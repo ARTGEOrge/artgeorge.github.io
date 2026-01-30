@@ -2,147 +2,185 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>2048</title>
+  <title>NEON SURVIVOR</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <style>
     body {
-      font-family: Arial, sans-serif;
-      background: #faf8ef;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
+      margin: 0;
+      background: radial-gradient(circle at center, #0f172a, #020617);
+      overflow: hidden;
     }
-
-    .game {
-      background: #bbada0;
-      padding: 10px;
-      border-radius: 6px;
+    canvas {
+      display: block;
     }
-
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(4, 80px);
-      grid-gap: 10px;
-    }
-
-    .cell {
-      width: 80px;
-      height: 80px;
-      background: #cdc1b4;
-      border-radius: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 24px;
-      font-weight: bold;
-      color: #776e65;
-    }
-
-    .cell[data-value="2"]  { background: #eee4da; }
-    .cell[data-value="4"]  { background: #ede0c8; }
-    .cell[data-value="8"]  { background: #f2b179; color: #f9f6f2; }
-    .cell[data-value="16"] { background: #f59563; color: #f9f6f2; }
-    .cell[data-value="32"] { background: #f67c5f; color: #f9f6f2; }
-    .cell[data-value="64"] { background: #f65e3b; color: #f9f6f2; }
-    .cell[data-value="128"] { background: #edcf72; }
-    .cell[data-value="256"] { background: #edcc61; }
-    .cell[data-value="512"] { background: #edc850; }
-    .cell[data-value="1024"] { background: #edc53f; }
-    .cell[data-value="2048"] { background: #edc22e; }
   </style>
 </head>
-<body>
-  <div class="game">
-    <div class="grid" id="grid"></div>
+<body class="text-white select-none">
+
+<div class="fixed top-4 left-4 z-10 text-sm">
+  <div class="font-bold text-cyan-400">NEON SURVIVOR</div>
+  <div>Time: <span id="time">0.0</span>s</div>
+  <div>Dash: <span id="dash">READY</span></div>
+</div>
+
+<div id="gameOver" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-20">
+  <div class="text-center space-y-4 animate-pulse">
+    <div class="text-4xl font-extrabold text-red-400">GAME OVER</div>
+    <div class="text-lg">Survived <span id="finalTime"></span>s</div>
+    <div class="text-sm opacity-70">Refresh to retry</div>
   </div>
+</div>
 
-  <script>
-    const size = 4;
-    let board = Array(size * size).fill(0);
-    const grid = document.getElementById("grid");
+<canvas id="c"></canvas>
 
-    function init() {
-      addTile();
-      addTile();
-      render();
-    }
+<script>
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const timeEl = document.getElementById("time");
+const dashEl = document.getElementById("dash");
+const gameOverEl = document.getElementById("gameOver");
+const finalTimeEl = document.getElementById("finalTime");
 
-    function addTile() {
-      const empty = board
-        .map((v, i) => (v === 0 ? i : null))
-        .filter(v => v !== null);
-      if (!empty.length) return;
-      const index = empty[Math.floor(Math.random() * empty.length)];
-      board[index] = Math.random() < 0.9 ? 2 : 4;
-    }
+function resize() {
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+}
+addEventListener("resize", resize);
+resize();
 
-    function render() {
-      grid.innerHTML = "";
-      board.forEach(value => {
-        const cell = document.createElement("div");
-        cell.className = "cell";
-        if (value) {
-          cell.textContent = value;
-          cell.dataset.value = value;
-        }
-        grid.appendChild(cell);
+let t0 = performance.now();
+let alive = true;
+let shake = 0;
+
+const player = {
+  x: canvas.width / 2,
+  y: canvas.height / 2,
+  r: 8,
+  dash: 0
+};
+
+const enemies = [];
+const particles = [];
+
+function spawnEnemy() {
+  const angle = Math.random() * Math.PI * 2;
+  enemies.push({
+    angle,
+    speed: 0.5 + Math.random() * 1.5,
+    radius: Math.max(canvas.width, canvas.height),
+    thickness: 6 + Math.random() * 10
+  });
+}
+
+setInterval(spawnEnemy, 900);
+
+addEventListener("mousemove", e => {
+  player.x = e.clientX;
+  player.y = e.clientY;
+});
+
+addEventListener("keydown", e => {
+  if (e.code === "Space" && player.dash <= 0) {
+    player.dash = 120;
+    shake = 12;
+    for (let i = 0; i < 20; i++) {
+      particles.push({
+        x: player.x,
+        y: player.y,
+        vx: Math.cos(i) * Math.random() * 6,
+        vy: Math.sin(i) * Math.random() * 6,
+        life: 30
       });
     }
+  }
+});
 
-    function slide(row) {
-      row = row.filter(v => v);
-      for (let i = 0; i < row.length - 1; i++) {
-        if (row[i] === row[i + 1]) {
-          row[i] *= 2;
-          row[i + 1] = 0;
-        }
-      }
-      return row.filter(v => v).concat(Array(size - row.length).fill(0));
+function update(dt) {
+  if (!alive) return;
+
+  player.dash -= dt * 60;
+
+  enemies.forEach(e => {
+    e.angle += e.speed * dt * 0.5;
+    e.radius -= dt * 80;
+  });
+
+  for (let e of enemies) {
+    const x = canvas.width / 2 + Math.cos(e.angle) * e.radius;
+    const y = canvas.height / 2 + Math.sin(e.angle) * e.radius;
+    const d = Math.hypot(x - player.x, y - player.y);
+    if (d < e.thickness + player.r && player.dash <= 0) {
+      alive = false;
+      finalTimeEl.textContent = ((performance.now() - t0) / 1000).toFixed(2);
+      gameOverEl.classList.remove("hidden");
     }
+  }
 
-    function move(direction) {
-      let moved = false;
+  particles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+  });
 
-      for (let i = 0; i < size; i++) {
-        let row = [];
-        for (let j = 0; j < size; j++) {
-          const index = direction === "left" || direction === "right"
-            ? i * size + j
-            : j * size + i;
-          row.push(board[index]);
-        }
+  particles.splice(0, particles.filter(p => p.life > 0).length);
 
-        if (direction === "right" || direction === "down") row.reverse();
+  dashEl.textContent = player.dash > 0 ? "COOLDOWN" : "READY";
+}
 
-        const newRow = slide(row);
+function draw() {
+  ctx.save();
+  if (shake > 0) {
+    ctx.translate(
+      (Math.random() - 0.5) * shake,
+      (Math.random() - 0.5) * shake
+    );
+    shake *= 0.9;
+  }
 
-        if (direction === "right" || direction === "down") newRow.reverse();
+  ctx.fillStyle = "rgba(2,6,23,0.4)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        for (let j = 0; j < size; j++) {
-          const index = direction === "left" || direction === "right"
-            ? i * size + j
-            : j * size + i;
-          if (board[index] !== newRow[j]) {
-            moved = true;
-            board[index] = newRow[j];
-          }
-        }
-      }
+  enemies.forEach(e => {
+    ctx.strokeStyle = "rgba(34,211,238,0.8)";
+    ctx.lineWidth = e.thickness;
+    ctx.beginPath();
+    ctx.arc(
+      canvas.width / 2,
+      canvas.height / 2,
+      e.radius,
+      e.angle,
+      e.angle + Math.PI / 2
+    );
+    ctx.stroke();
+  });
 
-      if (moved) {
-        addTile();
-        render();
-      }
-    }
+  ctx.fillStyle = "white";
+  ctx.beginPath();
+  ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
+  ctx.fill();
 
-    document.addEventListener("keydown", e => {
-      if (e.key === "ArrowLeft") move("left");
-      if (e.key === "ArrowRight") move("right");
-      if (e.key === "ArrowUp") move("up");
-      if (e.key === "ArrowDown") move("down");
-    });
+  particles.forEach(p => {
+    ctx.fillStyle = `rgba(34,211,238,${p.life / 30})`;
+    ctx.fillRect(p.x, p.y, 2, 2);
+  });
 
-    init();
-  </script>
+  ctx.restore();
+}
+
+let last = performance.now();
+function loop(now) {
+  const dt = (now - last) / 1000;
+  last = now;
+
+  update(dt);
+  draw();
+
+  if (alive) {
+    timeEl.textContent = ((now - t0) / 1000).toFixed(1);
+    requestAnimationFrame(loop);
+  }
+}
+loop(last);
+</script>
 </body>
 </html>
