@@ -101,6 +101,7 @@
 
     .card--escape { --accent: #ffd700; --accent-glow: rgba(255,180,0,0.4); }
     .card--neon   { --accent: #22d3ee; --accent-glow: rgba(34,211,238,0.4); }
+    .card--race   { --accent: #ff8c00; --accent-glow: rgba(255,140,0,0.4); }
 
     .card-body { padding: 20px 22px 24px; }
 
@@ -285,6 +286,62 @@
           <span class="tag">Survival</span>
           <span class="tag">Minimalist</span>
           <span class="tag">Mouse</span>
+        </div>
+      </div>
+    </a>
+
+    <a href="/survival-race/" class="card card--race">
+      <div class="play-btn">&#9654; PLAY</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="raceGrad" cx="50%" cy="60%" r="70%">
+              <stop offset="0%" stop-color="#2a1a00"/>
+              <stop offset="100%" stop-color="#080408"/>
+            </radialGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#raceGrad)"/>
+          <!-- Track -->
+          <rect x="0" y="115" width="400" height="65" fill="#1a1a1a"/>
+          <rect x="0" y="115" width="400" height="5" fill="#333"/>
+          <line x1="0" y1="147" x2="400" y2="147" stroke="#ffffff" stroke-width="2" stroke-dasharray="20,16"/>
+          <!-- Checkered finish -->
+          <rect x="340" y="115" width="10" height="10" fill="white"/>
+          <rect x="350" y="115" width="10" height="10" fill="black"/>
+          <rect x="340" y="125" width="10" height="10" fill="black"/>
+          <rect x="350" y="125" width="10" height="10" fill="white"/>
+          <rect x="340" y="135" width="10" height="10" fill="white"/>
+          <rect x="350" y="135" width="10" height="10" fill="black"/>
+          <!-- Cars -->
+          <rect x="80"  y="120" width="52" height="22" rx="4" fill="#e8b400"/>
+          <rect x="83"  y="122" width="22" height="10" rx="2" fill="rgba(160,230,255,0.7)"/>
+          <rect x="180" y="128" width="48" height="20" rx="4" fill="#cc2222"/>
+          <rect x="183" y="130" width="20" height="9"  rx="2" fill="rgba(160,230,255,0.6)"/>
+          <rect x="260" y="122" width="46" height="20" rx="4" fill="#2255cc"/>
+          <rect x="263" y="124" width="19" height="9"  rx="2" fill="rgba(160,230,255,0.6)"/>
+          <!-- Speed lines -->
+          <line x1="20" y1="128" x2="70" y2="128" stroke="rgba(255,180,0,0.5)" stroke-width="2"/>
+          <line x1="20" y1="133" x2="60" y2="133" stroke="rgba(255,180,0,0.3)" stroke-width="1.5"/>
+          <line x1="20" y1="138" x2="65" y2="138" stroke="rgba(255,180,0,0.4)" stroke-width="1"/>
+          <!-- Trees -->
+          <rect x="30"  y="80" width="10" height="35" fill="#1a3a00"/>
+          <circle cx="35"  cy="75" r="14" fill="#2a5a00"/>
+          <rect x="120" y="75" width="10" height="40" fill="#1a3a00"/>
+          <circle cx="125" cy="70" r="14" fill="#2a5a00"/>
+          <rect x="220" y="78" width="10" height="37" fill="#1a3a00"/>
+          <circle cx="225" cy="73" r="14" fill="#2a5a00"/>
+          <rect x="320" y="76" width="10" height="39" fill="#1a3a00"/>
+          <circle cx="325" cy="71" r="14" fill="#2a5a00"/>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">Racing</div>
+        <div class="card-title">Survival Race</div>
+        <p class="card-desc">Hit the track and race to survive. Dodge rivals, push your limits, and cross the finish line in one piece.</p>
+        <div class="card-tags">
+          <span class="tag">Racing</span>
+          <span class="tag">Survival</span>
+          <span class="tag">Action</span>
         </div>
       </div>
     </a>
