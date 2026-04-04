@@ -2,185 +2,329 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>NEON SURVIVOR</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARTGEOrge — Games</title>
   <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
     body {
-      margin: 0;
-      background: radial-gradient(circle at center, #0f172a, #020617);
-      overflow: hidden;
+      min-height: 100vh;
+      background: #050510;
+      color: #fff;
+      font-family: 'Segoe UI', system-ui, monospace;
+      overflow-x: hidden;
     }
-    canvas {
+
+    #stars {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 60px 24px 80px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 64px;
+    }
+
+    .logo {
+      display: inline-block;
+      font-size: 12px;
+      letter-spacing: 6px;
+      text-transform: uppercase;
+      color: #445;
+      margin-bottom: 16px;
+    }
+
+    h1 {
+      font-size: clamp(36px, 6vw, 64px);
+      font-weight: 900;
+      letter-spacing: -1px;
+      background: linear-gradient(135deg, #ffd700 0%, #ff8c00 50%, #ff4466 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.1;
+    }
+
+    .tagline {
+      margin-top: 14px;
+      font-size: 15px;
+      color: #445566;
+      letter-spacing: 1px;
+    }
+
+    .games {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 28px;
+    }
+
+    .card {
+      position: relative;
+      background: #0a0a1e;
+      border: 1px solid #1a1a3a;
+      border-radius: 16px;
+      overflow: hidden;
+      transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+      text-decoration: none;
+      color: inherit;
       display: block;
     }
+
+    .card:hover {
+      transform: translateY(-6px);
+      border-color: var(--accent);
+      box-shadow: 0 0 36px -4px var(--accent-glow);
+    }
+
+    .card-banner {
+      height: 180px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card-banner svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .card--escape { --accent: #ffd700; --accent-glow: rgba(255,180,0,0.4); }
+    .card--neon   { --accent: #22d3ee; --accent-glow: rgba(34,211,238,0.4); }
+
+    .card-body { padding: 20px 22px 24px; }
+
+    .card-tag {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 8px;
+    }
+
+    .card-title {
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 10px;
+    }
+
+    .card-desc {
+      font-size: 14px;
+      color: #5566aa;
+      line-height: 1.65;
+      margin-bottom: 18px;
+    }
+
+    .card-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .tag {
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 99px;
+      background: rgba(255,255,255,0.05);
+      color: #778899;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .play-btn {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      background: var(--accent);
+      color: #000;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 6px 14px;
+      border-radius: 99px;
+      z-index: 2;
+      opacity: 0;
+      transform: scale(0.88);
+      transition: opacity 0.2s, transform 0.2s;
+    }
+
+    .card:hover .play-btn {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    footer {
+      text-align: center;
+      margin-top: 72px;
+      color: #222233;
+      font-size: 12px;
+      letter-spacing: 1px;
+    }
+
+    footer a { color: #334455; text-decoration: none; }
+    footer a:hover { color: #ffd700; }
   </style>
 </head>
-<body class="text-white select-none">
+<body>
 
-<div class="fixed top-4 left-4 z-10 text-sm">
-  <div class="font-bold text-cyan-400">NEON SURVIVOR</div>
-  <div>Time: <span id="time">0.0</span>s</div>
-  <div>Dash: <span id="dash">READY</span></div>
-</div>
+<canvas id="stars"></canvas>
 
-<div id="gameOver" class="hidden fixed inset-0 bg-black/70 flex items-center justify-center z-20">
-  <div class="text-center space-y-4 animate-pulse">
-    <div class="text-4xl font-extrabold text-red-400">GAME OVER</div>
-    <div class="text-lg">Survived <span id="finalTime"></span>s</div>
-    <div class="text-sm opacity-70">Refresh to retry</div>
+<div class="container">
+  <header>
+    <div class="logo">ARTGEOrge</div>
+    <h1>GAME ARCADE</h1>
+    <p class="tagline">Pick a game &amp; play instantly in your browser</p>
+  </header>
+
+  <div class="games">
+
+    <a href="/escape-road-city-2/" class="card card--escape">
+      <div class="play-btn">&#9654; PLAY</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="skyGrad" cx="50%" cy="100%" r="80%">
+              <stop offset="0%" stop-color="#1a3060" stop-opacity="0.9"/>
+              <stop offset="100%" stop-color="#050520" stop-opacity="1"/>
+            </radialGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#skyGrad)"/>
+          <!-- Buildings -->
+          <rect x="10"  y="95"  width="32" height="85"  fill="#0d1b3e"/>
+          <rect x="47"  y="65"  width="26" height="115" fill="#122050"/>
+          <rect x="78"  y="42"  width="42" height="138" fill="#0e1a48"/>
+          <rect x="125" y="72"  width="28" height="108" fill="#0d1b3e"/>
+          <rect x="158" y="28"  width="52" height="152" fill="#112060"/>
+          <rect x="215" y="58"  width="36" height="122" fill="#0e1a48"/>
+          <rect x="256" y="78"  width="30" height="102" fill="#0d1b3e"/>
+          <rect x="291" y="38"  width="46" height="142" fill="#122050"/>
+          <rect x="342" y="68"  width="28" height="112" fill="#0e1a48"/>
+          <rect x="375" y="52"  width="25" height="128" fill="#0d1b3e"/>
+          <!-- Windows -->
+          <rect x="83"  y="52" width="6" height="7" fill="rgba(255,215,80,0.8)"/>
+          <rect x="94"  y="52" width="6" height="7" fill="rgba(255,215,80,0.4)"/>
+          <rect x="83"  y="66" width="6" height="7" fill="rgba(255,215,80,0.5)"/>
+          <rect x="94"  y="66" width="6" height="7" fill="rgba(255,215,80,0.8)"/>
+          <rect x="163" y="40" width="7" height="8" fill="rgba(255,215,80,0.9)"/>
+          <rect x="175" y="40" width="7" height="8" fill="rgba(255,215,80,0.4)"/>
+          <rect x="187" y="40" width="7" height="8" fill="rgba(255,215,80,0.7)"/>
+          <rect x="163" y="55" width="7" height="8" fill="rgba(255,215,80,0.3)"/>
+          <rect x="175" y="55" width="7" height="8" fill="rgba(255,215,80,0.8)"/>
+          <rect x="187" y="55" width="7" height="8" fill="rgba(255,215,80,0.5)"/>
+          <rect x="296" y="48" width="7" height="8" fill="rgba(255,215,80,0.7)"/>
+          <rect x="308" y="48" width="7" height="8" fill="rgba(255,215,80,0.5)"/>
+          <rect x="320" y="48" width="7" height="8" fill="rgba(255,215,80,0.4)"/>
+          <!-- Road -->
+          <rect x="0"   y="150" width="400" height="30" fill="#1a1a28"/>
+          <rect x="0"   y="151" width="400" height="4"  fill="#25253a"/>
+          <line x1="0" y1="165" x2="400" y2="165" stroke="#ffd700" stroke-width="1.5" stroke-dasharray="18,14"/>
+          <!-- Police car -->
+          <rect x="155" y="153" width="22" height="14" rx="3" fill="#1a4fb0"/>
+          <rect x="156" y="150" width="9"  height="3"  fill="#2244ff"/>
+          <rect x="167" y="150" width="9"  height="3"  fill="#cc0000"/>
+          <!-- Player car -->
+          <rect x="210" y="153" width="20" height="13" rx="3" fill="#e03030"/>
+          <rect x="212" y="155" width="16" height="5"  rx="1" fill="rgba(160,230,255,0.7)"/>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">New</div>
+        <div class="card-title">Escape Road City 2</div>
+        <p class="card-desc">Race through a neon night city to outrun the police. Grab nitro boosts, collect coins, and dodge the helicopter spotlight.</p>
+        <div class="card-tags">
+          <span class="tag">Driving</span>
+          <span class="tag">Chase</span>
+          <span class="tag">City</span>
+          <span class="tag">Arcade</span>
+        </div>
+      </div>
+    </a>
+
+    <a href="/neon-survivor/" class="card card--neon">
+      <div class="play-btn">&#9654; PLAY</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="neonGrad" cx="50%" cy="50%" r="60%">
+              <stop offset="0%" stop-color="#0f2040"/>
+              <stop offset="100%" stop-color="#020617"/>
+            </radialGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#neonGrad)"/>
+          <circle cx="200" cy="90" r="112" fill="none" stroke="rgba(34,211,238,0.12)" stroke-width="20"/>
+          <circle cx="200" cy="90" r="76"  fill="none" stroke="rgba(34,211,238,0.18)" stroke-width="13"/>
+          <circle cx="200" cy="90" r="44"  fill="none" stroke="rgba(34,211,238,0.26)" stroke-width="9"/>
+          <path d="M90,90 A110,110 0 0,1 255,12"  fill="none" stroke="#22d3ee" stroke-width="11" stroke-linecap="round" opacity="0.9"/>
+          <path d="M276,90 A76,76 0 0,0 163,155"  fill="none" stroke="#22d3ee" stroke-width="8"  stroke-linecap="round" opacity="0.8"/>
+          <path d="M156,90 A44,44 0 0,1 200,46"   fill="none" stroke="#22d3ee" stroke-width="6"  stroke-linecap="round" opacity="0.7"/>
+          <circle cx="200" cy="90" r="8"  fill="white"/>
+          <circle cx="200" cy="90" r="14" fill="rgba(255,255,255,0.12)"/>
+          <circle cx="168" cy="68"  r="2" fill="rgba(34,211,238,0.8)"/>
+          <circle cx="228" cy="108" r="2" fill="rgba(34,211,238,0.6)"/>
+          <circle cx="183" cy="118" r="2" fill="rgba(34,211,238,0.7)"/>
+          <circle cx="218" cy="66"  r="2" fill="rgba(34,211,238,0.5)"/>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag" style="color:#22d3ee">Classic</div>
+        <div class="card-title">Neon Survivor</div>
+        <p class="card-desc">Move your cursor to dodge spiraling neon rings that close in from every angle. Survive as long as you can.</p>
+        <div class="card-tags">
+          <span class="tag">Dodge</span>
+          <span class="tag">Survival</span>
+          <span class="tag">Minimalist</span>
+          <span class="tag">Mouse</span>
+        </div>
+      </div>
+    </a>
+
   </div>
-</div>
 
-<canvas id="c"></canvas>
+  <footer>
+    <p>Made by <a href="https://github.com/ARTGEOrge">ARTGEOrge</a> &nbsp;&middot;&nbsp; More games coming soon</p>
+  </footer>
+</div>
 
 <script>
-const canvas = document.getElementById("c");
-const ctx = canvas.getContext("2d");
-const timeEl = document.getElementById("time");
-const dashEl = document.getElementById("dash");
-const gameOverEl = document.getElementById("gameOver");
-const finalTimeEl = document.getElementById("finalTime");
+  const canvas = document.getElementById('stars');
+  const ctx = canvas.getContext('2d');
+  const stars = Array.from({ length: 150 }, () => ({
+    x: Math.random(), y: Math.random(),
+    r: Math.random() * 1.4 + 0.3,
+    speed: Math.random() * 0.00008 + 0.00002,
+    phase: Math.random() * Math.PI * 2,
+  }));
 
-function resize() {
-  canvas.width = innerWidth;
-  canvas.height = innerHeight;
-}
-addEventListener("resize", resize);
-resize();
+  function resize() {
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
 
-let t0 = performance.now();
-let alive = true;
-let shake = 0;
-
-const player = {
-  x: canvas.width / 2,
-  y: canvas.height / 2,
-  r: 8,
-  dash: 0
-};
-
-const enemies = [];
-const particles = [];
-
-function spawnEnemy() {
-  const angle = Math.random() * Math.PI * 2;
-  enemies.push({
-    angle,
-    speed: 0.5 + Math.random() * 1.5,
-    radius: Math.max(canvas.width, canvas.height),
-    thickness: 6 + Math.random() * 10
-  });
-}
-
-setInterval(spawnEnemy, 900);
-
-addEventListener("mousemove", e => {
-  player.x = e.clientX;
-  player.y = e.clientY;
-});
-
-addEventListener("keydown", e => {
-  if (e.code === "Space" && player.dash <= 0) {
-    player.dash = 120;
-    shake = 12;
-    for (let i = 0; i < 20; i++) {
-      particles.push({
-        x: player.x,
-        y: player.y,
-        vx: Math.cos(i) * Math.random() * 6,
-        vy: Math.sin(i) * Math.random() * 6,
-        life: 30
-      });
+  function draw(ts) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const s of stars) {
+      const alpha = 0.25 + 0.55 * Math.sin(s.phase + ts * s.speed * 1000);
+      ctx.fillStyle = `rgba(180,200,255,${alpha})`;
+      ctx.beginPath();
+      ctx.arc(s.x * canvas.width, s.y * canvas.height, s.r, 0, Math.PI * 2);
+      ctx.fill();
     }
+    requestAnimationFrame(draw);
   }
-});
-
-function update(dt) {
-  if (!alive) return;
-
-  player.dash -= dt * 60;
-
-  enemies.forEach(e => {
-    e.angle += e.speed * dt * 0.5;
-    e.radius -= dt * 80;
-  });
-
-  for (let e of enemies) {
-    const x = canvas.width / 2 + Math.cos(e.angle) * e.radius;
-    const y = canvas.height / 2 + Math.sin(e.angle) * e.radius;
-    const d = Math.hypot(x - player.x, y - player.y);
-    if (d < e.thickness + player.r && player.dash <= 0) {
-      alive = false;
-      finalTimeEl.textContent = ((performance.now() - t0) / 1000).toFixed(2);
-      gameOverEl.classList.remove("hidden");
-    }
-  }
-
-  particles.forEach(p => {
-    p.x += p.vx;
-    p.y += p.vy;
-    p.life--;
-  });
-
-  particles.splice(0, particles.filter(p => p.life > 0).length);
-
-  dashEl.textContent = player.dash > 0 ? "COOLDOWN" : "READY";
-}
-
-function draw() {
-  ctx.save();
-  if (shake > 0) {
-    ctx.translate(
-      (Math.random() - 0.5) * shake,
-      (Math.random() - 0.5) * shake
-    );
-    shake *= 0.9;
-  }
-
-  ctx.fillStyle = "rgba(2,6,23,0.4)";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-  enemies.forEach(e => {
-    ctx.strokeStyle = "rgba(34,211,238,0.8)";
-    ctx.lineWidth = e.thickness;
-    ctx.beginPath();
-    ctx.arc(
-      canvas.width / 2,
-      canvas.height / 2,
-      e.radius,
-      e.angle,
-      e.angle + Math.PI / 2
-    );
-    ctx.stroke();
-  });
-
-  ctx.fillStyle = "white";
-  ctx.beginPath();
-  ctx.arc(player.x, player.y, player.r, 0, Math.PI * 2);
-  ctx.fill();
-
-  particles.forEach(p => {
-    ctx.fillStyle = `rgba(34,211,238,${p.life / 30})`;
-    ctx.fillRect(p.x, p.y, 2, 2);
-  });
-
-  ctx.restore();
-}
-
-let last = performance.now();
-function loop(now) {
-  const dt = (now - last) / 1000;
-  last = now;
-
-  update(dt);
-  draw();
-
-  if (alive) {
-    timeEl.textContent = ((now - t0) / 1000).toFixed(1);
-    requestAnimationFrame(loop);
-  }
-}
-loop(last);
+  requestAnimationFrame(draw);
 </script>
 </body>
 </html>
