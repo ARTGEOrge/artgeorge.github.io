@@ -101,8 +101,6 @@
 
     .card--escape { --accent: #ffd700; --accent-glow: rgba(255,180,0,0.4); }
     .card--neon   { --accent: #22d3ee; --accent-glow: rgba(34,211,238,0.4); }
-    .card--race   { --accent: #ff8c00; --accent-glow: rgba(255,140,0,0.4); }
-    .card--wild   { --accent: #44ff88; --accent-glow: rgba(68,255,136,0.4); }
 
     .card-body { padding: 20px 22px 24px; }
 
@@ -291,118 +289,6 @@
       </div>
     </a>
 
-    <a href="/survival-race/" class="card card--race">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <radialGradient id="raceGrad" cx="50%" cy="60%" r="70%">
-              <stop offset="0%" stop-color="#2a1a00"/>
-              <stop offset="100%" stop-color="#080408"/>
-            </radialGradient>
-          </defs>
-          <rect width="400" height="180" fill="url(#raceGrad)"/>
-          <!-- Track -->
-          <rect x="0" y="115" width="400" height="65" fill="#1a1a1a"/>
-          <rect x="0" y="115" width="400" height="5" fill="#333"/>
-          <line x1="0" y1="147" x2="400" y2="147" stroke="#ffffff" stroke-width="2" stroke-dasharray="20,16"/>
-          <!-- Checkered finish -->
-          <rect x="340" y="115" width="10" height="10" fill="white"/>
-          <rect x="350" y="115" width="10" height="10" fill="black"/>
-          <rect x="340" y="125" width="10" height="10" fill="black"/>
-          <rect x="350" y="125" width="10" height="10" fill="white"/>
-          <rect x="340" y="135" width="10" height="10" fill="white"/>
-          <rect x="350" y="135" width="10" height="10" fill="black"/>
-          <!-- Cars -->
-          <rect x="80"  y="120" width="52" height="22" rx="4" fill="#e8b400"/>
-          <rect x="83"  y="122" width="22" height="10" rx="2" fill="rgba(160,230,255,0.7)"/>
-          <rect x="180" y="128" width="48" height="20" rx="4" fill="#cc2222"/>
-          <rect x="183" y="130" width="20" height="9"  rx="2" fill="rgba(160,230,255,0.6)"/>
-          <rect x="260" y="122" width="46" height="20" rx="4" fill="#2255cc"/>
-          <rect x="263" y="124" width="19" height="9"  rx="2" fill="rgba(160,230,255,0.6)"/>
-          <!-- Speed lines -->
-          <line x1="20" y1="128" x2="70" y2="128" stroke="rgba(255,180,0,0.5)" stroke-width="2"/>
-          <line x1="20" y1="133" x2="60" y2="133" stroke="rgba(255,180,0,0.3)" stroke-width="1.5"/>
-          <line x1="20" y1="138" x2="65" y2="138" stroke="rgba(255,180,0,0.4)" stroke-width="1"/>
-          <!-- Trees -->
-          <rect x="30"  y="80" width="10" height="35" fill="#1a3a00"/>
-          <circle cx="35"  cy="75" r="14" fill="#2a5a00"/>
-          <rect x="120" y="75" width="10" height="40" fill="#1a3a00"/>
-          <circle cx="125" cy="70" r="14" fill="#2a5a00"/>
-          <rect x="220" y="78" width="10" height="37" fill="#1a3a00"/>
-          <circle cx="225" cy="73" r="14" fill="#2a5a00"/>
-          <rect x="320" y="76" width="10" height="39" fill="#1a3a00"/>
-          <circle cx="325" cy="71" r="14" fill="#2a5a00"/>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">Racing</div>
-        <div class="card-title">Survival Race</div>
-        <p class="card-desc">Hit the track and race to survive. Dodge rivals, push your limits, and cross the finish line in one piece.</p>
-        <div class="card-tags">
-          <span class="tag">Racing</span>
-          <span class="tag">Survival</span>
-          <span class="tag">Action</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/driven-wild/" class="card card--wild">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <radialGradient id="wildGrad" cx="50%" cy="50%" r="70%">
-              <stop offset="0%" stop-color="#0a2a10"/>
-              <stop offset="100%" stop-color="#050810"/>
-            </radialGradient>
-          </defs>
-          <rect width="400" height="180" fill="url(#wildGrad)"/>
-          <!-- Ground / dirt track -->
-          <ellipse cx="200" cy="130" rx="170" ry="50" fill="#1a1208" stroke="#2a2010" stroke-width="2"/>
-          <ellipse cx="200" cy="130" rx="120" ry="32" fill="#0a0a0a"/>
-          <!-- Trees / jungle -->
-          <circle cx="30"  cy="60" r="28" fill="#0d3a0d"/>
-          <circle cx="22"  cy="55" r="20" fill="#155215"/>
-          <circle cx="370" cy="55" r="28" fill="#0d3a0d"/>
-          <circle cx="378" cy="50" r="20" fill="#155215"/>
-          <circle cx="80"  cy="40" r="22" fill="#0d3a0d"/>
-          <circle cx="320" cy="42" r="22" fill="#0d3a0d"/>
-          <circle cx="140" cy="30" r="18" fill="#124a12"/>
-          <circle cx="260" cy="32" r="18" fill="#124a12"/>
-          <!-- Mud splashes -->
-          <ellipse cx="150" cy="138" rx="18" ry="8" fill="#3a2a10" opacity="0.8"/>
-          <ellipse cx="255" cy="125" rx="14" ry="6" fill="#3a2a10" opacity="0.7"/>
-          <!-- Car 1 (player - green) -->
-          <rect x="175" y="108" width="50" height="28" rx="5" fill="#22aa44"/>
-          <rect x="179" y="111" width="22" height="13" rx="2" fill="rgba(160,230,180,0.7)"/>
-          <circle cx="183" cy="138" r="5" fill="#111"/>
-          <circle cx="217" cy="138" r="5" fill="#111"/>
-          <!-- Car 2 -->
-          <rect x="100" y="120" width="44" height="24" rx="4" fill="#aa4422"/>
-          <circle cx="108" cy="145" r="4" fill="#111"/>
-          <circle cx="136" cy="145" r="4" fill="#111"/>
-          <!-- Dust clouds -->
-          <circle cx="95"  cy="130" r="12" fill="rgba(180,160,100,0.3)"/>
-          <circle cx="85"  cy="125" r="9"  fill="rgba(180,160,100,0.2)"/>
-          <circle cx="170" cy="135" r="10" fill="rgba(180,160,100,0.25)"/>
-          <!-- Speed lines -->
-          <line x1="240" y1="118" x2="290" y2="115" stroke="rgba(68,255,136,0.4)" stroke-width="2"/>
-          <line x1="240" y1="124" x2="285" y2="122" stroke="rgba(68,255,136,0.25)" stroke-width="1.5"/>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag" style="color:#44ff88">Off-Road</div>
-        <div class="card-title">Driven Wild</div>
-        <p class="card-desc">Take it off-road through wild terrain. Push your vehicle to the limit across mud, dust, and untamed tracks.</p>
-        <div class="card-tags">
-          <span class="tag">Off-Road</span>
-          <span class="tag">Racing</span>
-          <span class="tag">Wild</span>
-          <span class="tag">Action</span>
-        </div>
-      </div>
-    </a>
 
   </div>
 
