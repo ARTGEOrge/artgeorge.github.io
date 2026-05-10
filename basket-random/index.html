@@ -484,6 +484,10 @@ function drawSpotlights() {
   }
 }
 
+const SKIN_TONES = ['#ffd6a8', '#e8b48a', '#c89464', '#9a6840', '#6a4824', '#3e2814'];
+const HAIR_COLORS = ['#1a0e08', '#3e2008', '#7a4a1a', '#cf9a4a', '#a8a8a8', '#dc2626', null, null];
+const SHIRTS = ['#b21e1e', '#222a55', '#1a1a2a', '#1e50b4', '#222a55', '#fcd34d', '#1a1a2a'];
+
 function drawCrowd(t) {
   const crowdTop = Math.max(80, GROUND_Y - 260);
   // Stand structure
@@ -492,24 +496,97 @@ function drawCrowd(t) {
   ctx.fillStyle = '#150a30';
   ctx.fillRect(0, crowdTop + 100, W, 8);
 
-  // Heads with subtle wave
+  let idx = 0;
   for (let x = 0; x < W; x += 22) {
     const r = 9 + ((Math.sin(x * 0.13) + 1) * 3);
     const wave = Math.sin(t * 0.003 + x * 0.04) * 2;
     const yy = crowdTop + 30 + wave;
+    const cx = x + 11;
 
-    // Random shirt stripe (every nth fan colored)
-    const cycle = Math.floor(x / 22) % 7;
-    if (cycle === 0)      ctx.fillStyle = 'rgba(180,30,30,0.55)';
-    else if (cycle === 3) ctx.fillStyle = 'rgba(30,80,180,0.55)';
-    else if (cycle === 5) ctx.fillStyle = 'rgba(252,211,77,0.45)';
-    else                  ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    const skin  = SKIN_TONES[(idx * 5 + 1) % SKIN_TONES.length];
+    const hair  = HAIR_COLORS[(idx * 3) % HAIR_COLORS.length];
+    const shirt = SHIRTS[idx % SHIRTS.length];
 
-    // Body blob
-    ctx.fillRect(x + 2, yy + r * 0.4, r * 2 - 2, 10);
+    // Cheer cycle — drives mouth shape and raised arms
+    const cheerPhase = Math.sin(t * 0.005 + idx * 0.7);
+    const cheering = cheerPhase > 0.35;
+
+    // Torso with shoulder line
+    ctx.fillStyle = shirt;
+    ctx.fillRect(x + 2, yy + r * 0.55, r * 2 - 2, 14);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(x + 2, yy + r * 0.55, r * 2 - 2, 2);
+
+    // Arms — raised when cheering, otherwise tucked
+    ctx.strokeStyle = skin;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    if (cheering) {
+      ctx.beginPath();
+      ctx.moveTo(x + 4,  yy + r * 0.7);
+      ctx.lineTo(x + 1,  yy - r * 0.6);
+      ctx.moveTo(x + 18, yy + r * 0.7);
+      ctx.lineTo(x + 21, yy - r * 0.6);
+      ctx.stroke();
+      // Tiny hands at the top
+      ctx.fillStyle = skin;
+      ctx.beginPath(); ctx.arc(x + 1,  yy - r * 0.6, 1.6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 21, yy - r * 0.6, 1.6, 0, Math.PI * 2); ctx.fill();
+    }
+
     // Head
-    ctx.fillStyle = 'rgba(0,0,0,0.85)';
-    ctx.beginPath(); ctx.arc(x + 11, yy, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = skin;
+    ctx.beginPath(); ctx.arc(cx, yy, r, 0, Math.PI * 2); ctx.fill();
+
+    // Hair on top half
+    if (hair) {
+      ctx.fillStyle = hair;
+      ctx.beginPath();
+      ctx.arc(cx, yy - 1, r, Math.PI + 0.25, Math.PI * 2 - 0.25);
+      ctx.fill();
+    }
+
+    // Team cap on some shirt-cycle fans
+    if ((shirt === '#b21e1e' || shirt === '#1e50b4') && idx % 2 === 0) {
+      const capColor = shirt === '#b21e1e' ? '#dc2626' : '#2563eb';
+      ctx.fillStyle = capColor;
+      ctx.beginPath();
+      ctx.arc(cx, yy - r * 0.25, r * 0.95, Math.PI, Math.PI * 2);
+      ctx.fill();
+      const facing = (idx % 4 < 2) ? 1 : -1;
+      ctx.fillRect(cx, yy - r * 0.05, facing * r * 0.95, 2);
+    }
+
+    // Eyes
+    ctx.fillStyle = '#000';
+    const eyeY = yy + 0.5;
+    const eyeOff = Math.max(2, r * 0.32);
+    ctx.beginPath();
+    ctx.arc(cx - eyeOff, eyeY, 1.4, 0, Math.PI * 2);
+    ctx.arc(cx + eyeOff, eyeY, 1.4, 0, Math.PI * 2);
+    ctx.fill();
+    // Tiny eye highlights
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(cx - eyeOff + 0.3, eyeY - 0.6, 0.7, 0.7);
+    ctx.fillRect(cx + eyeOff + 0.3, eyeY - 0.6, 0.7, 0.7);
+
+    // Mouth — open when cheering, smile otherwise
+    if (cheering) {
+      ctx.fillStyle = '#3a0a0a';
+      ctx.beginPath();
+      ctx.ellipse(cx, yy + r * 0.45, 1.8, 2.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(cx - 1.5, yy + r * 0.45 - 1.5, 3, 0.8);
+    } else {
+      ctx.strokeStyle = '#3a0a0a';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(cx, yy + r * 0.3, 2.2, 0.25, Math.PI - 0.25);
+      ctx.stroke();
+    }
+
+    idx++;
   }
 
   // Camera flashes
