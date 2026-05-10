@@ -33,6 +33,15 @@
 const cv  = document.getElementById('gameCanvas');
 const ctx = cv.getContext('2d');
 
+function adjustColor(hex, deltaPct) {
+  const m = hex.replace('#', '');
+  const r = parseInt(m.slice(0, 2), 16);
+  const g = parseInt(m.slice(2, 4), 16);
+  const b = parseInt(m.slice(4, 6), 16);
+  const f = (v) => Math.max(0, Math.min(255, Math.round(v + v * deltaPct / 100)));
+  return `rgb(${f(r)},${f(g)},${f(b)})`;
+}
+
 let W, H, GROUND_Y;
 function resize() {
   cv.width  = window.innerWidth;
@@ -752,6 +761,79 @@ function drawCourt() {
     ctx.ellipse(cx, GROUND_Y, 110, 18, 0, 0, Math.PI, false);
     ctx.stroke();
   }
+
+  // Painted basketball logo at center court (squashed for floor perspective)
+  ctx.save();
+  ctx.translate(W / 2, GROUND_Y + 6);
+  ctx.scale(1, 0.32);
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = '#dc7a20';
+  ctx.beginPath(); ctx.arc(0, 0, 36, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#3a1505';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-36, 0); ctx.lineTo(36, 0); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, -36); ctx.lineTo(0, 36); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, 36, -0.55, 0.55); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, 36, Math.PI - 0.55, Math.PI + 0.55); ctx.stroke();
+  ctx.restore();
+  ctx.globalAlpha = 1;
+
+  // Painted "BR" text under the logo
+  ctx.save();
+  ctx.translate(W / 2, GROUND_Y + 22);
+  ctx.scale(1, 0.45);
+  ctx.fillStyle = 'rgba(252,211,77,0.55)';
+  ctx.font = 'bold 22px Impact, "Arial Black", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('BASKET RANDOM', 0, 0);
+  ctx.restore();
+}
+
+const SPONSOR_MSG = '   ★   BASKET RANDOM CHAMPIONSHIP   ★   FINALS NIGHT   ★   DUNK CONTEST   ★   POWERED BY ARCADE   ★   ';
+function drawAdBoard(t) {
+  const crowdTop = Math.max(80, GROUND_Y - 260);
+  const adY = crowdTop + 112;
+  const adH = 22;
+  const adX = 200;
+  const adW = Math.max(0, W - 400);
+  if (adW < 100) return;
+
+  // Frame + bezel
+  ctx.fillStyle = '#000';
+  ctx.fillRect(adX, adY, adW, adH);
+  ctx.strokeStyle = '#fcd34d';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(adX, adY, adW, adH);
+  ctx.strokeStyle = 'rgba(252,211,77,0.35)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(adX - 2, adY - 2, adW + 4, adH + 4);
+
+  // Scrolling LED text (clipped)
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(adX + 4, adY + 1, adW - 8, adH - 2);
+  ctx.clip();
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  const charW = 9;
+  const totalW = SPONSOR_MSG.length * charW;
+  const offset = (t * 0.07) % totalW;
+  // Draw the message twice so it wraps seamlessly
+  // Glow trail
+  ctx.shadowColor = '#ff3b3b';
+  ctx.shadowBlur = 8;
+  ctx.fillStyle = '#ff5050';
+  ctx.fillText(SPONSOR_MSG, adX + 4 - offset, adY + adH / 2);
+  ctx.fillText(SPONSOR_MSG, adX + 4 - offset + totalW, adY + adH / 2);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // Subtle scanline overlay
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  for (let y = adY + 1; y < adY + adH; y += 2) {
+    ctx.fillRect(adX + 1, y, adW - 2, 1);
+  }
 }
 
 function drawHoop(h, t) {
@@ -857,63 +939,174 @@ function drawPlayer(p) {
   const legL = inAir ? -10 : Math.sin(phase) * 10;
   const legR = inAir ? 10  : -Math.sin(phase) * 10;
 
-  // Sneakers + legs
-  ctx.strokeStyle = '#1f2937';
+  // Upper legs (skin)
+  ctx.strokeStyle = '#ffd6a8';
   ctx.lineWidth = 7 * sq;
   ctx.lineCap = 'round';
-  // Left leg
   ctx.beginPath();
-  ctx.moveTo(p.x - 4, p.y - 50);
-  ctx.lineTo(p.x - 4 + legL * 0.5, p.y - 18);
-  ctx.lineTo(p.x - 4 + legL,       p.y);
+  ctx.moveTo(p.x - 4, p.y - 50); ctx.lineTo(p.x - 4 + legL * 0.5, p.y - 20);
+  ctx.moveTo(p.x + 4, p.y - 50); ctx.lineTo(p.x + 4 + legR * 0.5, p.y - 20);
   ctx.stroke();
-  // Right leg
-  ctx.beginPath();
-  ctx.moveTo(p.x + 4, p.y - 50);
-  ctx.lineTo(p.x + 4 + legR * 0.5, p.y - 18);
-  ctx.lineTo(p.x + 4 + legR,       p.y);
-  ctx.stroke();
-  // Sneakers
-  ctx.fillStyle = '#fff';
-  ctx.beginPath(); ctx.ellipse(p.x - 4 + legL, p.y, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(p.x + 4 + legR, p.y, 9, 4, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = p.color;
-  ctx.fillRect(p.x - 4 + legL - 7, p.y - 1, 14, 2);
-  ctx.fillRect(p.x + 4 + legR - 7, p.y - 1, 14, 2);
 
-  // Shorts
+  // Knee-high socks (team color)
+  ctx.strokeStyle = p.color;
+  ctx.lineWidth = 8 * sq;
+  ctx.beginPath();
+  ctx.moveTo(p.x - 4 + legL * 0.5, p.y - 20); ctx.lineTo(p.x - 4 + legL, p.y - 2);
+  ctx.moveTo(p.x + 4 + legR * 0.5, p.y - 20); ctx.lineTo(p.x + 4 + legR, p.y - 2);
+  ctx.stroke();
+  // Sock white stripes (top + middle)
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1.6 * sq;
+  ctx.beginPath();
+  ctx.moveTo(p.x - 4 + legL * 0.5 - 4, p.y - 18);
+  ctx.lineTo(p.x - 4 + legL * 0.5 + 4, p.y - 18);
+  ctx.moveTo(p.x + 4 + legR * 0.5 - 4, p.y - 18);
+  ctx.lineTo(p.x + 4 + legR * 0.5 + 4, p.y - 18);
+  ctx.moveTo(p.x - 4 + (legL * 0.5 + legL) / 2 - 4, p.y - 11);
+  ctx.lineTo(p.x - 4 + (legL * 0.5 + legL) / 2 + 4, p.y - 11);
+  ctx.moveTo(p.x + 4 + (legR * 0.5 + legR) / 2 - 4, p.y - 11);
+  ctx.lineTo(p.x + 4 + (legR * 0.5 + legR) / 2 + 4, p.y - 11);
+  ctx.stroke();
+
+  // Sneakers (white leather + colored sole + swoosh stripe)
+  for (const [legPosX, legSwing] of [[p.x - 4, legL], [p.x + 4, legR]]) {
+    const fx = legPosX + legSwing;
+    // Shoe upper
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(fx, p.y - 1, 10, 4.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Toe cap accent
+    ctx.fillStyle = p.rim;
+    ctx.beginPath();
+    ctx.ellipse(fx + Math.sign(p.facing) * 4, p.y - 2, 5, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    // Swoosh stripe (team color)
+    ctx.strokeStyle = p.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(fx - 8, p.y - 1);
+    ctx.quadraticCurveTo(fx, p.y - 4, fx + 8, p.y - 1);
+    ctx.stroke();
+    // Sole (dark)
+    ctx.fillStyle = '#0d0d18';
+    ctx.fillRect(fx - 9, p.y + 2, 18, 2);
+  }
+
+  // ===== SHORTS =====
+  const shortsTop = p.y - 50;
+  const shortsBot = p.y - 30;
+  // Main fabric
   ctx.fillStyle = p.shorts;
   ctx.beginPath();
-  ctx.moveTo(p.x - 14, p.y - 52);
-  ctx.lineTo(p.x + 14, p.y - 52);
-  ctx.lineTo(p.x + 12, p.y - 36);
-  ctx.lineTo(p.x - 12, p.y - 36);
+  ctx.moveTo(p.x - 14, shortsTop);
+  ctx.lineTo(p.x + 14, shortsTop);
+  ctx.lineTo(p.x + 13, shortsBot);
+  ctx.lineTo(p.x - 13, shortsBot);
   ctx.closePath();
   ctx.fill();
+  // Vertical side stripes (team color)
   ctx.fillStyle = p.color;
-  ctx.fillRect(p.x - 14, p.y - 38, 28, 2);
+  ctx.fillRect(p.x - 14, shortsTop, 3, shortsBot - shortsTop);
+  ctx.fillRect(p.x + 11, shortsTop, 3, shortsBot - shortsTop);
+  // Center seam
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(p.x - 0.5, shortsTop, 1, shortsBot - shortsTop);
+  // Waistband
+  ctx.fillStyle = p.color;
+  ctx.fillRect(p.x - 14, shortsTop, 28, 2);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(p.x - 14, shortsTop + 2, 28, 1);
+  // Team initial badge
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 7px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(p.side === 'left' ? 'R' : 'B', p.x - 9, shortsBot - 5);
 
-  // Jersey
-  const bodyGrad = ctx.createLinearGradient(p.x - 16, 0, p.x + 16, 0);
-  bodyGrad.addColorStop(0, p.rim);
+  // ===== JERSEY =====
+  const jTopY = p.y - 78 * st;
+  const jBotY = shortsTop + 2;
+  const jHalfW = 16;
+
+  // Main fabric with gradient
+  const bodyGrad = ctx.createLinearGradient(p.x - jHalfW, jTopY, p.x + jHalfW, jBotY);
+  bodyGrad.addColorStop(0,   adjustColor(p.color, -10));
   bodyGrad.addColorStop(0.5, p.color);
-  bodyGrad.addColorStop(1, p.rim);
+  bodyGrad.addColorStop(1,   adjustColor(p.color, -25));
   ctx.fillStyle = bodyGrad;
   ctx.beginPath();
-  ctx.moveTo(p.x - 16, p.y - 78 * st);
-  ctx.lineTo(p.x + 16, p.y - 78 * st);
-  ctx.lineTo(p.x + 14, p.y - 52);
-  ctx.lineTo(p.x - 14, p.y - 52);
+  ctx.moveTo(p.x - jHalfW, jTopY);
+  ctx.lineTo(p.x + jHalfW, jTopY);
+  ctx.lineTo(p.x + 14,     jBotY);
+  ctx.lineTo(p.x - 14,     jBotY);
   ctx.closePath();
   ctx.fill();
-  // Side stripe
+
+  // Contrast side panels with white piping
+  ctx.fillStyle = p.rim;
+  ctx.beginPath();
+  ctx.moveTo(p.x - jHalfW,     jTopY);
+  ctx.lineTo(p.x - jHalfW + 4, jTopY);
+  ctx.lineTo(p.x - 14 + 4,     jBotY);
+  ctx.lineTo(p.x - 14,         jBotY);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(p.x + jHalfW,     jTopY);
+  ctx.lineTo(p.x + jHalfW - 4, jTopY);
+  ctx.lineTo(p.x + 14 - 4,     jBotY);
+  ctx.lineTo(p.x + 14,         jBotY);
+  ctx.closePath(); ctx.fill();
   ctx.fillStyle = '#fff';
-  ctx.fillRect(p.x - 16, p.y - 70 * st, 32, 2);
-  // Jersey number
+  ctx.fillRect(p.x - jHalfW + 4, jTopY, 1, jBotY - jTopY);
+  ctx.fillRect(p.x + jHalfW - 5, jTopY, 1, jBotY - jTopY);
+
+  // Sleeve trim (top edge)
   ctx.fillStyle = '#fff';
-  ctx.font = 'bold 14px Arial';
+  ctx.fillRect(p.x - jHalfW + 4, jTopY, jHalfW * 2 - 8, 1.5);
+
+  // V-neck cut (skin showing through) + trim
+  ctx.fillStyle = '#ffd6a8';
+  ctx.beginPath();
+  ctx.moveTo(p.x - 5, jTopY);
+  ctx.lineTo(p.x + 5, jTopY);
+  ctx.lineTo(p.x, jTopY + 5);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(p.x - 5, jTopY);
+  ctx.lineTo(p.x, jTopY + 5);
+  ctx.lineTo(p.x + 5, jTopY);
+  ctx.stroke();
+
+  // Team name across the top
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 6px Arial';
   ctx.textAlign = 'center';
-  ctx.fillText(p.side === 'left' ? '23' : '7', p.x, p.y - 60);
+  const teamText = p.side === 'left' ? 'RED' : 'BLUE';
+  ctx.fillText(teamText, p.x, jTopY + 12);
+
+  // Big jersey number with outline + highlight
+  const num = p.side === 'left' ? '23' : '07';
+  ctx.font = '900 14px "Arial Black", Arial';
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#000';
+  ctx.strokeText(num, p.x, jBotY - 6);
+  ctx.fillStyle = '#fff';
+  ctx.fillText(num, p.x, jBotY - 6);
+  // Top sheen on number
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.fillRect(p.x - 6, jBotY - 14, 12, 1);
+
+  // Right-side body shading (3D feel)
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.beginPath();
+  ctx.moveTo(p.x + 11, jTopY + 2);
+  ctx.lineTo(p.x + jHalfW - 1, jTopY + 2);
+  ctx.lineTo(p.x + 13 - 1, jBotY - 1);
+  ctx.lineTo(p.x + 10, jBotY - 1);
+  ctx.closePath(); ctx.fill();
 
   // Arms
   const swing = Math.max(0, p.armSwing);
@@ -956,6 +1149,16 @@ function drawPlayer(p) {
   ctx.fillStyle = '#1a1a1a';
   ctx.beginPath(); ctx.arc(-4 + aimDir * 4, 1, 1.6, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc( 5 + aimDir * 4, 1, 1.6, 0, Math.PI * 2); ctx.fill();
+  // Eyebrows (intense, slightly angled inward — game face)
+  ctx.strokeStyle = '#3a1f0a';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(-8 + aimDir * 3, -4);
+  ctx.lineTo(-1 + aimDir * 3, -3);
+  ctx.moveTo( 1 + aimDir * 3, -3);
+  ctx.lineTo( 8 + aimDir * 3, -4);
+  ctx.stroke();
   // Mouth
   ctx.strokeStyle = '#a04020';
   ctx.lineWidth = 1.5;
@@ -1129,6 +1332,7 @@ function frame(t) {
   drawSweepingLights(t);
   drawSpotlights();
   drawCrowd(t);
+  drawAdBoard(t);
   drawJumbotron(t);
   drawBanners(t);
   drawCourt();
