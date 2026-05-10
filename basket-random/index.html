@@ -570,13 +570,10 @@ function drawSky() {
 
 function drawSweepingLights(t) {
   const beams = [
-    { color: 'rgba(244,63,94,0.22)',   freq: 0.0007, phase: 0,    cx: W * 0.10 },  // pink
-    { color: 'rgba(168,85,247,0.20)',  freq: 0.0009, phase: 0.7,  cx: W * 0.25 },  // purple
-    { color: 'rgba(59,130,246,0.20)',  freq: 0.0006, phase: 1.4,  cx: W * 0.40 },  // blue
-    { color: 'rgba(34,211,238,0.20)',  freq: 0.0008, phase: 2.1,  cx: W * 0.55 },  // cyan
-    { color: 'rgba(34,197,94,0.20)',   freq: 0.0007, phase: 2.8,  cx: W * 0.70 },  // green
+    { color: 'rgba(244,63,94,0.22)',   freq: 0.0007, phase: 0,    cx: W * 0.18 },  // pink
+    { color: 'rgba(59,130,246,0.20)',  freq: 0.0006, phase: 1.4,  cx: W * 0.42 },  // blue
+    { color: 'rgba(34,197,94,0.20)',   freq: 0.0007, phase: 2.8,  cx: W * 0.62 },  // green
     { color: 'rgba(252,211,77,0.18)',  freq: 0.0009, phase: 3.5,  cx: W * 0.85 },  // gold
-    { color: 'rgba(249,115,22,0.20)',  freq: 0.0006, phase: 4.2,  cx: W * 0.95 },  // orange
   ];
   for (const b of beams) {
     const aim = Math.sin(t * b.freq + b.phase) * 0.5;
@@ -620,20 +617,20 @@ function drawDiscoFloorLights(t) {
 let nextSparkleAt = 0;
 function maybeSpawnSparkle(t) {
   if (t < nextSparkleAt) return;
-  nextSparkleAt = t + 350 + Math.random() * 800;
+  nextSparkleAt = t + 800 + Math.random() * 1400;
   const fx = 80 + Math.random() * (W - 160);
   const fy = 30 + Math.random() * 80;
   const baseHue = Math.random() * 360;
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2;
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
     const sp = 2 + Math.random() * 3;
     particles.push({
       x: fx, y: fy,
       vx: Math.cos(a) * sp,
       vy: Math.sin(a) * sp,
       g: 0.08,
-      life: 35,
-      color: `hsl(${(baseHue + i * 22) % 360}, 95%, 65%)`,
+      life: 28,
+      color: `hsl(${(baseHue + i * 45) % 360}, 95%, 65%)`,
       size: 3,
       rot: 0, vr: 0,
     });
@@ -662,7 +659,7 @@ const SKIN_TONES = ['#ffd6a8', '#e8b48a', '#c89464', '#9a6840', '#6a4824', '#3e2
 const HAIR_COLORS = ['#1a0e08', '#3e2008', '#7a4a1a', '#cf9a4a', '#a8a8a8', '#dc2626', null, null];
 const SHIRTS = ['#b21e1e', '#222a55', '#1a1a2a', '#1e50b4', '#222a55', '#fcd34d', '#1a1a2a'];
 
-const CROWD_ROW_COUNT = 9;
+const CROWD_ROW_COUNT = 5;
 
 function drawCrowd(t) {
   const frontTop = Math.max(120, GROUND_Y - 280);
@@ -724,6 +721,11 @@ function drawFanLocal(t, worldX, idx) {
   ctx.save();
   ctx.translate(0, wave);
 
+  // Cheap render path for tiny back-row fans (whatever ctx.scale leaves them at)
+  // ctx.globalAlpha is already set by the caller — when alpha < 0.65 we're
+  // in the back rows where heavy detail is invisible anyway.
+  const isFar = ctx.globalAlpha < 0.7;
+
   const teamSide = worldX < W * 0.45 ? 'left' : worldX > W * 0.55 ? 'right' : null;
   const baseSkin = SKIN_TONES[(idx * 5 + 1) % SKIN_TONES.length];
   const hair  = HAIR_COLORS[(idx * 3) % HAIR_COLORS.length];
@@ -768,6 +770,9 @@ function drawFanLocal(t, worldX, idx) {
   // Head
   ctx.fillStyle = skin;
   ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+
+  // Skip the rest of the fine detail for far rows — saves a lot of draw calls
+  if (isFar) { ctx.restore(); return; }
 
   // Hair on top half
   if (hair) {
@@ -930,16 +935,13 @@ function drawJumbotron(t) {
   ctx.strokeStyle = '#444'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(cx - 110, 0); ctx.lineTo(cx - 110, cy - sh / 2 + 4); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(cx + 110, 0); ctx.lineTo(cx + 110, cy - sh / 2 + 4); ctx.stroke();
-  // Frame with color-cycling neon trim
+  // Frame with color-cycling neon trim (no shadowBlur — too costly)
   ctx.fillStyle = '#0a0a18';
   const frameHue = (t * 0.06) % 360;
   ctx.strokeStyle = `hsl(${frameHue}, 90%, 60%)`;
-  ctx.shadowColor = `hsl(${frameHue}, 90%, 60%)`;
-  ctx.shadowBlur = 14;
   ctx.lineWidth = 3;
   if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(cx - sw/2, cy - sh/2, sw, sh, 10); ctx.fill(); ctx.stroke(); }
   else { ctx.fillRect(cx - sw/2, cy - sh/2, sw, sh); ctx.strokeRect(cx - sw/2, cy - sh/2, sw, sh); }
-  ctx.shadowBlur = 0;
   // Inset screen
   const ix = cx - sw/2 + 10, iy = cy - sh/2 + 22, iw = sw - 20, ih = sh - 32;
   ctx.fillStyle = '#000';
@@ -1286,18 +1288,15 @@ function drawAdBoard(t) {
   const charW = 9;
   const totalW = SPONSOR_MSG.length * charW;
   const offset = (t * 0.07) % totalW;
-  // Rainbow gradient flowing across the strip
+  // Rainbow gradient flowing across the strip (no shadowBlur — saves ~3-4ms/frame)
   const grad = ctx.createLinearGradient(adX, 0, adX + adW, 0);
   const baseHue = (t * 0.10) % 360;
   for (let i = 0; i <= 6; i++) {
     grad.addColorStop(i / 6, `hsl(${(baseHue + i * 60) % 360}, 100%, 62%)`);
   }
-  ctx.shadowColor = `hsl(${baseHue}, 100%, 60%)`;
-  ctx.shadowBlur = 10;
   ctx.fillStyle = grad;
   ctx.fillText(SPONSOR_MSG, adX + 4 - offset, adY + adH / 2);
   ctx.fillText(SPONSOR_MSG, adX + 4 - offset + totalW, adY + adH / 2);
-  ctx.shadowBlur = 0;
   ctx.restore();
 
   // Subtle scanline overlay
@@ -1841,10 +1840,8 @@ function drawReflection(t) {
   ctx.translate(0, GROUND_Y * 2);
   ctx.scale(1, -1);
   ctx.globalAlpha = 0.22;
-  // Soft motion blur on reflection
-  ctx.filter = 'blur(0.6px)';
+  // (No filter blur — too expensive. Sheen overlay below softens it enough.)
   drawWorld(t);
-  ctx.filter = 'none';
   ctx.restore();
 
   // Subtle horizontal sheen overlay to "polish" the reflection
