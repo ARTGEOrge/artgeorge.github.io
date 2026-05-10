@@ -101,8 +101,8 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a1428);
-scene.fog = new THREE.Fog(0x0a1428, 28, 95);
+scene.background = new THREE.Color(0x0c1730);
+scene.fog = new THREE.Fog(0x141a30, 38, 130);
 
 const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 200);
 camera.position.set(0, 4.2, 8.5);
@@ -117,7 +117,7 @@ function resize() {
 window.addEventListener('resize', resize); resize();
 
 // ============== LIGHTING ==============
-scene.add(new THREE.HemisphereLight(0x6688cc, 0x221122, 0.55));
+scene.add(new THREE.HemisphereLight(0x6688cc, 0x222a44, 0.85));
 const sun = new THREE.DirectionalLight(0xffeec8, 1.15);
 sun.position.set(6, 14, 6);
 sun.castShadow = true;
@@ -157,39 +157,109 @@ for (let i = 0; i < 2; i++) {
   floors.push(f);
 }
 
-// Ceiling (subway tunnel feel)
-const ceilingMat = new THREE.MeshStandardMaterial({ color: 0x16161e, roughness: 1, metalness: 0 });
-const ceilings = [];
-for (let i = 0; i < 2; i++) {
-  const c = new THREE.Mesh(new THREE.PlaneGeometry(FLOOR_HALFW * 2, FLOOR_LEN), ceilingMat);
-  c.rotation.x = Math.PI / 2;
-  c.position.set(0, 6.5, -FLOOR_LEN / 2 - i * FLOOR_LEN);
-  scene.add(c);
-  ceilings.push(c);
+// ============== WORLD: CITY BUILDINGS (replaces tunnel walls + ceiling) ==============
+const BUILDING_COLORS = [0x664a3a, 0x5a5a5a, 0x5a4a3a, 0x4a4a5a, 0x6a3a3a, 0x4a5a4a, 0x6a5a4a, 0x3a3a48];
+const ROOF_COLOR     = 0x222230;
+const winLitMat   = new THREE.MeshStandardMaterial({ color: 0xffeeaa, emissive: 0x553311 });
+const winDarkMat  = new THREE.MeshStandardMaterial({ color: 0x111118, emissive: 0x000000 });
+const storefrontMat = new THREE.MeshStandardMaterial({ color: 0xffaa44, emissive: 0x664422 });
+const billboardMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x0e6a2a });
+
+function makeBuildingRow(side) {
+  const g = new THREE.Group();
+  const buildingsCount = 14;
+  const sectionLen = FLOOR_LEN / buildingsCount;
+  for (let i = 0; i < buildingsCount; i++) {
+    const z = -FLOOR_LEN / 2 + i * sectionLen + sectionLen / 2;
+    const h = 4 + Math.random() * 11;
+    const w = sectionLen * (0.85 + Math.random() * 0.10);
+    const depth = 2.4 + Math.random() * 2;
+    const c = BUILDING_COLORS[Math.floor(Math.random() * BUILDING_COLORS.length)];
+    const bx = side * (FLOOR_HALFW + depth / 2 + 0.4);
+
+    // Building body
+    const building = new THREE.Mesh(
+      new THREE.BoxGeometry(depth, h, w),
+      new THREE.MeshStandardMaterial({ color: c, roughness: 0.9 })
+    );
+    building.position.set(bx, h / 2, z);
+    building.receiveShadow = true;
+    g.add(building);
+
+    // Roof slab + small parapet
+    const roof = new THREE.Mesh(
+      new THREE.BoxGeometry(depth + 0.18, 0.3, w + 0.18),
+      new THREE.MeshStandardMaterial({ color: ROOF_COLOR })
+    );
+    roof.position.set(bx, h + 0.15, z);
+    g.add(roof);
+
+    // Lit windows on the inner face (facing the player)
+    const winRows = Math.max(1, Math.floor(h / 1.6));
+    const winCols = Math.max(1, Math.floor(w / 1.4));
+    for (let r = 0; r < winRows; r++) {
+      for (let col = 0; col < winCols; col++) {
+        if (Math.random() < 0.55) {
+          const lit = Math.random() < 0.7;
+          const wm = new THREE.Mesh(
+            new THREE.BoxGeometry(0.06, 0.55, 0.7),
+            lit ? winLitMat : winDarkMat
+          );
+          wm.position.set(
+            side * (FLOOR_HALFW + 0.05),
+            0.9 + r * 1.6,
+            z - w / 2 + 0.7 + col * (w / winCols)
+          );
+          g.add(wm);
+        }
+      }
+    }
+
+    // Bright glowing storefront at street level (for some buildings)
+    if (Math.random() < 0.45) {
+      const sf = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 1.3, 1.6),
+        storefrontMat
+      );
+      sf.position.set(side * (FLOOR_HALFW + 0.06), 0.65, z - w / 2 + Math.random() * w);
+      g.add(sf);
+    }
+    // Occasional rooftop billboard
+    if (h > 7 && Math.random() < 0.3) {
+      const bb = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.2, 2.2), billboardMat);
+      bb.position.set(side * (FLOOR_HALFW + 0.05), h + 0.9, z);
+      g.add(bb);
+      // Billboard support struts
+      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.6, 0.04),
+        new THREE.MeshStandardMaterial({ color: 0x222222 }));
+      strut.position.set(side * (FLOOR_HALFW + 0.05), h + 0.3, z - 0.6);
+      g.add(strut);
+      const strut2 = strut.clone(); strut2.position.z = z + 0.6; g.add(strut2);
+    }
+  }
+  return g;
 }
 
-// ============== WORLD: TUNNEL WALLS ==============
-const wallMat = new THREE.MeshStandardMaterial({ color: 0x1c1c28, roughness: 0.9 });
-const walls = [];
-for (let side of [-1, 1]) {
+const buildings = [];
+for (const side of [-1, 1]) {
   for (let i = 0; i < 2; i++) {
-    const w = new THREE.Mesh(new THREE.BoxGeometry(0.4, 6.5, FLOOR_LEN), wallMat);
-    w.position.set(side * (FLOOR_HALFW + 0.2), 3.25, -FLOOR_LEN / 2 - i * FLOOR_LEN);
-    w.receiveShadow = true;
-    scene.add(w);
-    walls.push(w);
+    const row = makeBuildingRow(side);
+    row.position.z = -FLOOR_LEN / 2 - i * FLOOR_LEN;
+    scene.add(row);
+    buildings.push(row);
   }
 }
 
-// Wall stripe (subway tile pattern look — long thin emissive boxes)
-const stripeMat = new THREE.MeshStandardMaterial({ color: 0xaaccff, emissive: 0x223344, roughness: 0.4 });
-const wallStripes = [];
-for (let side of [-1, 1]) {
+// Curb / sidewalk concrete edge along the inside of each building row
+const curbMat = new THREE.MeshStandardMaterial({ color: 0x6a6a6a, roughness: 0.85 });
+const curbs = [];
+for (const side of [-1, 1]) {
   for (let i = 0; i < 2; i++) {
-    const s = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.4, FLOOR_LEN), stripeMat);
-    s.position.set(side * FLOOR_HALFW, 4.5, -FLOOR_LEN / 2 - i * FLOOR_LEN);
-    scene.add(s);
-    wallStripes.push(s);
+    const c = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, FLOOR_LEN), curbMat);
+    c.position.set(side * (FLOOR_HALFW - 0.25), 0.15, -FLOOR_LEN / 2 - i * FLOOR_LEN);
+    c.receiveShadow = true;
+    scene.add(c);
+    curbs.push(c);
   }
 }
 
@@ -222,16 +292,56 @@ tieInstanced.instanceMatrix.needsUpdate = true;
 tieInstanced.receiveShadow = true;
 scene.add(tieInstanced);
 
-// ============== WORLD: CEILING LIGHTS ==============
+// ============== WORLD: STREET LAMPS (replaces ceiling lights) ==============
 const lightFixtureMat = new THREE.MeshBasicMaterial({ color: 0xffeeaa });
-const ceilingLights = [];
+const lampPoleMat = new THREE.MeshStandardMaterial({ color: 0x141418, roughness: 0.7, metalness: 0.4 });
+const streetLamps = [];
 const LIGHT_COUNT = 36;
 for (let i = 0; i < LIGHT_COUNT; i++) {
-  const l = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.8), lightFixtureMat);
-  l.position.set(0, 6.4, -i * LIGHT_GAP);
-  scene.add(l);
-  ceilingLights.push(l);
+  for (const side of [-1, 1]) {
+    const lamp = new THREE.Group();
+    // Pole
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.08, 0.12, 5, 8),
+      lampPoleMat
+    );
+    pole.position.y = 2.5;
+    pole.castShadow = true;
+    lamp.add(pole);
+    // Curved arm reaching over the tracks
+    const arm = new THREE.Mesh(
+      new THREE.BoxGeometry(0.85, 0.08, 0.08),
+      lampPoleMat
+    );
+    arm.position.set(-side * 0.45, 4.95, 0);
+    lamp.add(arm);
+    // Lamp head (housing + bright bulb)
+    const housing = new THREE.Mesh(
+      new THREE.BoxGeometry(0.55, 0.18, 0.55),
+      lampPoleMat
+    );
+    housing.position.set(-side * 0.85, 4.92, 0);
+    lamp.add(housing);
+    const bulb = new THREE.Mesh(
+      new THREE.BoxGeometry(0.4, 0.05, 0.4),
+      lightFixtureMat
+    );
+    bulb.position.set(-side * 0.85, 4.82, 0);
+    lamp.add(bulb);
+
+    lamp.position.set(side * (FLOOR_HALFW - 0.4), 0, -i * LIGHT_GAP);
+    scene.add(lamp);
+    streetLamps.push(lamp);
+  }
 }
+
+// Background: a pulse of distant city light at the horizon
+const skyHaze = new THREE.Mesh(
+  new THREE.PlaneGeometry(FLOOR_HALFW * 4, 8),
+  new THREE.MeshBasicMaterial({ color: 0x442266, transparent: true, opacity: 0.5 })
+);
+skyHaze.position.set(0, 4, -FLOOR_LEN / 2);
+scene.add(skyHaze);
 
 // ============== PLAYER ==============
 const playerGroup = new THREE.Group();
@@ -1211,24 +1321,21 @@ function update(dt) {
     f.position.z += dz;
     if (f.position.z > FLOOR_LEN / 2 + 5) f.position.z -= FLOOR_LEN * 2;
   }
-  for (const c of ceilings) {
+  for (const b of buildings) {
+    b.position.z += dz;
+    if (b.position.z > FLOOR_LEN / 2 + 5) b.position.z -= FLOOR_LEN * 2;
+  }
+  for (const c of curbs) {
     c.position.z += dz;
     if (c.position.z > FLOOR_LEN / 2 + 5) c.position.z -= FLOOR_LEN * 2;
-  }
-  for (const w of walls) {
-    w.position.z += dz;
-    if (w.position.z > FLOOR_LEN / 2 + 5) w.position.z -= FLOOR_LEN * 2;
-  }
-  for (const s of wallStripes) {
-    s.position.z += dz;
-    if (s.position.z > FLOOR_LEN / 2 + 5) s.position.z -= FLOOR_LEN * 2;
   }
   for (const r of rails) {
     r.position.z += dz;
     if (r.position.z > FLOOR_LEN / 2 + 5) r.position.z -= FLOOR_LEN * 2;
   }
-  for (const l of ceilingLights) {
+  for (const l of streetLamps) {
     l.position.z += dz;
+    // Each pair takes 2 lamps so wrap distance accounts for that
     if (l.position.z > 8) l.position.z -= LIGHT_COUNT * LIGHT_GAP;
   }
   // Scroll instanced ties
