@@ -1143,11 +1143,32 @@ function drawCourt() {
   g.addColorStop(1, '#3a1a0a');
   ctx.fillStyle = g; ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
 
-  // Wood plank seams (faint)
-  ctx.strokeStyle = 'rgba(40,20,8,0.5)';
+  // === ONE-POINT PERSPECTIVE WOOD PLANKS ===
+  const vpX = W / 2;
+  const vpY = GROUND_Y - 70;
+  ctx.strokeStyle = 'rgba(40,20,8,0.55)';
   ctx.lineWidth = 1;
-  for (let i = 0; i < W; i += 60) {
-    ctx.beginPath(); ctx.moveTo(i, GROUND_Y); ctx.lineTo(i + 25, H); ctx.stroke();
+  const seamSpread = W * 0.85;
+  const seamCount = 26;
+  for (let i = -seamCount; i <= seamCount; i++) {
+    const fx = W / 2 + (i / seamCount) * seamSpread;
+    const tt = (GROUND_Y - vpY) / (H - vpY);
+    const gx = vpX + (fx - vpX) * tt;
+    ctx.beginPath();
+    ctx.moveTo(gx, GROUND_Y);
+    ctx.lineTo(fx, H);
+    ctx.stroke();
+  }
+  // Plank end-grain rows — bunched toward back (perspective)
+  ctx.strokeStyle = 'rgba(40,20,8,0.32)';
+  for (let r = 1; r <= 6; r++) {
+    const u = r / 6;
+    const persU = Math.pow(u, 1.7);
+    const yy = GROUND_Y + persU * (H - GROUND_Y);
+    ctx.beginPath();
+    ctx.moveTo(0, yy);
+    ctx.lineTo(W, yy);
+    ctx.stroke();
   }
 
   // Polished sheen across the floor
@@ -1157,14 +1178,52 @@ function drawCourt() {
   ctx.fillStyle = sheen;
   ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
 
-  // Court lines
+  // === PAINTED TEAM "KEYS" (lanes) IN PERSPECTIVE TRAPEZOIDS ===
+  for (const h of hoops) {
+    const cx = h.x + h.w / 2;
+    // Each hoop's key is colored for the team that defends it (the opposite team scores into it)
+    const T = TEAMS[h.side];
+    const backW   = 70;
+    const frontW  = 120;
+    const keyDepth = 100;
+    const keyTop  = GROUND_Y + 4;
+    ctx.fillStyle = T.color + '26';
+    ctx.beginPath();
+    ctx.moveTo(cx - backW / 2,  keyTop);
+    ctx.lineTo(cx + backW / 2,  keyTop);
+    ctx.lineTo(cx + frontW / 2, keyTop + keyDepth);
+    ctx.lineTo(cx - frontW / 2, keyTop + keyDepth);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // Court lines (yellow)
   ctx.strokeStyle = '#fcd34d';
   ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(0, GROUND_Y); ctx.lineTo(W, GROUND_Y); ctx.stroke();
   ctx.beginPath(); ctx.ellipse(W / 2, GROUND_Y, 70, 12, 0, 0, Math.PI * 2); ctx.stroke();
+  // Half-court line (vertical from vanishing point, since vp is centered)
   ctx.beginPath(); ctx.moveTo(W / 2, GROUND_Y); ctx.lineTo(W / 2, H); ctx.stroke();
+  // Key outlines + free-throw lines and circles
   for (const h of hoops) {
     const cx = h.x + h.w / 2;
+    const backW = 70, frontW = 120, keyDepth = 100;
+    const keyTop = GROUND_Y + 4;
+    ctx.beginPath();
+    ctx.moveTo(cx - backW / 2, keyTop);
+    ctx.lineTo(cx + backW / 2, keyTop);
+    ctx.moveTo(cx - backW / 2, keyTop);
+    ctx.lineTo(cx - frontW / 2, keyTop + keyDepth);
+    ctx.moveTo(cx + backW / 2, keyTop);
+    ctx.lineTo(cx + frontW / 2, keyTop + keyDepth);
+    ctx.moveTo(cx - frontW / 2, keyTop + keyDepth);
+    ctx.lineTo(cx + frontW / 2, keyTop + keyDepth);
+    ctx.stroke();
+    // Free-throw arc (front of key)
+    ctx.beginPath();
+    ctx.ellipse(cx, keyTop + keyDepth, frontW / 2, 16, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    // 3-point arc (back of key) — kept from before
     ctx.beginPath();
     ctx.ellipse(cx, GROUND_Y, 110, 18, 0, 0, Math.PI, false);
     ctx.stroke();
@@ -1290,19 +1349,41 @@ function drawHoop(h, t) {
     ctx.fill();
   }
 
-  // Rim
-  ctx.strokeStyle = '#ff5522';
-  ctx.lineWidth = 6;
+  // ==== 3D RIM (ring viewed from slightly above) ====
+  const rimCx = h.x + h.w / 2;
+  const rimRx = h.w / 2;
+  const rimRy = 5;
+  // Inner hole shadow (so the rim looks hollow)
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.beginPath();
+  ctx.ellipse(rimCx, rimY, rimRx - 2, rimRy - 1, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Back half of the rim (away from camera) — dimmer
+  ctx.strokeStyle = '#a82200';
+  ctx.lineWidth = 3.5;
   ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(h.x, rimY); ctx.lineTo(h.x + h.w, rimY); ctx.stroke();
-  // Rim shadow underline
-  ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+  ctx.beginPath();
+  ctx.ellipse(rimCx, rimY, rimRx, rimRy, 0, Math.PI, Math.PI * 2);
+  ctx.stroke();
+  // Front half of the rim (toward camera) — brighter
+  ctx.strokeStyle = '#ff7a3d';
+  ctx.lineWidth = 4.5;
+  ctx.beginPath();
+  ctx.ellipse(rimCx, rimY, rimRx, rimRy, 0, 0, Math.PI);
+  ctx.stroke();
+  // Specular hot spot on the front edge
+  ctx.fillStyle = 'rgba(255,255,200,0.7)';
+  ctx.beginPath();
+  ctx.ellipse(rimCx - rimRx * 0.45, rimY + rimRy - 1, 5, 1.2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Bracket attaching rim to backboard
+  const bbAttachX = h.side === 'left' ? h.x - 2 : h.x + h.w + 2;
+  ctx.strokeStyle = '#666';
   ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(h.x, rimY + 4); ctx.lineTo(h.x + h.w, rimY + 4); ctx.stroke();
-  // Rim end caps
-  ctx.fillStyle = '#ff7a3d';
-  ctx.beginPath(); ctx.arc(h.x, rimY, 4, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(h.x + h.w, rimY, 4, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(bbAttachX, rimY);
+  ctx.lineTo(h.side === 'left' ? h.x + 4 : h.x + h.w - 4, rimY);
+  ctx.stroke();
 
   // Net (curved strands)
   const netH = 38;
