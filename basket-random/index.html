@@ -615,37 +615,36 @@ const SKIN_TONES = ['#ffd6a8', '#e8b48a', '#c89464', '#9a6840', '#6a4824', '#3e2
 const HAIR_COLORS = ['#1a0e08', '#3e2008', '#7a4a1a', '#cf9a4a', '#a8a8a8', '#dc2626', null, null];
 const SHIRTS = ['#b21e1e', '#222a55', '#1a1a2a', '#1e50b4', '#222a55', '#fcd34d', '#1a1a2a'];
 
-const CROWD_ROWS = [
-  { yOff: -96, scale: 0.55, alpha: 0.55, xStep: 14, offset: 9 },
-  { yOff: -64, scale: 0.68, alpha: 0.72, xStep: 17, offset: 3 },
-  { yOff: -34, scale: 0.84, alpha: 0.90, xStep: 20, offset: 7 },
-  { yOff:   0, scale: 1.00, alpha: 1.00, xStep: 22, offset: 0 },
-];
+const CROWD_ROW_COUNT = 9;
 
 function drawCrowd(t) {
   const frontTop = Math.max(120, GROUND_Y - 280);
+  const topMargin = 14;
+  const frontY = frontTop + 30;
+  const depth  = Math.max(140, frontY - topMargin);
 
-  // Draw rows back-to-front so taller front rows visually anchor
-  for (let rIdx = 0; rIdx < CROWD_ROWS.length; rIdx++) {
-    const row = CROWD_ROWS[rIdx];
-    const rowY = frontTop + 30 + row.yOff;
+  for (let rIdx = 0; rIdx < CROWD_ROW_COUNT; rIdx++) {
+    const u = rIdx / (CROWD_ROW_COUNT - 1);     // 0 = back, 1 = front
+    const rowY  = topMargin + depth * u;
+    const scale = 0.26 + u * 0.74;
+    const alpha = 0.38 + u * 0.62;
+    const xStep = Math.max(7, Math.round(7 + u * 15));
+    const offset = (rIdx * 11) % 19;
 
-    // Stadium tier riser behind this row (extends a bit up so heads sit on it)
-    ctx.fillStyle = `rgba(6,3,20,${0.55 + (1 - row.alpha) * 0.30})`;
-    ctx.fillRect(0, rowY + 14 * row.scale, W, 22);
-    // Riser top step lip
-    ctx.fillStyle = `rgba(160,140,80,${row.alpha * 0.18})`;
-    ctx.fillRect(0, rowY + 14 * row.scale, W, 1.5);
-    // Step underline shadow
-    ctx.fillStyle = `rgba(0,0,0,${0.25 + (1 - row.alpha) * 0.2})`;
-    ctx.fillRect(0, rowY + 36 * row.scale, W, 2);
+    // Stadium tier riser
+    ctx.fillStyle = `rgba(6,3,20,${0.55 + (1 - alpha) * 0.30})`;
+    ctx.fillRect(0, rowY + 14 * scale, W, Math.max(8, 22 * scale));
+    ctx.fillStyle = `rgba(160,140,80,${alpha * 0.18})`;
+    ctx.fillRect(0, rowY + 14 * scale, W, 1.5);
+    ctx.fillStyle = `rgba(0,0,0,${0.25 + (1 - alpha) * 0.2})`;
+    ctx.fillRect(0, rowY + 36 * scale, W, 2);
 
-    let idx = rIdx * 53 + row.offset;
-    for (let x = (row.offset % row.xStep) - row.xStep / 2; x < W + row.xStep; x += row.xStep) {
+    let idx = rIdx * 53 + offset;
+    for (let x = (offset % xStep) - xStep / 2; x < W + xStep; x += xStep) {
       ctx.save();
-      ctx.globalAlpha = row.alpha;
+      ctx.globalAlpha = alpha;
       ctx.translate(x + 11, rowY);
-      ctx.scale(row.scale, row.scale);
+      ctx.scale(scale, scale);
       drawFanLocal(t, x, idx);
       ctx.restore();
       idx++;
@@ -659,12 +658,13 @@ function drawCrowd(t) {
   ctx.fillRect(0, frontTop + 100, W, 8);
 
   // Camera flashes scattered through all tiers
-  for (let x = 12; x < W; x += 23) {
+  for (let x = 12; x < W; x += 21) {
     const flicker = (Math.sin(t * 0.002 + x) + 1) * 0.5;
     if (flicker > 0.78) {
-      const rowIdx = Math.floor(((Math.sin(x * 1.7) + 1) * 0.5) * CROWD_ROWS.length);
-      const fr = CROWD_ROWS[Math.min(CROWD_ROWS.length - 1, rowIdx)];
-      const fy = frontTop + 30 + fr.yOff - 2;
+      const rIdx = Math.floor(((Math.sin(x * 1.7) + 1) * 0.5) * CROWD_ROW_COUNT);
+      const ri = Math.min(CROWD_ROW_COUNT - 1, rIdx);
+      const u = ri / (CROWD_ROW_COUNT - 1);
+      const fy = topMargin + depth * u - 2;
       ctx.fillStyle = `rgba(255,240,200,${flicker - 0.55})`;
       ctx.fillRect(x, fy, 2, 2);
     }
