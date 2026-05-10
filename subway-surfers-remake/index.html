@@ -432,7 +432,11 @@ const player = {
   state: 'run',
   slideTimer: 0,
   invuln: 0,
+  platformY: 0,    // current "ground" level (raised when riding on top of a train)
+  onTrain: null,   // reference to train obstacle when riding it
 };
+const PLAYER_JUMP_V = 15;
+const PLAYER_GRAVITY = 38;
 let speed = 14;
 let distance = 0;
 let score = 0;
@@ -501,39 +505,51 @@ function makeHighBar(lane) {
 
 function makeTrain(lane) {
   const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, 3.0, 6.5),
+  const TRAIN_BODY_H = 2.4;
+  const TRAIN_LEN    = 7.0;
+  const TRAIN_TOP_Y  = TRAIN_BODY_H + 0.15; // top-of-roof Y where the player can stand
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, TRAIN_BODY_H, TRAIN_LEN),
     new THREE.MeshStandardMaterial({ color: 0xdc3322, roughness: 0.5, metalness: 0.2 }));
-  body.position.y = 1.6; body.castShadow = true; g.add(body);
-  // Roof
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.2, 6.55),
-    new THREE.MeshStandardMaterial({ color: 0x5a1010 }));
-  roof.position.y = 3.2; g.add(roof);
+  body.position.y = TRAIN_BODY_H / 2; body.castShadow = true; g.add(body);
+  // Roof — flat so a player can stand on it
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.2, TRAIN_LEN + 0.05),
+    new THREE.MeshStandardMaterial({ color: 0x5a1010, roughness: 0.7 }));
+  roof.position.y = TRAIN_BODY_H + 0.1; g.add(roof);
   // Side stripe (gold)
-  const stripeBox = new THREE.Mesh(new THREE.BoxGeometry(1.91, 0.14, 6.51),
+  const stripeBox = new THREE.Mesh(new THREE.BoxGeometry(1.91, 0.14, TRAIN_LEN + 0.01),
     new THREE.MeshStandardMaterial({ color: 0xffd700 }));
-  stripeBox.position.y = 1.6; g.add(stripeBox);
+  stripeBox.position.y = 1.2; g.add(stripeBox);
   // Windows on each long side
   const winMat = new THREE.MeshStandardMaterial({
     color: 0xaaccee, emissive: 0x334466, transparent: true, opacity: 0.9
   });
-  for (let i = -2; i <= 2; i += 1.4) {
+  for (let i = -2.2; i <= 2.2; i += 1.4) {
     const w1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.55, 0.55), winMat);
-    w1.position.set(0.97, 2.15, i); g.add(w1);
+    w1.position.set(0.97, 1.75, i); g.add(w1);
     const w2 = w1.clone(); w2.position.x = -0.97; g.add(w2);
   }
   // Front windshield
-  const front = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.7, 0.05), winMat);
-  front.position.set(0, 2.3, 3.27); g.add(front);
+  const front = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.65, 0.05), winMat);
+  front.position.set(0, 1.85, TRAIN_LEN / 2 + 0.02); g.add(front);
   // Headlight glow
   const hl = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 10),
     new THREE.MeshBasicMaterial({ color: 0xffeeaa }));
-  hl.position.set(0, 0.7, 3.28); g.add(hl);
+  hl.position.set(0, 0.7, TRAIN_LEN / 2 + 0.03); g.add(hl);
   const hlGlow = new THREE.PointLight(0xffeeaa, 0.6, 8);
-  hlGlow.position.set(0, 0.7, 3.5);
+  hlGlow.position.set(0, 0.7, TRAIN_LEN / 2 + 0.25);
   g.add(hlGlow);
+  // Roof rivets (visual hint that you can stand on top)
+  const rivetMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.6 });
+  for (let r = -TRAIN_LEN / 2 + 0.6; r < TRAIN_LEN / 2; r += 1.2) {
+    for (const rx of [-0.7, 0.7]) {
+      const rivet = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), rivetMat);
+      rivet.position.set(rx, TRAIN_TOP_Y + 0.05, r);
+      g.add(rivet);
+    }
+  }
   g.position.x = (lane - 1) * LANE_WIDTH;
   scene.add(g);
-  return { mesh: g, type: 'train', lane, length: 6.5 };
+  return { mesh: g, type: 'train', lane, length: TRAIN_LEN, topY: TRAIN_TOP_Y };
 }
 
 function makeCan(lane) {
@@ -849,7 +865,7 @@ function spawnRow() {
 function tryJump() {
   if (player.state === 'run') {
     player.state = 'jump';
-    player.vy = 9.5;
+    player.vy = PLAYER_JUMP_V;
   }
 }
 function trySlide() {
@@ -909,6 +925,7 @@ function restart() {
   player.yOff = 0; player.vy = 0;
   player.state = 'run'; player.slideTimer = 0;
   player.invuln = 0;
+  player.platformY = 0; player.onTrain = null;
   speed = 14;
   distance = 0;
   score = 0;
@@ -1006,10 +1023,10 @@ function update(dt) {
   const laneTilt = (targetX - player.displayX) * 0.3;
   playerGroup.rotation.z = laneTilt;
 
-  // Jump
+  // Jump (gravity applies relative to platformY-anchored ground)
   if (player.state === 'jump') {
     player.yOff += player.vy * dt;
-    player.vy -= 26 * dt;
+    player.vy -= PLAYER_GRAVITY * dt;
     if (player.yOff <= 0) {
       player.yOff = 0; player.vy = 0;
       player.state = 'run';
@@ -1019,7 +1036,7 @@ function update(dt) {
     player.slideTimer -= dt;
     if (player.slideTimer <= 0) player.state = 'run';
   }
-  playerGroup.position.y = player.yOff;
+  playerGroup.position.y = player.platformY + player.yOff;
 
   // Crouch and tilt forward when sliding
   const targetScaleY = player.state === 'slide' ? 0.42 : 1;
@@ -1047,9 +1064,9 @@ function update(dt) {
     armR.rotation.x = -0.3;
   }
 
-  // Camera bob
+  // Camera bob — also rises when player is on a train roof
   const bob = (player.state === 'run') ? Math.sin(tt * 2) * 0.04 : 0;
-  camera.position.y = 4.2 + bob + player.yOff * 0.15;
+  camera.position.y = 4.2 + bob + (player.platformY + player.yOff) * 0.18;
 
   // ===== COP CHASER =====
   // Cop closes the gap during stumble, falls back when player runs clean
@@ -1155,7 +1172,39 @@ function update(dt) {
     lastStationZ -= 180 + Math.random() * 120;
   }
 
-  // Collisions
+  // ===== ON-TRAIN DETECTION =====
+  // First, figure out if the player is currently above (and on) a train.
+  let nowOnTrain = null;
+  for (const o of obstacles) {
+    if (o.type !== 'train') continue;
+    if (o.lane !== player.lane) continue;
+    const oz = o.mesh.position.z;
+    const halfLen = (o.length || 7) / 2;
+    if (oz < -halfLen || oz > halfLen) continue;
+    // Player is in this train's z & lane footprint
+    const pY = player.platformY + player.yOff;
+    if (pY >= o.topY - 0.2) { nowOnTrain = o; break; }
+  }
+  if (nowOnTrain) {
+    if (player.onTrain !== nowOnTrain) {
+      // Just landed (or stepped onto a different train)
+      player.platformY = nowOnTrain.topY;
+      player.yOff = 0;
+      player.vy = 0;
+      player.state = 'run';
+      nowOnTrain.passed = true; // don't double-trigger as a hit
+    }
+    player.onTrain = nowOnTrain;
+  } else if (player.onTrain) {
+    // Fell off the train (lane change, end of train, or slide-dismount)
+    player.onTrain = null;
+    player.yOff = player.platformY + player.yOff;
+    player.platformY = 0;
+    player.state = 'jump';
+    player.vy = 0;  // start falling from current height
+  }
+
+  // ===== OBSTACLE COLLISIONS =====
   for (let i = obstacles.length - 1; i >= 0; i--) {
     const o = obstacles[i];
     const oz = o.mesh.position.z;
@@ -1165,14 +1214,18 @@ function update(dt) {
       continue;
     }
     if (oz > -1.2 && oz < 1.6 && o.lane === player.lane && !o.passed) {
+      // While riding a train, the player is elevated above ground obstacles
+      if (player.onTrain) continue;
+      const pY = player.platformY + player.yOff;
       let hit = true;
-      const jumpClears = player.state === 'jump' && player.yOff > 0.55;
+      const jumpClears = player.state === 'jump' && pY > 0.55;
       if (o.type === 'barrier'  && jumpClears) hit = false;
       if (o.type === 'can'      && jumpClears) hit = false;
-      if (o.type === 'crate'    && player.state === 'jump' && player.yOff > 0.95) hit = false;
+      if (o.type === 'crate'    && player.state === 'jump' && pY > 0.95) hit = false;
       if (o.type === 'high-bar' && player.state === 'slide') hit = false;
       if (o.type === 'sign'     && player.state === 'slide') hit = false;
-      // train always hits
+      // Train: a high-enough jump clears it (and the on-train check above will snap us onto the roof)
+      if (o.type === 'train'    && pY >= o.topY - 0.2) hit = false;
       if (hit) {
         o.passed = true;
         stumble(o.type === 'train' ? COP_PUSH_TRAIN : COP_PUSH_HIT);
@@ -1189,8 +1242,9 @@ function update(dt) {
       continue;
     }
     if (c.mesh.position.z > -1 && c.mesh.position.z < 1.5 && c.lane === player.lane) {
-      const playerYTop = player.yOff + (player.state === 'slide' ? 0.5 : 1.8);
-      const playerYBot = player.yOff + (player.state === 'slide' ? 0 : 0);
+      const pY = player.platformY + player.yOff;
+      const playerYTop = pY + (player.state === 'slide' ? 0.5 : 1.8);
+      const playerYBot = pY;
       const coinY = 1 + c.yOff;
       if (coinY >= playerYBot - 0.3 && coinY <= playerYTop + 0.3) {
         scene.remove(c.mesh);
