@@ -651,6 +651,9 @@ function pickWeighted(items, weights) {
   }
   return items[items.length - 1];
 }
+function preSpawn(rows) {
+  for (let i = 0; i < rows; i++) spawnRow();
+}
 function spawnRow() {
   const r = Math.random();
   // lastSpawnZ in world coords; player at z=0
@@ -749,7 +752,8 @@ function restart() {
   score = 0;
   coinCount = 0;
   gameOver = false;
-  lastSpawnZ = -16;
+  lastSpawnZ = -10;
+  preSpawn(20);
   copZ = 6.5;
   cop.group.position.x = 0;
   flashEl.style.background = 'rgba(255,0,0,0)';
@@ -963,8 +967,14 @@ function update(dt) {
   }
   tieInstanced.instanceMatrix.needsUpdate = true;
 
-  // Spawn ahead (keep buffer of ~70 units ahead of player)
-  while (lastSpawnZ > -70) spawnRow();
+  // Spawn ahead — keep a deep buffer that scales with current speed (always at least ~5 sec ahead)
+  const spawnBuffer = -Math.max(120, speed * 6);
+  while (lastSpawnZ > spawnBuffer) spawnRow();
+  // Safety net: if the spawn cursor somehow drifts past the player, snap it forward
+  if (lastSpawnZ > -20) {
+    lastSpawnZ = -40;
+    spawnRow();
+  }
 
   // Collisions
   for (let i = obstacles.length - 1; i >= 0; i--) {
@@ -1035,8 +1045,8 @@ function frame(t) {
   requestAnimationFrame(frame);
 }
 
-// Pre-spawn so the first row is already visible
-for (let i = 0; i < 12; i++) spawnRow();
+// Pre-spawn so the world is already populated when the game starts
+preSpawn(20);
 
 requestAnimationFrame(frame);
 }
