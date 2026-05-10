@@ -450,6 +450,8 @@ bestEl.textContent = bestScore;
 const obstacles = [];
 const coins = [];
 const sparks = [];
+const stations = [];
+let lastStationZ = -90;     // world-z of most recently spawned station; gets scrolled with the world
 
 // ============== OBSTACLE FACTORIES ==============
 function makeBarrier(lane) {
@@ -628,6 +630,164 @@ function makeSign(lane) {
   return { mesh: g, type: 'sign', lane };
 }
 
+// Random station name picker
+const STATION_NAMES = ['MAIN ST', 'CITY HALL', 'UNION SQ', 'CENTRAL', 'TIMES SQ', 'PARK AVE', 'BROADWAY', 'GRAND ST'];
+function pickStationName() { return STATION_NAMES[Math.floor(Math.random() * STATION_NAMES.length)]; }
+
+function makeStation() {
+  const g = new THREE.Group();
+  const STATION_LEN = 32;
+  const HALF = STATION_LEN / 2;
+  const PLAT_INNER_X = 3.4;             // platforms hug the outside of the lanes
+  const PLAT_OUTER_X = FLOOR_HALFW;     // out to the wall
+  const PLAT_HEIGHT  = 1.0;
+
+  // === Tile floor for the station section ===
+  const stFloor = new THREE.Mesh(
+    new THREE.PlaneGeometry(FLOOR_HALFW * 2, STATION_LEN),
+    new THREE.MeshStandardMaterial({ color: 0xc8c5b4, roughness: 0.55, metalness: 0.05 })
+  );
+  stFloor.rotation.x = -Math.PI / 2;
+  stFloor.position.y = 0.02;
+  stFloor.receiveShadow = true;
+  g.add(stFloor);
+
+  const platMat = new THREE.MeshStandardMaterial({ color: 0xb0aa9a, roughness: 0.85 });
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0x554400 });
+  const pillarMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.45 });
+  const basMat   = new THREE.MeshStandardMaterial({ color: 0x4a4a4a });
+  const benchMat = new THREE.MeshStandardMaterial({ color: 0x6b3a1a, roughness: 0.7 });
+  const benchLegMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.5 });
+  const signBgMat   = new THREE.MeshStandardMaterial({ color: 0x163059, emissive: 0x081830 });
+  const letterMat   = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const stationName = pickStationName();
+
+  for (const side of [-1, 1]) {
+    const platCx = side * (PLAT_INNER_X + (PLAT_OUTER_X - PLAT_INNER_X) / 2);
+    const platW  = PLAT_OUTER_X - PLAT_INNER_X;
+
+    // Platform slab
+    const plat = new THREE.Mesh(
+      new THREE.BoxGeometry(platW, PLAT_HEIGHT, STATION_LEN),
+      platMat
+    );
+    plat.position.set(platCx, PLAT_HEIGHT / 2, 0);
+    plat.castShadow = true;
+    plat.receiveShadow = true;
+    g.add(plat);
+
+    // Yellow safety stripe along the inner edge
+    const stripe = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.06, STATION_LEN),
+      stripeMat
+    );
+    stripe.position.set(side * (PLAT_INNER_X + 0.09), PLAT_HEIGHT + 0.03, 0);
+    g.add(stripe);
+
+    // Pillars along the platform
+    for (let pz = -HALF + 4; pz <= HALF - 4; pz += 8) {
+      const pillar = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.32, 0.32, 4.8, 14),
+        pillarMat
+      );
+      pillar.position.set(platCx, PLAT_HEIGHT + 2.4, pz);
+      pillar.castShadow = true;
+      g.add(pillar);
+      // Cap and base
+      const capGeom = new THREE.BoxGeometry(0.85, 0.18, 0.85);
+      const cap = new THREE.Mesh(capGeom, basMat);
+      cap.position.set(platCx, PLAT_HEIGHT + 4.9, pz);
+      g.add(cap);
+      const base = new THREE.Mesh(capGeom, basMat);
+      base.position.set(platCx, PLAT_HEIGHT + 0.05, pz);
+      g.add(base);
+    }
+
+    // Bench
+    const benchSeat = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.1, 0.45), benchMat);
+    benchSeat.position.set(platCx, PLAT_HEIGHT + 0.55, 0);
+    benchSeat.castShadow = true;
+    g.add(benchSeat);
+    const benchBack = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.6, 0.08), benchMat);
+    benchBack.position.set(platCx + side * 0.18, PLAT_HEIGHT + 0.85, 0);
+    g.add(benchBack);
+    for (const bx of [-0.55, 0.55]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.55, 0.45), benchLegMat);
+      leg.position.set(platCx + bx, PLAT_HEIGHT + 0.27, 0);
+      g.add(leg);
+    }
+
+    // Station-name sign on the wall (rectangular blue plaque)
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.95, 5), signBgMat);
+    sign.position.set(side * (FLOOR_HALFW - 0.06), 4, 0);
+    g.add(sign);
+    // White border
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.05, 5), letterMat);
+    top.position.set(side * (FLOOR_HALFW - 0.06), 4.45, 0); g.add(top);
+    const bot = top.clone(); bot.position.y = 3.55; g.add(bot);
+    // Letters approximated as small white blocks (one per character)
+    const charW = 0.32;
+    const totalW = stationName.length * charW;
+    for (let i = 0; i < stationName.length; i++) {
+      if (stationName[i] === ' ') continue;
+      const ch = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.5, 0.22), letterMat);
+      ch.position.set(side * (FLOOR_HALFW - 0.07), 4, -totalW / 2 + i * charW + charW / 2);
+      g.add(ch);
+    }
+
+    // Backlight glow on the sign
+    const signGlow = new THREE.PointLight(0x88aaff, 0.4, 6);
+    signGlow.position.set(side * (FLOOR_HALFW - 0.5), 4, 0);
+    g.add(signGlow);
+
+    // Trash can on the platform (decorative)
+    const tc = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.32, 0.36, 0.7, 12),
+      new THREE.MeshStandardMaterial({ color: 0x4a5a6a, metalness: 0.5, roughness: 0.6 })
+    );
+    tc.position.set(platCx, PLAT_HEIGHT + 0.35, side * 8);
+    g.add(tc);
+  }
+
+  // Brighter, denser ceiling fluorescents inside the station
+  for (let pz = -HALF + 2; pz <= HALF - 2; pz += 3.5) {
+    const light = new THREE.Mesh(
+      new THREE.BoxGeometry(2.6, 0.15, 0.7),
+      new THREE.MeshBasicMaterial({ color: 0xffffff })
+    );
+    light.position.set(0, 6.35, pz);
+    g.add(light);
+  }
+  // A station-wide ambient point light for that "indoors" feel
+  const stationLight = new THREE.PointLight(0xfff5d8, 0.9, 28);
+  stationLight.position.set(0, 5.5, 0);
+  g.add(stationLight);
+
+  // Hanging "WAY OUT" arrow sign at the entrance
+  const arrowSign = new THREE.Mesh(
+    new THREE.BoxGeometry(2.2, 0.6, 0.1),
+    new THREE.MeshStandardMaterial({ color: 0x16a34a, emissive: 0x062414 })
+  );
+  arrowSign.position.set(0, 5.6, -HALF + 1);
+  g.add(arrowSign);
+  // Arrow chains
+  const chainMat = new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.7 });
+  for (const cx of [-0.9, 0.9]) {
+    const chain = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.7, 0.06), chainMat);
+    chain.position.set(cx, 6.25, -HALF + 1);
+    g.add(chain);
+  }
+  // White text blocks on the green sign
+  for (let i = -0.7; i <= 0.7; i += 0.25) {
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.28, 0.11), letterMat);
+    t.position.set(i, 5.6, -HALF + 1.05);
+    g.add(t);
+  }
+
+  scene.add(g);
+  return { mesh: g, length: STATION_LEN };
+}
+
 function makeCoin(lane, yOff) {
   const m = new THREE.Mesh(
     new THREE.TorusGeometry(0.28, 0.09, 10, 18),
@@ -742,7 +902,9 @@ function restart() {
   for (const o of obstacles) scene.remove(o.mesh);
   for (const c of coins) scene.remove(c.mesh);
   for (const s of sparks) scene.remove(s.mesh);
-  obstacles.length = 0; coins.length = 0; sparks.length = 0;
+  for (const s of stations) scene.remove(s.mesh);
+  obstacles.length = 0; coins.length = 0; sparks.length = 0; stations.length = 0;
+  lastStationZ = -90;
   player.lane = 1; player.displayX = 0;
   player.yOff = 0; player.vy = 0;
   player.state = 'run'; player.slideTimer = 0;
@@ -974,6 +1136,23 @@ function update(dt) {
   if (lastSpawnZ > -20) {
     lastSpawnZ = -40;
     spawnRow();
+  }
+
+  // Stations — scroll, despawn, and spawn periodically
+  lastStationZ += dz;
+  for (let i = stations.length - 1; i >= 0; i--) {
+    const s = stations[i];
+    s.mesh.position.z += dz;
+    if (s.mesh.position.z > s.length / 2 + 8) {
+      scene.remove(s.mesh);
+      stations.splice(i, 1);
+    }
+  }
+  while (lastStationZ > -180) {
+    const st = makeStation();
+    st.mesh.position.z = lastStationZ;
+    stations.push(st);
+    lastStationZ -= 180 + Math.random() * 120;
   }
 
   // Collisions
