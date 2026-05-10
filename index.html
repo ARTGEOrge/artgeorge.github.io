@@ -113,6 +113,7 @@
     .card--bridge  { --accent: #ff7a1a; --accent-glow: rgba(255,122,26,0.45); }
     .card--water   { --accent: #38bdf8; --accent-glow: rgba(56,189,248,0.45); }
     .card--bazooka { --accent: #f59e0b; --accent-glow: rgba(245,158,11,0.5); }
+    .card--basket  { --accent: #ff8c1a; --accent-glow: rgba(255,140,26,0.5); }
 
     .card-body { padding: 20px 22px 24px; }
 
@@ -1139,6 +1140,105 @@
           <span class="tag">Action</span>
           <span class="tag">Physics</span>
           <span class="tag">Aim</span>
+          <span class="tag">Casual</span>
+        </div>
+      </div>
+    </a>
+
+    <a href="/basket-random/" class="card card--basket">
+      <div class="play-btn">&#9654; PLAY</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="brkBg" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#3a1a08"/>
+              <stop offset="100%" stop-color="#0a0402"/>
+            </linearGradient>
+            <linearGradient id="brkFloor" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#a35a1a"/>
+              <stop offset="100%" stop-color="#5a3010"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#brkBg)"/>
+          <!-- Crowd silhouettes (back) -->
+          <g fill="rgba(0,0,0,0.6)">
+            <ellipse cx="40"  cy="56" rx="14" ry="10"/>
+            <ellipse cx="80"  cy="50" rx="14" ry="10"/>
+            <ellipse cx="120" cy="56" rx="14" ry="10"/>
+            <ellipse cx="160" cy="48" rx="14" ry="10"/>
+            <ellipse cx="200" cy="54" rx="14" ry="10"/>
+            <ellipse cx="240" cy="50" rx="14" ry="10"/>
+            <ellipse cx="280" cy="56" rx="14" ry="10"/>
+            <ellipse cx="320" cy="48" rx="14" ry="10"/>
+            <ellipse cx="360" cy="54" rx="14" ry="10"/>
+            <rect x="0" y="60" width="400" height="20"/>
+          </g>
+          <!-- Spotlight glow -->
+          <ellipse cx="200" cy="105" rx="200" ry="40" fill="rgba(255,160,40,0.2)"/>
+          <!-- Court floor -->
+          <polygon points="0,180 400,180 400,150 0,150" fill="url(#brkFloor)"/>
+          <line x1="0" y1="150" x2="400" y2="150" stroke="#ffcc66" stroke-width="2" opacity="0.6"/>
+          <line x1="200" y1="150" x2="200" y2="180" stroke="#ffcc66" stroke-width="1.5" opacity="0.5"/>
+          <ellipse cx="200" cy="180" rx="60" ry="10" fill="none" stroke="#ffcc66" stroke-width="1.5" opacity="0.5"/>
+          <!-- Left hoop -->
+          <g>
+            <rect x="14" y="80" width="6" height="60" fill="#777"/>
+            <rect x="20" y="92" width="42" height="4"  fill="#fff"/>
+            <rect x="58" y="92" width="4"  height="20" fill="#ff5522"/>
+            <rect x="44" y="112" width="20" height="3" fill="#ff5522"/>
+            <line x1="46" y1="115" x2="44" y2="128" stroke="#fff" stroke-width="1"/>
+            <line x1="52" y1="115" x2="52" y2="130" stroke="#fff" stroke-width="1"/>
+            <line x1="58" y1="115" x2="60" y2="128" stroke="#fff" stroke-width="1"/>
+          </g>
+          <!-- Right hoop -->
+          <g>
+            <rect x="380" y="80" width="6" height="60" fill="#777"/>
+            <rect x="338" y="92" width="42" height="4" fill="#fff"/>
+            <rect x="338" y="92" width="4"  height="20" fill="#ff5522"/>
+            <rect x="338" y="112" width="20" height="3" fill="#ff5522"/>
+            <line x1="340" y1="115" x2="342" y2="128" stroke="#fff" stroke-width="1"/>
+            <line x1="346" y1="115" x2="346" y2="130" stroke="#fff" stroke-width="1"/>
+            <line x1="354" y1="115" x2="352" y2="128" stroke="#fff" stroke-width="1"/>
+          </g>
+          <!-- Player 1 (red ragdoll, left, jumping) -->
+          <g>
+            <circle cx="120" cy="116" r="10" fill="#ffd6a8"/>
+            <rect x="112" y="124" width="16" height="22" rx="4" fill="#ef4444"/>
+            <rect x="100" y="120" width="12" height="6"  rx="2" fill="#ffd6a8" transform="rotate(-30 106 123)"/>
+            <rect x="128" y="98"  width="12" height="6"  rx="2" fill="#ffd6a8" transform="rotate(-50 134 101)"/>
+            <rect x="110" y="146" width="6"  height="14" fill="#222"/>
+            <rect x="124" y="146" width="6"  height="14" fill="#222"/>
+            <rect x="116" y="100" width="8"  height="6"  fill="#b91c1c"/>
+          </g>
+          <!-- Player 2 (blue ragdoll, right) -->
+          <g>
+            <circle cx="280" cy="120" r="10" fill="#ffd6a8"/>
+            <rect x="272" y="128" width="16" height="22" rx="4" fill="#3b82f6"/>
+            <rect x="288" y="120" width="12" height="6"  rx="2" fill="#ffd6a8" transform="rotate(30 294 123)"/>
+            <rect x="260" y="120" width="12" height="6"  rx="2" fill="#ffd6a8" transform="rotate(20 266 123)"/>
+            <rect x="270" y="150" width="6"  height="12" fill="#222"/>
+            <rect x="284" y="150" width="6"  height="12" fill="#222"/>
+            <rect x="276" y="104" width="8"  height="6"  fill="#1d4ed8"/>
+          </g>
+          <!-- Basketball (mid-air) -->
+          <g>
+            <circle cx="200" cy="80" r="14" fill="#ff8c1a" stroke="#7a3a08" stroke-width="2"/>
+            <line x1="186" y1="80" x2="214" y2="80" stroke="#7a3a08" stroke-width="1.5"/>
+            <path d="M200,66 Q210,80 200,94" stroke="#7a3a08" stroke-width="1.5" fill="none"/>
+            <path d="M200,66 Q190,80 200,94" stroke="#7a3a08" stroke-width="1.5" fill="none"/>
+          </g>
+          <!-- Motion arc -->
+          <path d="M148,118 Q174,72 200,80" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="1.5" stroke-dasharray="3,4"/>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">Sports</div>
+        <div class="card-title">Basket Random</div>
+        <p class="card-desc">Wobbly ragdoll basketball where every shot is chaos. Tap to jump, dunk, and out-flail your opponent.</p>
+        <div class="card-tags">
+          <span class="tag">Sports</span>
+          <span class="tag">Ragdoll</span>
+          <span class="tag">2 Player</span>
           <span class="tag">Casual</span>
         </div>
       </div>
