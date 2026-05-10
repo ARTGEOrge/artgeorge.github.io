@@ -111,6 +111,7 @@
     .card--ai      { --accent: #10b981; --accent-glow: rgba(16,185,129,0.45); }
     .card--death   { --accent: #b91c1c; --accent-glow: rgba(220,38,38,0.5); }
     .card--bridge  { --accent: #ff7a1a; --accent-glow: rgba(255,122,26,0.45); }
+    .card--water   { --accent: #38bdf8; --accent-glow: rgba(56,189,248,0.45); }
 
     .card-body { padding: 20px 22px 24px; }
 
@@ -958,6 +959,92 @@
           <span class="tag">Race</span>
           <span class="tag">Casual</span>
           <span class="tag">Multiplayer</span>
+        </div>
+      </div>
+    </a>
+
+    <a href="/color-water-sort-3d/" class="card card--water">
+      <div class="play-btn">&#9654; PLAY</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="cwBg" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#0c1f3a"/>
+              <stop offset="100%" stop-color="#040a18"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#cwBg)"/>
+          <!-- Soft glow -->
+          <ellipse cx="200" cy="160" rx="200" ry="30" fill="rgba(56,189,248,0.18)"/>
+
+          <!-- Tube template (drawn 6 times). Tube body 36w x 110h, rounded bottom. -->
+          <!-- Tube 1 (left, mixed) -->
+          <g transform="translate(40,30)">
+            <path d="M0,0 L0,90 Q0,110 18,110 Q36,110 36,90 L36,0 Z" fill="rgba(255,255,255,0.08)" stroke="#9ad8ff" stroke-width="1.5"/>
+            <rect x="3"  y="-3" width="30" height="6" rx="2" fill="#9ad8ff"/>
+            <!-- Liquid layers (bottom up) -->
+            <path d="M2,90 Q2,108 18,108 Q34,108 34,90 L34,80 L2,80 Z" fill="#ef4444"/>
+            <rect x="2" y="58" width="32" height="22" fill="#22c55e"/>
+            <rect x="2" y="36" width="32" height="22" fill="#3b82f6"/>
+            <rect x="2" y="14" width="32" height="22" fill="#facc15"/>
+          </g>
+
+          <!-- Tube 2 -->
+          <g transform="translate(100,30)">
+            <path d="M0,0 L0,90 Q0,110 18,110 Q36,110 36,90 L36,0 Z" fill="rgba(255,255,255,0.08)" stroke="#9ad8ff" stroke-width="1.5"/>
+            <rect x="3"  y="-3" width="30" height="6" rx="2" fill="#9ad8ff"/>
+            <path d="M2,90 Q2,108 18,108 Q34,108 34,90 L34,70 L2,70 Z" fill="#a855f7"/>
+            <rect x="2" y="48" width="32" height="22" fill="#ef4444"/>
+            <rect x="2" y="26" width="32" height="22" fill="#facc15"/>
+          </g>
+
+          <!-- Tube 3 (pouring source - tilted) -->
+          <g transform="translate(176,18) rotate(35)">
+            <path d="M0,0 L0,90 Q0,110 18,110 Q36,110 36,90 L36,0 Z" fill="rgba(255,255,255,0.08)" stroke="#9ad8ff" stroke-width="1.5"/>
+            <rect x="3"  y="-3" width="30" height="6" rx="2" fill="#9ad8ff"/>
+            <path d="M2,90 Q2,108 18,108 Q34,108 34,90 L34,68 L2,68 Z" fill="#22c55e"/>
+            <rect x="2" y="46" width="32" height="22" fill="#3b82f6"/>
+          </g>
+
+          <!-- Pour stream from tube 3 to tube 4 -->
+          <path d="M226,52 Q236,72 250,82" stroke="#3b82f6" stroke-width="6" fill="none" stroke-linecap="round"/>
+
+          <!-- Tube 4 (target) -->
+          <g transform="translate(240,30)">
+            <path d="M0,0 L0,90 Q0,110 18,110 Q36,110 36,90 L36,0 Z" fill="rgba(255,255,255,0.08)" stroke="#9ad8ff" stroke-width="1.5"/>
+            <rect x="3"  y="-3" width="30" height="6" rx="2" fill="#9ad8ff"/>
+            <path d="M2,90 Q2,108 18,108 Q34,108 34,90 L34,80 L2,80 Z" fill="#3b82f6"/>
+            <rect x="2" y="58" width="32" height="22" fill="#3b82f6"/>
+          </g>
+
+          <!-- Tube 5 (sorted - all yellow) -->
+          <g transform="translate(300,30)">
+            <path d="M0,0 L0,90 Q0,110 18,110 Q36,110 36,90 L36,0 Z" fill="rgba(255,255,255,0.08)" stroke="#9ad8ff" stroke-width="1.5"/>
+            <rect x="3"  y="-3" width="30" height="6" rx="2" fill="#9ad8ff"/>
+            <path d="M2,90 Q2,108 18,108 Q34,108 34,90 L34,14 L2,14 Z" fill="#facc15"/>
+          </g>
+
+          <!-- Tube 6 (empty) -->
+          <g transform="translate(360,30)">
+            <path d="M0,0 L0,90 Q0,110 18,110 Q36,110 36,90 L36,0 Z" fill="rgba(255,255,255,0.08)" stroke="#9ad8ff" stroke-width="1.5"/>
+            <rect x="3"  y="-3" width="30" height="6" rx="2" fill="#9ad8ff"/>
+          </g>
+
+          <!-- Splash droplets at the pour landing -->
+          <circle cx="248" cy="82"  r="2" fill="#3b82f6"/>
+          <circle cx="256" cy="78"  r="1.5" fill="#3b82f6"/>
+          <circle cx="244" cy="88"  r="1.5" fill="#3b82f6"/>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">Puzzle</div>
+        <div class="card-title">Color Water Sort 3D</div>
+        <p class="card-desc">Pour colored liquids between tubes until each one holds a single color. A relaxing puzzle with surprisingly tricky levels.</p>
+        <div class="card-tags">
+          <span class="tag">Puzzle</span>
+          <span class="tag">Sort</span>
+          <span class="tag">Casual</span>
+          <span class="tag">Brain</span>
         </div>
       </div>
     </a>
