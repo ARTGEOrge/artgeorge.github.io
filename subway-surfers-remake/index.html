@@ -41,6 +41,23 @@
   #gameover .hint { font-size: 16px; opacity: 0.75; margin-top: 24px; }
   #loadhint { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
               font-size: 18px; color: #aaa; }
+  #flash {
+    position: fixed; inset: 0;
+    background: rgba(255, 0, 0, 0);
+    pointer-events: none;
+    transition: background 0.18s ease-out;
+    box-shadow: inset 0 0 120px rgba(255,0,0,0);
+  }
+  #danger {
+    position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+    font-family: Impact, "Arial Black", sans-serif;
+    font-size: 36px; color: #ff3030; letter-spacing: 4px;
+    text-shadow: 2px 2px 0 #000, 0 0 16px rgba(255,40,40,0.9);
+    opacity: 0; pointer-events: none; user-select: none;
+    transition: opacity 0.15s;
+  }
+  #danger.on { opacity: 1; animation: pulse 0.5s infinite alternate; }
+  @keyframes pulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.08); } }
 </style>
 </head>
 <body>
@@ -52,6 +69,8 @@
 </div>
 <div id="best" style="display:none">Best: <span id="bestScore">0</span></div>
 <div id="hint" style="display:none">← → / A D : switch lane &nbsp;·&nbsp; ↑ / W / SPACE : jump &nbsp;·&nbsp; ↓ / S : slide</div>
+<div id="danger">⚠  COP CLOSING IN!  ⚠</div>
+<div id="flash"></div>
 <div id="gameover">
   <h1>CRASHED!</h1>
   <p>Score: <span id="finalScore">0</span></p>
@@ -311,6 +330,100 @@ const soleL = new THREE.Mesh(new THREE.BoxGeometry(0.33, 0.06, 0.51),
 soleL.position.set(0, -1.05, 0.08); legL.add(soleL);
 const soleR = soleL.clone(); soleR.position.set(0, -1.05, 0.08); legR.add(soleR);
 
+// ============== COP CHASER ==============
+function makeCop() {
+  const g = new THREE.Group();
+  const uniformMat = new THREE.MeshStandardMaterial({ color: 0x162a4a, roughness: 0.85 });
+  const copSkinMat = new THREE.MeshStandardMaterial({ color: 0xe8b48a, roughness: 0.6 });
+  // Head
+  const ch = new THREE.Mesh(new THREE.SphereGeometry(0.36, 16, 16), copSkinMat);
+  ch.position.y = 2.45; ch.castShadow = true; g.add(ch);
+  // Police cap
+  const cap = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.4, 0.4, 0.28, 18),
+    new THREE.MeshStandardMaterial({ color: 0x0a1830, roughness: 0.5 })
+  );
+  cap.position.y = 2.78; g.add(cap);
+  // Cap brim
+  const brim = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.46, 0.46, 0.05, 18, 1, false, -Math.PI / 2, Math.PI),
+    new THREE.MeshStandardMaterial({ color: 0x000000 })
+  );
+  brim.position.set(0, 2.62, 0.04);
+  g.add(brim);
+  // Cap badge
+  const badge = new THREE.Mesh(
+    new THREE.BoxGeometry(0.22, 0.13, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.7, emissive: 0x332200 })
+  );
+  badge.position.set(0, 2.78, 0.4);
+  g.add(badge);
+  // Sunglasses
+  const glasses = new THREE.Mesh(
+    new THREE.BoxGeometry(0.55, 0.12, 0.06),
+    new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.2, metalness: 0.7 })
+  );
+  glasses.position.set(0, 2.5, 0.34); g.add(glasses);
+  // Mustache
+  const stash = new THREE.Mesh(
+    new THREE.BoxGeometry(0.36, 0.07, 0.06),
+    new THREE.MeshStandardMaterial({ color: 0x111111 })
+  );
+  stash.position.set(0, 2.36, 0.34); g.add(stash);
+  // Body (uniform with shirt)
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.0, 0.5), uniformMat);
+  body.position.y = 1.55; body.castShadow = true; g.add(body);
+  // Tie
+  const tie = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.7, 0.04),
+    new THREE.MeshStandardMaterial({ color: 0x222222 }));
+  tie.position.set(0, 1.7, 0.27); g.add(tie);
+  // Sheriff star on chest
+  const star = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.04, 5),
+    new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.7, emissive: 0x332200 }));
+  star.rotation.x = Math.PI / 2;
+  star.position.set(-0.25, 1.85, 0.27);
+  g.add(star);
+  // Belt
+  const belt = new THREE.Mesh(new THREE.BoxGeometry(0.96, 0.18, 0.51),
+    new THREE.MeshStandardMaterial({ color: 0x111111 }));
+  belt.position.y = 1.07; g.add(belt);
+  const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.15, 0.05),
+    new THREE.MeshStandardMaterial({ color: 0xffd700, metalness: 0.7 }));
+  buckle.position.set(0, 1.07, 0.27); g.add(buckle);
+  // Arms
+  const cArmL = makeLimb(uniformMat, 0.85, 0.24);
+  cArmL.position.set(-0.6, 2.0, 0); g.add(cArmL);
+  const cArmR = makeLimb(uniformMat, 0.85, 0.24);
+  cArmR.position.set( 0.6, 2.0, 0); g.add(cArmR);
+  const cHandL = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), copSkinMat);
+  cHandL.position.y = -0.85; cArmL.add(cHandL);
+  const cHandR = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), copSkinMat);
+  cHandR.position.y = -0.85; cArmR.add(cHandR);
+  // Legs
+  const cLegL = makeLimb(new THREE.MeshStandardMaterial({ color: 0x0a1830, roughness: 0.85 }), 0.95, 0.28);
+  cLegL.position.set(-0.24, 1.05, 0); g.add(cLegL);
+  const cLegR = makeLimb(new THREE.MeshStandardMaterial({ color: 0x0a1830, roughness: 0.85 }), 0.95, 0.28);
+  cLegR.position.set( 0.24, 1.05, 0); g.add(cLegR);
+  // Black boots
+  const bootMat = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.5 });
+  const cBootL = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.2, 0.5), bootMat);
+  cBootL.position.set(0, -0.95, 0.08); cLegL.add(cBootL);
+  const cBootR = cBootL.clone(); cBootR.position.set(0, -0.95, 0.08); cLegR.add(cBootR);
+  scene.add(g);
+  return { group: g, armL: cArmL, armR: cArmR, legL: cLegL, legR: cLegR };
+}
+const cop = makeCop();
+let copZ = 6.5;
+const COP_DANGER = 1.0;     // game over when cop within this distance
+const COP_MAX = 7.5;        // max trailing distance (cop falls behind)
+const COP_PUSH_HIT = 1.8;   // distance closed per stumble (small obstacle)
+const COP_PUSH_TRAIN = 3.0; // distance closed per stumble (train)
+const COP_RECOVER = 1.0;    // distance / sec the cop falls behind while running clean
+
+// Quick reference to flash/danger UI
+const flashEl = document.getElementById('flash');
+const dangerEl = document.getElementById('danger');
+
 // ============== GAME STATE ==============
 const player = {
   lane: 1,
@@ -318,6 +431,7 @@ const player = {
   yOff: 0, vy: 0,
   state: 'run',
   slideTimer: 0,
+  invuln: 0,
 };
 let speed = 14;
 let distance = 0;
@@ -420,6 +534,100 @@ function makeTrain(lane) {
   return { mesh: g, type: 'train', lane, length: 6.5 };
 }
 
+function makeCan(lane) {
+  const g = new THREE.Group();
+  const can = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.42, 0.46, 1.0, 14),
+    new THREE.MeshStandardMaterial({ color: 0x4a5a6a, roughness: 0.55, metalness: 0.55 })
+  );
+  can.position.y = 0.5; can.castShadow = true; g.add(can);
+  // Lid
+  const lid = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.44, 0.44, 0.1, 14),
+    new THREE.MeshStandardMaterial({ color: 0x2a3a4a, roughness: 0.6, metalness: 0.6 })
+  );
+  lid.position.y = 1.05; g.add(lid);
+  // Trash bag bulging
+  const bag = new THREE.Mesh(
+    new THREE.SphereGeometry(0.36, 10, 10),
+    new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.95 })
+  );
+  bag.position.y = 1.22; bag.scale.y = 0.7; g.add(bag);
+  // Vertical seam (rim)
+  const rim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.43, 0.03, 6, 14),
+    new THREE.MeshStandardMaterial({ color: 0x1a2a3a })
+  );
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = 0.3;
+  g.add(rim);
+  g.position.x = (lane - 1) * LANE_WIDTH;
+  scene.add(g);
+  return { mesh: g, type: 'can', lane };
+}
+
+function makeCrate(lane) {
+  const g = new THREE.Group();
+  const crate = new THREE.Mesh(
+    new THREE.BoxGeometry(1.3, 1.3, 1.3),
+    new THREE.MeshStandardMaterial({ color: 0x8a5a2a, roughness: 0.85 })
+  );
+  crate.position.y = 0.65; crate.castShadow = true; g.add(crate);
+  // Dark slats around the box
+  const slatMat = new THREE.MeshStandardMaterial({ color: 0x4a2a10 });
+  for (const y of [1.1, 0.65, 0.2]) {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(1.32, 0.06, 1.32), slatMat);
+    s.position.y = y; g.add(s);
+  }
+  // Edge brackets
+  for (const sx of [-0.65, 0.65]) for (const sz of [-0.65, 0.65]) {
+    const e = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.32, 0.06), slatMat);
+    e.position.set(sx, 0.65, sz); g.add(e);
+  }
+  // Stamp
+  const stamp = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.7, 0.4),
+    new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.9 })
+  );
+  stamp.position.set(0, 0.7, 0.66); g.add(stamp);
+  g.position.x = (lane - 1) * LANE_WIDTH;
+  scene.add(g);
+  return { mesh: g, type: 'crate', lane };
+}
+
+function makeSign(lane) {
+  // Hanging street sign — slide under
+  const g = new THREE.Group();
+  const board = new THREE.Mesh(
+    new THREE.BoxGeometry(2.2, 0.8, 0.18),
+    new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.6 })
+  );
+  board.position.y = 2.3; board.castShadow = true; g.add(board);
+  // Border
+  const borderMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  const top = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.06, 0.19), borderMat);
+  top.position.y = 2.66; g.add(top);
+  const bot = top.clone(); bot.position.y = 1.94; g.add(bot);
+  // Chains
+  const chainMat = new THREE.MeshStandardMaterial({ color: 0x666666, metalness: 0.8, roughness: 0.4 });
+  for (const x of [-0.95, 0.95]) {
+    const chain = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.6, 0.06), chainMat);
+    chain.position.set(x, 3.5, 0); g.add(chain);
+  }
+  // Top rail (where chains attach)
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.1, 0.1), chainMat);
+  rail.position.y = 4.3; g.add(rail);
+  // White text approximation (boxes)
+  const textMat = new THREE.MeshStandardMaterial({ color: 0xffffff });
+  for (let i = -0.7; i <= 0.7; i += 0.34) {
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.34, 0.19), textMat);
+    t.position.set(i, 2.3, 0); g.add(t);
+  }
+  g.position.x = (lane - 1) * LANE_WIDTH;
+  scene.add(g);
+  return { mesh: g, type: 'sign', lane };
+}
+
 function makeCoin(lane, yOff) {
   const m = new THREE.Mesh(
     new THREE.TorusGeometry(0.28, 0.09, 10, 18),
@@ -433,18 +641,32 @@ function makeCoin(lane, yOff) {
 }
 
 // ============== SPAWN ==============
+function pickWeighted(items, weights) {
+  let total = 0;
+  for (const w of weights) total += w;
+  let pick = Math.random() * total;
+  for (let i = 0; i < items.length; i++) {
+    pick -= weights[i];
+    if (pick <= 0) return items[i];
+  }
+  return items[items.length - 1];
+}
 function spawnRow() {
   const r = Math.random();
   // lastSpawnZ in world coords; player at z=0
-  if (r < 0.45) {
+  if (r < 0.55) {
+    // Train less frequent (full lane block) — others equally common
+    const factories = [makeBarrier, makeHighBar, makeCan, makeCrate, makeSign, makeTrain];
+    const weights   = [3,           3,           3,        3,          3,        2];
     const lane = Math.floor(Math.random() * 3);
-    const factories = [makeBarrier, makeHighBar, makeTrain];
-    const obs = factories[Math.floor(Math.random() * 3)](lane);
+    const factory = pickWeighted(factories, weights);
+    const obs = factory(lane);
     obs.mesh.position.z = lastSpawnZ;
     obstacles.push(obs);
-    if (Math.random() < 0.3) {
+    if (Math.random() < 0.4) {
       const otherLane = (lane + 1 + Math.floor(Math.random() * 2)) % 3;
-      const obs2 = factories[Math.floor(Math.random() * 3)](otherLane);
+      const factory2 = pickWeighted(factories, weights);
+      const obs2 = factory2(otherLane);
       obs2.mesh.position.z = lastSpawnZ;
       obstacles.push(obs2);
     }
@@ -521,12 +743,17 @@ function restart() {
   player.lane = 1; player.displayX = 0;
   player.yOff = 0; player.vy = 0;
   player.state = 'run'; player.slideTimer = 0;
+  player.invuln = 0;
   speed = 14;
   distance = 0;
   score = 0;
   coinCount = 0;
   gameOver = false;
   lastSpawnZ = -16;
+  copZ = 6.5;
+  cop.group.position.x = 0;
+  flashEl.style.background = 'rgba(255,0,0,0)';
+  dangerEl.classList.remove('on');
   document.getElementById('gameover').classList.remove('show');
   lastTime = performance.now();
 }
@@ -552,7 +779,23 @@ function spawnSparks(x, y, z) {
   }
 }
 
-function crash() {
+function stumble(severity) {
+  if (player.invuln > 0) return;
+  player.invuln = 0.9;
+  copZ -= severity;
+  // Brief red flash
+  flashEl.style.transition = 'background 0s';
+  flashEl.style.background = 'rgba(255,0,0,0.45)';
+  setTimeout(() => {
+    flashEl.style.transition = 'background 0.4s ease-out';
+    flashEl.style.background = 'rgba(255,0,0,0)';
+  }, 50);
+  // Spark burst at player
+  spawnSparks(player.displayX, 1.5, 0);
+}
+
+function caught() {
+  if (gameOver) return;
   gameOver = true;
   if (score > bestScore) {
     bestScore = score;
@@ -563,7 +806,9 @@ function crash() {
   document.getElementById('finalBest').textContent = bestScore;
   bestEl.textContent = bestScore;
   document.getElementById('gameover').classList.add('show');
-  // Spark burst at player
+  dangerEl.classList.remove('on');
+  // Big spark burst
+  spawnSparks(player.displayX, 1.5, 0);
   spawnSparks(player.displayX, 1.5, 0);
 }
 
@@ -640,6 +885,43 @@ function update(dt) {
   const bob = (player.state === 'run') ? Math.sin(tt * 2) * 0.04 : 0;
   camera.position.y = 4.2 + bob + player.yOff * 0.15;
 
+  // ===== COP CHASER =====
+  // Cop closes the gap during stumble, falls back when player runs clean
+  if (player.invuln > 0) {
+    player.invuln -= dt;
+    copZ -= 0.4 * dt; // slight extra approach during the stumble
+  } else {
+    copZ = Math.min(COP_MAX, copZ + COP_RECOVER * dt);
+  }
+  // Cop position
+  cop.group.position.z = copZ;
+  cop.group.position.x += (player.displayX - cop.group.position.x) * Math.min(1, dt * 8);
+  // Cop run animation (faster cadence than player so it looks intense)
+  const ct = performance.now() * 0.018;
+  const csw = Math.sin(ct) * 0.95;
+  cop.legL.rotation.x =  csw;
+  cop.legR.rotation.x = -csw;
+  cop.armL.rotation.x = -csw * 0.95;
+  cop.armR.rotation.x =  csw * 0.95;
+  // Slight forward lean for intensity
+  cop.group.rotation.x = -0.12 + Math.sin(ct * 2) * 0.02;
+
+  // Danger UI when cop is close
+  if (copZ < 3.0) {
+    const danger = (3.0 - copZ) / 3.0;
+    flashEl.style.transition = 'background 0.25s ease-out';
+    flashEl.style.background = `rgba(255,30,30,${danger * 0.30})`;
+    if (copZ < 2.4) dangerEl.classList.add('on');
+    else            dangerEl.classList.remove('on');
+  } else {
+    flashEl.style.background = 'rgba(255,30,30,0)';
+    dangerEl.classList.remove('on');
+  }
+  // Caught!
+  if (copZ <= COP_DANGER) {
+    caught();
+  }
+
   // Move world toward camera
   const dz = speed * dt;
   for (const o of obstacles) o.mesh.position.z += dz;
@@ -692,12 +974,19 @@ function update(dt) {
       obstacles.splice(i, 1);
       continue;
     }
-    if (oz > -1.2 && oz < 1.6 && o.lane === player.lane) {
+    if (oz > -1.2 && oz < 1.6 && o.lane === player.lane && !o.passed) {
       let hit = true;
-      if (o.type === 'barrier'  && player.state === 'jump' && player.yOff > 0.6) hit = false;
+      const jumpClears = player.state === 'jump' && player.yOff > 0.55;
+      if (o.type === 'barrier'  && jumpClears) hit = false;
+      if (o.type === 'can'      && jumpClears) hit = false;
+      if (o.type === 'crate'    && player.state === 'jump' && player.yOff > 0.95) hit = false;
       if (o.type === 'high-bar' && player.state === 'slide') hit = false;
+      if (o.type === 'sign'     && player.state === 'slide') hit = false;
       // train always hits
-      if (hit) { crash(); break; }
+      if (hit) {
+        o.passed = true;
+        stumble(o.type === 'train' ? COP_PUSH_TRAIN : COP_PUSH_HIT);
+      }
     }
   }
 
