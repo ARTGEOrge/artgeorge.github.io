@@ -27,7 +27,7 @@
 </head>
 <body>
 <canvas id="gameCanvas"></canvas>
-<div id="hint">W = Red jump &nbsp;·&nbsp; ↑ = Blue jump &nbsp;·&nbsp; First to 7 wins</div>
+<div id="hint">Red: A/D move, W jump &nbsp;·&nbsp; Blue: ←/→ move, ↑ jump &nbsp;·&nbsp; First to 7 wins</div>
 
 <script>
 const cv  = document.getElementById('gameCanvas');
@@ -75,9 +75,15 @@ function placeHoops() {
 }
 
 const players = [
-  { side: 'left',  x: 0, y: 0, vy: 0, color: '#ef4444', rim: '#7f1d1d', key: 'KeyW',     armSwing: 0, lastJump: 0 },
-  { side: 'right', x: 0, y: 0, vy: 0, color: '#3b82f6', rim: '#1e3a8a', key: 'ArrowUp',  armSwing: 0, lastJump: 0 },
+  { side: 'left',  x: 0, y: 0, vy: 0, color: '#ef4444', rim: '#7f1d1d',
+    keyJump: 'KeyW',    keyLeft: 'KeyA',      keyRight: 'KeyD',     armSwing: 0, facing: 1 },
+  { side: 'right', x: 0, y: 0, vy: 0, color: '#3b82f6', rim: '#1e3a8a',
+    keyJump: 'ArrowUp', keyLeft: 'ArrowLeft', keyRight: 'ArrowRight', armSwing: 0, facing: -1 },
 ];
+const keys = Object.create(null);
+const PLAYER_RADIUS = 16;
+const MOVE_SPEED    = 5.5;
+const AIR_CONTROL   = 0.7;
 function placePlayers() {
   players[0].x = Math.max(220, W * 0.28);
   players[1].x = W - Math.max(220, W * 0.28);
@@ -140,9 +146,13 @@ window.addEventListener('keydown', e => {
     resetBall(Math.random() < 0.5 ? 'left' : 'right');
     return;
   }
-  for (const p of players) if (e.code === p.key) tryJump(p);
-  if (['Space','ArrowUp','ArrowDown','KeyW'].includes(e.code)) e.preventDefault();
+  if (!keys[e.code]) {
+    for (const p of players) if (e.code === p.keyJump) tryJump(p);
+  }
+  keys[e.code] = true;
+  if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'].includes(e.code)) e.preventDefault();
 });
+window.addEventListener('keyup', e => { keys[e.code] = false; });
 window.addEventListener('touchstart', e => {
   for (const t of e.changedTouches) {
     const side = t.clientX < W / 2 ? 'left' : 'right';
@@ -165,6 +175,17 @@ function update() {
   const restitution = (modifier === 'super-bouncy') ? 0.92 : 0.65;
 
   for (const p of players) {
+    const grounded = p.y >= GROUND_Y - 0.5;
+    const ctrl = grounded ? 1 : AIR_CONTROL;
+    let dx = 0;
+    if (keys[p.keyLeft])  dx -= 1;
+    if (keys[p.keyRight]) dx += 1;
+    p.x += dx * MOVE_SPEED * ctrl;
+    if (dx !== 0) p.facing = dx;
+
+    if (p.x < PLAYER_RADIUS)     p.x = PLAYER_RADIUS;
+    if (p.x > W - PLAYER_RADIUS) p.x = W - PLAYER_RADIUS;
+
     p.vy += GRAVITY * gMul;
     p.y += p.vy;
     if (p.y > GROUND_Y) {
@@ -173,6 +194,17 @@ function update() {
       p.vy = 0;
     }
     if (p.armSwing > 0) p.armSwing -= 0.04;
+  }
+
+  const a = players[0], b = players[1];
+  const minSep = PLAYER_RADIUS * 2 + 6;
+  const sep = b.x - a.x;
+  if (sep < minSep) {
+    const overlap = (minSep - sep) / 2;
+    a.x -= overlap;
+    b.x += overlap;
+    if (a.x < PLAYER_RADIUS) { b.x += PLAYER_RADIUS - a.x; a.x = PLAYER_RADIUS; }
+    if (b.x > W - PLAYER_RADIUS) { a.x -= b.x - (W - PLAYER_RADIUS); b.x = W - PLAYER_RADIUS; }
   }
 
   ball.vy += GRAVITY * 0.7 * gMul;
@@ -424,7 +456,7 @@ function drawHoop(h) {
 function drawPlayer(p) {
   const headR = 17;
   const headY = p.y - 92;
-  const aimDir = p.side === 'left' ? 1 : -1;
+  const aimDir = p.facing || (p.side === 'left' ? 1 : -1);
 
   const shadowScale = Math.max(0.45, 1 - (GROUND_Y - p.y) / 220);
   ctx.fillStyle = `rgba(0,0,0,${0.35 * shadowScale})`;
