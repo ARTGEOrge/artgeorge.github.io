@@ -123,6 +123,15 @@ function throwBall(p) {
 const keys = Object.create(null);
 const particles = [];
 const scorePopups = [];
+let bigBanner = null;
+function spawnBigBanner(text, side) {
+  bigBanner = {
+    text,
+    color: side === 'left' ? '#ef4444' : '#3b82f6',
+    life: 90,
+    maxLife: 90,
+  };
+}
 
 function spawnConfetti(x, y) {
   for (let i = 0; i < 60; i++) {
@@ -369,6 +378,7 @@ function update() {
       else                        score.right++;
       spawnConfetti(h.x + h.w / 2, rimY);
       spawnScorePopup(h.x + h.w / 2, h.y - 10, scoringSide);
+      spawnBigBanner('BASKET!', scoringSide);
       if (score.left >= WIN_SCORE)       winner = 'left';
       else if (score.right >= WIN_SCORE) winner = 'right';
       const serveTo = h.side;
@@ -402,6 +412,10 @@ function update() {
     const s = scorePopups[i];
     s.y += s.vy; s.life--;
     if (s.life <= 0) scorePopups.splice(i, 1);
+  }
+  if (bigBanner) {
+    bigBanner.life--;
+    if (bigBanner.life <= 0) bigBanner = null;
   }
 }
 
@@ -975,6 +989,46 @@ function drawReflection(t) {
   ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
 }
 
+function drawBigBanner() {
+  if (!bigBanner) return;
+  const elapsed = bigBanner.maxLife - bigBanner.life;
+  const enter = Math.min(1, elapsed / 14);
+  const popScale = enter < 1
+    ? 0.4 + enter * 0.6 + Math.sin(enter * Math.PI) * 0.2
+    : 1;
+  const wobble = Math.sin(elapsed * 0.18) * 0.04 * Math.max(0, 1 - elapsed / 30);
+  const alpha = bigBanner.life < 22 ? bigBanner.life / 22 : 1;
+  const fontSize = Math.min(180, Math.max(96, W * 0.16));
+
+  ctx.save();
+  ctx.translate(W / 2, H * 0.42);
+  ctx.scale(popScale, popScale);
+  ctx.rotate(wobble);
+  ctx.globalAlpha = alpha;
+  ctx.font = `900 ${fontSize}px Impact, "Arial Black", sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Outer glow
+  ctx.shadowColor = bigBanner.color;
+  ctx.shadowBlur = 40;
+  ctx.fillStyle = bigBanner.color;
+  ctx.fillText(bigBanner.text, 0, 0);
+  ctx.shadowBlur = 0;
+
+  // Black outline
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = '#000';
+  ctx.strokeText(bigBanner.text, 0, 0);
+  // Solid color fill on top
+  ctx.fillStyle = bigBanner.color;
+  ctx.fillText(bigBanner.text, 0, 0);
+  // White inner highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.fillText(bigBanner.text, 0, -fontSize * 0.05);
+  ctx.restore();
+}
+
 function drawWinner() {
   if (!winner) return;
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -1005,6 +1059,7 @@ function frame(t) {
   drawWorld(t);
   drawParticles();
   drawScorePopups();
+  drawBigBanner();
   drawWinner();
   requestAnimationFrame(frame);
 }
