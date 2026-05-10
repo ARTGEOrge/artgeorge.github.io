@@ -108,6 +108,7 @@
     .card--crossy  { --accent: #ffcc33; --accent-glow: rgba(255,204,51,0.45); }
     .card--blocks  { --accent: #4d7cff; --accent-glow: rgba(77,124,255,0.45); }
     .card--mob     { --accent: #c84dff; --accent-glow: rgba(200,77,255,0.45); }
+    .card--ai      { --accent: #10b981; --accent-glow: rgba(16,185,129,0.45); }
 
     .card-body { padding: 20px 22px 24px; }
 
@@ -697,6 +698,92 @@
           <span class="tag">Casual</span>
           <span class="tag">Strategy</span>
           <span class="tag">3D</span>
+        </div>
+      </div>
+    </a>
+
+    <a href="/chat-bot-ai/" class="card card--ai">
+      <div class="play-btn">&#9654; OPEN</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="aiBg" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#0d1f1a"/>
+              <stop offset="100%" stop-color="#04100c"/>
+            </linearGradient>
+            <linearGradient id="aiBubbleBot" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#10b981"/>
+              <stop offset="100%" stop-color="#059669"/>
+            </linearGradient>
+            <linearGradient id="aiBubbleUser" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#3b82f6"/>
+              <stop offset="100%" stop-color="#2563eb"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#aiBg)"/>
+          <!-- Faint grid -->
+          <g stroke="rgba(16,185,129,0.08)" stroke-width="1">
+            <line x1="0"   y1="40"  x2="400" y2="40"/>
+            <line x1="0"   y1="80"  x2="400" y2="80"/>
+            <line x1="0"   y1="120" x2="400" y2="120"/>
+            <line x1="0"   y1="160" x2="400" y2="160"/>
+          </g>
+          <!-- Glow blobs -->
+          <circle cx="80"  cy="40"  r="50" fill="rgba(16,185,129,0.18)"/>
+          <circle cx="330" cy="140" r="60" fill="rgba(59,130,246,0.18)"/>
+
+          <!-- User bubble (top right) -->
+          <g>
+            <rect x="200" y="24" width="160" height="40" rx="20" fill="url(#aiBubbleUser)"/>
+            <polygon points="350,58 364,64 348,52" fill="#2563eb"/>
+            <rect x="216" y="38" width="100" height="4" rx="2" fill="rgba(255,255,255,0.85)"/>
+            <rect x="216" y="48" width="70"  height="4" rx="2" fill="rgba(255,255,255,0.55)"/>
+          </g>
+
+          <!-- Bot bubble (left) -->
+          <g>
+            <rect x="40" y="78" width="200" height="50" rx="20" fill="url(#aiBubbleBot)"/>
+            <polygon points="48,120 36,128 50,114" fill="#059669"/>
+            <rect x="58" y="92"  width="160" height="4" rx="2" fill="rgba(255,255,255,0.9)"/>
+            <rect x="58" y="102" width="130" height="4" rx="2" fill="rgba(255,255,255,0.65)"/>
+            <rect x="58" y="112" width="90"  height="4" rx="2" fill="rgba(255,255,255,0.5)"/>
+          </g>
+
+          <!-- User reply (small, bottom right) -->
+          <g>
+            <rect x="240" y="138" width="120" height="30" rx="15" fill="url(#aiBubbleUser)"/>
+            <polygon points="350,162 362,168 348,156" fill="#2563eb"/>
+            <rect x="254" y="150" width="80" height="4" rx="2" fill="rgba(255,255,255,0.85)"/>
+          </g>
+
+          <!-- Robot avatar (left of bot bubble) -->
+          <g>
+            <rect x="14" y="84" width="22" height="22" rx="5" fill="#10b981"/>
+            <circle cx="20" cy="93" r="2" fill="#04100c"/>
+            <circle cx="30" cy="93" r="2" fill="#04100c"/>
+            <rect x="20" y="100" width="10" height="2" rx="1" fill="#04100c"/>
+            <rect x="23" y="78"  width="4"  height="6" rx="1" fill="#10b981"/>
+            <circle cx="25" cy="78" r="2" fill="#a7f3d0"/>
+          </g>
+
+          <!-- Typing dots in a faint bubble at bottom-left -->
+          <g>
+            <rect x="40" y="146" width="64" height="22" rx="11" fill="rgba(16,185,129,0.18)" stroke="rgba(16,185,129,0.5)"/>
+            <circle cx="56" cy="157" r="3" fill="#10b981"/>
+            <circle cx="72" cy="157" r="3" fill="#10b981" opacity="0.7"/>
+            <circle cx="88" cy="157" r="3" fill="#10b981" opacity="0.4"/>
+          </g>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">AI</div>
+        <div class="card-title">Chat Bot AI</div>
+        <p class="card-desc">Chat with a built-in AI assistant right in your browser. Ask questions, brainstorm ideas, or just see what it has to say.</p>
+        <div class="card-tags">
+          <span class="tag">AI</span>
+          <span class="tag">Chat</span>
+          <span class="tag">GPT</span>
+          <span class="tag">Tool</span>
         </div>
       </div>
     </a>
