@@ -1,0 +1,20 @@
+using UnityEngine;
+
+public class PlayerController : MonoBehaviour {
+    public float laneWidth = 3.0f; // Distance between tracks
+    private int currentLane = 1;   // 0 = Left, 1 = Middle, 2 = Right
+
+    void Update() {
+        // Detect lane change inputs
+        if (Input.GetKeyDown(KeyCode.LeftArrow) && currentLane > 0) {
+            currentLane--;
+        }
+        if (Input.GetKeyDown(KeyCode.RightArrow) && currentLane < 2) {
+            currentLane++;
+        }
+
+        // Calculate target position and move
+        Vector3 targetPos = new Vector3((currentLane - 1) * laneWidth, transform.position.y, transform.position.z);
+        transform.position = Vector3.MoveTowards(transform.position, targetPos, Time.deltaTime * 10f);
+    }
+}
