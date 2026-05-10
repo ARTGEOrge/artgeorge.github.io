@@ -109,6 +109,7 @@
     .card--blocks  { --accent: #4d7cff; --accent-glow: rgba(77,124,255,0.45); }
     .card--mob     { --accent: #c84dff; --accent-glow: rgba(200,77,255,0.45); }
     .card--ai      { --accent: #10b981; --accent-glow: rgba(16,185,129,0.45); }
+    .card--death   { --accent: #b91c1c; --accent-glow: rgba(220,38,38,0.5); }
 
     .card-body { padding: 20px 22px 24px; }
 
@@ -784,6 +785,90 @@
           <span class="tag">Chat</span>
           <span class="tag">GPT</span>
           <span class="tag">Tool</span>
+        </div>
+      </div>
+    </a>
+
+    <a href="/death-run-3d/" class="card card--death">
+      <div class="play-btn">&#9654; PLAY</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="drBg" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#1a0608"/>
+              <stop offset="100%" stop-color="#050102"/>
+            </linearGradient>
+            <linearGradient id="drFloor" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#3a0a10"/>
+              <stop offset="100%" stop-color="#0a0204"/>
+            </linearGradient>
+            <radialGradient id="drGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#ff5544" stop-opacity="0.7"/>
+              <stop offset="100%" stop-color="#ff5544" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#drBg)"/>
+          <!-- Vanishing-point glow -->
+          <circle cx="200" cy="78" r="70" fill="url(#drGlow)"/>
+          <!-- Perspective track (3 lanes) -->
+          <polygon points="60,180 340,180 240,80 160,80" fill="url(#drFloor)"/>
+          <!-- Lane dividers -->
+          <line x1="160" y1="80" x2="120" y2="180" stroke="#ff3322" stroke-width="2" opacity="0.7"/>
+          <line x1="240" y1="80" x2="280" y2="180" stroke="#ff3322" stroke-width="2" opacity="0.7"/>
+          <!-- Side walls -->
+          <polygon points="60,180 160,80 160,60 40,180"  fill="#1a0608" stroke="#3a0608" stroke-width="1"/>
+          <polygon points="340,180 240,80 240,60 360,180" fill="#1a0608" stroke="#3a0608" stroke-width="1"/>
+          <!-- Wall lights -->
+          <circle cx="80"  cy="160" r="2" fill="#ff5544"/>
+          <circle cx="100" cy="140" r="2" fill="#ff5544"/>
+          <circle cx="120" cy="120" r="1.7" fill="#ff5544"/>
+          <circle cx="140" cy="100" r="1.5" fill="#ff5544"/>
+          <circle cx="320" cy="160" r="2" fill="#ff5544"/>
+          <circle cx="300" cy="140" r="2" fill="#ff5544"/>
+          <circle cx="280" cy="120" r="1.7" fill="#ff5544"/>
+          <circle cx="260" cy="100" r="1.5" fill="#ff5544"/>
+          <!-- Spike-trap bar (mid track) -->
+          <g>
+            <rect x="170" y="116" width="60" height="6" fill="#222"/>
+            <polygon points="172,116 178,108 184,116" fill="#aaa"/>
+            <polygon points="186,116 192,108 198,116" fill="#aaa"/>
+            <polygon points="200,116 206,108 212,116" fill="#aaa"/>
+            <polygon points="214,116 220,108 226,116" fill="#aaa"/>
+          </g>
+          <!-- Far spike trap (smaller) -->
+          <g>
+            <rect x="184" y="92" width="32" height="4" fill="#222"/>
+            <polygon points="186,92 190,87 194,92" fill="#aaa"/>
+            <polygon points="196,92 200,87 204,92" fill="#aaa"/>
+            <polygon points="206,92 210,87 214,92" fill="#aaa"/>
+          </g>
+          <!-- Runner silhouette (foreground) -->
+          <g fill="#ff8866">
+            <circle cx="200" cy="138" r="9"/>
+            <rect x="194" y="146" width="12" height="20" rx="3"/>
+            <rect x="186" y="148" width="8"  height="14" rx="2"/>
+            <rect x="206" y="148" width="8"  height="14" rx="2"/>
+            <rect x="194" y="166" width="5"  height="12" rx="1"/>
+            <rect x="201" y="166" width="5"  height="12" rx="1"/>
+          </g>
+          <!-- Speed streaks -->
+          <g stroke="#ff5544" stroke-width="1.5" opacity="0.55">
+            <line x1="60"  y1="160" x2="20"  y2="170"/>
+            <line x1="80"  y1="170" x2="40"  y2="178"/>
+            <line x1="340" y1="160" x2="380" y2="170"/>
+            <line x1="320" y1="170" x2="360" y2="178"/>
+          </g>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">Runner</div>
+        <div class="card-title">Death Run 3D</div>
+        <p class="card-desc">Sprint down a deadly 3D corridor full of spikes, blades, and gaps. Switch lanes, time your jumps, and stay alive.</p>
+        <div class="card-tags">
+          <span class="tag">3D</span>
+          <span class="tag">Runner</span>
+          <span class="tag">Reflexes</span>
+          <span class="tag">Arcade</span>
         </div>
       </div>
     </a>
