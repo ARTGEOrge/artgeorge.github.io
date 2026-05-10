@@ -26,7 +26,7 @@
 </head>
 <body>
 <canvas id="gameCanvas"></canvas>
-<div id="hint">Mouse  ·  W / S  to move &nbsp;·&nbsp; Space to serve / restart &nbsp;·&nbsp; First to 11</div>
+<div id="hint">VS AI: mouse or W/S &nbsp;·&nbsp; VS FRIEND: P1 = W/S, P2 = ↑/↓ &nbsp;·&nbsp; SPACE serves &nbsp;·&nbsp; First to 11</div>
 
 <script>
 const canvas = document.getElementById("gameCanvas");
@@ -69,6 +69,11 @@ let hitFlash = 0;         // 0..1 frames after a paddle hit
 let aiSkill  = 0.10;      // tracking aggressiveness
 let trail = [];
 
+// Mode selection
+let mode    = 'menu';     // 'menu' | 'game'
+let vsMode  = 'ai';       // 'ai' | 'friend'
+let menuButtons = [];     // populated when drawing menu, used for click hits
+
 function reset() {
   const c = getCourt();
   player = { y: c.y + c.h / 2 - PADDLE_H / 2, vy: 0 };
@@ -104,22 +109,50 @@ function serve() {
 }
 
 // ================== INPUT ==================
+function startMode(m) {
+  vsMode = m;
+  mode   = 'game';
+  hardReset();
+}
 window.addEventListener("mousemove", (e) => {
+  // Mouse only steers Player 1 in AI mode (in friend mode both players use keyboard for fairness)
+  if (mode !== 'game' || vsMode !== 'ai') return;
   const rect = canvas.getBoundingClientRect();
   player.y = e.clientY - rect.top - PADDLE_H / 2;
 });
 const keys = Object.create(null);
 window.addEventListener('keydown', e => {
+  // Menu input
+  if (mode === 'menu') {
+    if (e.code === 'Digit1' || e.code === 'Numpad1') { startMode('ai'); e.preventDefault(); return; }
+    if (e.code === 'Digit2' || e.code === 'Numpad2') { startMode('friend'); e.preventDefault(); return; }
+    if (e.code === 'Space' || e.code === 'Enter')    { startMode(vsMode); e.preventDefault(); return; }
+    return;
+  }
   keys[e.code] = true;
   if (e.code === 'Space') {
     if (gameOver) hardReset();
     else if (!inPlay) serve();
     e.preventDefault();
   }
+  if (gameOver && e.code === 'KeyM') {
+    mode = 'menu';
+    e.preventDefault();
+  }
   if (['KeyW','KeyS','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 window.addEventListener('mousedown', e => {
+  if (mode === 'menu') {
+    for (const btn of menuButtons) {
+      if (e.clientX >= btn.x && e.clientX <= btn.x + btn.w &&
+          e.clientY >= btn.y && e.clientY <= btn.y + btn.h) {
+        startMode(btn.mode);
+        return;
+      }
+    }
+    return;
+  }
   if (gameOver) hardReset();
   else if (!inPlay) serve();
 });
@@ -127,23 +160,32 @@ window.addEventListener('mousedown', e => {
 // ================== UPDATE ==================
 let lastTime = performance.now();
 function update(dt) {
+  if (mode !== 'game') return;
   const c = getCourt();
 
-  // Player keyboard movement
-  if (keys['KeyW'] || keys['ArrowUp'])   player.y -= 480 * dt;
-  if (keys['KeyS'] || keys['ArrowDown']) player.y += 480 * dt;
+  // Player 1 keyboard movement — W/S always; arrow keys also work in AI mode (where they wouldn't conflict)
+  if (keys['KeyW']) player.y -= 480 * dt;
+  if (keys['KeyS']) player.y += 480 * dt;
+  if (vsMode === 'ai') {
+    if (keys['ArrowUp'])   player.y -= 480 * dt;
+    if (keys['ArrowDown']) player.y += 480 * dt;
+  }
   player.y = Math.max(c.y, Math.min(c.y + c.h - PADDLE_H, player.y));
 
-  // AI moves toward predicted ball Y
-  if (inPlay) {
-    let targetY = ball.y - PADDLE_H / 2;
-    // Lazy AI when ball moving away
-    const responsiveness = ball.vx > 0 ? aiSkill : aiSkill * 0.35;
-    ai.y += (targetY - ai.y) * Math.min(1, responsiveness * 60 * dt);
-  } else if (serving === 'ai') {
-    // Snap toward middle
-    const target = c.y + c.h / 2 - PADDLE_H / 2;
-    ai.y += (target - ai.y) * 0.12;
+  if (vsMode === 'friend') {
+    // Player 2 uses the arrow keys
+    if (keys['ArrowUp'])   ai.y -= 480 * dt;
+    if (keys['ArrowDown']) ai.y += 480 * dt;
+  } else {
+    // AI tracks predicted ball Y
+    if (inPlay) {
+      const targetY = ball.y - PADDLE_H / 2;
+      const responsiveness = ball.vx > 0 ? aiSkill : aiSkill * 0.35;
+      ai.y += (targetY - ai.y) * Math.min(1, responsiveness * 60 * dt);
+    } else if (serving === 'ai') {
+      const target = c.y + c.h / 2 - PADDLE_H / 2;
+      ai.y += (target - ai.y) * 0.12;
+    }
   }
   ai.y = Math.max(c.y, Math.min(c.y + c.h - PADDLE_H, ai.y));
 
@@ -156,9 +198,9 @@ function update(dt) {
     } else {
       ball.x = c.x + c.w - PADDLE_W * 3 - 8;
       ball.y = ai.y + PADDLE_H / 2;
-      // AI auto-serves after a beat
       ball.vx = 0; ball.vy = 0;
-      if (Math.random() < 0.02) serve();
+      // Only auto-serve when the AI is in control — friend P2 must press SPACE themselves
+      if (vsMode === 'ai' && Math.random() < 0.02) serve();
     }
     return;
   }
@@ -461,20 +503,24 @@ function drawHUD() {
   ctx.fillText('Best: ' + bestScore, W - 14, 26);
 
   // Player labels
+  const leftLabel  = vsMode === 'ai' ? 'YOU' : 'P1';
+  const rightLabel = vsMode === 'ai' ? 'CPU' : 'P2';
   ctx.fillStyle = '#ef4444';
   ctx.font = 'bold 14px monospace';
   ctx.textAlign = 'left';
-  ctx.fillText('YOU', 14, 26);
+  ctx.fillText(leftLabel, 14, 26);
   ctx.fillStyle = '#3b82f6';
   ctx.textAlign = 'right';
-  ctx.fillText('CPU', W - 14, H - 16);
+  ctx.fillText(rightLabel, W - 14, H - 16);
 
   // Serve prompt
   if (!inPlay && !gameOver) {
     ctx.fillStyle = '#fff';
     ctx.font = 'bold 22px monospace';
     ctx.textAlign = 'center';
-    const msg = serving === 'player' ? 'Press SPACE to serve' : 'Opponent serving…';
+    let msg;
+    if (serving === 'player') msg = (vsMode === 'ai' ? 'Press SPACE to serve' : 'P1: Press SPACE to serve');
+    else                      msg = (vsMode === 'ai' ? 'Opponent serving…'   : 'P2: Press SPACE to serve');
     ctx.fillText(msg, W / 2, H - 60);
   }
 
@@ -484,17 +530,91 @@ function drawHUD() {
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
     const color = winner === 'player' ? '#ef4444' : '#3b82f6';
-    const name  = winner === 'player' ? 'YOU WIN!' : 'CPU WINS!';
+    let name;
+    if (vsMode === 'ai') name = winner === 'player' ? 'YOU WIN!' : 'CPU WINS!';
+    else                 name = winner === 'player' ? 'PLAYER 1 WINS!' : 'PLAYER 2 WINS!';
     ctx.fillStyle = '#000';
-    ctx.font = 'bold 90px Impact, "Arial Black", sans-serif';
+    ctx.font = 'bold 80px Impact, "Arial Black", sans-serif';
     ctx.fillText(name, W / 2 + 4, H / 2 + 4);
     ctx.fillStyle = color;
     ctx.fillText(name, W / 2, H / 2);
     ctx.fillStyle = '#fff';
     ctx.font = '22px monospace';
     ctx.fillText(`Final score:  ${scoreP}  —  ${scoreA}`, W / 2, H / 2 + 50);
-    ctx.fillText('Press SPACE or click to play again', W / 2, H / 2 + 90);
+    ctx.fillText('SPACE for rematch  ·  M for menu', W / 2, H / 2 + 90);
   }
+}
+
+function drawMenu() {
+  // Backdrop — show a faded court behind the menu
+  drawCourt();
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Title
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fcd34d';
+  ctx.font = `900 ${Math.min(110, W * 0.10)}px Impact, "Arial Black", sans-serif`;
+  ctx.fillText('TENNIS', W / 2, H * 0.22);
+  // Subtitle
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 18px monospace';
+  ctx.fillText('CHOOSE A MODE', W / 2, H * 0.32);
+
+  // Two big buttons side by side
+  menuButtons = [];
+  const btnW = Math.min(320, (W - 80) / 2);
+  const btnH = 130;
+  const gap  = 30;
+  const totalW = btnW * 2 + gap;
+  const startX = W / 2 - totalW / 2;
+  const btnY   = H * 0.42;
+
+  const aiBtn = { x: startX, y: btnY, w: btnW, h: btnH, mode: 'ai',
+                  fill: '#1e3a8a', stroke: '#3b82f6',
+                  icon: '🤖', label: 'VS  AI', sub: 'You vs the computer' };
+  const fnBtn = { x: startX + btnW + gap, y: btnY, w: btnW, h: btnH, mode: 'friend',
+                  fill: '#166534', stroke: '#22c55e',
+                  icon: '🎮', label: 'VS  FRIEND', sub: 'Local 2-player on one keyboard' };
+
+  for (const b of [aiBtn, fnBtn]) {
+    ctx.fillStyle = b.fill;
+    ctx.strokeStyle = b.stroke;
+    ctx.lineWidth = 4;
+    if (ctx.roundRect) {
+      ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 16); ctx.fill(); ctx.stroke();
+    } else {
+      ctx.fillRect(b.x, b.y, b.w, b.h); ctx.strokeRect(b.x, b.y, b.w, b.h);
+    }
+    // Icon
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.font = '48px sans-serif';
+    ctx.fillText(b.icon, b.x + 50, b.y + b.h / 2 + 4);
+    // Label
+    ctx.font = 'bold 32px Impact, "Arial Black", sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(b.label, b.x + 90, b.y + b.h / 2 - 8);
+    // Subtitle
+    ctx.font = '13px monospace';
+    ctx.fillStyle = '#cfe6ff';
+    ctx.fillText(b.sub, b.x + 90, b.y + b.h / 2 + 18);
+    menuButtons.push(b);
+  }
+
+  // Helpful hint
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.font = '14px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('Click a mode  ·  or press 1 / 2  ·  Space to start', W / 2, btnY + btnH + 36);
+
+  // Controls reference for both modes
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = '13px monospace';
+  ctx.fillText('VS AI  —  mouse or W/S to move',           W / 2, H * 0.78);
+  ctx.fillText('VS FRIEND  —  P1: W/S    P2: ↑/↓',         W / 2, H * 0.81);
+  ctx.fillText('First to 11 (win by 2) takes the match.',  W / 2, H * 0.85);
 }
 
 // ================== MAIN LOOP ==================
@@ -504,12 +624,16 @@ function frame(t) {
   update(dt);
   updateParticles(dt);
 
-  drawCourt();
-  drawPaddle('left',  player, '#ef4444', '#7f1d1d');
-  drawPaddle('right', ai,     '#3b82f6', '#1e3a8a');
-  drawBall();
-  drawParticles();
-  drawHUD();
+  if (mode === 'menu') {
+    drawMenu();
+  } else {
+    drawCourt();
+    drawPaddle('left',  player, '#ef4444', '#7f1d1d');
+    drawPaddle('right', ai,     '#3b82f6', '#1e3a8a');
+    drawBall();
+    drawParticles();
+    drawHUD();
+  }
 
   requestAnimationFrame(frame);
 }
