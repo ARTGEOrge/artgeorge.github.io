@@ -157,13 +157,65 @@ for (let i = 0; i < 2; i++) {
   floors.push(f);
 }
 
+// ============== ANIMATED VISUAL ARRAYS ==============
+const animatedNeon = [];     // emissive meshes whose color cycles per-frame
+const animatedBillboards = []; // billboards that flash through colors
+const NEON_PALETTE = [0xff3399, 0x33ddff, 0xffcc22, 0x9933ff, 0x22ff88, 0xff5522, 0x66ffff];
+
+// ============== WORLD: STAR FIELD (twinkling night sky) ==============
+{
+  const starCount = 220;
+  const starPos = new Float32Array(starCount * 3);
+  for (let i = 0; i < starCount; i++) {
+    starPos[i*3]     = (Math.random() - 0.5) * 250;
+    starPos[i*3 + 1] = 10 + Math.random() * 50;
+    starPos[i*3 + 2] = -180 + Math.random() * 180;
+  }
+  const starGeo = new THREE.BufferGeometry();
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+  const starMat = new THREE.PointsMaterial({
+    color: 0xffffff, size: 0.4, sizeAttenuation: true,
+    transparent: true, opacity: 0.85
+  });
+  const stars = new THREE.Points(starGeo, starMat);
+  scene.add(stars);
+}
+
+// ============== WORLD: SWEEPING SEARCHLIGHTS ==============
+const searchLights = [];
+const SEARCHLIGHT_COLORS = [0xff3399, 0x33ddff, 0xffcc22, 0x9933ff];
+for (let i = 0; i < 4; i++) {
+  const cone = new THREE.Mesh(
+    new THREE.ConeGeometry(7, 35, 18, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: SEARCHLIGHT_COLORS[i],
+      transparent: true, opacity: 0.18,
+      side: THREE.DoubleSide,
+      depthWrite: false
+    })
+  );
+  cone.position.set((i - 1.5) * 28, 22, -60);
+  cone.rotation.x = Math.PI;
+  cone.userData.phase = Math.random() * Math.PI * 2;
+  cone.userData.freq  = 0.0007 + Math.random() * 0.0008;
+  scene.add(cone);
+  searchLights.push(cone);
+}
+
 // ============== WORLD: CITY BUILDINGS (replaces tunnel walls + ceiling) ==============
-const BUILDING_COLORS = [0x664a3a, 0x5a5a5a, 0x5a4a3a, 0x4a4a5a, 0x6a3a3a, 0x4a5a4a, 0x6a5a4a, 0x3a3a48];
+const BUILDING_COLORS = [0x4a3a5a, 0x3a4a5a, 0x5a3a3a, 0x3a5a4a, 0x5a4a3a, 0x4a4a5a, 0x6a4a4a, 0x3a3a48];
 const ROOF_COLOR     = 0x222230;
-const winLitMat   = new THREE.MeshStandardMaterial({ color: 0xffeeaa, emissive: 0x553311 });
+const winLitMat   = new THREE.MeshStandardMaterial({ color: 0xffeeaa, emissive: 0x884411, emissiveIntensity: 1.2 });
 const winDarkMat  = new THREE.MeshStandardMaterial({ color: 0x111118, emissive: 0x000000 });
-const storefrontMat = new THREE.MeshStandardMaterial({ color: 0xffaa44, emissive: 0x664422 });
-const billboardMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, emissive: 0x0e6a2a });
+const STOREFRONT_PALETTE = [
+  { c: 0xffaa44, e: 0x884422 }, // amber
+  { c: 0xff44aa, e: 0x882244 }, // hot pink
+  { c: 0x44ffaa, e: 0x228855 }, // mint
+  { c: 0x44aaff, e: 0x224488 }, // cyan
+  { c: 0xff4444, e: 0x882222 }, // red
+  { c: 0xffff44, e: 0x888822 }, // bright yellow
+  { c: 0xaa44ff, e: 0x442288 }, // purple
+];
 
 function makeBuildingRow(side) {
   const g = new THREE.Group();
@@ -215,26 +267,82 @@ function makeBuildingRow(side) {
       }
     }
 
-    // Bright glowing storefront at street level (for some buildings)
-    if (Math.random() < 0.45) {
+    // Bright glowing storefront at street level (random color from palette)
+    if (Math.random() < 0.55) {
+      const sp = STOREFRONT_PALETTE[Math.floor(Math.random() * STOREFRONT_PALETTE.length)];
       const sf = new THREE.Mesh(
-        new THREE.BoxGeometry(0.06, 1.3, 1.6),
-        storefrontMat
+        new THREE.BoxGeometry(0.07, 1.3, 1.6),
+        new THREE.MeshStandardMaterial({ color: sp.c, emissive: sp.e, emissiveIntensity: 1.2 })
       );
       sf.position.set(side * (FLOOR_HALFW + 0.06), 0.65, z - w / 2 + Math.random() * w);
       g.add(sf);
     }
-    // Occasional rooftop billboard
-    if (h > 7 && Math.random() < 0.3) {
-      const bb = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.2, 2.2), billboardMat);
-      bb.position.set(side * (FLOOR_HALFW + 0.05), h + 0.9, z);
+    // Horizontal neon trim band on the inner face (random color, animated)
+    if (Math.random() < 0.7) {
+      const neonColor = NEON_PALETTE[Math.floor(Math.random() * NEON_PALETTE.length)];
+      const trimY = 1.5 + Math.random() * Math.max(0.5, h - 2.5);
+      const trim = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.18, w + 0.05),
+        new THREE.MeshBasicMaterial({ color: neonColor })
+      );
+      trim.position.set(side * (FLOOR_HALFW + 0.04), trimY, z);
+      trim.userData.phase = Math.random() * Math.PI * 2;
+      trim.userData.baseColor = neonColor;
+      g.add(trim);
+      animatedNeon.push(trim);
+    }
+    // Vertical neon edge accent on taller buildings
+    if (h > 8 && Math.random() < 0.5) {
+      const neonColor = NEON_PALETTE[Math.floor(Math.random() * NEON_PALETTE.length)];
+      const edge = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, h - 1, 0.2),
+        new THREE.MeshBasicMaterial({ color: neonColor })
+      );
+      const eZ = (Math.random() < 0.5 ? -1 : 1) * (w / 2 - 0.4);
+      edge.position.set(side * (FLOOR_HALFW + 0.05), h / 2, z + eZ);
+      edge.userData.phase = Math.random() * Math.PI * 2;
+      g.add(edge);
+      animatedNeon.push(edge);
+    }
+    // Rooftop billboard with color-cycling face
+    if (h > 7 && Math.random() < 0.4) {
+      const bbColor = NEON_PALETTE[Math.floor(Math.random() * NEON_PALETTE.length)];
+      const bb = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 1.5, 2.6),
+        new THREE.MeshStandardMaterial({
+          color: bbColor, emissive: bbColor, emissiveIntensity: 1.4
+        })
+      );
+      bb.position.set(side * (FLOOR_HALFW + 0.05), h + 1.0, z);
+      bb.userData.phase = Math.random() * Math.PI * 2;
       g.add(bb);
-      // Billboard support struts
-      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.6, 0.04),
-        new THREE.MeshStandardMaterial({ color: 0x222222 }));
-      strut.position.set(side * (FLOOR_HALFW + 0.05), h + 0.3, z - 0.6);
+      animatedBillboards.push(bb);
+      // Billboard frame
+      const frameMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6 });
+      const frTop = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.1, 2.7), frameMat);
+      frTop.position.set(side * (FLOOR_HALFW + 0.05), h + 1.85, z); g.add(frTop);
+      const frBot = frTop.clone(); frBot.position.y = h + 0.15; g.add(frBot);
+      // Billboard support struts (now angular)
+      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.6, 0.04), frameMat);
+      strut.position.set(side * (FLOOR_HALFW + 0.05), h + 0.3, z - 0.9);
       g.add(strut);
-      const strut2 = strut.clone(); strut2.position.z = z + 0.6; g.add(strut2);
+      const strut2 = strut.clone(); strut2.position.z = z + 0.9; g.add(strut2);
+    }
+    // Occasional antenna/spire on tallest buildings
+    if (h > 12 && Math.random() < 0.35) {
+      const spireMat = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.7 });
+      const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 2.5, 6), spireMat);
+      spire.position.set(side * (FLOOR_HALFW + 0.5), h + 1.5, z);
+      g.add(spire);
+      // Tip light (red)
+      const tipLight = new THREE.Mesh(
+        new THREE.SphereGeometry(0.12, 6, 6),
+        new THREE.MeshBasicMaterial({ color: 0xff3030 })
+      );
+      tipLight.position.set(side * (FLOOR_HALFW + 0.5), h + 2.8, z);
+      tipLight.userData.phase = Math.random() * Math.PI * 2;
+      g.add(tipLight);
+      animatedNeon.push(tipLight); // also blink
     }
   }
   return g;
@@ -248,6 +356,16 @@ for (const side of [-1, 1]) {
     scene.add(row);
     buildings.push(row);
   }
+}
+
+// Glowing neon centerline running down the middle of the road
+const centerLineMat = new THREE.MeshBasicMaterial({ color: 0x33ddff });
+const centerLines = [];
+for (let i = 0; i < 2; i++) {
+  const cl = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.04, FLOOR_LEN), centerLineMat);
+  cl.position.set(0, 0.06, -FLOOR_LEN / 2 - i * FLOOR_LEN);
+  scene.add(cl);
+  centerLines.push(cl);
 }
 
 // Curb / sidewalk concrete edge along the inside of each building row
@@ -440,6 +558,21 @@ const soleL = new THREE.Mesh(new THREE.BoxGeometry(0.33, 0.06, 0.51),
 soleL.position.set(0, -1.05, 0.08); legL.add(soleL);
 const soleR = soleL.clone(); soleR.position.set(0, -1.05, 0.08); legR.add(soleR);
 
+// Glowing trail behind the player (3 fading planes for ghost effect)
+const playerTrails = [];
+for (let i = 0; i < 3; i++) {
+  const t = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.85, 1.7),
+    new THREE.MeshBasicMaterial({
+      color: 0x22c55e, transparent: true, opacity: 0.0, side: THREE.DoubleSide, depthWrite: false
+    })
+  );
+  t.position.set(0, 1.2, 0.5 + i * 0.6);
+  t.rotation.y = Math.PI;
+  playerGroup.add(t);
+  playerTrails.push(t);
+}
+
 // ============== COP CHASER ==============
 function makeCop() {
   const g = new THREE.Group();
@@ -523,6 +656,17 @@ function makeCop() {
   return { group: g, armL: cArmL, armR: cArmR, legL: cLegL, legR: cLegR };
 }
 const cop = makeCop();
+// Pulsing red danger aura ring around the cop
+const copAura = new THREE.Mesh(
+  new THREE.RingGeometry(0.8, 1.4, 24),
+  new THREE.MeshBasicMaterial({
+    color: 0xff2244, transparent: true, opacity: 0.25,
+    side: THREE.DoubleSide, depthWrite: false
+  })
+);
+copAura.rotation.x = -Math.PI / 2;
+copAura.position.y = 0.05;
+cop.group.add(copAura);
 let copZ = 6.5;
 const COP_DANGER = 1.0;     // game over when cop within this distance
 const COP_MAX = 7.5;        // max trailing distance (cop falls behind)
@@ -1339,6 +1483,73 @@ function update(dt) {
     caught();
   }
 
+  // ===== FLASHY VISUAL ANIMATIONS =====
+  const tNow = performance.now();
+  const tSec = tNow * 0.001;
+
+  // Sweeping searchlights — orbit around their hub
+  for (const sl of searchLights) {
+    const a = Math.sin(tNow * sl.userData.freq + sl.userData.phase) * 0.6;
+    sl.rotation.x = Math.PI + Math.sin(tSec * 0.5 + sl.userData.phase) * 0.15;
+    sl.rotation.z = a;
+    sl.rotation.y = Math.cos(tNow * sl.userData.freq * 0.7 + sl.userData.phase) * 0.5;
+    sl.material.opacity = 0.15 + Math.abs(Math.sin(tSec + sl.userData.phase)) * 0.10;
+  }
+
+  // Animated neon trim/edge stripes — pulse intensity in groups
+  for (let i = 0; i < animatedNeon.length; i++) {
+    const m = animatedNeon[i];
+    const pulse = 0.55 + 0.45 * Math.sin(tSec * 2.4 + m.userData.phase);
+    m.material.color.setScalar(1);
+    // Use color tint by setting material color via HSL cycle
+    const hue = ((tSec * 30 + i * 7) % 360) / 360;
+    m.material.color.setHSL(hue, 1.0, 0.4 + pulse * 0.25);
+  }
+
+  // Color-cycling billboards
+  for (let i = 0; i < animatedBillboards.length; i++) {
+    const bb = animatedBillboards[i];
+    const hue = ((tSec * 40 + i * 25 + bb.userData.phase * 60) % 360) / 360;
+    const lum = 0.45 + 0.2 * Math.sin(tSec * 3 + bb.userData.phase);
+    bb.material.color.setHSL(hue, 1.0, lum);
+    bb.material.emissive.setHSL(hue, 1.0, lum * 0.6);
+  }
+
+  // Color-cycling coins (rainbow shimmer)
+  for (let i = 0; i < coins.length; i++) {
+    const c = coins[i];
+    const hue = ((tSec * 60 + i * 17) % 360) / 360;
+    c.mesh.material.emissive.setHSL(hue, 1.0, 0.45);
+  }
+
+  // Cop danger aura — pulses size and opacity, brightens as he closes
+  {
+    const closeness = Math.max(0, 1 - copZ / 5);
+    const scale = 1 + 0.25 * Math.sin(tSec * 6) + closeness * 0.35;
+    copAura.scale.set(scale, scale, scale);
+    copAura.material.opacity = 0.18 + closeness * 0.35;
+  }
+
+  // Player ghost trail — fade based on speed
+  const trailIntensity = Math.min(1, (speed - 14) / 22) * 0.45 + 0.15;
+  for (let i = 0; i < playerTrails.length; i++) {
+    const t = playerTrails[i];
+    t.material.opacity = trailIntensity * (0.6 - i * 0.18) * (0.6 + 0.4 * Math.sin(tSec * 4 + i));
+  }
+
+  // Pulsing cyan road centerline
+  const cl = 0.55 + 0.45 * Math.sin(tSec * 5);
+  centerLineMat.color.setRGB(0.2 * cl, 0.85 * cl, 1.0 * cl);
+
+  // Cycle street-lamp bulb hues every now and then for a disco effect
+  for (let i = 0; i < streetLamps.length; i++) {
+    const lamp = streetLamps[i];
+    const bulb = lamp.children[3]; // bulb mesh added 4th in makeStreetLamp loop
+    if (!bulb) continue;
+    const hue = ((tSec * 8 + i * 14) % 360) / 360;
+    bulb.material.color.setHSL(hue, 0.6, 0.75);
+  }
+
   // Move world toward camera
   const dz = speed * dt;
   lastSpawnZ += dz;  // keep the spawn cursor anchored to the world so new rows keep coming
@@ -1358,6 +1569,10 @@ function update(dt) {
   for (const c of curbs) {
     c.position.z += dz;
     if (c.position.z > FLOOR_LEN / 2 + 5) c.position.z -= FLOOR_LEN * 2;
+  }
+  for (const cl of centerLines) {
+    cl.position.z += dz;
+    if (cl.position.z > FLOOR_LEN / 2 + 5) cl.position.z -= FLOOR_LEN * 2;
   }
   for (const r of rails) {
     r.position.z += dz;
