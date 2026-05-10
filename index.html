@@ -107,6 +107,7 @@
     .card--bombs   { --accent: #ff3322; --accent-glow: rgba(255,80,40,0.45); }
     .card--crossy  { --accent: #ffcc33; --accent-glow: rgba(255,204,51,0.45); }
     .card--blocks  { --accent: #4d7cff; --accent-glow: rgba(77,124,255,0.45); }
+    .card--mob     { --accent: #c84dff; --accent-glow: rgba(200,77,255,0.45); }
 
     .card-body { padding: 20px 22px 24px; }
 
@@ -618,6 +619,84 @@
           <span class="tag">Blocks</span>
           <span class="tag">Casual</span>
           <span class="tag">Brain</span>
+        </div>
+      </div>
+    </a>
+
+    <a href="/mob-control/" class="card card--mob">
+      <div class="play-btn">&#9654; PLAY</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="mcBg" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#3a1a55"/>
+              <stop offset="100%" stop-color="#0a0518"/>
+            </linearGradient>
+            <linearGradient id="mcFloor" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#5b3a8a"/>
+              <stop offset="100%" stop-color="#1a0c3a"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#mcBg)"/>
+          <!-- Arena floor -->
+          <polygon points="0,150 400,150 400,180 0,180" fill="url(#mcFloor)"/>
+          <line x1="0" y1="150" x2="400" y2="150" stroke="#9966ee" stroke-width="1" opacity="0.4"/>
+          <!-- Center splitter line glow -->
+          <line x1="200" y1="60" x2="200" y2="170" stroke="#c84dff" stroke-width="1.5" stroke-dasharray="4,6" opacity="0.55"/>
+          <!-- Cannon (gateway) -->
+          <rect x="186" y="38" width="28" height="22" rx="3" fill="#2a1a44"/>
+          <rect x="190" y="42" width="20" height="14" rx="2" fill="#c84dff"/>
+          <rect x="196" y="30" width="8"  height="10" fill="#2a1a44"/>
+          <!-- Left mob (purple stickmen) -->
+          <g fill="#c84dff">
+            <circle cx="60"  cy="118" r="6"/><rect x="56"  y="124" width="8" height="14" rx="2"/>
+            <circle cx="80"  cy="120" r="6"/><rect x="76"  y="126" width="8" height="13" rx="2"/>
+            <circle cx="100" cy="116" r="6"/><rect x="96"  y="122" width="8" height="15" rx="2"/>
+            <circle cx="70"  cy="100" r="6"/><rect x="66"  y="106" width="8" height="14" rx="2"/>
+            <circle cx="90"  cy="102" r="6"/><rect x="86"  y="108" width="8" height="13" rx="2"/>
+            <circle cx="50"  cy="135" r="5"/><rect x="46"  y="140" width="8" height="10" rx="2"/>
+            <circle cx="115" cy="132" r="5"/><rect x="111" y="137" width="8" height="11" rx="2"/>
+            <circle cx="125" cy="118" r="5"/><rect x="121" y="123" width="8" height="12" rx="2"/>
+            <circle cx="40"  cy="118" r="5"/><rect x="36"  y="123" width="8" height="11" rx="2"/>
+          </g>
+          <!-- Right mob (cyan stickmen) -->
+          <g fill="#22d3ee">
+            <circle cx="300" cy="118" r="6"/><rect x="296" y="124" width="8" height="14" rx="2"/>
+            <circle cx="320" cy="120" r="6"/><rect x="316" y="126" width="8" height="13" rx="2"/>
+            <circle cx="340" cy="116" r="6"/><rect x="336" y="122" width="8" height="15" rx="2"/>
+            <circle cx="310" cy="100" r="6"/><rect x="306" y="106" width="8" height="14" rx="2"/>
+            <circle cx="330" cy="102" r="6"/><rect x="326" y="108" width="8" height="13" rx="2"/>
+            <circle cx="290" cy="135" r="5"/><rect x="286" y="140" width="8" height="10" rx="2"/>
+            <circle cx="355" cy="132" r="5"/><rect x="351" y="137" width="8" height="11" rx="2"/>
+            <circle cx="275" cy="118" r="5"/><rect x="271" y="123" width="8" height="12" rx="2"/>
+            <circle cx="365" cy="118" r="5"/><rect x="361" y="123" width="8" height="11" rx="2"/>
+          </g>
+          <!-- Streaming dots from cannon -->
+          <g fill="#fff" opacity="0.85">
+            <circle cx="170" cy="68" r="3"/>
+            <circle cx="155" cy="80" r="2.5"/>
+            <circle cx="140" cy="92" r="2"/>
+            <circle cx="230" cy="68" r="3"/>
+            <circle cx="245" cy="80" r="2.5"/>
+            <circle cx="260" cy="92" r="2"/>
+          </g>
+          <!-- Battle sparks at center -->
+          <g fill="#ffee66">
+            <circle cx="200" cy="125" r="2.5"/>
+            <circle cx="206" cy="130" r="1.5"/>
+            <circle cx="194" cy="132" r="1.5"/>
+          </g>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">Crowd</div>
+        <div class="card-title">Mob Control</div>
+        <p class="card-desc">Aim your gate, multiply your crowd, and overwhelm the enemy stickmen. Time your shots to grow the biggest mob and storm the tower.</p>
+        <div class="card-tags">
+          <span class="tag">Crowd</span>
+          <span class="tag">Casual</span>
+          <span class="tag">Strategy</span>
+          <span class="tag">3D</span>
         </div>
       </div>
     </a>
