@@ -544,6 +544,8 @@ const player = {
   invuln: 0,
   platformY: 0,    // current "ground" level (raised when riding on top of a train)
   onTrain: null,   // reference to train obstacle when riding it
+  tumbling: 0,     // seconds remaining of bounce-and-tumble after a crash
+  tumbleDir: 1,    // 1 = forward flip, -1 = back
 };
 const PLAYER_JUMP_V = 15;
 const PLAYER_GRAVITY = 38;
@@ -1130,6 +1132,8 @@ function restart() {
   player.state = 'run'; player.slideTimer = 0;
   player.invuln = 0;
   player.platformY = 0; player.onTrain = null;
+  player.tumbling = 0; player.tumbleDir = 1;
+  playerGroup.rotation.x = 0; playerGroup.rotation.z = 0;
   speed = 14;
   distance = 0;
   score = 0;
@@ -1170,6 +1174,17 @@ function stumble(severity) {
   if (player.invuln > 0) return;
   player.invuln = 0.9;
   copZ -= severity;
+  // BOUNCE: launch the player off the obstacle and tumble in mid-air before landing
+  player.state = 'jump';
+  player.vy = 11;                                  // upward bounce
+  player.tumbling = 0.55;                          // tumble for a beat
+  player.tumbleDir = Math.random() < 0.5 ? 1 : -1;
+  // If they were riding a train, knock them off
+  if (player.onTrain) {
+    player.onTrain = null;
+    player.yOff = player.platformY + player.yOff;
+    player.platformY = 0;
+  }
   // Brief red flash
   flashEl.style.transition = 'background 0s';
   flashEl.style.background = 'rgba(255,0,0,0.45)';
@@ -1177,7 +1192,7 @@ function stumble(severity) {
     flashEl.style.transition = 'background 0.4s ease-out';
     flashEl.style.background = 'rgba(255,0,0,0)';
   }, 50);
-  // Spark burst at player
+  // Spark burst at player + dust on impact
   spawnSparks(player.displayX, 1.5, 0);
 }
 
@@ -1224,8 +1239,10 @@ function update(dt) {
   player.displayX += (targetX - player.displayX) * Math.min(1, dt * 14);
   playerGroup.position.x = player.displayX;
   // Tilt sideways during lane change
-  const laneTilt = (targetX - player.displayX) * 0.3;
-  playerGroup.rotation.z = laneTilt;
+  if (player.tumbling <= 0) {
+    const laneTilt = (targetX - player.displayX) * 0.3;
+    playerGroup.rotation.z = laneTilt;
+  }
 
   // Jump (gravity applies relative to platformY-anchored ground)
   if (player.state === 'jump') {
@@ -1245,8 +1262,21 @@ function update(dt) {
   // Crouch and tilt forward when sliding
   const targetScaleY = player.state === 'slide' ? 0.42 : 1;
   playerGroup.scale.y += (targetScaleY - playerGroup.scale.y) * Math.min(1, dt * 16);
-  const targetTilt = player.state === 'slide' ? -0.55 : 0;
-  playerGroup.rotation.x += (targetTilt - playerGroup.rotation.x) * Math.min(1, dt * 16);
+  if (player.tumbling > 0) {
+    // Bounce-and-tumble — keep spinning until it elapses
+    player.tumbling -= dt;
+    playerGroup.rotation.x += dt * 14 * player.tumbleDir;
+    playerGroup.rotation.z += dt * 6  * player.tumbleDir;
+    if (player.tumbling <= 0) {
+      player.tumbling = 0;
+      // Snap back to upright
+      playerGroup.rotation.x = 0;
+      playerGroup.rotation.z = 0;
+    }
+  } else {
+    const targetTilt = player.state === 'slide' ? -0.55 : 0;
+    playerGroup.rotation.x += (targetTilt - playerGroup.rotation.x) * Math.min(1, dt * 16);
+  }
 
   // Limb animation
   const tt = performance.now() * 0.014;
