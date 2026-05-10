@@ -104,6 +104,7 @@
     .card--escape2 { --accent: #ff6600; --accent-glow: rgba(255,102,0,0.4); }
     .card--snow    { --accent: #aaddff; --accent-glow: rgba(170,221,255,0.4); }
     .card--eagle   { --accent: #55cc55; --accent-glow: rgba(85,204,85,0.4); }
+    .card--bombs   { --accent: #ff3322; --accent-glow: rgba(255,80,40,0.45); }
 
     .card-body { padding: 20px 22px 24px; }
 
@@ -403,6 +404,65 @@
           <span class="tag">3D</span>
           <span class="tag">Sled</span>
           <span class="tag">Snow</span>
+          <span class="tag">Arcade</span>
+        </div>
+      </div>
+    </a>
+
+    <a href="/evolving-bombs-3d/" class="card card--bombs">
+      <div class="play-btn">&#9654; PLAY</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="bombGrad" cx="50%" cy="55%" r="70%">
+              <stop offset="0%" stop-color="#5a1a0a"/>
+              <stop offset="100%" stop-color="#0a0205"/>
+            </radialGradient>
+            <radialGradient id="boomGrad" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#fff5b0" stop-opacity="1"/>
+              <stop offset="40%" stop-color="#ffaa22" stop-opacity="0.95"/>
+              <stop offset="80%" stop-color="#ff3322" stop-opacity="0.6"/>
+              <stop offset="100%" stop-color="#ff3322" stop-opacity="0"/>
+            </radialGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#bombGrad)"/>
+          <!-- Explosion glow behind -->
+          <circle cx="290" cy="78" r="78" fill="url(#boomGrad)"/>
+          <!-- Explosion shards -->
+          <polygon points="290,10 300,60 280,60" fill="#ffcc44" opacity="0.8"/>
+          <polygon points="370,40 320,70 340,55" fill="#ff8822" opacity="0.75"/>
+          <polygon points="365,120 320,90 345,98" fill="#ff8822" opacity="0.75"/>
+          <polygon points="290,150 280,100 300,100" fill="#ffcc44" opacity="0.8"/>
+          <polygon points="220,130 270,98 252,108" fill="#ff8822" opacity="0.7"/>
+          <polygon points="215,32 265,68 245,58"  fill="#ffcc44" opacity="0.7"/>
+          <!-- Bomb body -->
+          <circle cx="130" cy="110" r="42" fill="#1a1a22"/>
+          <circle cx="130" cy="110" r="42" fill="none" stroke="#3a3a44" stroke-width="2"/>
+          <!-- Bomb highlight -->
+          <ellipse cx="115" cy="95" rx="12" ry="8" fill="rgba(255,255,255,0.18)"/>
+          <!-- Fuse cap -->
+          <rect x="122" y="60" width="16" height="12" rx="2" fill="#665544"/>
+          <!-- Fuse curve -->
+          <path d="M130,60 Q150,40 170,46 Q188,52 180,30" fill="none" stroke="#aa8855" stroke-width="3" stroke-linecap="round"/>
+          <!-- Fuse spark -->
+          <circle cx="180" cy="30" r="6" fill="#ffee66"/>
+          <circle cx="180" cy="30" r="3" fill="#ffffff"/>
+          <!-- Tiny spark particles -->
+          <circle cx="190" cy="22" r="1.5" fill="#ffcc44"/>
+          <circle cx="172" cy="20" r="1.5" fill="#ffaa22"/>
+          <circle cx="186" cy="40" r="1.5" fill="#ffcc44"/>
+          <!-- Ground line -->
+          <rect x="0" y="160" width="400" height="20" fill="rgba(0,0,0,0.5)"/>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">Action</div>
+        <div class="card-title">Evolving Bombs 3D</div>
+        <p class="card-desc">Toss bombs that grow with every kill. Wipe out waves of enemies in a chaotic 3D arena and chase the highest combo.</p>
+        <div class="card-tags">
+          <span class="tag">3D</span>
+          <span class="tag">Action</span>
+          <span class="tag">Arena</span>
           <span class="tag">Arcade</span>
         </div>
       </div>
