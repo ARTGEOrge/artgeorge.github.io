@@ -203,10 +203,17 @@ for (let i = 0; i < 4; i++) {
 }
 
 // ============== WORLD: CITY BUILDINGS (replaces tunnel walls + ceiling) ==============
-const BUILDING_COLORS = [0x4a3a5a, 0x3a4a5a, 0x5a3a3a, 0x3a5a4a, 0x5a4a3a, 0x4a4a5a, 0x6a4a4a, 0x3a3a48];
-const ROOF_COLOR     = 0x222230;
-const winLitMat   = new THREE.MeshStandardMaterial({ color: 0xffeeaa, emissive: 0x884411, emissiveIntensity: 1.2 });
-const winDarkMat  = new THREE.MeshStandardMaterial({ color: 0x111118, emissive: 0x000000 });
+const BUILDING_COLORS = [0x1a2030, 0x202836, 0x18202a, 0x2a2034, 0x1c2838, 0x1c1c24, 0x252535, 0x222a3a];
+const ROOF_COLOR     = 0x0c0e14;
+// Sleek dark-glass curtain wall material — slightly emissive so it reads as nighttime tinted glass
+const glassMat = new THREE.MeshStandardMaterial({
+  color: 0x0a0e16, metalness: 0.85, roughness: 0.22, emissive: 0x1a2236, emissiveIntensity: 0.45
+});
+const mullionMat = new THREE.MeshStandardMaterial({ color: 0x0a0a10, metalness: 0.75, roughness: 0.35 });
+const podiumMat = new THREE.MeshStandardMaterial({ color: 0x161820, metalness: 0.35, roughness: 0.55 });
+const crownMat = new THREE.MeshStandardMaterial({ color: ROOF_COLOR, metalness: 0.55, roughness: 0.55 });
+const winStripLitMat  = new THREE.MeshStandardMaterial({ color: 0xffd9a0, emissive: 0xff9944, emissiveIntensity: 1.0 });
+const winStripCoolMat = new THREE.MeshStandardMaterial({ color: 0xa0d4ff, emissive: 0x4488ff, emissiveIntensity: 0.9 });
 const STOREFRONT_PALETTE = [
   { c: 0xffaa44, e: 0x884422 }, // amber
   { c: 0xff44aa, e: 0x882244 }, // hot pink
@@ -223,126 +230,197 @@ function makeBuildingRow(side) {
   const sectionLen = FLOOR_LEN / buildingsCount;
   for (let i = 0; i < buildingsCount; i++) {
     const z = -FLOOR_LEN / 2 + i * sectionLen + sectionLen / 2;
-    const h = 4 + Math.random() * 11;
-    const w = sectionLen * (0.85 + Math.random() * 0.10);
-    const depth = 2.4 + Math.random() * 2;
+    const h = 5 + Math.random() * 14;                       // taller skyline
+    const w = sectionLen * (0.86 + Math.random() * 0.10);
+    const depth = 3.2 + Math.random() * 2.6;                // deeper, more solid
     const c = BUILDING_COLORS[Math.floor(Math.random() * BUILDING_COLORS.length)];
     const bx = side * (FLOOR_HALFW + depth / 2 + 0.4);
+    const facadeX = side * (FLOOR_HALFW + 0.4);             // x of inner (road-facing) face
 
-    // Building body
-    const building = new THREE.Mesh(
-      new THREE.BoxGeometry(depth, h, w),
-      new THREE.MeshStandardMaterial({ color: c, roughness: 0.9 })
+    // --- Podium / street-level base (slightly wider than tower, classic skyscraper plinth)
+    const podiumH = 1.6;
+    const podium = new THREE.Mesh(
+      new THREE.BoxGeometry(depth + 0.35, podiumH, w + 0.25),
+      podiumMat
     );
-    building.position.set(bx, h / 2, z);
-    building.receiveShadow = true;
-    g.add(building);
+    podium.position.set(bx, podiumH / 2, z);
+    podium.receiveShadow = true;
+    g.add(podium);
 
-    // Roof slab + small parapet
-    const roof = new THREE.Mesh(
-      new THREE.BoxGeometry(depth + 0.18, 0.3, w + 0.18),
-      new THREE.MeshStandardMaterial({ color: ROOF_COLOR })
+    // --- Main tower body (above podium)
+    const bodyH = h - podiumH;
+    const towerMat = new THREE.MeshStandardMaterial({ color: c, roughness: 0.45, metalness: 0.55 });
+    const tower = new THREE.Mesh(new THREE.BoxGeometry(depth, bodyH, w), towerMat);
+    tower.position.set(bx, podiumH + bodyH / 2, z);
+    tower.receiveShadow = true;
+    g.add(tower);
+
+    // --- Setback tier on tall buildings (steps back from the road for a real skyline silhouette)
+    const tall = h > 11;
+    let topY = h;
+    let topCenterX = bx;
+    let topW = w, topD = depth;
+    if (tall) {
+      const setbackH = 2 + Math.random() * 3.5;
+      const setbackD = depth * (0.60 + Math.random() * 0.15);
+      const setbackW = w * (0.74 + Math.random() * 0.12);
+      // align outer (away-from-road) face with tower so step is visible from the player
+      const setbackX = bx + side * (depth - setbackD) / 2;
+      const setback = new THREE.Mesh(
+        new THREE.BoxGeometry(setbackD, setbackH, setbackW),
+        towerMat
+      );
+      setback.position.set(setbackX, h + setbackH / 2, z);
+      g.add(setback);
+      topY = h + setbackH;
+      topCenterX = setbackX;
+      topW = setbackW; topD = setbackD;
+    }
+
+    // --- Glass curtain-wall facade panel on the inner (road-facing) face
+    const facade = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, bodyH * 0.96, w * 0.92),
+      glassMat
     );
-    roof.position.set(bx, h + 0.15, z);
-    g.add(roof);
+    facade.position.set(facadeX - side * 0.05, podiumH + bodyH / 2, z);
+    g.add(facade);
 
-    // Lit windows on the inner face (facing the player)
-    const winRows = Math.max(1, Math.floor(h / 1.6));
-    const winCols = Math.max(1, Math.floor(w / 1.4));
-    for (let r = 0; r < winRows; r++) {
-      for (let col = 0; col < winCols; col++) {
-        if (Math.random() < 0.55) {
-          const lit = Math.random() < 0.7;
-          const wm = new THREE.Mesh(
-            new THREE.BoxGeometry(0.06, 0.55, 0.7),
-            lit ? winLitMat : winDarkMat
-          );
-          wm.position.set(
-            side * (FLOOR_HALFW + 0.05),
-            0.9 + r * 1.6,
-            z - w / 2 + 0.7 + col * (w / winCols)
-          );
-          g.add(wm);
-        }
+    // --- Vertical mullions: slim metal pillars dividing the curtain wall into panels
+    const mullCount = Math.max(2, Math.floor(w / 1.0));
+    for (let m = 0; m <= mullCount; m++) {
+      const mz = z - w / 2 + (m * w) / mullCount;
+      const mull = new THREE.Mesh(
+        new THREE.BoxGeometry(0.22, bodyH, 0.14),
+        mullionMat
+      );
+      mull.position.set(facadeX - side * 0.02, podiumH + bodyH / 2, mz);
+      g.add(mull);
+    }
+
+    // --- Continuous horizontal window strips (sleek light bands, not dotted windows)
+    const stripCount = Math.max(2, Math.floor(bodyH / 1.3));
+    const stripSpacing = bodyH / (stripCount + 0.5);
+    const stripMat = Math.random() < 0.7 ? winStripLitMat : winStripCoolMat;
+    for (let s = 0; s < stripCount; s++) {
+      if (Math.random() < 0.85) {
+        const strip = new THREE.Mesh(
+          new THREE.BoxGeometry(0.08, 0.45, w * 0.88),
+          stripMat
+        );
+        strip.position.set(facadeX - side * 0.07, podiumH + 0.7 + s * stripSpacing, z);
+        g.add(strip);
+      }
+    }
+    // Setback-tier glass + a couple of strips
+    if (tall) {
+      const sbInnerX = topCenterX - side * (topD / 2);
+      const sbFacade = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16, (topY - h) * 0.9, topW * 0.9),
+        glassMat
+      );
+      sbFacade.position.set(sbInnerX - side * 0.04, (h + topY) / 2, z);
+      g.add(sbFacade);
+      const sbStrips = Math.max(1, Math.floor((topY - h) / 1.2));
+      for (let s = 0; s < sbStrips; s++) {
+        const strip = new THREE.Mesh(
+          new THREE.BoxGeometry(0.07, 0.4, topW * 0.84),
+          stripMat
+        );
+        strip.position.set(sbInnerX - side * 0.06, h + 0.6 + s * 1.2, z);
+        g.add(strip);
       }
     }
 
-    // Bright glowing storefront at street level (random color from palette)
-    if (Math.random() < 0.55) {
+    // --- Crown / parapet slab on top
+    const crownH = 0.35;
+    const crown = new THREE.Mesh(
+      new THREE.BoxGeometry(topD * 1.04, crownH, topW * 1.04),
+      crownMat
+    );
+    crown.position.set(topCenterX, topY + crownH / 2, z);
+    g.add(crown);
+
+    // --- Glowing storefront at podium level
+    if (Math.random() < 0.7) {
       const sp = STOREFRONT_PALETTE[Math.floor(Math.random() * STOREFRONT_PALETTE.length)];
       const sf = new THREE.Mesh(
-        new THREE.BoxGeometry(0.07, 1.3, 1.6),
-        new THREE.MeshStandardMaterial({ color: sp.c, emissive: sp.e, emissiveIntensity: 1.2 })
+        new THREE.BoxGeometry(0.1, 0.95, w * 0.55),
+        new THREE.MeshStandardMaterial({ color: sp.c, emissive: sp.e, emissiveIntensity: 1.3 })
       );
-      sf.position.set(side * (FLOOR_HALFW + 0.06), 0.65, z - w / 2 + Math.random() * w);
+      sf.position.set(facadeX - side * 0.09, 0.75, z + (Math.random() - 0.5) * w * 0.3);
       g.add(sf);
     }
-    // Horizontal neon trim band on the inner face (random color, animated)
-    if (Math.random() < 0.7) {
+
+    // --- Horizontal neon trim band on the inner face (animated)
+    if (Math.random() < 0.65) {
       const neonColor = NEON_PALETTE[Math.floor(Math.random() * NEON_PALETTE.length)];
-      const trimY = 1.5 + Math.random() * Math.max(0.5, h - 2.5);
+      const trimY = podiumH + 0.4 + Math.random() * Math.max(0.5, bodyH - 1.0);
       const trim = new THREE.Mesh(
-        new THREE.BoxGeometry(0.08, 0.18, w + 0.05),
+        new THREE.BoxGeometry(0.1, 0.14, w + 0.04),
         new THREE.MeshBasicMaterial({ color: neonColor })
       );
-      trim.position.set(side * (FLOOR_HALFW + 0.04), trimY, z);
+      trim.position.set(facadeX - side * 0.11, trimY, z);
       trim.userData.phase = Math.random() * Math.PI * 2;
       trim.userData.baseColor = neonColor;
       g.add(trim);
       animatedNeon.push(trim);
     }
-    // Vertical neon edge accent on taller buildings
-    if (h > 8 && Math.random() < 0.5) {
+
+    // --- Vertical neon edge accent on taller buildings (corner light strip)
+    if (h > 8 && Math.random() < 0.55) {
       const neonColor = NEON_PALETTE[Math.floor(Math.random() * NEON_PALETTE.length)];
       const edge = new THREE.Mesh(
-        new THREE.BoxGeometry(0.06, h - 1, 0.2),
+        new THREE.BoxGeometry(0.08, bodyH - 0.6, 0.18),
         new THREE.MeshBasicMaterial({ color: neonColor })
       );
-      const eZ = (Math.random() < 0.5 ? -1 : 1) * (w / 2 - 0.4);
-      edge.position.set(side * (FLOOR_HALFW + 0.05), h / 2, z + eZ);
+      const eZ = (Math.random() < 0.5 ? -1 : 1) * (w / 2 - 0.35);
+      edge.position.set(facadeX - side * 0.1, podiumH + bodyH / 2, z + eZ);
       edge.userData.phase = Math.random() * Math.PI * 2;
       g.add(edge);
       animatedNeon.push(edge);
     }
-    // Rooftop billboard with color-cycling face
+
+    // --- Rooftop billboard with color-cycling face
     if (h > 7 && Math.random() < 0.4) {
       const bbColor = NEON_PALETTE[Math.floor(Math.random() * NEON_PALETTE.length)];
       const bb = new THREE.Mesh(
-        new THREE.BoxGeometry(0.12, 1.5, 2.6),
+        new THREE.BoxGeometry(0.14, 1.6, 2.6),
         new THREE.MeshStandardMaterial({
           color: bbColor, emissive: bbColor, emissiveIntensity: 1.4
         })
       );
-      bb.position.set(side * (FLOOR_HALFW + 0.05), h + 1.0, z);
+      const bbX = topCenterX - side * (topD / 2) - side * 0.1;
+      bb.position.set(bbX, topY + 1.0, z);
       bb.userData.phase = Math.random() * Math.PI * 2;
       g.add(bb);
       animatedBillboards.push(bb);
       // Billboard frame
       const frameMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.6 });
-      const frTop = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.1, 2.7), frameMat);
-      frTop.position.set(side * (FLOOR_HALFW + 0.05), h + 1.85, z); g.add(frTop);
-      const frBot = frTop.clone(); frBot.position.y = h + 0.15; g.add(frBot);
-      // Billboard support struts (now angular)
-      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.6, 0.04), frameMat);
-      strut.position.set(side * (FLOOR_HALFW + 0.05), h + 0.3, z - 0.9);
+      const frTop = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.1, 2.7), frameMat);
+      frTop.position.set(bbX, topY + 1.85, z); g.add(frTop);
+      const frBot = frTop.clone(); frBot.position.y = topY + 0.15; g.add(frBot);
+      // Support struts
+      const strut = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.7, 0.05), frameMat);
+      strut.position.set(bbX, topY + 0.4, z - 0.9);
       g.add(strut);
       const strut2 = strut.clone(); strut2.position.z = z + 0.9; g.add(strut2);
     }
-    // Occasional antenna/spire on tallest buildings
-    if (h > 12 && Math.random() < 0.35) {
-      const spireMat = new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.7 });
-      const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.08, 2.5, 6), spireMat);
-      spire.position.set(side * (FLOOR_HALFW + 0.5), h + 1.5, z);
+
+    // --- Antenna/spire on tallest buildings, centered on the crown
+    if (h > 12 && Math.random() < 0.4) {
+      const spireMat = new THREE.MeshStandardMaterial({ color: 0x666677, metalness: 0.85, roughness: 0.3 });
+      const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.1, 2.8, 6), spireMat);
+      spire.position.set(topCenterX, topY + 1.4, z);
       g.add(spire);
-      // Tip light (red)
+      // Tip light (red, blinks via animatedNeon)
       const tipLight = new THREE.Mesh(
-        new THREE.SphereGeometry(0.12, 6, 6),
+        new THREE.SphereGeometry(0.13, 6, 6),
         new THREE.MeshBasicMaterial({ color: 0xff3030 })
       );
-      tipLight.position.set(side * (FLOOR_HALFW + 0.5), h + 2.8, z);
+      tipLight.position.set(topCenterX, topY + 2.85, z);
       tipLight.userData.phase = Math.random() * Math.PI * 2;
       g.add(tipLight);
-      animatedNeon.push(tipLight); // also blink
+      animatedNeon.push(tipLight);
     }
   }
   return g;
