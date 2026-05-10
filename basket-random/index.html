@@ -65,6 +65,19 @@ let winner = null;
 let modifier = 'normal';
 let modifierTimer = 0;
 
+const TIME_OPTIONS = [
+  { label: '1 MIN',    seconds: 60  },
+  { label: '2 MIN',    seconds: 120 },
+  { label: '3 MIN',    seconds: 180 },
+  { label: '5 MIN',    seconds: 300 },
+  { label: 'NO LIMIT', seconds: 0   },
+];
+let gameState       = 'menu';
+let selectedTimeIdx = 1;
+let timeLeft        = TIME_OPTIONS[1].seconds;
+let lastUpdateMs    = performance.now();
+let startBtnHit     = null;
+
 const MODIFIERS = ['normal', 'low-gravity', 'big-ball', 'tiny-hoops', 'super-bouncy'];
 function pickModifier() {
   modifier = MODIFIERS[Math.floor(Math.random() * MODIFIERS.length)];
@@ -129,6 +142,45 @@ function throwBall(p) {
   ball.lastTouch = p.side;
 }
 
+function startGame() {
+  const opt = TIME_OPTIONS[selectedTimeIdx];
+  timeLeft = opt.seconds;
+  score.left = 0;
+  score.right = 0;
+  winner = null;
+  modifier = 'normal';
+  applyModifier();
+  bigBanner = null;
+  particles.length = 0;
+  scorePopups.length = 0;
+  for (const h of hoops) { h.scored = false; h.netFlash = 0; }
+  placePlayers();
+  resetBall(Math.random() < 0.5 ? 'left' : 'right');
+  gameState = 'playing';
+  lastUpdateMs = performance.now();
+}
+
+function handleMenuClick(x, y) {
+  for (let i = 0; i < TIME_OPTIONS.length; i++) {
+    const h = TIME_OPTIONS[i]._hit;
+    if (h && x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h) {
+      selectedTimeIdx = i;
+      return;
+    }
+  }
+  if (startBtnHit && x >= startBtnHit.x && x <= startBtnHit.x + startBtnHit.w &&
+      y >= startBtnHit.y && y <= startBtnHit.y + startBtnHit.h) {
+    startGame();
+  }
+}
+
+function formatTime(secs) {
+  const s = Math.max(0, Math.ceil(secs));
+  const mm = Math.floor(s / 60).toString().padStart(2, '0');
+  const ss = (s % 60).toString().padStart(2, '0');
+  return `${mm}:${ss}`;
+}
+
 const keys = Object.create(null);
 const particles = [];
 const scorePopups = [];
@@ -188,11 +240,21 @@ function tryJump(p) {
   }
 }
 window.addEventListener('keydown', e => {
-  if (winner && (e.code === 'Space' || e.code === 'Enter')) {
-    score.left = score.right = 0;
-    winner = null;
-    modifier = 'normal'; applyModifier();
-    resetBall(Math.random() < 0.5 ? 'left' : 'right');
+  if (gameState === 'menu') {
+    if (e.code === 'ArrowLeft' || e.code === 'KeyA') {
+      selectedTimeIdx = (selectedTimeIdx - 1 + TIME_OPTIONS.length) % TIME_OPTIONS.length;
+    } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
+      selectedTimeIdx = (selectedTimeIdx + 1) % TIME_OPTIONS.length;
+    } else if (e.code === 'Space' || e.code === 'Enter') {
+      startGame();
+    }
+    if (['Space','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
+    return;
+  }
+  if (gameState === 'over') {
+    if (e.code === 'Space' || e.code === 'Enter') startGame();
+    else if (e.code === 'KeyM' || e.code === 'Escape') gameState = 'menu';
+    if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'].includes(e.code)) e.preventDefault();
     return;
   }
   if (!keys[e.code]) {
@@ -207,7 +269,17 @@ window.addEventListener('keydown', e => {
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'].includes(e.code)) e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
+window.addEventListener('mousedown', e => {
+  if (gameState === 'menu') { handleMenuClick(e.clientX, e.clientY); return; }
+  if (gameState === 'over') { startGame(); return; }
+});
 window.addEventListener('touchstart', e => {
+  if (gameState === 'menu') {
+    const t = e.changedTouches[0];
+    if (t) handleMenuClick(t.clientX, t.clientY);
+    return;
+  }
+  if (gameState === 'over') { startGame(); return; }
   for (const t of e.changedTouches) {
     const side = t.clientX < W / 2 ? 'left' : 'right';
     const p = players.find(pp => pp.side === side);
@@ -216,13 +288,34 @@ window.addEventListener('touchstart', e => {
 }, { passive: true });
 
 function update() {
-  if (winner) {
+  // Real-time delta for the game clock
+  const now = performance.now();
+  const dt = Math.min(0.1, (now - lastUpdateMs) / 1000);
+  lastUpdateMs = now;
+
+  if (gameState === 'playing') {
+    const limit = TIME_OPTIONS[selectedTimeIdx].seconds;
+    if (limit > 0) {
+      timeLeft -= dt;
+      if (timeLeft <= 0) {
+        timeLeft = 0;
+        winner = score.left > score.right ? 'left'
+              : score.right > score.left ? 'right'
+              : 'tie';
+        gameState = 'over';
+      }
+    }
+  }
+
+  if (gameState !== 'playing') {
     for (let i = particles.length - 1; i >= 0; i--) {
       const p = particles[i];
       p.x += p.vx; p.y += p.vy; p.vy += p.g; p.rot += p.vr; p.life--;
       if (p.life <= 0) particles.splice(i, 1);
     }
-    if (Math.random() < 0.4) spawnConfetti(Math.random() * W, -10);
+    if (gameState === 'over' && winner !== 'tie' && Math.random() < 0.4) {
+      spawnConfetti(Math.random() * W, -10);
+    }
     return;
   }
 
@@ -388,8 +481,8 @@ function update() {
       spawnConfetti(h.x + h.w / 2, rimY);
       spawnScorePopup(h.x + h.w / 2, h.y - 10, scoringSide);
       spawnBigBanner('BASKET!', scoringSide);
-      if (score.left >= WIN_SCORE)       winner = 'left';
-      else if (score.right >= WIN_SCORE) winner = 'right';
+      if (score.left >= WIN_SCORE)       { winner = 'left';  gameState = 'over'; }
+      else if (score.right >= WIN_SCORE) { winner = 'right'; gameState = 'over'; }
       const serveTo = h.side;
       setTimeout(() => {
         h.scored = false;
@@ -646,7 +739,7 @@ function drawBanner(x, y, c1, c2, label, sway) {
 
 function drawJumbotron(t) {
   const cx = W / 2, cy = 140;
-  const sw = 220, sh = 90;
+  const sw = 240, sh = 116;
   // Cables
   ctx.strokeStyle = '#444'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(cx - 110, 0); ctx.lineTo(cx - 110, cy - sh / 2 + 4); ctx.stroke();
@@ -667,13 +760,30 @@ function drawJumbotron(t) {
   ctx.textAlign = 'center';
   ctx.fillText('— BASKET RANDOM —', cx, cy - sh/2 + 14);
 
-  // 7-segment-ish digits
-  drawLEDDigit(ix + iw * 0.22, iy + ih / 2, 22, 36, score.left,  '#ff3b3b');
+  // 7-segment-ish digits — slightly above center to leave room for time below
+  const scoreY = iy + ih * 0.38;
+  drawLEDDigit(ix + iw * 0.22, scoreY, 22, 36, score.left,  '#ff3b3b');
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 32px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(':', cx, iy + ih / 2 + 11);
-  drawLEDDigit(ix + iw * 0.78, iy + ih / 2, 22, 36, score.right, '#3bb6ff');
+  ctx.fillText(':', cx, scoreY + 11);
+  drawLEDDigit(ix + iw * 0.78, scoreY, 22, 36, score.right, '#3bb6ff');
+
+  // Time line below score, inside the jumbotron screen
+  const limit = TIME_OPTIONS[selectedTimeIdx].seconds;
+  const showTime = (gameState === 'menu') ? limit : timeLeft;
+  ctx.textAlign = 'center';
+  if (limit > 0) {
+    const lowTime = gameState === 'playing' && timeLeft < 10;
+    const blinkRed = lowTime && Math.floor(t / 250) % 2 === 0;
+    ctx.fillStyle = blinkRed ? '#ff3b3b' : '#fcd34d';
+    ctx.font = 'bold 16px monospace';
+    ctx.fillText(formatTime(showTime), cx, iy + ih - 4);
+  } else {
+    ctx.fillStyle = '#fcd34d';
+    ctx.font = 'bold 12px monospace';
+    ctx.fillText('NO TIME LIMIT', cx, iy + ih - 4);
+  }
 
   if (modifierTimer > 0 && modifier !== 'normal') {
     const labels = {
@@ -689,6 +799,98 @@ function drawJumbotron(t) {
       ctx.fillText('★ ' + labels[modifier] + ' ★', cx, cy + sh/2 + 16);
     }
   }
+}
+
+function drawMenu(t) {
+  // Dim backdrop
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(0, 0, W, H);
+
+  // Title with glow
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const titleSize = Math.min(110, W * 0.10);
+  ctx.shadowColor = '#fcd34d';
+  ctx.shadowBlur = 30;
+  ctx.fillStyle = '#fcd34d';
+  ctx.font = `900 ${titleSize}px Impact, "Arial Black", sans-serif`;
+  ctx.fillText('BASKET RANDOM', W / 2, H * 0.20);
+  ctx.shadowBlur = 0;
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#7a4f00';
+  ctx.strokeText('BASKET RANDOM', W / 2, H * 0.20);
+
+  // Subtitle
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 18px monospace';
+  ctx.fillText('CHOOSE YOUR TIME LIMIT', W / 2, H * 0.32);
+
+  // Time option buttons
+  const btnW = Math.min(140, (W - 60) / TIME_OPTIONS.length - 16);
+  const btnH = 56;
+  const gap = 14;
+  const totalW = btnW * TIME_OPTIONS.length + gap * (TIME_OPTIONS.length - 1);
+  const startX = W / 2 - totalW / 2;
+  const btnY = H * 0.42;
+
+  TIME_OPTIONS.forEach((opt, i) => {
+    const x = startX + i * (btnW + gap);
+    const isSel = i === selectedTimeIdx;
+    ctx.fillStyle = isSel ? '#fcd34d' : 'rgba(20,20,40,0.9)';
+    ctx.strokeStyle = isSel ? '#fff' : '#fcd34d';
+    ctx.lineWidth = isSel ? 3 : 2;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, btnY, btnW, btnH, 10);
+    else ctx.rect(x, btnY, btnW, btnH);
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = isSel ? '#000' : '#fff';
+    ctx.font = 'bold 16px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(opt.label, x + btnW / 2, btnY + btnH / 2);
+    opt._hit = { x, y: btnY, w: btnW, h: btnH };
+  });
+
+  // Hint
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.font = 'bold 14px monospace';
+  ctx.fillText('← / →  CHANGE   ·   CLICK A BUTTON   ·   SPACE TO START', W / 2, btnY + btnH + 30);
+
+  // Big START button (pulsing green)
+  const sBW = 240, sBH = 64;
+  const sBX = W / 2 - sBW / 2, sBY = H * 0.62;
+  const pulse = 1 + Math.sin(t * 0.006) * 0.04;
+  ctx.save();
+  ctx.translate(sBX + sBW / 2, sBY + sBH / 2);
+  ctx.scale(pulse, pulse);
+  ctx.translate(-(sBX + sBW / 2), -(sBY + sBH / 2));
+  ctx.shadowColor = '#22c55e';
+  ctx.shadowBlur = 20;
+  ctx.fillStyle = '#22c55e';
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(sBX, sBY, sBW, sBH, 14);
+  else ctx.rect(sBX, sBY, sBW, sBH);
+  ctx.fill(); ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#fff';
+  ctx.font = '900 32px Impact, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 4; ctx.strokeStyle = '#15803d';
+  ctx.strokeText('▶  START', sBX + sBW / 2, sBY + sBH / 2);
+  ctx.fillText('▶  START', sBX + sBW / 2, sBY + sBH / 2);
+  ctx.restore();
+  startBtnHit = { x: sBX, y: sBY, w: sBW, h: sBH };
+
+  // Controls reference
+  ctx.fillStyle = 'rgba(255,255,255,0.65)';
+  ctx.font = '13px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('RED  —  A / D move,  W jump or throw', W / 2, H * 0.78);
+  ctx.fillText('BLUE  —  ← / → move,  ↑ jump or throw', W / 2, H * 0.81);
+  ctx.fillText('Walk over the ball to pick it up.  First to 7 — or highest at time-up — wins!', W / 2, H * 0.85);
 }
 
 // Tiny "LED" 7-seg style digit
@@ -1310,20 +1512,27 @@ function drawBigBanner() {
 }
 
 function drawWinner() {
-  if (!winner) return;
+  if (gameState !== 'over') return;
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
   ctx.fillRect(0, 0, W, H);
-  const color = winner === 'left' ? '#ef4444' : '#3b82f6';
-  const name  = winner === 'left' ? 'RED' : 'BLUE';
+  let color, name;
+  if (winner === 'tie') {
+    color = '#fcd34d'; name = "IT'S A TIE!";
+  } else {
+    color = winner === 'left' ? '#ef4444' : '#3b82f6';
+    name  = (winner === 'left' ? 'RED' : 'BLUE') + ' WINS!';
+  }
   ctx.fillStyle = '#000';
   ctx.font = 'bold 84px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText(`${name} WINS!`, W / 2 + 4, H / 2 + 4);
+  ctx.textBaseline = 'alphabetic';
+  ctx.fillText(name, W / 2 + 4, H / 2 + 4);
   ctx.fillStyle = color;
-  ctx.fillText(`${name} WINS!`, W / 2, H / 2);
+  ctx.fillText(name, W / 2, H / 2);
   ctx.fillStyle = '#fff';
   ctx.font = '20px monospace';
-  ctx.fillText('Press SPACE or ENTER to play again', W / 2, H / 2 + 50);
+  ctx.fillText(`Final score:  ${score.left}  —  ${score.right}`, W / 2, H / 2 + 36);
+  ctx.fillText('Press SPACE to play again  ·  M to change time', W / 2, H / 2 + 64);
 }
 
 function frame(t) {
@@ -1342,6 +1551,7 @@ function frame(t) {
   drawScorePopups();
   drawBigBanner();
   drawWinner();
+  if (gameState === 'menu') drawMenu(t);
   requestAnimationFrame(frame);
 }
 
