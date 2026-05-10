@@ -570,19 +570,23 @@ function drawSky() {
 
 function drawSweepingLights(t) {
   const beams = [
-    { color: 'rgba(244,63,94,0.15)',  freq: 0.0006, phase: 0,    cx: W * 0.30 },
-    { color: 'rgba(59,130,246,0.15)', freq: 0.0008, phase: 1.5,  cx: W * 0.55 },
-    { color: 'rgba(168,85,247,0.13)', freq: 0.0005, phase: 3.0,  cx: W * 0.75 },
+    { color: 'rgba(244,63,94,0.22)',   freq: 0.0007, phase: 0,    cx: W * 0.10 },  // pink
+    { color: 'rgba(168,85,247,0.20)',  freq: 0.0009, phase: 0.7,  cx: W * 0.25 },  // purple
+    { color: 'rgba(59,130,246,0.20)',  freq: 0.0006, phase: 1.4,  cx: W * 0.40 },  // blue
+    { color: 'rgba(34,211,238,0.20)',  freq: 0.0008, phase: 2.1,  cx: W * 0.55 },  // cyan
+    { color: 'rgba(34,197,94,0.20)',   freq: 0.0007, phase: 2.8,  cx: W * 0.70 },  // green
+    { color: 'rgba(252,211,77,0.18)',  freq: 0.0009, phase: 3.5,  cx: W * 0.85 },  // gold
+    { color: 'rgba(249,115,22,0.20)',  freq: 0.0006, phase: 4.2,  cx: W * 0.95 },  // orange
   ];
   for (const b of beams) {
     const aim = Math.sin(t * b.freq + b.phase) * 0.5;
-    const tx = b.cx + aim * 200;
+    const tx = b.cx + aim * 220;
     ctx.save();
     ctx.beginPath();
-    ctx.moveTo(b.cx - 30, 0);
-    ctx.lineTo(b.cx + 30, 0);
-    ctx.lineTo(tx + 220, GROUND_Y);
-    ctx.lineTo(tx - 220, GROUND_Y);
+    ctx.moveTo(b.cx - 26, 0);
+    ctx.lineTo(b.cx + 26, 0);
+    ctx.lineTo(tx + 240, GROUND_Y);
+    ctx.lineTo(tx - 240, GROUND_Y);
     ctx.closePath();
     const grad = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
     grad.addColorStop(0, b.color);
@@ -590,6 +594,49 @@ function drawSweepingLights(t) {
     ctx.fillStyle = grad;
     ctx.fill();
     ctx.restore();
+  }
+}
+
+function drawDiscoFloorLights(t) {
+  // Rotating colored discs on the court
+  const lights = [
+    { color: 'rgba(244,63,94,0.30)', cx: W * 0.25, freq: 0.0011, phase: 0   },
+    { color: 'rgba(34,211,238,0.30)', cx: W * 0.50, freq: 0.0009, phase: 1.5 },
+    { color: 'rgba(34,197,94,0.30)',  cx: W * 0.75, freq: 0.0010, phase: 3.0 },
+  ];
+  for (const l of lights) {
+    const dx = Math.sin(t * l.freq + l.phase) * 100;
+    const cy = GROUND_Y + 30;
+    const grad = ctx.createRadialGradient(l.cx + dx, cy, 0, l.cx + dx, cy, 60);
+    grad.addColorStop(0, l.color);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.ellipse(l.cx + dx, cy, 80, 16, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+let nextSparkleAt = 0;
+function maybeSpawnSparkle(t) {
+  if (t < nextSparkleAt) return;
+  nextSparkleAt = t + 350 + Math.random() * 800;
+  const fx = 80 + Math.random() * (W - 160);
+  const fy = 30 + Math.random() * 80;
+  const baseHue = Math.random() * 360;
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const sp = 2 + Math.random() * 3;
+    particles.push({
+      x: fx, y: fy,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp,
+      g: 0.08,
+      life: 35,
+      color: `hsl(${(baseHue + i * 22) % 360}, 95%, 65%)`,
+      size: 3,
+      rot: 0, vr: 0,
+    });
   }
 }
 
@@ -883,12 +930,16 @@ function drawJumbotron(t) {
   ctx.strokeStyle = '#444'; ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(cx - 110, 0); ctx.lineTo(cx - 110, cy - sh / 2 + 4); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(cx + 110, 0); ctx.lineTo(cx + 110, cy - sh / 2 + 4); ctx.stroke();
-  // Frame
+  // Frame with color-cycling neon trim
   ctx.fillStyle = '#0a0a18';
-  ctx.strokeStyle = '#fcd34d';
+  const frameHue = (t * 0.06) % 360;
+  ctx.strokeStyle = `hsl(${frameHue}, 90%, 60%)`;
+  ctx.shadowColor = `hsl(${frameHue}, 90%, 60%)`;
+  ctx.shadowBlur = 14;
   ctx.lineWidth = 3;
   if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(cx - sw/2, cy - sh/2, sw, sh, 10); ctx.fill(); ctx.stroke(); }
   else { ctx.fillRect(cx - sw/2, cy - sh/2, sw, sh); ctx.strokeRect(cx - sw/2, cy - sh/2, sw, sh); }
+  ctx.shadowBlur = 0;
   // Inset screen
   const ix = cx - sw/2 + 10, iy = cy - sh/2 + 22, iw = sw - 20, ih = sh - 32;
   ctx.fillStyle = '#000';
@@ -1165,7 +1216,7 @@ function drawAdBoard(t) {
   ctx.lineWidth = 1;
   ctx.strokeRect(adX - 2, adY - 2, adW + 4, adH + 4);
 
-  // Scrolling LED text (clipped)
+  // Scrolling LED text with flowing rainbow gradient
   ctx.save();
   ctx.beginPath();
   ctx.rect(adX + 4, adY + 1, adW - 8, adH - 2);
@@ -1176,11 +1227,15 @@ function drawAdBoard(t) {
   const charW = 9;
   const totalW = SPONSOR_MSG.length * charW;
   const offset = (t * 0.07) % totalW;
-  // Draw the message twice so it wraps seamlessly
-  // Glow trail
-  ctx.shadowColor = '#ff3b3b';
-  ctx.shadowBlur = 8;
-  ctx.fillStyle = '#ff5050';
+  // Rainbow gradient flowing across the strip
+  const grad = ctx.createLinearGradient(adX, 0, adX + adW, 0);
+  const baseHue = (t * 0.10) % 360;
+  for (let i = 0; i <= 6; i++) {
+    grad.addColorStop(i / 6, `hsl(${(baseHue + i * 60) % 360}, 100%, 62%)`);
+  }
+  ctx.shadowColor = `hsl(${baseHue}, 100%, 60%)`;
+  ctx.shadowBlur = 10;
+  ctx.fillStyle = grad;
   ctx.fillText(SPONSOR_MSG, adX + 4 - offset, adY + adH / 2);
   ctx.fillText(SPONSOR_MSG, adX + 4 - offset + totalW, adY + adH / 2);
   ctx.shadowBlur = 0;
@@ -1789,11 +1844,13 @@ function frame(t) {
   drawSky();
   drawSweepingLights(t);
   drawSpotlights();
+  maybeSpawnSparkle(t);
   drawCrowd(t);
   drawAdBoard(t);
   drawJumbotron(t);
   drawBanners(t);
   drawCourt();
+  drawDiscoFloorLights(t);
   drawReflection(t);
   drawWorld(t);
   drawParticles();
