@@ -27,7 +27,7 @@
 </head>
 <body>
 <canvas id="gameCanvas"></canvas>
-<div id="hint">Red: A/D move, W jump &nbsp;·&nbsp; Blue: ←/→ move, ↑ jump &nbsp;·&nbsp; First to 7 wins</div>
+<div id="hint">Red: A/D move, W jump/throw &nbsp;·&nbsp; Blue: ←/→ move, ↑ jump/throw &nbsp;·&nbsp; Walk over the ball to pick it up</div>
 
 <script>
 const cv  = document.getElementById('gameCanvas');
@@ -76,9 +76,11 @@ function placeHoops() {
 
 const players = [
   { side: 'left',  x: 0, y: 0, vy: 0, color: '#ef4444', rim: '#7f1d1d',
-    keyJump: 'KeyW',    keyLeft: 'KeyA',      keyRight: 'KeyD',     armSwing: 0, facing: 1 },
+    keyJump: 'KeyW',    keyLeft: 'KeyA',      keyRight: 'KeyD',     armSwing: 0, facing: 1,
+    holding: false, holdCooldown: 0 },
   { side: 'right', x: 0, y: 0, vy: 0, color: '#3b82f6', rim: '#1e3a8a',
-    keyJump: 'ArrowUp', keyLeft: 'ArrowLeft', keyRight: 'ArrowRight', armSwing: 0, facing: -1 },
+    keyJump: 'ArrowUp', keyLeft: 'ArrowLeft', keyRight: 'ArrowRight', armSwing: 0, facing: -1,
+    holding: false, holdCooldown: 0 },
 ];
 const keys = Object.create(null);
 const PLAYER_RADIUS = 16;
@@ -90,7 +92,7 @@ function placePlayers() {
   for (const p of players) p.y = GROUND_Y;
 }
 
-const ball = { x: 0, y: 100, vx: 0, vy: 0, r: 16, rot: 0, lastTouch: null };
+const ball = { x: 0, y: 100, vx: 0, vy: 0, r: 16, rot: 0, lastTouch: null, heldBy: null };
 function resetBall(servingSide) {
   ball.x = W / 2 + (servingSide === 'left' ? -60 : 60);
   ball.y = 90;
@@ -98,6 +100,24 @@ function resetBall(servingSide) {
   ball.vy = 0;
   ball.rot = 0;
   ball.lastTouch = null;
+  ball.heldBy = null;
+  for (const p of players) { p.holding = false; p.holdCooldown = 0; }
+}
+function heldBallPos(p) {
+  return { x: p.x + p.facing * 16, y: p.y - 110 };
+}
+function throwBall(p) {
+  if (!p.holding) return;
+  const pos = heldBallPos(p);
+  ball.x = pos.x; ball.y = pos.y;
+  ball.vx = p.facing * 14;
+  ball.vy = -13;
+  ball.heldBy = null;
+  p.holding = false;
+  p.holdCooldown = 25;
+  p.armSwing = 1;
+  p.vy = -6;
+  ball.lastTouch = p.side;
 }
 
 const particles = [];
@@ -147,7 +167,12 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (!keys[e.code]) {
-    for (const p of players) if (e.code === p.keyJump) tryJump(p);
+    for (const p of players) {
+      if (e.code === p.keyJump) {
+        if (p.holding) throwBall(p);
+        else tryJump(p);
+      }
+    }
   }
   keys[e.code] = true;
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','KeyW','KeyA','KeyS','KeyD'].includes(e.code)) e.preventDefault();
@@ -156,7 +181,8 @@ window.addEventListener('keyup', e => { keys[e.code] = false; });
 window.addEventListener('touchstart', e => {
   for (const t of e.changedTouches) {
     const side = t.clientX < W / 2 ? 'left' : 'right';
-    tryJump(players.find(p => p.side === side));
+    const p = players.find(pp => pp.side === side);
+    if (p.holding) throwBall(p); else tryJump(p);
   }
 }, { passive: true });
 
@@ -175,6 +201,7 @@ function update() {
   const restitution = (modifier === 'super-bouncy') ? 0.92 : 0.65;
 
   for (const p of players) {
+    if (p.holdCooldown > 0) p.holdCooldown--;
     const grounded = p.y >= GROUND_Y - 0.5;
     const ctrl = grounded ? 1 : AIR_CONTROL;
     let dx = 0;
@@ -207,21 +234,48 @@ function update() {
     if (b.x > W - PLAYER_RADIUS) { a.x -= b.x - (W - PLAYER_RADIUS); b.x = W - PLAYER_RADIUS; }
   }
 
-  ball.vy += GRAVITY * 0.7 * gMul;
-  ball.x += ball.vx;
-  ball.y += ball.vy;
-  ball.rot += ball.vx * 0.05;
-  if (ball.x - ball.r < 0)  { ball.x = ball.r;     ball.vx *= -0.75; }
-  if (ball.x + ball.r > W)  { ball.x = W - ball.r; ball.vx *= -0.75; }
-  if (ball.y + ball.r > GROUND_Y) {
-    if (ball.vy > 4) spawnDust(ball.x, GROUND_Y);
-    ball.y = GROUND_Y - ball.r;
-    ball.vy *= -restitution;
-    ball.vx *= 0.94;
-    if (Math.abs(ball.vy) < 1.2) ball.vy = 0;
+  if (ball.heldBy) {
+    const holder = players.find(p => p.side === ball.heldBy);
+    const pos = heldBallPos(holder);
+    ball.x = pos.x; ball.y = pos.y;
+    ball.vx = 0; ball.vy = 0;
+    ball.rot += holder.facing * 0.04;
+  } else {
+    ball.vy += GRAVITY * 0.7 * gMul;
+    ball.x += ball.vx;
+    ball.y += ball.vy;
+    ball.rot += ball.vx * 0.05;
+    if (ball.x - ball.r < 0)  { ball.x = ball.r;     ball.vx *= -0.75; }
+    if (ball.x + ball.r > W)  { ball.x = W - ball.r; ball.vx *= -0.75; }
+    if (ball.y + ball.r > GROUND_Y) {
+      if (ball.vy > 4) spawnDust(ball.x, GROUND_Y);
+      ball.y = GROUND_Y - ball.r;
+      ball.vy *= -restitution;
+      ball.vx *= 0.94;
+      if (Math.abs(ball.vy) < 1.2) ball.vy = 0;
+    }
+
+    const settled =
+      ball.y >= GROUND_Y - ball.r - 4 &&
+      Math.abs(ball.vy) < 2.5 &&
+      Math.abs(ball.vx) < 2.5;
+    if (settled) {
+      for (const p of players) {
+        if (p.holdCooldown > 0) continue;
+        if (p.y < GROUND_Y - 4) continue;
+        const dx = p.x - ball.x;
+        if (Math.abs(dx) < ball.r + PLAYER_RADIUS + 4) {
+          p.holding = true;
+          ball.heldBy = p.side;
+          ball.lastTouch = p.side;
+          break;
+        }
+      }
+    }
   }
 
   for (const p of players) {
+    if (ball.heldBy) break;
     const headX = p.x;
     const headY = p.y - 92;
     const dx = ball.x - headX, dy = ball.y - headY;
@@ -250,6 +304,7 @@ function update() {
   }
 
   for (const h of hoops) {
+    if (ball.heldBy) break;
     const rimY = h.y + h.h - 4;
     const above = ball.y < rimY + 2;
     if (above) {
