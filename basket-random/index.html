@@ -630,18 +630,24 @@ function drawCrowd(t) {
     const yy = crowdTop + 30 + wave;
     const cx = x + 11;
 
-    const skin  = SKIN_TONES[(idx * 5 + 1) % SKIN_TONES.length];
+    const baseSkin = SKIN_TONES[(idx * 5 + 1) % SKIN_TONES.length];
     const hair  = HAIR_COLORS[(idx * 3) % HAIR_COLORS.length];
+    const teamSide = x < W * 0.45 ? 'left' : x > W * 0.55 ? 'right' : null;
     let shirt;
-    if (x < W * 0.45) {
+    if (teamSide === 'left') {
       const c = idx % 4;
       shirt = c === 0 ? '#c8102e' : c === 1 ? '#1d428a' : c === 2 ? '#1a1a2a' : '#fff';
-    } else if (x > W * 0.55) {
+    } else if (teamSide === 'right') {
       const c = idx % 4;
       shirt = c === 0 ? '#00471b' : c === 1 ? '#eee1c6' : c === 2 ? '#1a1a2a' : '#fff';
     } else {
       shirt = SHIRTS[idx % SHIRTS.length];
     }
+    // Some superfans paint their faces in team color
+    const paintedFace = teamSide && (idx % 9 === 2);
+    const skin = paintedFace ? TEAMS[teamSide].color : baseSkin;
+    // Sign / foam finger gimmick rotation
+    const gimmick = teamSide ? (idx % 7) : -1;
 
     // Cheer cycle — drives mouth shape and raised arms
     const cheerPhase = Math.sin(t * 0.005 + idx * 0.7);
@@ -721,6 +727,88 @@ function drawCrowd(t) {
       ctx.beginPath();
       ctx.arc(cx, yy + r * 0.3, 2.2, 0.25, Math.PI - 0.25);
       ctx.stroke();
+    }
+
+    // War paint stripes for painted-face superfans
+    if (paintedFace) {
+      const stripeColor = TEAMS[teamSide].rim;
+      ctx.fillStyle = stripeColor;
+      ctx.fillRect(cx - r * 0.7, yy + 5, r * 1.4, 1.4);
+      ctx.fillRect(cx - r * 0.5, yy - 6, r * 1.0, 1.2);
+    }
+
+    // Held-up team signs and foam fingers
+    if (teamSide) {
+      const T = TEAMS[teamSide];
+      const sway = Math.sin(t * 0.005 + idx * 1.1) * 1.6;
+      if (gimmick === 1) {
+        // Held team sign (rectangle on a stick)
+        const sw = 22, sh = 12;
+        const sx = cx - sw / 2 + sway;
+        const sy = yy - r - 18;
+        // Stick
+        ctx.strokeStyle = '#5a3a1a';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(cx, yy + r * 0.3);
+        ctx.lineTo(cx + sway, sy + sh);
+        ctx.stroke();
+        // Sign body
+        ctx.fillStyle = T.color;
+        ctx.fillRect(sx, sy, sw, sh);
+        ctx.fillStyle = T.rim;
+        ctx.fillRect(sx, sy, sw, 2);
+        ctx.fillRect(sx, sy + sh - 2, sw, 2);
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 7px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('GO ' + T.short + '!', sx + sw / 2, sy + sh / 2);
+      } else if (gimmick === 4) {
+        // Foam #1 finger
+        const fx = cx + sway;
+        const fy = yy - r - 22;
+        // Hand base
+        ctx.fillStyle = T.color;
+        ctx.fillRect(fx - 5, fy + 10, 10, 8);
+        // Index finger pointing up
+        ctx.fillRect(fx - 2, fy - 4, 4, 14);
+        // Knuckles bulge
+        ctx.beginPath();
+        ctx.arc(fx, fy - 4, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        // Wristband stripe
+        ctx.fillStyle = T.rim;
+        ctx.fillRect(fx - 5, fy + 14, 10, 2);
+        // "#1" label
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 5px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('#1', fx, fy + 13);
+        // Arm holding it up
+        ctx.strokeStyle = baseSkin;
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx + (teamSide === 'left' ? 6 : -6), yy + r * 0.7);
+        ctx.lineTo(fx, fy + 18);
+        ctx.stroke();
+      } else if (gimmick === 6 && cheering) {
+        // Pom-pom in team color (only when cheering)
+        const px = cx + sway;
+        const py = yy - r - 10;
+        ctx.fillStyle = T.color;
+        for (let p = 0; p < 6; p++) {
+          const a = p * Math.PI / 3 + t * 0.01;
+          ctx.beginPath();
+          ctx.arc(px + Math.cos(a) * 3, py + Math.sin(a) * 3, 2.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.fillStyle = T.rim;
+        ctx.beginPath();
+        ctx.arc(px, py, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
     idx++;
