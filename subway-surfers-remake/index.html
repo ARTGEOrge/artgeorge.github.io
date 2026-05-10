@@ -924,6 +924,7 @@ function update(dt) {
 
   // Move world toward camera
   const dz = speed * dt;
+  lastSpawnZ += dz;  // keep the spawn cursor anchored to the world so new rows keep coming
   for (const o of obstacles) o.mesh.position.z += dz;
   for (const c of coins) {
     c.mesh.position.z += dz;
