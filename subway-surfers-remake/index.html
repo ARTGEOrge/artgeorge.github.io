@@ -506,50 +506,142 @@ function makeHighBar(lane) {
 function makeTrain(lane) {
   const g = new THREE.Group();
   const TRAIN_BODY_H = 2.4;
-  const TRAIN_LEN    = 7.0;
-  const TRAIN_TOP_Y  = TRAIN_BODY_H + 0.15; // top-of-roof Y where the player can stand
-  const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, TRAIN_BODY_H, TRAIN_LEN),
-    new THREE.MeshStandardMaterial({ color: 0xdc3322, roughness: 0.5, metalness: 0.2 }));
-  body.position.y = TRAIN_BODY_H / 2; body.castShadow = true; g.add(body);
-  // Roof — flat so a player can stand on it
-  const roof = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.2, TRAIN_LEN + 0.05),
-    new THREE.MeshStandardMaterial({ color: 0x5a1010, roughness: 0.7 }));
-  roof.position.y = TRAIN_BODY_H + 0.1; g.add(roof);
-  // Side stripe (gold)
-  const stripeBox = new THREE.Mesh(new THREE.BoxGeometry(1.91, 0.14, TRAIN_LEN + 0.01),
-    new THREE.MeshStandardMaterial({ color: 0xffd700 }));
-  stripeBox.position.y = 1.2; g.add(stripeBox);
-  // Windows on each long side
-  const winMat = new THREE.MeshStandardMaterial({
+  const COACH_LEN    = 7.0;
+  const COUPLING_LEN = 0.5;
+  const NUM_COACHES  = 3 + Math.floor(Math.random() * 3); // 3, 4, or 5 coaches
+  const TOTAL_LEN    = NUM_COACHES * COACH_LEN + (NUM_COACHES - 1) * COUPLING_LEN;
+  const TRAIN_TOP_Y  = TRAIN_BODY_H + 0.15;
+  const HALF_TOTAL   = TOTAL_LEN / 2;
+
+  // Shared materials
+  const bodyMat   = new THREE.MeshStandardMaterial({ color: 0xdc3322, roughness: 0.5, metalness: 0.2 });
+  const roofMat   = new THREE.MeshStandardMaterial({ color: 0x5a1010, roughness: 0.7 });
+  const stripeMat = new THREE.MeshStandardMaterial({ color: 0xffd700 });
+  const winMat    = new THREE.MeshStandardMaterial({
     color: 0xaaccee, emissive: 0x334466, transparent: true, opacity: 0.9
   });
-  for (let i = -2.2; i <= 2.2; i += 1.4) {
-    const w1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.55, 0.55), winMat);
-    w1.position.set(0.97, 1.75, i); g.add(w1);
-    const w2 = w1.clone(); w2.position.x = -0.97; g.add(w2);
-  }
-  // Front windshield
-  const front = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.65, 0.05), winMat);
-  front.position.set(0, 1.85, TRAIN_LEN / 2 + 0.02); g.add(front);
-  // Headlight glow
-  const hl = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 10),
-    new THREE.MeshBasicMaterial({ color: 0xffeeaa }));
-  hl.position.set(0, 0.7, TRAIN_LEN / 2 + 0.03); g.add(hl);
-  const hlGlow = new THREE.PointLight(0xffeeaa, 0.6, 8);
-  hlGlow.position.set(0, 0.7, TRAIN_LEN / 2 + 0.25);
-  g.add(hlGlow);
-  // Roof rivets (visual hint that you can stand on top)
-  const rivetMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.6 });
-  for (let r = -TRAIN_LEN / 2 + 0.6; r < TRAIN_LEN / 2; r += 1.2) {
-    for (const rx of [-0.7, 0.7]) {
-      const rivet = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), rivetMat);
-      rivet.position.set(rx, TRAIN_TOP_Y + 0.05, r);
-      g.add(rivet);
+  const doorMat   = new THREE.MeshStandardMaterial({ color: 0xa02816, roughness: 0.5 });
+  const doorWinMat = new THREE.MeshStandardMaterial({
+    color: 0x88aacc, emissive: 0x223344, transparent: true, opacity: 0.85
+  });
+  const rivetMat   = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.6 });
+  const couplerMat = new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.5 });
+  const tailMat    = new THREE.MeshBasicMaterial({ color: 0xff3030 });
+
+  for (let ci = 0; ci < NUM_COACHES; ci++) {
+    // Local z of this coach center: coach 0 is at the front (+z, closest to camera)
+    const cz = HALF_TOTAL - COACH_LEN / 2 - ci * (COACH_LEN + COUPLING_LEN);
+    const isFront = ci === 0;
+    const isBack  = ci === NUM_COACHES - 1;
+
+    // Body
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, TRAIN_BODY_H, COACH_LEN), bodyMat);
+    body.position.set(0, TRAIN_BODY_H / 2, cz);
+    body.castShadow = true; g.add(body);
+
+    // Roof
+    const roof = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.2, COACH_LEN + 0.05), roofMat);
+    roof.position.set(0, TRAIN_BODY_H + 0.1, cz); g.add(roof);
+
+    // Gold side stripe
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(1.91, 0.14, COACH_LEN + 0.01), stripeMat);
+    stripe.position.set(0, 1.2, cz); g.add(stripe);
+
+    // Side windows (a row on each side, with a door in the middle)
+    const winZs = [-2.5, -1.4, 1.4, 2.5];
+    for (const wz of winZs) {
+      const w1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.55, 0.85), winMat);
+      w1.position.set(0.97, 1.75, cz + wz); g.add(w1);
+      const w2 = w1.clone(); w2.position.x = -0.97; g.add(w2);
+    }
+    // Sliding door (with small upper window)
+    for (const sx of [0.97, -0.97]) {
+      const door = new THREE.Mesh(new THREE.BoxGeometry(0.05, 1.7, 0.95), doorMat);
+      door.position.set(sx, 1.0, cz);
+      g.add(door);
+      const dw = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.4, 0.7), doorWinMat);
+      dw.position.set(sx, 1.55, cz);
+      g.add(dw);
+      // Door split line
+      const split = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.7, 0.02),
+        new THREE.MeshStandardMaterial({ color: 0x000000 }));
+      split.position.set(sx, 1.0, cz);
+      g.add(split);
+    }
+
+    // Coach number plate
+    const plate = new THREE.Mesh(
+      new THREE.BoxGeometry(0.06, 0.2, 0.4),
+      new THREE.MeshStandardMaterial({ color: 0xffffff })
+    );
+    plate.position.set(0.97, 2.15, cz - COACH_LEN / 2 + 0.4);
+    g.add(plate);
+
+    // Front-only details
+    if (isFront) {
+      const front = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.65, 0.05), winMat);
+      front.position.set(0, 1.85, cz + COACH_LEN / 2 + 0.02);
+      g.add(front);
+      const hl = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 10),
+        new THREE.MeshBasicMaterial({ color: 0xffeeaa }));
+      hl.position.set(0, 0.7, cz + COACH_LEN / 2 + 0.03);
+      g.add(hl);
+      const hlGlow = new THREE.PointLight(0xffeeaa, 0.6, 8);
+      hlGlow.position.set(0, 0.7, cz + COACH_LEN / 2 + 0.3);
+      g.add(hlGlow);
+      // "Driver cab" indicator line
+      const cab = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.1, 0.5),
+        new THREE.MeshStandardMaterial({ color: 0x000000 }));
+      cab.position.set(0, 1.5, cz + COACH_LEN / 2 - 0.3);
+      g.add(cab);
+    }
+
+    // Back-only details
+    if (isBack) {
+      // Red tail lights
+      for (const tx of [-0.65, 0.65]) {
+        const tl = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 8), tailMat);
+        tl.position.set(tx, 1.0, cz - COACH_LEN / 2 - 0.02);
+        g.add(tl);
+      }
+      // Back face
+      const back = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.55, 0.05), winMat);
+      back.position.set(0, 1.85, cz - COACH_LEN / 2 - 0.02);
+      g.add(back);
+    }
+
+    // Coupling between this coach and the next one back
+    if (!isBack) {
+      const cup = new THREE.Mesh(
+        new THREE.BoxGeometry(0.4, 0.5, COUPLING_LEN),
+        couplerMat
+      );
+      cup.position.set(0, 0.6, cz - COACH_LEN / 2 - COUPLING_LEN / 2);
+      g.add(cup);
+      // End plates / bellows on each side of the coupling
+      for (const ez of [cz - COACH_LEN / 2 - 0.02, cz - COACH_LEN / 2 - COUPLING_LEN + 0.02]) {
+        const ep = new THREE.Mesh(
+          new THREE.BoxGeometry(1.7, 1.6, 0.05),
+          new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.8 })
+        );
+        ep.position.set(0, 1.2, ez);
+        g.add(ep);
+      }
+    }
+
+    // Roof rivets so it visibly looks walkable
+    for (let r = -COACH_LEN / 2 + 0.6; r < COACH_LEN / 2; r += 1.2) {
+      for (const rx of [-0.7, 0.7]) {
+        const rivet = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), rivetMat);
+        rivet.position.set(rx, TRAIN_TOP_Y + 0.05, cz + r);
+        g.add(rivet);
+      }
     }
   }
+
   g.position.x = (lane - 1) * LANE_WIDTH;
   scene.add(g);
-  return { mesh: g, type: 'train', lane, length: TRAIN_LEN, topY: TRAIN_TOP_Y };
+  return { mesh: g, type: 'train', lane, length: TOTAL_LEN, topY: TRAIN_TOP_Y, coaches: NUM_COACHES };
 }
 
 function makeCan(lane) {
@@ -832,9 +924,8 @@ function preSpawn(rows) {
 }
 function spawnRow() {
   const r = Math.random();
-  // lastSpawnZ in world coords; player at z=0
+  let extraGap = 0;  // extra spacing for long trains
   if (r < 0.55) {
-    // Train less frequent (full lane block) — others equally common
     const factories = [makeBarrier, makeHighBar, makeCan, makeCrate, makeSign, makeTrain];
     const weights   = [3,           3,           3,        3,          3,        2];
     const lane = Math.floor(Math.random() * 3);
@@ -842,12 +933,14 @@ function spawnRow() {
     const obs = factory(lane);
     obs.mesh.position.z = lastSpawnZ;
     obstacles.push(obs);
+    if (factory === makeTrain) extraGap = Math.max(extraGap, obs.length || 0);
     if (Math.random() < 0.4) {
       const otherLane = (lane + 1 + Math.floor(Math.random() * 2)) % 3;
       const factory2 = pickWeighted(factories, weights);
       const obs2 = factory2(otherLane);
       obs2.mesh.position.z = lastSpawnZ;
       obstacles.push(obs2);
+      if (factory2 === makeTrain) extraGap = Math.max(extraGap, obs2.length || 0);
     }
   } else if (r < 0.85) {
     const lane = Math.floor(Math.random() * 3);
@@ -858,7 +951,8 @@ function spawnRow() {
       coins.push(c);
     }
   }
-  lastSpawnZ -= 7 + Math.random() * 5;
+  // Advance the spawn cursor; for a train, push past the back of the train + a normal gap
+  lastSpawnZ -= 7 + Math.random() * 5 + extraGap;
 }
 
 // ============== INPUT ==============
