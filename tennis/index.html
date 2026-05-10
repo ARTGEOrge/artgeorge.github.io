@@ -26,7 +26,7 @@
 </head>
 <body>
 <canvas id="gameCanvas"></canvas>
-<div id="hint">VS AI: mouse or W/S &nbsp;·&nbsp; VS FRIEND: P1 = W/S, P2 = ↑/↓ &nbsp;·&nbsp; SPACE serves &nbsp;·&nbsp; First to 11</div>
+<div id="hint">VS AI: mouse or W/S &nbsp;·&nbsp; VS FRIEND: P1 = W/S, P2 = ↑/↓ &nbsp;·&nbsp; SPACE serves &nbsp;·&nbsp; Timed match or first-to-7 unlimited</div>
 
 <script>
 const canvas = document.getElementById("gameCanvas");
@@ -70,9 +70,22 @@ let aiSkill  = 0.10;      // tracking aggressiveness
 let trail = [];
 
 // Mode selection
-let mode    = 'menu';     // 'menu' | 'game'
-let vsMode  = 'ai';       // 'ai' | 'friend'
+let mode     = 'menu';    // 'menu' | 'game'
+let menuStep = 'mode';    // 'mode' | 'time'
+let vsMode   = 'ai';      // 'ai' | 'friend'
 let menuButtons = [];     // populated when drawing menu, used for click hits
+
+// Time / win-condition
+const TIME_OPTIONS = [
+  { label: '1 MIN',     seconds: 60  },
+  { label: '2 MIN',     seconds: 120 },
+  { label: '3 MIN',     seconds: 180 },
+  { label: '5 MIN',     seconds: 300 },
+  { label: 'UNLIMITED', seconds: 0   },
+];
+const UNLIMITED_TARGET = 7; // first-to-7 in unlimited mode
+let timeLimit = 0;          // seconds; 0 = unlimited
+let timeLeft  = 0;          // seconds remaining
 
 function reset() {
   const c = getCourt();
@@ -88,6 +101,7 @@ function hardReset() {
   scoreP = 0; scoreA = 0;
   serving = 'player';
   gameOver = false; winner = null;
+  timeLeft = timeLimit;
   reset();
 }
 hardReset();
@@ -109,9 +123,14 @@ function serve() {
 }
 
 // ================== INPUT ==================
-function startMode(m) {
-  vsMode = m;
-  mode   = 'game';
+function selectMode(m) {
+  vsMode   = m;
+  menuStep = 'time';
+}
+function selectTime(seconds) {
+  timeLimit = seconds;
+  timeLeft  = seconds;
+  mode      = 'game';
   hardReset();
 }
 window.addEventListener("mousemove", (e) => {
@@ -124,9 +143,17 @@ const keys = Object.create(null);
 window.addEventListener('keydown', e => {
   // Menu input
   if (mode === 'menu') {
-    if (e.code === 'Digit1' || e.code === 'Numpad1') { startMode('ai'); e.preventDefault(); return; }
-    if (e.code === 'Digit2' || e.code === 'Numpad2') { startMode('friend'); e.preventDefault(); return; }
-    if (e.code === 'Space' || e.code === 'Enter')    { startMode(vsMode); e.preventDefault(); return; }
+    if (menuStep === 'mode') {
+      if (e.code === 'Digit1' || e.code === 'Numpad1') { selectMode('ai');     e.preventDefault(); return; }
+      if (e.code === 'Digit2' || e.code === 'Numpad2') { selectMode('friend'); e.preventDefault(); return; }
+      if (e.code === 'Space' || e.code === 'Enter')    { selectMode(vsMode);   e.preventDefault(); return; }
+    } else if (menuStep === 'time') {
+      const map = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Digit5: 4,
+                    Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3, Numpad5: 4 };
+      if (e.code in map) { selectTime(TIME_OPTIONS[map[e.code]].seconds); e.preventDefault(); return; }
+      if (e.code === 'Space' || e.code === 'Enter') { selectTime(TIME_OPTIONS[1].seconds); e.preventDefault(); return; }
+      if (e.code === 'Escape' || e.code === 'Backspace') { menuStep = 'mode'; e.preventDefault(); return; }
+    }
     return;
   }
   keys[e.code] = true;
@@ -137,6 +164,7 @@ window.addEventListener('keydown', e => {
   }
   if (gameOver && e.code === 'KeyM') {
     mode = 'menu';
+    menuStep = 'mode';
     e.preventDefault();
   }
   if (['KeyW','KeyS','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
@@ -147,7 +175,9 @@ window.addEventListener('mousedown', e => {
     for (const btn of menuButtons) {
       if (e.clientX >= btn.x && e.clientX <= btn.x + btn.w &&
           e.clientY >= btn.y && e.clientY <= btn.y + btn.h) {
-        startMode(btn.mode);
+        if (btn.kind === 'mode')      selectMode(btn.value);
+        else if (btn.kind === 'time') selectTime(btn.value);
+        else if (btn.kind === 'back') menuStep = 'mode';
         return;
       }
     }
@@ -161,6 +191,18 @@ window.addEventListener('mousedown', e => {
 let lastTime = performance.now();
 function update(dt) {
   if (mode !== 'game') return;
+  // ===== TIME LIMIT =====
+  if (timeLimit > 0 && !gameOver) {
+    timeLeft -= dt;
+    if (timeLeft <= 0) {
+      timeLeft = 0;
+      gameOver = true;
+      winner = scoreP > scoreA ? 'player'
+            : scoreA > scoreP ? 'ai'
+            : 'tie';
+      saveBest();
+    }
+  }
   const c = getCourt();
 
   // Player 1 keyboard movement — W/S always; arrow keys also work in AI mode (where they wouldn't conflict)
@@ -273,14 +315,16 @@ function paddleHit(paddle, dir) {
 }
 
 function checkGameOver() {
-  if ((scoreP >= 11 && scoreP - scoreA >= 2) ||
-      (scoreA >= 11 && scoreA - scoreP >= 2)) {
-    gameOver = true;
-    winner = scoreP > scoreA ? 'player' : 'ai';
-    if (scoreP > bestScore) {
-      bestScore = scoreP;
-      localStorage.setItem('tennis-best', String(scoreP));
-    }
+  // Timed mode: winner is decided when the clock hits 0 (handled in update())
+  if (timeLimit > 0) return;
+  // Unlimited mode: first to UNLIMITED_TARGET takes the match
+  if (scoreP >= UNLIMITED_TARGET) { gameOver = true; winner = 'player'; saveBest(); }
+  else if (scoreA >= UNLIMITED_TARGET) { gameOver = true; winner = 'ai'; saveBest(); }
+}
+function saveBest() {
+  if (scoreP > bestScore) {
+    bestScore = scoreP;
+    localStorage.setItem('tennis-best', String(scoreP));
   }
 }
 
@@ -496,6 +540,23 @@ function drawHUD() {
   ctx.fillStyle = '#3b82f6';
   ctx.fillText(scoreA, sx + sw - 50, sy + 50);
 
+  // Timer (timed) or "first to 7" hint (unlimited) under scoreboard
+  if (timeLimit > 0) {
+    const mm = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+    const ss = Math.floor(Math.max(0, timeLeft) % 60).toString().padStart(2, '0');
+    const lowTime = !gameOver && timeLeft < 10;
+    const blink = lowTime && Math.floor(performance.now() / 250) % 2 === 0;
+    ctx.fillStyle = blink ? '#ff3b3b' : '#fcd34d';
+    ctx.font = 'bold 22px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`${mm}:${ss}`, sx + sw / 2, sy + sh + 26);
+  } else {
+    ctx.fillStyle = '#fcd34d';
+    ctx.font = 'bold 12px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`FIRST TO ${UNLIMITED_TARGET}`, sx + sw / 2, sy + sh + 18);
+  }
+
   // Best score
   ctx.fillStyle = '#fcd34d';
   ctx.font = '14px monospace';
@@ -529,10 +590,14 @@ function drawHUD() {
     ctx.fillStyle = 'rgba(0,0,0,0.65)';
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
-    const color = winner === 'player' ? '#ef4444' : '#3b82f6';
-    let name;
-    if (vsMode === 'ai') name = winner === 'player' ? 'YOU WIN!' : 'CPU WINS!';
-    else                 name = winner === 'player' ? 'PLAYER 1 WINS!' : 'PLAYER 2 WINS!';
+    let color, name;
+    if (winner === 'tie') {
+      color = '#fcd34d'; name = "IT'S A TIE!";
+    } else {
+      color = winner === 'player' ? '#ef4444' : '#3b82f6';
+      if (vsMode === 'ai') name = winner === 'player' ? 'YOU WIN!' : 'CPU WINS!';
+      else                 name = winner === 'player' ? 'PLAYER 1 WINS!' : 'PLAYER 2 WINS!';
+    }
     ctx.fillStyle = '#000';
     ctx.font = 'bold 80px Impact, "Arial Black", sans-serif';
     ctx.fillText(name, W / 2 + 4, H / 2 + 4);
@@ -556,65 +621,126 @@ function drawMenu() {
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#fcd34d';
   ctx.font = `900 ${Math.min(110, W * 0.10)}px Impact, "Arial Black", sans-serif`;
-  ctx.fillText('TENNIS', W / 2, H * 0.22);
-  // Subtitle
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 18px monospace';
-  ctx.fillText('CHOOSE A MODE', W / 2, H * 0.32);
+  ctx.fillText('TENNIS', W / 2, H * 0.18);
 
-  // Two big buttons side by side
   menuButtons = [];
-  const btnW = Math.min(320, (W - 80) / 2);
-  const btnH = 130;
-  const gap  = 30;
-  const totalW = btnW * 2 + gap;
-  const startX = W / 2 - totalW / 2;
-  const btnY   = H * 0.42;
 
-  const aiBtn = { x: startX, y: btnY, w: btnW, h: btnH, mode: 'ai',
-                  fill: '#1e3a8a', stroke: '#3b82f6',
-                  icon: '🤖', label: 'VS  AI', sub: 'You vs the computer' };
-  const fnBtn = { x: startX + btnW + gap, y: btnY, w: btnW, h: btnH, mode: 'friend',
-                  fill: '#166534', stroke: '#22c55e',
-                  icon: '🎮', label: 'VS  FRIEND', sub: 'Local 2-player on one keyboard' };
-
-  for (const b of [aiBtn, fnBtn]) {
-    ctx.fillStyle = b.fill;
-    ctx.strokeStyle = b.stroke;
-    ctx.lineWidth = 4;
-    if (ctx.roundRect) {
-      ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 16); ctx.fill(); ctx.stroke();
-    } else {
-      ctx.fillRect(b.x, b.y, b.w, b.h); ctx.strokeRect(b.x, b.y, b.w, b.h);
-    }
-    // Icon
+  if (menuStep === 'mode') {
+    // Step 1: pick the mode
     ctx.fillStyle = '#fff';
+    ctx.font = 'bold 18px monospace';
+    ctx.fillText('STEP 1  ·  CHOOSE A MODE', W / 2, H * 0.30);
+
+    const btnW = Math.min(320, (W - 80) / 2);
+    const btnH = 130;
+    const gap  = 30;
+    const totalW = btnW * 2 + gap;
+    const startX = W / 2 - totalW / 2;
+    const btnY   = H * 0.40;
+
+    const buttons = [
+      { x: startX, y: btnY, w: btnW, h: btnH, kind: 'mode', value: 'ai',
+        fill: '#1e3a8a', stroke: '#3b82f6',
+        icon: '🤖', label: 'VS  AI', sub: 'You vs the computer' },
+      { x: startX + btnW + gap, y: btnY, w: btnW, h: btnH, kind: 'mode', value: 'friend',
+        fill: '#166534', stroke: '#22c55e',
+        icon: '🎮', label: 'VS  FRIEND', sub: 'Local 2-player on one keyboard' },
+    ];
+    for (const b of buttons) drawBigBtn(b);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = '14px monospace';
     ctx.textAlign = 'center';
-    ctx.font = '48px sans-serif';
-    ctx.fillText(b.icon, b.x + 50, b.y + b.h / 2 + 4);
-    // Label
-    ctx.font = 'bold 32px Impact, "Arial Black", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(b.label, b.x + 90, b.y + b.h / 2 - 8);
-    // Subtitle
+    ctx.fillText('Click a mode  ·  or press 1 / 2', W / 2, btnY + btnH + 36);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = '13px monospace';
-    ctx.fillStyle = '#cfe6ff';
-    ctx.fillText(b.sub, b.x + 90, b.y + b.h / 2 + 18);
-    menuButtons.push(b);
+    ctx.fillText('VS AI  —  mouse or W/S to move',     W / 2, H * 0.80);
+    ctx.fillText('VS FRIEND  —  P1: W/S    P2: ↑/↓',   W / 2, H * 0.83);
+  } else if (menuStep === 'time') {
+    // Step 2: pick the time limit (or unlimited)
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 18px monospace';
+    ctx.fillText(`STEP 2  ·  CHOOSE A TIME LIMIT  (mode: ${vsMode === 'ai' ? 'VS AI' : 'VS FRIEND'})`, W / 2, H * 0.30);
+
+    const btnW = Math.min(150, (W - 80) / TIME_OPTIONS.length - 14);
+    const btnH = 80;
+    const gap  = 14;
+    const totalW = btnW * TIME_OPTIONS.length + gap * (TIME_OPTIONS.length - 1);
+    const startX = W / 2 - totalW / 2;
+    const btnY   = H * 0.42;
+
+    TIME_OPTIONS.forEach((opt, i) => {
+      const isUnlimited = opt.seconds === 0;
+      const b = {
+        x: startX + i * (btnW + gap),
+        y: btnY, w: btnW, h: btnH,
+        kind: 'time', value: opt.seconds,
+        fill: isUnlimited ? '#7a4f00' : '#143b6e',
+        stroke: isUnlimited ? '#fcd34d' : '#3b82f6',
+        label: opt.label,
+        sub: isUnlimited ? `first to ${UNLIMITED_TARGET}` : 'timed match',
+      };
+      drawSmallBtn(b);
+    });
+
+    // Back button
+    const back = {
+      x: W / 2 - 70, y: btnY + btnH + 60, w: 140, h: 40,
+      kind: 'back', value: null,
+      fill: '#222', stroke: '#888',
+      label: '← BACK', sub: '',
+    };
+    drawSmallBtn(back, true);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = '14px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Click a time  ·  or press 1–5  ·  Esc to go back', W / 2, btnY + btnH + 130);
+
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font = '13px monospace';
+    ctx.fillText('Timed: highest score when the clock hits 0 wins (ties allowed).',  W / 2, H * 0.80);
+    ctx.fillText(`Unlimited: first player to ${UNLIMITED_TARGET} points wins.`,      W / 2, H * 0.83);
   }
+}
 
-  // Helpful hint
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.font = '14px monospace';
+function drawBigBtn(b) {
+  ctx.fillStyle = b.fill;
+  ctx.strokeStyle = b.stroke;
+  ctx.lineWidth = 4;
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 16); ctx.fill(); ctx.stroke(); }
+  else { ctx.fillRect(b.x, b.y, b.w, b.h); ctx.strokeRect(b.x, b.y, b.w, b.h); }
+  ctx.fillStyle = '#fff';
   ctx.textAlign = 'center';
-  ctx.fillText('Click a mode  ·  or press 1 / 2  ·  Space to start', W / 2, btnY + btnH + 36);
-
-  // Controls reference for both modes
-  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  ctx.font = '48px sans-serif';
+  ctx.fillText(b.icon, b.x + 50, b.y + b.h / 2 + 4);
+  ctx.font = 'bold 32px Impact, "Arial Black", sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(b.label, b.x + 90, b.y + b.h / 2 - 8);
   ctx.font = '13px monospace';
-  ctx.fillText('VS AI  —  mouse or W/S to move',           W / 2, H * 0.78);
-  ctx.fillText('VS FRIEND  —  P1: W/S    P2: ↑/↓',         W / 2, H * 0.81);
-  ctx.fillText('First to 11 (win by 2) takes the match.',  W / 2, H * 0.85);
+  ctx.fillStyle = '#cfe6ff';
+  ctx.fillText(b.sub, b.x + 90, b.y + b.h / 2 + 18);
+  menuButtons.push(b);
+}
+
+function drawSmallBtn(b, compact) {
+  ctx.fillStyle = b.fill;
+  ctx.strokeStyle = b.stroke;
+  ctx.lineWidth = 3;
+  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 10); ctx.fill(); ctx.stroke(); }
+  else { ctx.fillRect(b.x, b.y, b.w, b.h); ctx.strokeRect(b.x, b.y, b.w, b.h); }
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `bold ${compact ? 18 : 22}px Impact, "Arial Black", sans-serif`;
+  ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 - (compact ? 0 : 8));
+  if (b.sub) {
+    ctx.font = '11px monospace';
+    ctx.fillStyle = '#cfe6ff';
+    ctx.fillText(b.sub, b.x + b.w / 2, b.y + b.h / 2 + 14);
+  }
+  menuButtons.push(b);
 }
 
 // ================== MAIN LOOP ==================
