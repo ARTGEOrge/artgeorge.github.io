@@ -615,214 +615,233 @@ const SKIN_TONES = ['#ffd6a8', '#e8b48a', '#c89464', '#9a6840', '#6a4824', '#3e2
 const HAIR_COLORS = ['#1a0e08', '#3e2008', '#7a4a1a', '#cf9a4a', '#a8a8a8', '#dc2626', null, null];
 const SHIRTS = ['#b21e1e', '#222a55', '#1a1a2a', '#1e50b4', '#222a55', '#fcd34d', '#1a1a2a'];
 
+const CROWD_ROWS = [
+  { yOff: -96, scale: 0.55, alpha: 0.55, xStep: 14, offset: 9 },
+  { yOff: -64, scale: 0.68, alpha: 0.72, xStep: 17, offset: 3 },
+  { yOff: -34, scale: 0.84, alpha: 0.90, xStep: 20, offset: 7 },
+  { yOff:   0, scale: 1.00, alpha: 1.00, xStep: 22, offset: 0 },
+];
+
 function drawCrowd(t) {
-  const crowdTop = Math.max(80, GROUND_Y - 260);
-  // Stand structure
-  ctx.fillStyle = '#0a0418';
-  ctx.fillRect(0, crowdTop + 36, W, 70);
-  ctx.fillStyle = '#150a30';
-  ctx.fillRect(0, crowdTop + 100, W, 8);
+  const frontTop = Math.max(120, GROUND_Y - 280);
 
-  let idx = 0;
-  for (let x = 0; x < W; x += 22) {
-    const r = 9 + ((Math.sin(x * 0.13) + 1) * 3);
-    const wave = Math.sin(t * 0.003 + x * 0.04) * 2;
-    const yy = crowdTop + 30 + wave;
-    const cx = x + 11;
+  // Draw rows back-to-front so taller front rows visually anchor
+  for (let rIdx = 0; rIdx < CROWD_ROWS.length; rIdx++) {
+    const row = CROWD_ROWS[rIdx];
+    const rowY = frontTop + 30 + row.yOff;
 
-    const baseSkin = SKIN_TONES[(idx * 5 + 1) % SKIN_TONES.length];
-    const hair  = HAIR_COLORS[(idx * 3) % HAIR_COLORS.length];
-    const teamSide = x < W * 0.45 ? 'left' : x > W * 0.55 ? 'right' : null;
-    let shirt;
-    if (teamSide === 'left') {
-      const c = idx % 4;
-      shirt = c === 0 ? '#c8102e' : c === 1 ? '#1d428a' : c === 2 ? '#1a1a2a' : '#fff';
-    } else if (teamSide === 'right') {
-      const c = idx % 4;
-      shirt = c === 0 ? '#00471b' : c === 1 ? '#eee1c6' : c === 2 ? '#1a1a2a' : '#fff';
-    } else {
-      shirt = SHIRTS[idx % SHIRTS.length];
+    // Stadium tier riser behind this row (extends a bit up so heads sit on it)
+    ctx.fillStyle = `rgba(6,3,20,${0.55 + (1 - row.alpha) * 0.30})`;
+    ctx.fillRect(0, rowY + 14 * row.scale, W, 22);
+    // Riser top step lip
+    ctx.fillStyle = `rgba(160,140,80,${row.alpha * 0.18})`;
+    ctx.fillRect(0, rowY + 14 * row.scale, W, 1.5);
+    // Step underline shadow
+    ctx.fillStyle = `rgba(0,0,0,${0.25 + (1 - row.alpha) * 0.2})`;
+    ctx.fillRect(0, rowY + 36 * row.scale, W, 2);
+
+    let idx = rIdx * 53 + row.offset;
+    for (let x = (row.offset % row.xStep) - row.xStep / 2; x < W + row.xStep; x += row.xStep) {
+      ctx.save();
+      ctx.globalAlpha = row.alpha;
+      ctx.translate(x + 11, rowY);
+      ctx.scale(row.scale, row.scale);
+      drawFanLocal(t, x, idx);
+      ctx.restore();
+      idx++;
     }
-    // Some superfans paint their faces in team color
-    const paintedFace = teamSide && (idx % 9 === 2);
-    const skin = paintedFace ? TEAMS[teamSide].color : baseSkin;
-    // Sign / foam finger gimmick rotation
-    const gimmick = teamSide ? (idx % 7) : -1;
-
-    // Cheer cycle — drives mouth shape and raised arms
-    const cheerPhase = Math.sin(t * 0.005 + idx * 0.7);
-    const cheering = cheerPhase > 0.35;
-
-    // Torso with shoulder line
-    ctx.fillStyle = shirt;
-    ctx.fillRect(x + 2, yy + r * 0.55, r * 2 - 2, 14);
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.fillRect(x + 2, yy + r * 0.55, r * 2 - 2, 2);
-
-    // Arms — raised when cheering, otherwise tucked
-    ctx.strokeStyle = skin;
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-    if (cheering) {
-      ctx.beginPath();
-      ctx.moveTo(x + 4,  yy + r * 0.7);
-      ctx.lineTo(x + 1,  yy - r * 0.6);
-      ctx.moveTo(x + 18, yy + r * 0.7);
-      ctx.lineTo(x + 21, yy - r * 0.6);
-      ctx.stroke();
-      // Tiny hands at the top
-      ctx.fillStyle = skin;
-      ctx.beginPath(); ctx.arc(x + 1,  yy - r * 0.6, 1.6, 0, Math.PI * 2); ctx.fill();
-      ctx.beginPath(); ctx.arc(x + 21, yy - r * 0.6, 1.6, 0, Math.PI * 2); ctx.fill();
-    }
-
-    // Head
-    ctx.fillStyle = skin;
-    ctx.beginPath(); ctx.arc(cx, yy, r, 0, Math.PI * 2); ctx.fill();
-
-    // Hair on top half
-    if (hair) {
-      ctx.fillStyle = hair;
-      ctx.beginPath();
-      ctx.arc(cx, yy - 1, r, Math.PI + 0.25, Math.PI * 2 - 0.25);
-      ctx.fill();
-    }
-
-    // Team cap on some shirt-cycle fans
-    const capCandidates = ['#c8102e', '#1d428a', '#00471b', '#eee1c6', '#b21e1e', '#1e50b4'];
-    if (capCandidates.includes(shirt) && idx % 2 === 0) {
-      const capColor = shirt;
-      ctx.fillStyle = capColor;
-      ctx.beginPath();
-      ctx.arc(cx, yy - r * 0.25, r * 0.95, Math.PI, Math.PI * 2);
-      ctx.fill();
-      const facing = (idx % 4 < 2) ? 1 : -1;
-      ctx.fillRect(cx, yy - r * 0.05, facing * r * 0.95, 2);
-    }
-
-    // Eyes
-    ctx.fillStyle = '#000';
-    const eyeY = yy + 0.5;
-    const eyeOff = Math.max(2, r * 0.32);
-    ctx.beginPath();
-    ctx.arc(cx - eyeOff, eyeY, 1.4, 0, Math.PI * 2);
-    ctx.arc(cx + eyeOff, eyeY, 1.4, 0, Math.PI * 2);
-    ctx.fill();
-    // Tiny eye highlights
-    ctx.fillStyle = '#fff';
-    ctx.fillRect(cx - eyeOff + 0.3, eyeY - 0.6, 0.7, 0.7);
-    ctx.fillRect(cx + eyeOff + 0.3, eyeY - 0.6, 0.7, 0.7);
-
-    // Mouth — open when cheering, smile otherwise
-    if (cheering) {
-      ctx.fillStyle = '#3a0a0a';
-      ctx.beginPath();
-      ctx.ellipse(cx, yy + r * 0.45, 1.8, 2.4, 0, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillStyle = '#fff';
-      ctx.fillRect(cx - 1.5, yy + r * 0.45 - 1.5, 3, 0.8);
-    } else {
-      ctx.strokeStyle = '#3a0a0a';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.arc(cx, yy + r * 0.3, 2.2, 0.25, Math.PI - 0.25);
-      ctx.stroke();
-    }
-
-    // War paint stripes for painted-face superfans
-    if (paintedFace) {
-      const stripeColor = TEAMS[teamSide].rim;
-      ctx.fillStyle = stripeColor;
-      ctx.fillRect(cx - r * 0.7, yy + 5, r * 1.4, 1.4);
-      ctx.fillRect(cx - r * 0.5, yy - 6, r * 1.0, 1.2);
-    }
-
-    // Held-up team signs and foam fingers
-    if (teamSide) {
-      const T = TEAMS[teamSide];
-      const sway = Math.sin(t * 0.005 + idx * 1.1) * 1.6;
-      if (gimmick === 1) {
-        // Held team sign (rectangle on a stick)
-        const sw = 22, sh = 12;
-        const sx = cx - sw / 2 + sway;
-        const sy = yy - r - 18;
-        // Stick
-        ctx.strokeStyle = '#5a3a1a';
-        ctx.lineWidth = 1.4;
-        ctx.beginPath();
-        ctx.moveTo(cx, yy + r * 0.3);
-        ctx.lineTo(cx + sway, sy + sh);
-        ctx.stroke();
-        // Sign body
-        ctx.fillStyle = T.color;
-        ctx.fillRect(sx, sy, sw, sh);
-        ctx.fillStyle = T.rim;
-        ctx.fillRect(sx, sy, sw, 2);
-        ctx.fillRect(sx, sy + sh - 2, sw, 2);
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 7px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('GO ' + T.short + '!', sx + sw / 2, sy + sh / 2);
-      } else if (gimmick === 4) {
-        // Foam #1 finger
-        const fx = cx + sway;
-        const fy = yy - r - 22;
-        // Hand base
-        ctx.fillStyle = T.color;
-        ctx.fillRect(fx - 5, fy + 10, 10, 8);
-        // Index finger pointing up
-        ctx.fillRect(fx - 2, fy - 4, 4, 14);
-        // Knuckles bulge
-        ctx.beginPath();
-        ctx.arc(fx, fy - 4, 2.5, 0, Math.PI * 2);
-        ctx.fill();
-        // Wristband stripe
-        ctx.fillStyle = T.rim;
-        ctx.fillRect(fx - 5, fy + 14, 10, 2);
-        // "#1" label
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 5px monospace';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('#1', fx, fy + 13);
-        // Arm holding it up
-        ctx.strokeStyle = baseSkin;
-        ctx.lineWidth = 2.5;
-        ctx.beginPath();
-        ctx.moveTo(cx + (teamSide === 'left' ? 6 : -6), yy + r * 0.7);
-        ctx.lineTo(fx, fy + 18);
-        ctx.stroke();
-      } else if (gimmick === 6 && cheering) {
-        // Pom-pom in team color (only when cheering)
-        const px = cx + sway;
-        const py = yy - r - 10;
-        ctx.fillStyle = T.color;
-        for (let p = 0; p < 6; p++) {
-          const a = p * Math.PI / 3 + t * 0.01;
-          ctx.beginPath();
-          ctx.arc(px + Math.cos(a) * 3, py + Math.sin(a) * 3, 2.5, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.fillStyle = T.rim;
-        ctx.beginPath();
-        ctx.arc(px, py, 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
-    idx++;
   }
 
-  // Camera flashes
-  for (let x = 12; x < W; x += 17) {
+  // Front-row bleacher base / floor edge under everything
+  ctx.fillStyle = '#0a0418';
+  ctx.fillRect(0, frontTop + 36, W, 70);
+  ctx.fillStyle = '#150a30';
+  ctx.fillRect(0, frontTop + 100, W, 8);
+
+  // Camera flashes scattered through all tiers
+  for (let x = 12; x < W; x += 23) {
     const flicker = (Math.sin(t * 0.002 + x) + 1) * 0.5;
     if (flicker > 0.78) {
+      const rowIdx = Math.floor(((Math.sin(x * 1.7) + 1) * 0.5) * CROWD_ROWS.length);
+      const fr = CROWD_ROWS[Math.min(CROWD_ROWS.length - 1, rowIdx)];
+      const fy = frontTop + 30 + fr.yOff - 2;
       ctx.fillStyle = `rgba(255,240,200,${flicker - 0.55})`;
-      ctx.fillRect(x, crowdTop + 28, 2, 2);
+      ctx.fillRect(x, fy, 2, 2);
     }
   }
 }
+
+function drawFanLocal(t, worldX, idx) {
+  const r = 11 + Math.sin(idx * 0.71) * 2;
+  const wave = Math.sin(t * 0.003 + idx * 0.4) * 2;
+  ctx.save();
+  ctx.translate(0, wave);
+
+  const teamSide = worldX < W * 0.45 ? 'left' : worldX > W * 0.55 ? 'right' : null;
+  const baseSkin = SKIN_TONES[(idx * 5 + 1) % SKIN_TONES.length];
+  const hair  = HAIR_COLORS[(idx * 3) % HAIR_COLORS.length];
+  let shirt;
+  if (teamSide === 'left') {
+    const c = idx % 4;
+    shirt = c === 0 ? '#c8102e' : c === 1 ? '#1d428a' : c === 2 ? '#1a1a2a' : '#fff';
+  } else if (teamSide === 'right') {
+    const c = idx % 4;
+    shirt = c === 0 ? '#00471b' : c === 1 ? '#eee1c6' : c === 2 ? '#1a1a2a' : '#fff';
+  } else {
+    shirt = SHIRTS[idx % SHIRTS.length];
+  }
+  const paintedFace = teamSide && (idx % 9 === 2);
+  const skin = paintedFace ? TEAMS[teamSide].color : baseSkin;
+  const gimmick = teamSide ? (idx % 7) : -1;
+  const cheerPhase = Math.sin(t * 0.005 + idx * 0.7);
+  const cheering = cheerPhase > 0.35;
+
+  // Torso
+  ctx.fillStyle = shirt;
+  ctx.fillRect(-r + 2, r * 0.55, r * 2 - 2, 14);
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(-r + 2, r * 0.55, r * 2 - 2, 2);
+
+  // Arms — raised when cheering
+  if (cheering) {
+    ctx.strokeStyle = baseSkin;
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(-r + 4,  r * 0.7);
+    ctx.lineTo(-r + 1,  -r * 0.6);
+    ctx.moveTo( r - 4,  r * 0.7);
+    ctx.lineTo( r - 1,  -r * 0.6);
+    ctx.stroke();
+    ctx.fillStyle = baseSkin;
+    ctx.beginPath(); ctx.arc(-r + 1, -r * 0.6, 1.6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc( r - 1, -r * 0.6, 1.6, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // Head
+  ctx.fillStyle = skin;
+  ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+
+  // Hair on top half
+  if (hair) {
+    ctx.fillStyle = hair;
+    ctx.beginPath();
+    ctx.arc(0, -1, r, Math.PI + 0.25, Math.PI * 2 - 0.25);
+    ctx.fill();
+  }
+
+  // Team cap
+  const capCandidates = ['#c8102e', '#1d428a', '#00471b', '#eee1c6', '#b21e1e', '#1e50b4'];
+  if (capCandidates.includes(shirt) && idx % 2 === 0) {
+    ctx.fillStyle = shirt;
+    ctx.beginPath();
+    ctx.arc(0, -r * 0.25, r * 0.95, Math.PI, Math.PI * 2);
+    ctx.fill();
+    const facing = (idx % 4 < 2) ? 1 : -1;
+    ctx.fillRect(0, -r * 0.05, facing * r * 0.95, 2);
+  }
+
+  // Eyes
+  ctx.fillStyle = '#000';
+  const eyeOff = Math.max(2, r * 0.32);
+  ctx.beginPath();
+  ctx.arc(-eyeOff, 0.5, 1.4, 0, Math.PI * 2);
+  ctx.arc( eyeOff, 0.5, 1.4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(-eyeOff + 0.3, -0.1, 0.7, 0.7);
+  ctx.fillRect( eyeOff + 0.3, -0.1, 0.7, 0.7);
+
+  // Mouth
+  if (cheering) {
+    ctx.fillStyle = '#3a0a0a';
+    ctx.beginPath();
+    ctx.ellipse(0, r * 0.45, 1.8, 2.4, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-1.5, r * 0.45 - 1.5, 3, 0.8);
+  } else {
+    ctx.strokeStyle = '#3a0a0a';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(0, r * 0.3, 2.2, 0.25, Math.PI - 0.25);
+    ctx.stroke();
+  }
+
+  // War paint stripes
+  if (paintedFace) {
+    const stripeColor = TEAMS[teamSide].rim;
+    ctx.fillStyle = stripeColor;
+    ctx.fillRect(-r * 0.7, 5, r * 1.4, 1.4);
+    ctx.fillRect(-r * 0.5, -6, r * 1.0, 1.2);
+  }
+
+  // Signs / foam fingers / pom-poms
+  if (teamSide) {
+    const T = TEAMS[teamSide];
+    const sway = Math.sin(t * 0.005 + idx * 1.1) * 1.6;
+    if (gimmick === 1) {
+      const sw = 22, sh = 12;
+      const sx = -sw / 2 + sway;
+      const sy = -r - 18;
+      ctx.strokeStyle = '#5a3a1a';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(0, r * 0.3);
+      ctx.lineTo(sway, sy + sh);
+      ctx.stroke();
+      ctx.fillStyle = T.color;
+      ctx.fillRect(sx, sy, sw, sh);
+      ctx.fillStyle = T.rim;
+      ctx.fillRect(sx, sy, sw, 2);
+      ctx.fillRect(sx, sy + sh - 2, sw, 2);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 7px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('GO ' + T.short + '!', sx + sw / 2, sy + sh / 2);
+    } else if (gimmick === 4) {
+      const fx = sway;
+      const fy = -r - 22;
+      ctx.fillStyle = T.color;
+      ctx.fillRect(fx - 5, fy + 10, 10, 8);
+      ctx.fillRect(fx - 2, fy - 4, 4, 14);
+      ctx.beginPath();
+      ctx.arc(fx, fy - 4, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = T.rim;
+      ctx.fillRect(fx - 5, fy + 14, 10, 2);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 5px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('#1', fx, fy + 13);
+      ctx.strokeStyle = baseSkin;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(teamSide === 'left' ? 6 : -6, r * 0.7);
+      ctx.lineTo(fx, fy + 18);
+      ctx.stroke();
+    } else if (gimmick === 6 && cheering) {
+      const px = sway;
+      const py = -r - 10;
+      ctx.fillStyle = T.color;
+      for (let p = 0; p < 6; p++) {
+        const a = p * Math.PI / 3 + t * 0.01;
+        ctx.beginPath();
+        ctx.arc(px + Math.cos(a) * 3, py + Math.sin(a) * 3, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = T.rim;
+      ctx.beginPath();
+      ctx.arc(px, py, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  ctx.restore();
+}
+
 
 function drawBanners(t) {
   const sway = Math.sin(t * 0.002) * 4;
