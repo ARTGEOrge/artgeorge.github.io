@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tennis</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #050a18;
+    overflow: hidden;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    color: #fff;
+    cursor: crosshair;
+  }
+  canvas { display: block; }
+  #hint {
+    position: fixed;
+    bottom: 12px; left: 50%; transform: translateX(-50%);
+    font-size: 12px; letter-spacing: 1px; text-transform: uppercase;
+    color: rgba(255,255,255,0.65);
+    pointer-events: none; user-select: none;
+    text-shadow: 1px 1px 0 #000;
+  }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<div id="hint">Mouse  ·  W / S  to move &nbsp;·&nbsp; Space to serve / restart &nbsp;·&nbsp; First to 11</div>
+
+<script>
+const canvas = document.getElementById("gameCanvas");
+const ctx = canvas.getContext("2d");
+
+let W, H;
+function resize() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  W = canvas.width; H = canvas.height;
+}
+window.addEventListener('resize', resize); resize();
+
+// ================== COURT GEOMETRY ==================
+// Court is rendered with a fixed aspect, centered in the canvas
+function getCourt() {
+  const margin = 60;
+  const aspect = 1.8; // width:height
+  let cw = W - margin * 2;
+  let ch = cw / aspect;
+  if (ch > H - 120) { ch = H - 120; cw = ch * aspect; }
+  const cx = (W - cw) / 2;
+  const cy = (H - ch) / 2 + 20;
+  return { x: cx, y: cy, w: cw, h: ch };
+}
+
+// ================== STATE ==================
+const PADDLE_W = 14;
+const PADDLE_H = 110;
+const BALL_R   = 11;
+
+let player, ai, ball;
+let scoreP = 0, scoreA = 0;
+let bestScore = parseInt(localStorage.getItem('tennis-best') || '0', 10);
+let serving = 'player';   // 'player' | 'ai'
+let inPlay = false;
+let gameOver = false, winner = null;
+let lastHit = null;       // 'player' | 'ai'
+let hitFlash = 0;         // 0..1 frames after a paddle hit
+let aiSkill  = 0.10;      // tracking aggressiveness
+let trail = [];
+
+function reset() {
+  const c = getCourt();
+  player = { y: c.y + c.h / 2 - PADDLE_H / 2, vy: 0 };
+  ai     = { y: c.y + c.h / 2 - PADDLE_H / 2 };
+  ball = { x: c.x + c.w / 2, y: c.y + c.h / 2, vx: 0, vy: 0, rot: 0, vrot: 0 };
+  inPlay = false;
+  trail.length = 0;
+  hitFlash = 0;
+  aiSkill = 0.09 + Math.random() * 0.03;
+}
+function hardReset() {
+  scoreP = 0; scoreA = 0;
+  serving = 'player';
+  gameOver = false; winner = null;
+  reset();
+}
+hardReset();
+
+function serve() {
+  const c = getCourt();
+  const fromPlayer = serving === 'player';
+  ball.x = fromPlayer ? c.x + PADDLE_W * 3 + 8 : c.x + c.w - PADDLE_W * 3 - 8;
+  ball.y = (fromPlayer ? player.y : ai.y) + PADDLE_H / 2;
+  const dir = fromPlayer ? 1 : -1;
+  const speed = Math.min(W, H) * 0.55; // px/sec
+  const angle = (Math.random() - 0.5) * 0.5; // small initial spread
+  ball.vx = dir * Math.cos(angle) * speed;
+  ball.vy = Math.sin(angle) * speed;
+  ball.rot = 0;
+  ball.vrot = (Math.random() - 0.5) * 8;
+  inPlay = true;
+  trail.length = 0;
+}
+
+// ================== INPUT ==================
+window.addEventListener("mousemove", (e) => {
+  const rect = canvas.getBoundingClientRect();
+  player.y = e.clientY - rect.top - PADDLE_H / 2;
+});
+const keys = Object.create(null);
+window.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space') {
+    if (gameOver) hardReset();
+    else if (!inPlay) serve();
+    e.preventDefault();
+  }
+  if (['KeyW','KeyS','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
+});
+window.addEventListener('keyup', e => { keys[e.code] = false; });
+window.addEventListener('mousedown', e => {
+  if (gameOver) hardReset();
+  else if (!inPlay) serve();
+});
+
+// ================== UPDATE ==================
+let lastTime = performance.now();
+function update(dt) {
+  const c = getCourt();
+
+  // Player keyboard movement
+  if (keys['KeyW'] || keys['ArrowUp'])   player.y -= 480 * dt;
+  if (keys['KeyS'] || keys['ArrowDown']) player.y += 480 * dt;
+  player.y = Math.max(c.y, Math.min(c.y + c.h - PADDLE_H, player.y));
+
+  // AI moves toward predicted ball Y
+  if (inPlay) {
+    let targetY = ball.y - PADDLE_H / 2;
+    // Lazy AI when ball moving away
+    const responsiveness = ball.vx > 0 ? aiSkill : aiSkill * 0.35;
+    ai.y += (targetY - ai.y) * Math.min(1, responsiveness * 60 * dt);
+  } else if (serving === 'ai') {
+    // Snap toward middle
+    const target = c.y + c.h / 2 - PADDLE_H / 2;
+    ai.y += (target - ai.y) * 0.12;
+  }
+  ai.y = Math.max(c.y, Math.min(c.y + c.h - PADDLE_H, ai.y));
+
+  if (gameOver) return;
+  if (!inPlay) {
+    // Ball follows server's paddle while waiting for serve
+    if (serving === 'player') {
+      ball.x = c.x + PADDLE_W * 3 + 8;
+      ball.y = player.y + PADDLE_H / 2;
+    } else {
+      ball.x = c.x + c.w - PADDLE_W * 3 - 8;
+      ball.y = ai.y + PADDLE_H / 2;
+      // AI auto-serves after a beat
+      ball.vx = 0; ball.vy = 0;
+      if (Math.random() < 0.02) serve();
+    }
+    return;
+  }
+
+  // Ball movement
+  ball.x += ball.vx * dt;
+  ball.y += ball.vy * dt;
+  ball.rot += ball.vrot * dt;
+
+  // Trail
+  trail.push({ x: ball.x, y: ball.y, life: 14 });
+  if (trail.length > 14) trail.shift();
+  for (let i = trail.length - 1; i >= 0; i--) trail[i].life--;
+
+  // Top/bottom bounce off court edges
+  if (ball.y - BALL_R < c.y) {
+    ball.y = c.y + BALL_R;
+    ball.vy *= -1;
+  } else if (ball.y + BALL_R > c.y + c.h) {
+    ball.y = c.y + c.h - BALL_R;
+    ball.vy *= -1;
+  }
+
+  // Paddle collisions
+  // Player paddle (left)
+  const px1 = c.x + PADDLE_W * 2;
+  if (ball.x - BALL_R < px1 + PADDLE_W && ball.x > px1 - 10 &&
+      ball.y > player.y && ball.y < player.y + PADDLE_H && ball.vx < 0) {
+    paddleHit(player, +1);
+  }
+  // AI paddle (right)
+  const ax1 = c.x + c.w - PADDLE_W * 3;
+  if (ball.x + BALL_R > ax1 && ball.x < ax1 + PADDLE_W + 10 &&
+      ball.y > ai.y && ball.y < ai.y + PADDLE_H && ball.vx > 0) {
+    paddleHit(ai, -1);
+  }
+
+  // Score
+  if (ball.x + BALL_R < c.x) {
+    scoreA++;
+    serving = 'player';
+    inPlay = false;
+    checkGameOver();
+  } else if (ball.x - BALL_R > c.x + c.w) {
+    scoreP++;
+    serving = 'ai';
+    inPlay = false;
+    checkGameOver();
+  }
+
+  // Decay flash
+  if (hitFlash > 0) hitFlash -= dt * 4;
+}
+
+function paddleHit(paddle, dir) {
+  // Compute the hit offset on the paddle, [-1, 1], and translate to bounce angle
+  const offset = ((ball.y - paddle.y) / PADDLE_H) * 2 - 1; // -1 top, +1 bottom
+  const speed = Math.hypot(ball.vx, ball.vy);
+  const newSpeed = Math.min(speed * 1.06 + 30, Math.max(W, H) * 1.4);
+  const angle = offset * 0.85; // up to ~50°
+  ball.vx = dir * Math.cos(angle) * newSpeed;
+  ball.vy = Math.sin(angle) * newSpeed;
+  ball.vrot = -dir * offset * 14;
+  // Push ball out so it doesn't re-collide
+  if (dir > 0) ball.x = (paddle === player ? (getCourt().x + PADDLE_W * 3) : 0) + BALL_R + 1;
+  else         ball.x = (paddle === ai ? (getCourt().x + getCourt().w - PADDLE_W * 3) : W) - BALL_R - 1;
+  hitFlash = 1.0;
+  lastHit = paddle === player ? 'player' : 'ai';
+  spawnHitSparks(ball.x, ball.y, paddle === player ? '#ef4444' : '#3b82f6');
+}
+
+function checkGameOver() {
+  if ((scoreP >= 11 && scoreP - scoreA >= 2) ||
+      (scoreA >= 11 && scoreA - scoreP >= 2)) {
+    gameOver = true;
+    winner = scoreP > scoreA ? 'player' : 'ai';
+    if (scoreP > bestScore) {
+      bestScore = scoreP;
+      localStorage.setItem('tennis-best', String(scoreP));
+    }
+  }
+}
+
+// ================== PARTICLES ==================
+const particles = [];
+function spawnHitSparks(x, y, color) {
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const sp = 100 + Math.random() * 200;
+    particles.push({
+      x, y,
+      vx: Math.cos(a) * sp,
+      vy: Math.sin(a) * sp,
+      life: 0.5,
+      maxLife: 0.5,
+      color
+    });
+  }
+}
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.vx *= 0.94;
+    p.vy *= 0.94;
+    p.life -= dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+// ================== DRAWING ==================
+function drawCourt() {
+  const c = getCourt();
+  // Background gradient
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#0a1530');
+  g.addColorStop(1, '#1a2e58');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, H);
+
+  // Stadium silhouettes (very simple background flair)
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  for (let x = 0; x < W; x += 38) {
+    const sh = 30 + ((Math.sin(x * 0.13) + 1) * 14);
+    ctx.fillRect(x, c.y - sh - 6, 32, sh);
+  }
+
+  // Court surround (slight darker frame around the court)
+  ctx.fillStyle = '#143b6e';
+  ctx.fillRect(c.x - 30, c.y - 30, c.w + 60, c.h + 60);
+
+  // Court playing surface — Australian Open blue
+  const cg = ctx.createLinearGradient(c.x, c.y, c.x, c.y + c.h);
+  cg.addColorStop(0, '#1d6fae');
+  cg.addColorStop(1, '#1d5a92');
+  ctx.fillStyle = cg;
+  ctx.fillRect(c.x, c.y, c.w, c.h);
+
+  // Sheen
+  const sheen = ctx.createLinearGradient(c.x, c.y, c.x + c.w, c.y);
+  sheen.addColorStop(0,   'rgba(255,255,255,0.06)');
+  sheen.addColorStop(0.5, 'rgba(255,255,255,0)');
+  sheen.addColorStop(1,   'rgba(0,0,0,0.12)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(c.x, c.y, c.w, c.h);
+
+  // Court lines (thicker = more visible)
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 4;
+  // Outer (doubles) court
+  ctx.strokeRect(c.x, c.y, c.w, c.h);
+
+  // Singles sidelines (inset from doubles by ~6% of height)
+  ctx.lineWidth = 3;
+  const sideInset = c.h * 0.07;
+  ctx.beginPath();
+  ctx.moveTo(c.x, c.y + sideInset);             ctx.lineTo(c.x + c.w, c.y + sideInset);
+  ctx.moveTo(c.x, c.y + c.h - sideInset);       ctx.lineTo(c.x + c.w, c.y + c.h - sideInset);
+  ctx.stroke();
+
+  // Service line on each half (vertical, ~25% from each baseline)
+  const serveOff = c.w * 0.25;
+  ctx.beginPath();
+  ctx.moveTo(c.x + serveOff,           c.y + sideInset);
+  ctx.lineTo(c.x + serveOff,           c.y + c.h - sideInset);
+  ctx.moveTo(c.x + c.w - serveOff,     c.y + sideInset);
+  ctx.lineTo(c.x + c.w - serveOff,     c.y + c.h - sideInset);
+  ctx.stroke();
+
+  // Center service line (horizontal, between service lines)
+  ctx.beginPath();
+  ctx.moveTo(c.x + serveOff,           c.y + c.h / 2);
+  ctx.lineTo(c.x + c.w - serveOff,     c.y + c.h / 2);
+  ctx.stroke();
+
+  // Center mark on each baseline
+  ctx.beginPath();
+  ctx.moveTo(c.x,        c.y + c.h / 2);
+  ctx.lineTo(c.x + 14,   c.y + c.h / 2);
+  ctx.moveTo(c.x + c.w,  c.y + c.h / 2);
+  ctx.lineTo(c.x + c.w - 14, c.y + c.h / 2);
+  ctx.stroke();
+
+  // Net — vertical down the middle with crosshatch
+  const netX = c.x + c.w / 2;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(netX - 4, c.y - 12, 8, c.h + 24);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(netX - 4, c.y - 14, 8, 4);
+  ctx.fillRect(netX - 4, c.y + c.h + 10, 8, 4);
+  // Cross-hatch
+  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+  ctx.lineWidth = 1;
+  for (let yy = c.y; yy < c.y + c.h; yy += 6) {
+    ctx.beginPath();
+    ctx.moveTo(netX - 4, yy);
+    ctx.lineTo(netX + 4, yy + 6);
+    ctx.moveTo(netX + 4, yy);
+    ctx.lineTo(netX - 4, yy + 6);
+    ctx.stroke();
+  }
+}
+
+function drawPaddle(side, p, color, rim) {
+  const c = getCourt();
+  const x = side === 'left' ? c.x + PADDLE_W * 2 : c.x + c.w - PADDLE_W * 3;
+  // Paddle body
+  const grad = ctx.createLinearGradient(x, 0, x + PADDLE_W, 0);
+  grad.addColorStop(0, rim);
+  grad.addColorStop(0.5, color);
+  grad.addColorStop(1, rim);
+  ctx.fillStyle = grad;
+  ctx.fillRect(x, p.y, PADDLE_W, PADDLE_H);
+  // Trim band
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x, p.y + PADDLE_H / 2 - 1, PADDLE_W, 2);
+  ctx.fillStyle = rim;
+  ctx.fillRect(x, p.y, PADDLE_W, 4);
+  ctx.fillRect(x, p.y + PADDLE_H - 4, PADDLE_W, 4);
+  // Hit flash glow
+  if (hitFlash > 0 && lastHit === (side === 'left' ? 'player' : 'ai')) {
+    ctx.fillStyle = `rgba(255,255,200,${hitFlash * 0.4})`;
+    ctx.fillRect(x - 4, p.y - 4, PADDLE_W + 8, PADDLE_H + 8);
+  }
+}
+
+function drawBall() {
+  // Trail
+  for (let i = 0; i < trail.length; i++) {
+    const tr = trail[i];
+    const a = tr.life / 14;
+    ctx.fillStyle = `rgba(220,255,80,${a * 0.45})`;
+    ctx.beginPath();
+    ctx.arc(tr.x, tr.y, BALL_R * (0.4 + (i / trail.length) * 0.6), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.beginPath();
+  ctx.ellipse(ball.x + 3, ball.y + 4, BALL_R, BALL_R * 0.6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  // Ball
+  ctx.save();
+  ctx.translate(ball.x, ball.y);
+  ctx.rotate(ball.rot);
+  const grad = ctx.createRadialGradient(-BALL_R * 0.4, -BALL_R * 0.4, 1, 0, 0, BALL_R);
+  grad.addColorStop(0, '#fff8a8');
+  grad.addColorStop(0.6, '#e6e040');
+  grad.addColorStop(1, '#5a5800');
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(0, 0, BALL_R, 0, Math.PI * 2); ctx.fill();
+  // Seam
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(0, 0, BALL_R - 1, -0.4, 0.4); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, 0, BALL_R - 1, Math.PI - 0.4, Math.PI + 0.4); ctx.stroke();
+  ctx.restore();
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    const a = p.life / p.maxLife;
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = a;
+    ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD() {
+  // Scoreboard
+  const sw = 220, sh = 64;
+  const sx = W / 2 - sw / 2, sy = 12;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.strokeStyle = '#fcd34d';
+  ctx.lineWidth = 2;
+  if (ctx.roundRect) {
+    ctx.beginPath(); ctx.roundRect(sx, sy, sw, sh, 10); ctx.fill(); ctx.stroke();
+  } else {
+    ctx.fillRect(sx, sy, sw, sh);
+    ctx.strokeRect(sx, sy, sw, sh);
+  }
+  ctx.fillStyle = '#fcd34d';
+  ctx.font = 'bold 11px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText('— TENNIS —', sx + sw / 2, sy + 14);
+  ctx.font = 'bold 36px monospace';
+  ctx.fillStyle = '#ef4444';
+  ctx.fillText(scoreP, sx + 50, sy + 50);
+  ctx.fillStyle = '#fff';
+  ctx.fillText(':', sx + sw / 2, sy + 48);
+  ctx.fillStyle = '#3b82f6';
+  ctx.fillText(scoreA, sx + sw - 50, sy + 50);
+
+  // Best score
+  ctx.fillStyle = '#fcd34d';
+  ctx.font = '14px monospace';
+  ctx.textAlign = 'right';
+  ctx.fillText('Best: ' + bestScore, W - 14, 26);
+
+  // Player labels
+  ctx.fillStyle = '#ef4444';
+  ctx.font = 'bold 14px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('YOU', 14, 26);
+  ctx.fillStyle = '#3b82f6';
+  ctx.textAlign = 'right';
+  ctx.fillText('CPU', W - 14, H - 16);
+
+  // Serve prompt
+  if (!inPlay && !gameOver) {
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 22px monospace';
+    ctx.textAlign = 'center';
+    const msg = serving === 'player' ? 'Press SPACE to serve' : 'Opponent serving…';
+    ctx.fillText(msg, W / 2, H - 60);
+  }
+
+  // Game over
+  if (gameOver) {
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    const color = winner === 'player' ? '#ef4444' : '#3b82f6';
+    const name  = winner === 'player' ? 'YOU WIN!' : 'CPU WINS!';
+    ctx.fillStyle = '#000';
+    ctx.font = 'bold 90px Impact, "Arial Black", sans-serif';
+    ctx.fillText(name, W / 2 + 4, H / 2 + 4);
+    ctx.fillStyle = color;
+    ctx.fillText(name, W / 2, H / 2);
+    ctx.fillStyle = '#fff';
+    ctx.font = '22px monospace';
+    ctx.fillText(`Final score:  ${scoreP}  —  ${scoreA}`, W / 2, H / 2 + 50);
+    ctx.fillText('Press SPACE or click to play again', W / 2, H / 2 + 90);
+  }
+}
+
+// ================== MAIN LOOP ==================
+function frame(t) {
+  const dt = Math.min(0.05, (t - lastTime) / 1000);
+  lastTime = t;
+  update(dt);
+  updateParticles(dt);
+
+  drawCourt();
+  drawPaddle('left',  player, '#ef4444', '#7f1d1d');
+  drawPaddle('right', ai,     '#3b82f6', '#1e3a8a');
+  drawBall();
+  drawParticles();
+  drawHUD();
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
