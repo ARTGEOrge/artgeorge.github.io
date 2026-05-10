@@ -115,6 +115,7 @@
     .card--bazooka { --accent: #f59e0b; --accent-glow: rgba(245,158,11,0.5); }
     .card--basket  { --accent: #ff8c1a; --accent-glow: rgba(255,140,26,0.5); }
     .card--gdash   { --accent: #00e5ff; --accent-glow: rgba(0,229,255,0.5); }
+    .card--subway  { --accent: #22c55e; --accent-glow: rgba(34,197,94,0.5); }
 
     .card-body { padding: 20px 22px 24px; }
 
@@ -1330,6 +1331,117 @@
           <span class="tag">Platformer</span>
           <span class="tag">Reflexes</span>
           <span class="tag">Arcade</span>
+        </div>
+      </div>
+    </a>
+
+    <a href="/subway-surfers-remake/" class="card card--subway">
+      <div class="play-btn">&#9654; PLAY</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="ssSky" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#0c1832"/>
+              <stop offset="100%" stop-color="#3d6eaf"/>
+            </linearGradient>
+            <linearGradient id="ssGround" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#3a3a4a"/>
+              <stop offset="100%" stop-color="#16161f"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#ssSky)"/>
+          <!-- Skyline silhouettes -->
+          <g fill="#0c1830">
+            <rect x="0"   y="60" width="40" height="60"/>
+            <rect x="44"  y="40" width="34" height="80"/>
+            <rect x="82"  y="55" width="42" height="65"/>
+            <rect x="128" y="30" width="46" height="90"/>
+            <rect x="178" y="50" width="36" height="70"/>
+            <rect x="218" y="35" width="50" height="85"/>
+            <rect x="272" y="55" width="38" height="65"/>
+            <rect x="314" y="42" width="44" height="78"/>
+            <rect x="362" y="58" width="38" height="62"/>
+          </g>
+          <g fill="rgba(255,220,140,0.85)">
+            <rect x="58" y="55" width="2" height="3"/>
+            <rect x="64" y="55" width="2" height="3"/>
+            <rect x="58" y="65" width="2" height="3"/>
+            <rect x="138" y="50" width="2" height="3"/>
+            <rect x="146" y="50" width="2" height="3"/>
+            <rect x="156" y="50" width="2" height="3"/>
+            <rect x="232" y="55" width="2" height="3"/>
+            <rect x="246" y="55" width="2" height="3"/>
+            <rect x="232" y="68" width="2" height="3"/>
+            <rect x="324" y="62" width="2" height="3"/>
+            <rect x="334" y="62" width="2" height="3"/>
+          </g>
+          <!-- Ground -->
+          <rect x="0" y="120" width="400" height="60" fill="url(#ssGround)"/>
+          <!-- 3-lane perspective tracks converging to vanishing point -->
+          <g stroke="#aab" stroke-width="1.5">
+            <line x1="40"  y1="180" x2="195" y2="120"/>
+            <line x1="135" y1="180" x2="198" y2="120"/>
+            <line x1="265" y1="180" x2="202" y2="120"/>
+            <line x1="360" y1="180" x2="205" y2="120"/>
+          </g>
+          <!-- Wood ties -->
+          <g fill="#3a2010">
+            <rect x="60"  y="172" width="280" height="6"/>
+            <rect x="90"  y="156" width="220" height="5"/>
+            <rect x="120" y="144" width="160" height="4"/>
+            <rect x="148" y="134" width="104" height="3"/>
+            <rect x="170" y="127" width="60"  height="3"/>
+          </g>
+          <!-- Coins -->
+          <g fill="#ffd700" stroke="#aa7700" stroke-width="0.8">
+            <circle cx="320" cy="80"  r="3"/>
+            <circle cx="305" cy="100" r="4"/>
+            <circle cx="290" cy="120" r="5"/>
+            <circle cx="275" cy="140" r="6"/>
+          </g>
+          <!-- Train obstacle in left lane -->
+          <g>
+            <rect x="55"  y="84"  width="42" height="78" fill="#dc3322" stroke="#5a1010" stroke-width="1"/>
+            <rect x="53"  y="80"  width="46" height="6"  fill="#5a1010"/>
+            <rect x="62"  y="92"  width="28" height="14" fill="#aaccee" stroke="#222" stroke-width="0.8"/>
+            <rect x="62"  y="112" width="28" height="14" fill="#aaccee" stroke="#222" stroke-width="0.8"/>
+            <circle cx="76" cy="158" r="3" fill="#ffeeaa"/>
+          </g>
+          <!-- Player (Jake-like, jumping in center lane) -->
+          <g>
+            <!-- Beanie pom -->
+            <circle cx="175" cy="92"  r="2.5" fill="#fff"/>
+            <!-- Beanie -->
+            <path d="M163,98 Q175,86 187,98 L185,102 L165,102 Z" fill="#facc15"/>
+            <rect x="163" y="100" width="24" height="3" fill="#dc2626"/>
+            <!-- Head -->
+            <circle cx="175" cy="106" r="9" fill="#fdc97a"/>
+            <circle cx="172" cy="105" r="1.2" fill="#000"/>
+            <circle cx="178" cy="105" r="1.2" fill="#000"/>
+            <!-- Hoodie body -->
+            <path d="M163,116 L187,116 L185,140 L165,140 Z" fill="#22c55e"/>
+            <rect x="167" y="128" width="16" height="3" fill="#0f6e2c"/>
+            <!-- Arms -->
+            <rect x="156" y="118" width="6" height="14" rx="2" fill="#22c55e"/>
+            <rect x="188" y="118" width="6" height="14" rx="2" fill="#22c55e"/>
+            <!-- Legs (jumping pose) -->
+            <rect x="167" y="138" width="6" height="14" rx="2" fill="#1e3a8a"/>
+            <rect x="177" y="138" width="6" height="14" rx="2" fill="#1e3a8a"/>
+            <!-- Sneakers -->
+            <ellipse cx="170" cy="154" rx="6" ry="2.5" fill="#fff"/>
+            <ellipse cx="180" cy="154" rx="6" ry="2.5" fill="#fff"/>
+          </g>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">Endless Runner</div>
+        <div class="card-title">Subway Surfers Remake</div>
+        <p class="card-desc">Sprint down the subway, dodge oncoming trains, and grab coins in three lanes. Jump, slide, switch — survive as long as you can.</p>
+        <div class="card-tags">
+          <span class="tag">Runner</span>
+          <span class="tag">Endless</span>
+          <span class="tag">Reflexes</span>
+          <span class="tag">3D</span>
         </div>
       </div>
     </a>
