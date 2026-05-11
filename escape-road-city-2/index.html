@@ -114,31 +114,34 @@
       0%, 100% { opacity: 0.85; }
       50%      { opacity: 1; }
     }
-    /* Road-side lamps that follow the road's perspective — two columns converging
-       toward the vanishing point so it looks like streetlights line each side of the road. */
+    /* Road-side lamps — a dense, brighter column down each edge of the screen so they
+       read as "streetlights along the road" no matter what camera angle the game uses
+       (top-down OR chase). Each lamp is a tighter, more intense bloom. */
     #roadLamps {
       position: fixed; inset: 0;
       pointer-events: none;
-      z-index: 4;
+      z-index: 10;
       background:
-        /* === LEFT side of the road, near → far === */
-        radial-gradient(ellipse 8vw 6vh at 18% 90%, rgba(255, 200, 110, 0.55), transparent 60%),
-        radial-gradient(ellipse 7vw 5vh at 26% 82%, rgba(240, 245, 255, 0.5),  transparent 60%),
-        radial-gradient(ellipse 6vw 4vh at 33% 74%, rgba(255, 195, 95,  0.5),  transparent 60%),
-        radial-gradient(ellipse 4.5vw 3vh at 39% 66%, rgba(255, 200, 110, 0.45), transparent 62%),
-        radial-gradient(ellipse 3.2vw 2.2vh at 43% 60%, rgba(245, 250, 255, 0.42), transparent 65%),
-        radial-gradient(ellipse 2.2vw 1.5vh at 46% 55%, rgba(255, 205, 120, 0.36), transparent 68%),
-        radial-gradient(ellipse 1.4vw 1vh at 48% 51%, rgba(255, 215, 140, 0.3),  transparent 70%),
-        radial-gradient(ellipse 1vw 0.7vh at 49% 48%, rgba(255, 220, 160, 0.26), transparent 72%),
-        /* === RIGHT side of the road, near → far === */
-        radial-gradient(ellipse 8vw 6vh at 82% 90%, rgba(255, 200, 110, 0.55), transparent 60%),
-        radial-gradient(ellipse 7vw 5vh at 74% 82%, rgba(240, 245, 255, 0.5),  transparent 60%),
-        radial-gradient(ellipse 6vw 4vh at 67% 74%, rgba(255, 195, 95,  0.5),  transparent 60%),
-        radial-gradient(ellipse 4.5vw 3vh at 61% 66%, rgba(255, 200, 110, 0.45), transparent 62%),
-        radial-gradient(ellipse 3.2vw 2.2vh at 57% 60%, rgba(245, 250, 255, 0.42), transparent 65%),
-        radial-gradient(ellipse 2.2vw 1.5vh at 54% 55%, rgba(255, 205, 120, 0.36), transparent 68%),
-        radial-gradient(ellipse 1.4vw 1vh at 52% 51%, rgba(255, 215, 140, 0.3),  transparent 70%),
-        radial-gradient(ellipse 1vw 0.7vh at 51% 48%, rgba(255, 220, 160, 0.26), transparent 72%);
+        /* === LEFT column — bright, dense, stretching from the bottom to the horizon === */
+        radial-gradient(circle  4vmin at 16% 95%, rgba(255, 215, 140, 0.95), transparent 60%),
+        radial-gradient(circle 3.5vmin at 17% 85%, rgba(255, 210, 120, 0.9),  transparent 60%),
+        radial-gradient(circle 3.2vmin at 18% 75%, rgba(255, 215, 140, 0.85), transparent 60%),
+        radial-gradient(circle 2.8vmin at 19% 65%, rgba(255, 210, 120, 0.8),  transparent 60%),
+        radial-gradient(circle 2.4vmin at 20% 55%, rgba(255, 215, 140, 0.75), transparent 60%),
+        radial-gradient(circle 2.0vmin at 21% 45%, rgba(255, 210, 120, 0.7),  transparent 60%),
+        radial-gradient(circle 1.6vmin at 22% 35%, rgba(255, 215, 140, 0.65), transparent 60%),
+        radial-gradient(circle 1.3vmin at 23% 25%, rgba(255, 210, 120, 0.6),  transparent 60%),
+        radial-gradient(circle 1.0vmin at 24% 15%, rgba(255, 215, 140, 0.55), transparent 60%),
+        /* === RIGHT column — mirrored === */
+        radial-gradient(circle  4vmin at 84% 95%, rgba(255, 215, 140, 0.95), transparent 60%),
+        radial-gradient(circle 3.5vmin at 83% 85%, rgba(255, 210, 120, 0.9),  transparent 60%),
+        radial-gradient(circle 3.2vmin at 82% 75%, rgba(255, 215, 140, 0.85), transparent 60%),
+        radial-gradient(circle 2.8vmin at 81% 65%, rgba(255, 210, 120, 0.8),  transparent 60%),
+        radial-gradient(circle 2.4vmin at 80% 55%, rgba(255, 215, 140, 0.75), transparent 60%),
+        radial-gradient(circle 2.0vmin at 79% 45%, rgba(255, 210, 120, 0.7),  transparent 60%),
+        radial-gradient(circle 1.6vmin at 78% 35%, rgba(255, 215, 140, 0.65), transparent 60%),
+        radial-gradient(circle 1.3vmin at 77% 25%, rgba(255, 210, 120, 0.6),  transparent 60%),
+        radial-gradient(circle 1.0vmin at 76% 15%, rgba(255, 215, 140, 0.55), transparent 60%);
       mix-blend-mode: screen;
       animation: lampPulse 3.5s ease-in-out infinite;
     }
