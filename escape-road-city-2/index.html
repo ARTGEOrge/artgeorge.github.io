@@ -11,17 +11,27 @@
     #gameContainer { position: absolute; }
     #gameContainer canvas { position: absolute; }
 
-    /* Apply a nighttime mood directly to the Unity canvas: darker, cooler, hue cycling */
+    /* Strip the sunlight: drop the canvas to deep nighttime brightness with a cool cast.
+       The slow hue cycle is preserved so the neon mood from the overlays still varies the scene,
+       but it pivots around a much darker baseline so it reads as night rather than tinted day. */
     #gameContainer canvas {
-      filter: brightness(0.62) contrast(1.18) saturate(1.35);
+      filter: brightness(0.38) contrast(1.25) saturate(0.95);
       animation: neonShift 22s linear infinite;
     }
     @keyframes neonShift {
-      0%   { filter: brightness(0.62) contrast(1.18) saturate(1.35) hue-rotate(0deg); }
-      25%  { filter: brightness(0.58) contrast(1.22) saturate(1.5)  hue-rotate(35deg); }
-      50%  { filter: brightness(0.62) contrast(1.2)  saturate(1.4)  hue-rotate(-25deg); }
-      75%  { filter: brightness(0.6)  contrast(1.2)  saturate(1.55) hue-rotate(15deg); }
-      100% { filter: brightness(0.62) contrast(1.18) saturate(1.35) hue-rotate(0deg); }
+      0%   { filter: brightness(0.38) contrast(1.25) saturate(0.95) hue-rotate(0deg); }
+      25%  { filter: brightness(0.36) contrast(1.28) saturate(1.05) hue-rotate(25deg); }
+      50%  { filter: brightness(0.4)  contrast(1.25) saturate(0.95) hue-rotate(-20deg); }
+      75%  { filter: brightness(0.36) contrast(1.28) saturate(1.05) hue-rotate(15deg); }
+      100% { filter: brightness(0.38) contrast(1.25) saturate(0.95) hue-rotate(0deg); }
+    }
+    /* Deep-blue nighttime tint multiplied over the entire scene — kills the daylit feel */
+    #nightTint {
+      position: fixed; inset: 0;
+      background: rgba(8, 14, 44, 0.55);
+      pointer-events: none;
+      mix-blend-mode: multiply;
+      z-index: 3;
     }
 
     /* Night sky fade — deep blue at top dissolving toward horizon */
@@ -124,6 +134,7 @@
     }
     #nightToggle:hover { background: rgba(35, 50, 90, 0.9); }
     body.night-off #gameContainer canvas { filter: none; animation: none; }
+    body.night-off #nightTint,
     body.night-off #nightSky,
     body.night-off #vignette,
     body.night-off #neonWash,
@@ -145,6 +156,7 @@
   </div>
 
   <!-- Night-time overlay layers (rendered above the Unity canvas) -->
+  <div id="nightTint"></div>
   <div id="streetLamps"></div>
   <div id="nightSky"></div>
   <div id="vignette"></div>
