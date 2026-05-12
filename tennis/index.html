@@ -31,8 +31,9 @@
 <body>
 <canvas id="game"></canvas>
 <canvas id="hud"></canvas>
-<div id="hint">VS AI: mouse or A/D &nbsp;·&nbsp; VS FRIEND: P1 = A/D, P2 = ←/→ &nbsp;·&nbsp; SPACE serves &nbsp;·&nbsp; Timed match or first-to-7 unlimited</div>
+<div id="hint">VS AI · VS FRIEND · VS ONLINE (share a link) &nbsp;·&nbsp; A/D or ←/→ to move &nbsp;·&nbsp; SPACE serves &nbsp;·&nbsp; Timed or first-to-7</div>
 
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -53,14 +54,18 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.18;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x081229);
-scene.fog = new THREE.Fog(0x081229, 38, 95);
+scene.background = new THREE.Color(0x06112a);
+scene.fog = new THREE.Fog(0x06112a, 42, 110);
 
-const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
-camera.position.set(0, 10, 21);
-camera.lookAt(0, 1.0, -2);
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 220);
+const CAM_BASE = new THREE.Vector3(0, 10.5, 21.5);
+const CAM_LOOK = new THREE.Vector3(0, 1.0, -2);
+camera.position.copy(CAM_BASE);
+camera.lookAt(CAM_LOOK);
 
 let W = 0, H = 0;
 function resize() {
@@ -74,50 +79,62 @@ function resize() {
 window.addEventListener('resize', resize); resize();
 
 // ================== LIGHTS ==================
-scene.add(new THREE.HemisphereLight(0x9ec3ff, 0x182040, 0.65));
-const sun = new THREE.DirectionalLight(0xffffff, 1.0);
-sun.position.set(8, 18, 10);
+scene.add(new THREE.HemisphereLight(0x9ec3ff, 0x14223e, 0.55));
+const sun = new THREE.DirectionalLight(0xffffff, 1.05);
+sun.position.set(8, 22, 12);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.near = 1;
-sun.shadow.camera.far = 50;
-sun.shadow.camera.left  = -18;
-sun.shadow.camera.right = 18;
-sun.shadow.camera.top   = 22;
-sun.shadow.camera.bottom = -22;
-sun.shadow.bias = -0.0005;
+sun.shadow.camera.far = 60;
+sun.shadow.camera.left   = -20;
+sun.shadow.camera.right  = 20;
+sun.shadow.camera.top    = 24;
+sun.shadow.camera.bottom = -24;
+sun.shadow.bias = -0.0004;
+sun.shadow.normalBias = 0.04;
 scene.add(sun);
 
-const rim = new THREE.DirectionalLight(0x88aaff, 0.35);
-rim.position.set(-10, 6, -10);
+const rim = new THREE.DirectionalLight(0x88aaff, 0.45);
+rim.position.set(-12, 8, -12);
 scene.add(rim);
 
+const fill = new THREE.DirectionalLight(0xffd7a0, 0.18);
+fill.position.set(0, 6, 22);
+scene.add(fill);
+
 // ================== COURT ==================
-const COURT_W   = 11.0;    // doubles width (X)
-const COURT_L   = 23.77;   // baseline-to-baseline (Z)
+const COURT_W   = 11.0;
+const COURT_L   = 23.77;
 const SINGLES_W = 8.23;
 const NET_H     = 1.07;
 const NET_HALF_W = COURT_W / 2 + 0.3;
+const F = 2.0;  // surround frame thickness
 
 function makeCourtTexture() {
-  const baseW = 1024;
-  const cw = baseW;
-  const ch = Math.round(baseW * (COURT_L / COURT_W));
-  const cnv = document.createElement('canvas');
-  cnv.width = cw; cnv.height = ch;
-  const cx = cnv.getContext('2d');
+  const cw = 1024;
+  const ch = Math.round(cw * (COURT_L / COURT_W));
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = ch;
+  const cx = c.getContext('2d');
 
-  // Surface
+  // Base gradient (Aussie-blue)
   const g = cx.createLinearGradient(0, 0, 0, ch);
-  g.addColorStop(0, '#1d6fae');
-  g.addColorStop(1, '#1d5a92');
+  g.addColorStop(0, '#1f78bd');
+  g.addColorStop(0.5, '#1d6fae');
+  g.addColorStop(1, '#1b5d96');
   cx.fillStyle = g; cx.fillRect(0, 0, cw, ch);
 
-  // Sheen
+  // Subtle horizontal banding
+  for (let y = 0; y < ch; y += 12) {
+    cx.fillStyle = `rgba(255,255,255,${(y % 24 === 0 ? 0.02 : 0.0)})`;
+    cx.fillRect(0, y, cw, 6);
+  }
+
+  // Side sheen
   const sh = cx.createLinearGradient(0, 0, cw, 0);
-  sh.addColorStop(0,   'rgba(255,255,255,0.08)');
+  sh.addColorStop(0,   'rgba(255,255,255,0.10)');
   sh.addColorStop(0.5, 'rgba(255,255,255,0)');
-  sh.addColorStop(1,   'rgba(0,0,0,0.15)');
+  sh.addColorStop(1,   'rgba(0,0,0,0.18)');
   cx.fillStyle = sh; cx.fillRect(0, 0, cw, ch);
 
   cx.strokeStyle = '#fff';
@@ -135,7 +152,7 @@ function makeCourtTexture() {
   cx.moveTo(cw - singlesInset - 8, 8);       cx.lineTo(cw - singlesInset - 8, ch - 8);
   cx.stroke();
 
-  // Service lines (~6.4m from net)
+  // Service lines
   const serviceY1 = (COURT_L / 2 - 6.4) / COURT_L * ch;
   const serviceY2 = ch - serviceY1;
   cx.beginPath();
@@ -148,29 +165,29 @@ function makeCourtTexture() {
   cx.moveTo(cw / 2, serviceY1);              cx.lineTo(cw / 2, serviceY2);
   cx.stroke();
 
-  // Center mark on each baseline
+  // Center marks
   cx.lineWidth = 6;
   cx.beginPath();
   cx.moveTo(cw / 2 - 14, 8);                 cx.lineTo(cw / 2 + 14, 8);
   cx.moveTo(cw / 2 - 14, ch - 8);            cx.lineTo(cw / 2 + 14, ch - 8);
   cx.stroke();
 
-  // Net line across middle (just visual)
+  // Net line
   cx.lineWidth = 4;
-  cx.strokeStyle = 'rgba(255,255,255,0.6)';
+  cx.strokeStyle = 'rgba(255,255,255,0.55)';
   cx.beginPath();
   cx.moveTo(0, ch / 2); cx.lineTo(cw, ch / 2);
   cx.stroke();
 
-  const tex = new THREE.CanvasTexture(cnv);
-  tex.anisotropy = 8;
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 12;
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 
 const courtTex = makeCourtTexture();
 const courtMat = new THREE.MeshStandardMaterial({
-  map: courtTex, roughness: 0.55, metalness: 0.0,
+  map: courtTex, roughness: 0.45, metalness: 0.08,
 });
 const court = new THREE.Mesh(new THREE.PlaneGeometry(COURT_W, COURT_L), courtMat);
 court.rotation.x = -Math.PI / 2;
@@ -178,180 +195,534 @@ court.position.y = 0.005;
 court.receiveShadow = true;
 scene.add(court);
 
-// Surrounding floor
-const surroundMat = new THREE.MeshStandardMaterial({ color: 0x0c2a52, roughness: 0.9 });
-const surround = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), surroundMat);
-surround.rotation.x = -Math.PI / 2;
-surround.position.y = 0;
-surround.receiveShadow = true;
-scene.add(surround);
+// Surrounding apron
+const apronMat = new THREE.MeshStandardMaterial({ color: 0x0d2a52, roughness: 0.85 });
+const apron = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), apronMat);
+apron.rotation.x = -Math.PI / 2;
+apron.position.y = 0;
+apron.receiveShadow = true;
+scene.add(apron);
 
-// Frame strip around the court
-const frameMat = new THREE.MeshStandardMaterial({ color: 0x143b6e, roughness: 0.85 });
+// Frame strip around court
+const frameMat = new THREE.MeshStandardMaterial({ color: 0x16447c, roughness: 0.75, metalness: 0.1 });
 function strip(w, d, x, z) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, d), frameMat);
-  m.position.set(x, 0.002, z);
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), frameMat);
+  m.position.set(x, 0.003, z);
   m.receiveShadow = true;
   scene.add(m);
 }
-const F = 2.0;
 strip(COURT_W + F * 2, F, 0,  COURT_L / 2 + F / 2);
 strip(COURT_W + F * 2, F, 0, -COURT_L / 2 - F / 2);
 strip(F, COURT_L,  COURT_W / 2 + F / 2, 0);
 strip(F, COURT_L, -COURT_W / 2 - F / 2, 0);
 
-// Stadium silhouettes (low cubes around the arena)
-const standMat = new THREE.MeshStandardMaterial({ color: 0x0a1c3a, roughness: 0.95 });
-function stand(x, z, w, d, h) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), standMat);
-  m.position.set(x, h / 2, z);
-  m.castShadow = false;
-  m.receiveShadow = true;
-  scene.add(m);
+// ================== STADIUM ==================
+// Tiered grandstands on all 4 sides, with crowd points and floodlight pylons
+const standsGroup = new THREE.Group();
+scene.add(standsGroup);
+
+const standMat   = new THREE.MeshStandardMaterial({ color: 0x0a1e3c, roughness: 0.92 });
+const railMat    = new THREE.MeshStandardMaterial({ color: 0x16335f, roughness: 0.7, metalness: 0.15 });
+
+function buildSide(xDir, zDir, length, offset, isLong) {
+  // xDir/zDir give the outward normal of the side (unit)
+  const TIERS = 4;
+  const tierD = 1.9;
+  const tierH = 0.9;
+  for (let t = 0; t < TIERS; t++) {
+    const tierY = 0.45 + t * 0.82;
+    const out = offset + t * tierD;
+    const cx = xDir * out;
+    const cz = zDir * out;
+    const tierW = length + t * 2.4;
+    const w = isLong ? tierD : tierW;
+    const d = isLong ? tierW : tierD;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, tierH, d), standMat);
+    m.position.set(cx, tierY, cz);
+    m.receiveShadow = true;
+    standsGroup.add(m);
+    // Front rail
+    const railW = isLong ? 0.06 : tierW;
+    const railD = isLong ? tierW : 0.06;
+    const rx = xDir * (out - tierD / 2);
+    const rz = zDir * (out - tierD / 2);
+    const rail = new THREE.Mesh(new THREE.BoxGeometry(railW, 0.08, railD), railMat);
+    rail.position.set(rx, tierY + tierH / 2 + 0.04, rz);
+    standsGroup.add(rail);
+  }
 }
-for (let i = -3; i <= 3; i++) {
-  const w = 4.0, gap = 0.6;
-  stand(i * (w + gap),  COURT_L / 2 + F + 2.2, w, 2.5, 1.4);
-  stand(i * (w + gap), -COURT_L / 2 - F - 2.2, w, 2.5, 1.4);
+// Long sides at +/- X
+buildSide(+1, 0, COURT_L + 6, COURT_W / 2 + F + 1.8, true);
+buildSide(-1, 0, COURT_L + 6, COURT_W / 2 + F + 1.8, true);
+// Short sides at +/- Z
+buildSide(0, +1, COURT_W + 12, COURT_L / 2 + F + 1.8, false);
+buildSide(0, -1, COURT_W + 12, COURT_L / 2 + F + 1.8, false);
+
+// Crowd dots — points sprinkled over each tier
+function buildCrowd() {
+  const positions = [];
+  const colors    = [];
+  const TIERS = 4;
+  const tierD = 1.9;
+  const tierH = 0.9;
+  const palette = [
+    [1, 0.95, 0.8], [0.9, 0.3, 0.3], [0.3, 0.5, 1.0],
+    [0.9, 0.85, 0.4], [0.5, 0.9, 0.5], [0.95, 0.55, 0.25],
+    [0.85, 0.85, 0.95], [0.75, 0.4, 0.7],
+  ];
+  function fillStrip(centerX, centerZ, w, d, tierY) {
+    const density = 1.6; // people per sq unit
+    const count = Math.floor(w * d * density);
+    for (let i = 0; i < count; i++) {
+      const x = centerX + (Math.random() - 0.5) * w * 0.95;
+      const z = centerZ + (Math.random() - 0.5) * d * 0.95;
+      const y = tierY + 0.45 + (Math.random() - 0.5) * 0.12;
+      positions.push(x, y, z);
+      const c = palette[Math.floor(Math.random() * palette.length)];
+      colors.push(c[0], c[1], c[2]);
+    }
+  }
+  function addSide(xDir, zDir, length, offset, isLong) {
+    for (let t = 0; t < TIERS; t++) {
+      const tierY = 0.45 + t * 0.82 + tierH / 2;
+      const out = offset + t * tierD;
+      const cx = xDir * out;
+      const cz = zDir * out;
+      const tierW = length + t * 2.4;
+      const w = isLong ? tierD * 0.85 : tierW * 0.95;
+      const d = isLong ? tierW * 0.95 : tierD * 0.85;
+      fillStrip(cx, cz, w, d, tierY);
+    }
+  }
+  addSide(+1, 0, COURT_L + 6, COURT_W / 2 + F + 1.8, true);
+  addSide(-1, 0, COURT_L + 6, COURT_W / 2 + F + 1.8, true);
+  addSide(0, +1, COURT_W + 12, COURT_L / 2 + F + 1.8, false);
+  addSide(0, -1, COURT_W + 12, COURT_L / 2 + F + 1.8, false);
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('color',    new THREE.Float32BufferAttribute(colors, 3));
+  const mat = new THREE.PointsMaterial({
+    size: 0.20, vertexColors: true,
+    transparent: false, sizeAttenuation: true,
+  });
+  const points = new THREE.Points(geo, mat);
+  return points;
 }
-for (let i = -2; i <= 2; i++) {
-  const d = 4.0, gap = 0.6;
-  stand( COURT_W / 2 + F + 2.2, i * (d + gap), 2.5, d, 1.4);
-  stand(-COURT_W / 2 - F - 2.2, i * (d + gap), 2.5, d, 1.4);
+const crowd = buildCrowd();
+scene.add(crowd);
+
+// Floodlight pylons in 4 corners
+const pylonGroup = new THREE.Group();
+scene.add(pylonGroup);
+const pylonMat = new THREE.MeshStandardMaterial({ color: 0x1a1a22, roughness: 0.6, metalness: 0.5 });
+const lampGlowMat = new THREE.MeshBasicMaterial({ color: 0xfff4c0 });
+const beamMat = new THREE.MeshBasicMaterial({
+  color: 0xffe7a0, transparent: true, opacity: 0.07,
+  side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending,
+});
+
+const PYLON_H = 9.5;
+function makePylon(x, z) {
+  const g = new THREE.Group();
+  // Pole
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.18, 0.22, PYLON_H, 12), pylonMat
+  );
+  pole.position.set(0, PYLON_H / 2, 0);
+  pole.castShadow = true;
+  g.add(pole);
+  // Crossbar / lamp head
+  const head = new THREE.Mesh(
+    new THREE.BoxGeometry(2.2, 0.5, 0.6), pylonMat
+  );
+  head.position.set(0, PYLON_H + 0.05, 0);
+  head.castShadow = true;
+  g.add(head);
+  // 8 lamps in a 2x4 grid on the head, facing toward court
+  for (let i = -1.5; i <= 1.5; i += 1) {
+    for (let row = 0; row < 2; row++) {
+      const lamp = new THREE.Mesh(
+        new THREE.SphereGeometry(0.13, 12, 12), lampGlowMat
+      );
+      lamp.position.set(i * 0.55, PYLON_H + 0.05 + (row === 0 ? 0.12 : -0.12), 0.25);
+      g.add(lamp);
+    }
+  }
+  // Aim beam toward court center
+  const dx = -x;
+  const dz = -z;
+  const yaw = Math.atan2(dx, dz);
+  const dist = Math.hypot(dx, dz);
+  const pitch = Math.atan2(PYLON_H, dist);
+  // Cone beam
+  const beam = new THREE.Mesh(
+    new THREE.ConeGeometry(4.2, 18, 24, 1, true), beamMat
+  );
+  beam.position.set(0, PYLON_H, 0);
+  beam.rotation.set(0, yaw, 0);
+  // Pivot beam to angle down toward the court
+  const beamPivot = new THREE.Group();
+  beamPivot.position.set(0, PYLON_H, 0);
+  beamPivot.rotation.y = yaw;
+  g.remove(beam);
+  beamPivot.add(beam);
+  beam.position.set(0, 0, 0);
+  beam.rotation.set(0, 0, 0);
+  beam.rotation.x = Math.PI - (Math.PI / 2 - pitch);  // tilt down
+  // Move beam center halfway along its length on its local Z
+  beam.position.set(0, -9, 0);
+  g.add(beamPivot);
+  g.position.set(x, 0, z);
+  return g;
 }
 
+const pylonOff = COURT_W / 2 + F + 5.5;
+const pylonOffZ = COURT_L / 2 + F + 6;
+pylonGroup.add(makePylon( pylonOff,  pylonOffZ));
+pylonGroup.add(makePylon(-pylonOff,  pylonOffZ));
+pylonGroup.add(makePylon( pylonOff, -pylonOffZ));
+pylonGroup.add(makePylon(-pylonOff, -pylonOffZ));
+
 // ================== NET ==================
+function makeNetTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 64;
+  const cx = c.getContext('2d');
+  cx.clearRect(0, 0, 256, 64);
+  cx.strokeStyle = 'rgba(255,255,255,0.85)';
+  cx.lineWidth = 1.2;
+  for (let x = 0; x <= 256; x += 6) {
+    cx.beginPath(); cx.moveTo(x, 0); cx.lineTo(x, 64); cx.stroke();
+  }
+  for (let y = 0; y <= 64; y += 6) {
+    cx.beginPath(); cx.moveTo(0, y); cx.lineTo(256, y); cx.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.ClampToEdgeWrapping;
+  t.repeat.set(8, 1);
+  return t;
+}
 const netGroup = new THREE.Group();
-const postGeo = new THREE.CylinderGeometry(0.08, 0.08, NET_H + 0.25, 12);
-const postMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6, metalness: 0.3 });
+const postGeo = new THREE.CylinderGeometry(0.08, 0.09, NET_H + 0.3, 14);
+const postMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5, metalness: 0.45 });
 for (const sx of [-1, 1]) {
   const post = new THREE.Mesh(postGeo, postMat);
-  post.position.set(sx * (COURT_W / 2 + 0.3), (NET_H + 0.25) / 2, 0);
+  post.position.set(sx * (COURT_W / 2 + 0.3), (NET_H + 0.3) / 2, 0);
   post.castShadow = true;
   netGroup.add(post);
 }
+const netTex = makeNetTexture();
 const netMat = new THREE.MeshStandardMaterial({
-  color: 0x0a0a0a, transparent: true, opacity: 0.55,
-  side: THREE.DoubleSide, roughness: 0.7,
+  map: netTex, color: 0x0a0a0a, transparent: true, opacity: 0.7,
+  side: THREE.DoubleSide, roughness: 0.7, alphaTest: 0.05,
 });
-const netMesh = new THREE.Mesh(new THREE.PlaneGeometry(NET_HALF_W * 2, NET_H), netMat);
+const netMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(NET_HALF_W * 2, NET_H, 32, 4), netMat
+);
 netMesh.position.set(0, NET_H / 2, 0);
+netMesh.receiveShadow = true;
 netGroup.add(netMesh);
 const topBand = new THREE.Mesh(
-  new THREE.BoxGeometry(NET_HALF_W * 2, 0.08, 0.05),
-  new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 })
+  new THREE.BoxGeometry(NET_HALF_W * 2, 0.09, 0.06),
+  new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })
 );
-topBand.position.set(0, NET_H + 0.04, 0);
+topBand.position.set(0, NET_H + 0.045, 0);
 topBand.castShadow = true;
 netGroup.add(topBand);
+// Net top cable (thin cylinder)
+const cable = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.01, 0.01, NET_HALF_W * 2 + 0.4, 6),
+  new THREE.MeshStandardMaterial({ color: 0x111, metalness: 0.8, roughness: 0.3 })
+);
+cable.rotation.z = Math.PI / 2;
+cable.position.set(0, NET_H + 0.105, 0);
+netGroup.add(cable);
 scene.add(netGroup);
+
+// ================== STRINGS TEXTURE (RACKET) ==================
+function makeStringsTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 128;
+  const cx = c.getContext('2d');
+  cx.clearRect(0, 0, 128, 128);
+  cx.strokeStyle = 'rgba(255,255,255,0.85)';
+  cx.lineWidth = 1.4;
+  for (let i = 1; i < 16; i++) {
+    cx.beginPath(); cx.moveTo(i * 8, 6); cx.lineTo(i * 8, 122); cx.stroke();
+    cx.beginPath(); cx.moveTo(6, i * 8); cx.lineTo(122, i * 8); cx.stroke();
+  }
+  const t = new THREE.CanvasTexture(c);
+  return t;
+}
+const stringsTex = makeStringsTexture();
 
 // ================== PLAYERS ==================
 const SKIN = 0xf2cda0;
+
 function makePlayer(shirtColor, accentColor) {
   const g = new THREE.Group();
+  const skinMat   = new THREE.MeshStandardMaterial({ color: SKIN,    roughness: 0.55 });
+  const shirtMat  = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.5, metalness: 0.05 });
+  const shortsMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55 });
+  const sockMat   = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 });
+  const shoeMat   = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.35, metalness: 0.15 });
+  const shoeAcc   = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.4, metalness: 0.3, emissive: accentColor, emissiveIntensity: 0.18 });
+  const darkMat   = new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.5 });
+  const hairMat   = new THREE.MeshStandardMaterial({ color: 0x2a1a0d, roughness: 0.8 });
+  const bandMat   = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.45 });
+  const eyeMat    = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4 });
 
-  // Legs
-  const legGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.85, 10);
-  const legMat = new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.5 });
-  for (const dx of [-0.18, 0.18]) {
-    const leg = new THREE.Mesh(legGeo, legMat);
-    leg.position.set(dx, 0.43, 0);
-    leg.castShadow = true; leg.receiveShadow = true;
-    g.add(leg);
+  // ===== LEGS (hip → knee → foot, each animatable) =====
+  const legs = [];
+  for (const side of [-1, +1]) {
+    const hip = new THREE.Group();
+    hip.position.set(side * 0.15, 0.95, 0);
+    g.add(hip);
+
+    const thigh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.105, 0.46, 12), skinMat
+    );
+    thigh.position.set(0, -0.23, 0);
+    thigh.castShadow = true;
+    hip.add(thigh);
+
+    const knee = new THREE.Group();
+    knee.position.set(0, -0.46, 0);
+    hip.add(knee);
+
+    const shin = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.10, 0.09, 0.40, 12), skinMat
+    );
+    shin.position.set(0, -0.20, 0);
+    shin.castShadow = true;
+    knee.add(shin);
+
+    const sock = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.105, 0.10, 0.13, 12), sockMat
+    );
+    sock.position.set(0, -0.36, 0);
+    sock.castShadow = true;
+    knee.add(sock);
+
+    // Shoe (boxy)
+    const shoe = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.10, 0.30), shoeMat
+    );
+    shoe.position.set(0, -0.46, 0.07);
+    shoe.castShadow = true;
+    knee.add(shoe);
+    // Shoe accent stripe
+    const stripe = new THREE.Mesh(
+      new THREE.BoxGeometry(0.182, 0.035, 0.18), shoeAcc
+    );
+    stripe.position.set(0, -0.45, 0.03);
+    knee.add(stripe);
+
+    legs.push({ hip, knee, side });
   }
-  // Shorts
+
+  // ===== SHORTS =====
   const shorts = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.30, 0.26, 0.45, 12),
-    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 })
+    new THREE.CylinderGeometry(0.32, 0.30, 0.38, 16), shortsMat
   );
-  shorts.position.set(0, 0.95, 0);
+  shorts.position.set(0, 1.07, 0);
   shorts.castShadow = true;
   g.add(shorts);
-  // Body / shirt
-  const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.30, 0.34, 0.7, 12),
-    new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.55 })
+  const shortsBand = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.325, 0.325, 0.05, 16), bandMat
   );
-  body.position.set(0, 1.45, 0);
-  body.castShadow = true;
-  g.add(body);
-  // Head
-  const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.22, 18, 18),
-    new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.5 })
+  shortsBand.position.set(0, 0.90, 0);
+  g.add(shortsBand);
+
+  // ===== TORSO =====
+  const torso = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.30, 0.34, 0.68, 16), shirtMat
   );
-  head.position.set(0, 1.95, 0);
-  head.castShadow = true;
-  g.add(head);
-  // Headband
-  const hb = new THREE.Mesh(
-    new THREE.TorusGeometry(0.225, 0.045, 8, 18),
+  torso.position.set(0, 1.55, 0);
+  torso.castShadow = true;
+  g.add(torso);
+  // Chest accent stripe
+  const chest = new THREE.Mesh(
+    new THREE.BoxGeometry(0.4, 0.08, 0.55),
     new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.4 })
   );
-  hb.position.set(0, 2.0, 0);
+  chest.position.set(0, 1.62, 0);
+  g.add(chest);
+  // Collar
+  const collar = new THREE.Mesh(
+    new THREE.TorusGeometry(0.20, 0.05, 8, 20),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 })
+  );
+  collar.position.set(0, 1.86, 0);
+  collar.rotation.x = Math.PI / 2;
+  g.add(collar);
+
+  // ===== NECK + HEAD =====
+  const neck = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.10, 0.115, 0.12, 12), skinMat
+  );
+  neck.position.set(0, 1.93, 0);
+  neck.castShadow = true;
+  g.add(neck);
+
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.21, 22, 22), skinMat
+  );
+  head.position.set(0, 2.14, 0);
+  head.scale.set(1.0, 1.05, 0.96);
+  head.castShadow = true;
+  g.add(head);
+
+  // Hair cap (hemisphere)
+  const hair = new THREE.Mesh(
+    new THREE.SphereGeometry(0.218, 22, 22, 0, Math.PI * 2, 0, Math.PI / 2.1),
+    hairMat
+  );
+  hair.position.set(0, 2.15, 0);
+  hair.scale.set(1.0, 0.95, 1.02);
+  hair.castShadow = true;
+  g.add(hair);
+
+  // Eyes
+  for (const dx of [-0.075, 0.075]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 10), eyeMat);
+    eye.position.set(dx, 2.14, 0.19);
+    g.add(eye);
+  }
+  // Smile (a tiny dark torus arc segment is overkill — skip for now)
+
+  // Headband
+  const hb = new THREE.Mesh(
+    new THREE.TorusGeometry(0.215, 0.045, 8, 22), bandMat
+  );
+  hb.position.set(0, 2.20, 0);
   hb.rotation.x = Math.PI / 2;
   g.add(hb);
 
-  // Non-racket arm
-  const lArm = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.09, 0.09, 0.6, 8),
-    legMat
+  // ===== LEFT ARM (non-racket) =====
+  const lShoulder = new THREE.Group();
+  lShoulder.position.set(-0.34, 1.80, 0);
+  lShoulder.rotation.z = Math.PI * 0.08;
+  g.add(lShoulder);
+  const lUpper = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.085, 0.075, 0.35, 10), skinMat
   );
-  lArm.position.set(-0.36, 1.45, 0);
-  lArm.rotation.z = Math.PI / 12;
-  lArm.castShadow = true;
-  g.add(lArm);
+  lUpper.position.set(0, -0.175, 0);
+  lUpper.castShadow = true;
+  lShoulder.add(lUpper);
+  const lElbow = new THREE.Group();
+  lElbow.position.set(0, -0.35, 0);
+  lShoulder.add(lElbow);
+  const lFore = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.075, 0.07, 0.32, 10), skinMat
+  );
+  lFore.position.set(0, -0.16, 0);
+  lFore.castShadow = true;
+  lElbow.add(lFore);
+  const lWB = new THREE.Mesh(
+    new THREE.TorusGeometry(0.078, 0.028, 8, 16), bandMat
+  );
+  lWB.position.set(0, -0.32, 0);
+  lWB.rotation.x = Math.PI / 2;
+  lElbow.add(lWB);
 
-  // Racket arm (pivot at shoulder)
+  // ===== RACKET ARM =====
   const racketPivot = new THREE.Group();
-  racketPivot.position.set(0.30, 1.55, 0);
-  racketPivot.rotation.z = -Math.PI / 6;  // resting tilt
+  racketPivot.position.set(0.34, 1.80, 0);
+  racketPivot.rotation.z = -Math.PI / 6;  // resting
   g.add(racketPivot);
 
-  const armSeg = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.09, 0.08, 0.55, 8),
-    legMat
+  const rUpper = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.085, 0.075, 0.35, 10), skinMat
   );
-  armSeg.position.set(0, -0.275, 0);
-  armSeg.castShadow = true;
-  racketPivot.add(armSeg);
+  rUpper.position.set(0, -0.175, 0);
+  rUpper.castShadow = true;
+  racketPivot.add(rUpper);
 
+  const rElbow = new THREE.Group();
+  rElbow.position.set(0, -0.35, 0);
+  racketPivot.add(rElbow);
+
+  const rFore = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.075, 0.07, 0.32, 10), skinMat
+  );
+  rFore.position.set(0, -0.16, 0);
+  rFore.castShadow = true;
+  rElbow.add(rFore);
+
+  const rWB = new THREE.Mesh(
+    new THREE.TorusGeometry(0.078, 0.028, 8, 16), bandMat
+  );
+  rWB.position.set(0, -0.32, 0);
+  rWB.rotation.x = Math.PI / 2;
+  rElbow.add(rWB);
+
+  // ===== RACKET =====
   const racketGroup = new THREE.Group();
-  // grip ends near hand at y ≈ -0.55
-  racketGroup.position.set(0, -0.55, 0);
-  racketPivot.add(racketGroup);
+  racketGroup.position.set(0, -0.40, 0);
+  rElbow.add(racketGroup);
 
+  // Handle / grip
   const handle = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.045, 0.045, 0.34, 8),
-    new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 })
+    new THREE.CylinderGeometry(0.038, 0.038, 0.32, 12), darkMat
   );
-  handle.position.set(0, -0.17, 0);
+  handle.position.set(0, -0.16, 0);
   handle.castShadow = true;
   racketGroup.add(handle);
-  const racketHead = new THREE.Mesh(
-    new THREE.TorusGeometry(0.22, 0.035, 10, 28),
+  // Grip wrap (slightly larger cylinder)
+  const grip = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.046, 0.046, 0.20, 12),
+    new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.55 })
+  );
+  grip.position.set(0, -0.10, 0);
+  racketGroup.add(grip);
+
+  // Throat (V piece from grip to head)
+  const throat = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.032, 0.045, 0.18, 8),
     new THREE.MeshStandardMaterial({
-      color: accentColor, roughness: 0.35,
-      emissive: accentColor, emissiveIntensity: 0.15,
+      color: accentColor, roughness: 0.3, metalness: 0.6,
+      emissive: accentColor, emissiveIntensity: 0.3,
     })
   );
-  racketHead.position.set(0, -0.5, 0);
+  throat.position.set(0, -0.32, 0);
+  racketGroup.add(throat);
+
+  // Frame (head) — neon glow ring
+  const frameMat = new THREE.MeshStandardMaterial({
+    color: accentColor, metalness: 0.65, roughness: 0.22,
+    emissive: accentColor, emissiveIntensity: 0.55,
+  });
+  const racketHead = new THREE.Mesh(
+    new THREE.TorusGeometry(0.21, 0.026, 14, 40), frameMat
+  );
+  racketHead.position.set(0, -0.55, 0);
   racketHead.rotation.y = Math.PI / 2;
+  racketHead.scale.set(1, 1.12, 1);
   racketHead.castShadow = true;
   racketGroup.add(racketHead);
+
+  // Strings (textured plane inside the head)
   const strings = new THREE.Mesh(
-    new THREE.CircleGeometry(0.20, 24),
+    new THREE.PlaneGeometry(0.38, 0.44),
     new THREE.MeshStandardMaterial({
-      color: 0xffffff, transparent: true, opacity: 0.55,
-      roughness: 0.4, side: THREE.DoubleSide,
+      map: stringsTex, transparent: true, side: THREE.DoubleSide,
+      roughness: 0.5, alphaTest: 0.05,
     })
   );
-  strings.position.set(0, -0.5, 0);
+  strings.position.set(0, -0.55, 0);
   strings.rotation.y = Math.PI / 2;
   racketGroup.add(strings);
 
-  g.userData = { racketPivot };
+  g.userData = {
+    racketPivot,
+    legs,
+    lShoulder, lElbow,
+    head, hair,
+    movePhase: 0,
+  };
   return g;
 }
 
@@ -360,44 +731,56 @@ player1.position.set(0, 0, COURT_L / 2 - 0.6);
 scene.add(player1);
 const player2 = makePlayer(0x3b82f6, 0x93c5fd);
 player2.position.set(0, 0, -COURT_L / 2 + 0.6);
-player2.rotation.y = Math.PI;  // face the other side
+player2.rotation.y = Math.PI;
 scene.add(player2);
 
 // ================== BALL ==================
 const BALL_R = 0.20;
-const ball = new THREE.Mesh(
-  new THREE.SphereGeometry(BALL_R, 22, 22),
-  new THREE.MeshStandardMaterial({
-    color: 0xe6e040, emissive: 0x666000, emissiveIntensity: 0.25,
-    roughness: 0.45, metalness: 0.0,
-  })
-);
+const ballMat = new THREE.MeshStandardMaterial({
+  color: 0xeaff44, emissive: 0x6a7000, emissiveIntensity: 0.45,
+  roughness: 0.42, metalness: 0.0,
+});
+const ball = new THREE.Mesh(new THREE.SphereGeometry(BALL_R, 26, 26), ballMat);
 ball.castShadow = true;
 scene.add(ball);
 
+// Outer additive glow
+const ballGlow = new THREE.Mesh(
+  new THREE.SphereGeometry(BALL_R * 1.9, 18, 18),
+  new THREE.MeshBasicMaterial({
+    color: 0xfff58a, transparent: true, opacity: 0.28,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+  })
+);
+scene.add(ballGlow);
+
+// Ground shadow
 const ballShadow = new THREE.Mesh(
-  new THREE.CircleGeometry(BALL_R * 1.5, 22),
-  new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.4 })
+  new THREE.CircleGeometry(BALL_R * 1.5, 24),
+  new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 })
 );
 ballShadow.rotation.x = -Math.PI / 2;
-ballShadow.position.y = 0.015;
+ballShadow.position.y = 0.016;
 scene.add(ballShadow);
 
-// Ball trail
-const TRAIL_LEN = 16;
-const trailPos = new Float32Array(TRAIL_LEN * 3);
-const trailGeo = new THREE.BufferGeometry();
-trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
-trailGeo.setDrawRange(0, 0);
-const trailLine = new THREE.Line(
-  trailGeo,
-  new THREE.LineBasicMaterial({ color: 0xfff066, transparent: true, opacity: 0.7 })
-);
-scene.add(trailLine);
-let trailCount = 0;
+// Motion-blur ghosts (a chain of fading spheres behind the ball)
+const GHOSTS = 10;
+const ghosts = [];
+for (let i = 0; i < GHOSTS; i++) {
+  const m = new THREE.Mesh(
+    new THREE.SphereGeometry(BALL_R, 14, 14),
+    new THREE.MeshBasicMaterial({
+      color: 0xfff066, transparent: true, opacity: 0,
+      depthWrite: false, blending: THREE.AdditiveBlending,
+    })
+  );
+  scene.add(m);
+  ghosts.push(m);
+}
+const ballHistory = []; // [{x,y,z}]
 
-// Hit sparks (cheap particles)
-const SPARK_MAX = 80;
+// Hit sparks (Points particles)
+const SPARK_MAX = 120;
 const sparkGeo = new THREE.BufferGeometry();
 const sparkPos = new Float32Array(SPARK_MAX * 3);
 const sparkCol = new Float32Array(SPARK_MAX * 3);
@@ -405,26 +788,29 @@ sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3));
 sparkGeo.setAttribute('color',    new THREE.BufferAttribute(sparkCol, 3));
 const sparks = new THREE.Points(
   sparkGeo,
-  new THREE.PointsMaterial({ size: 0.16, vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false })
+  new THREE.PointsMaterial({
+    size: 0.18, vertexColors: true, transparent: true, opacity: 0.95,
+    depthWrite: false, blending: THREE.AdditiveBlending,
+  })
 );
 scene.add(sparks);
-const sparkList = [];  // {x,y,z,vx,vy,vz,life,maxLife,r,g,b}
+const sparkList = [];
 
 function spawnSparks(x, y, z, hexColor) {
   const r = ((hexColor >> 16) & 255) / 255;
   const g = ((hexColor >>  8) & 255) / 255;
   const b = ( hexColor        & 255) / 255;
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 18; i++) {
     if (sparkList.length >= SPARK_MAX) break;
     const a = Math.random() * Math.PI * 2;
-    const e = Math.random() * Math.PI * 0.5;
-    const sp = 2 + Math.random() * 4;
+    const e = Math.random() * Math.PI * 0.45;
+    const sp = 2.5 + Math.random() * 4.5;
     sparkList.push({
       x, y, z,
       vx: Math.cos(a) * Math.cos(e) * sp,
-      vy: Math.sin(e) * sp + 1.5,
+      vy: Math.sin(e) * sp + 2.0,
       vz: Math.sin(a) * Math.cos(e) * sp,
-      life: 0.5, maxLife: 0.5,
+      life: 0.55, maxLife: 0.55,
       r, g, b,
     });
   }
@@ -441,46 +827,271 @@ const TIME_OPTIONS = [
 const UNLIMITED_TARGET = 7;
 
 const GRAVITY = -18;
-const PLAYER_SPEED = 9.5;     // X units/sec
-const PLAYER_REACH = 1.7;     // half-width the player can hit balls at, in X
-const HIT_Y_MAX    = 2.6;     // how high the racket can reach in Y
+const PLAYER_SPEED = 9.5;
+const PLAYER_REACH = 1.7;
+const HIT_Y_MAX    = 2.6;
 const X_LIMIT      = COURT_W / 2 + 0.4;
 const P1_Z = COURT_L / 2 - 0.6;
 const P2_Z = -COURT_L / 2 + 0.6;
 
 const state = {
-  mode: 'menu',          // 'menu' | 'game'
+  mode: 'menu',
   menuStep: 'mode',
-  vsMode: 'ai',          // 'ai' | 'friend'
+  vsMode: 'ai',
   timeLimit: 0,
   timeLeft:  0,
 
   scoreP: 0,
   scoreA: 0,
-  serving: 'player',     // 'player' | 'ai'
+  serving: 'player',
   inPlay: false,
   gameOver: false,
   winner: null,
 
   p1x: 0, p2x: 0,
+  p1xPrev: 0, p2xPrev: 0,
   bx: 0, by: 1.0, bz: 0,
   bvx: 0, bvy: 0, bvz: 0,
   prevBz: 0,
 
-  lastHitBy: null,       // 'player' | 'ai'
-  bounces: 0,            // since last hit
+  lastHitBy: null,
+  bounces: 0,
   aiSkill: 0.10,
-  swingP1: 0, swingP2: 0, // 0..1 swing pulse
-  hitFlashP1: 0, hitFlashP2: 0,
+  swingP1: 0, swingP2: 0,
 };
 let bestScore = parseInt(localStorage.getItem('tennis-best') || '0', 10);
+
+// ================== NETWORK STATE ==================
+const net = {
+  role: 'none',        // 'none' | 'host' | 'guest'
+  status: 'idle',      // 'idle' | 'creating' | 'waiting' | 'connecting' | 'connected' | 'error' | 'disconnected'
+  peer: null,
+  conn: null,
+  roomId: '',
+  shareUrl: '',
+  errorMessage: '',
+  copied: false,
+  remoteInput: { left: false, right: false, space: false, m: false, prevSpace: false, prevM: false },
+};
+
+function newRoomId() {
+  return 'tns-' + Math.random().toString(36).slice(2, 8);
+}
+function buildShareUrl(id) {
+  try {
+    const u = new URL(location.href);
+    u.searchParams.set('room', id);
+    return u.href;
+  } catch {
+    return location.href + (location.search ? '&' : '?') + 'room=' + id;
+  }
+}
+
+function startHost(timeLimit) {
+  if (typeof Peer === 'undefined') {
+    net.status = 'error';
+    net.errorMessage = 'PeerJS library failed to load (check internet)';
+    return;
+  }
+  state.vsMode = 'online';
+  state.timeLimit = timeLimit;
+  state.timeLeft  = timeLimit;
+  net.role = 'host';
+  net.status = 'creating';
+  net.errorMessage = '';
+  const id = newRoomId();
+  try {
+    net.peer = new Peer(id, { debug: 0 });
+  } catch (e) {
+    net.status = 'error';
+    net.errorMessage = String(e && e.message || e);
+    return;
+  }
+  net.peer.on('open', (assignedId) => {
+    net.roomId = assignedId;
+    net.shareUrl = buildShareUrl(assignedId);
+    net.status = 'waiting';
+  });
+  net.peer.on('connection', (conn) => {
+    if (net.conn && net.conn.open) { try { conn.close(); } catch {} return; }
+    net.conn = conn;
+    conn.on('open', () => {
+      net.status = 'connected';
+      try { conn.send({ type: 'config', timeLimit: state.timeLimit }); } catch {}
+      state.mode = 'game';
+      hardReset();
+    });
+    conn.on('data', handleData);
+    conn.on('close', handleDisconnect);
+    conn.on('error', (e) => { net.errorMessage = String(e && (e.type || e.message) || e); });
+  });
+  net.peer.on('error', (err) => {
+    net.status = 'error';
+    net.errorMessage = String(err && (err.type || err.message) || err);
+  });
+}
+
+function startJoin(roomId) {
+  if (typeof Peer === 'undefined') {
+    net.status = 'error';
+    net.errorMessage = 'PeerJS library failed to load (check internet)';
+    return;
+  }
+  state.vsMode = 'online';
+  state.mode = 'menu';
+  state.menuStep = 'online-join';
+  net.role = 'guest';
+  net.status = 'connecting';
+  net.roomId = roomId;
+  net.errorMessage = '';
+  try {
+    net.peer = new Peer({ debug: 0 });
+  } catch (e) {
+    net.status = 'error';
+    net.errorMessage = String(e && e.message || e);
+    return;
+  }
+  net.peer.on('open', () => {
+    let conn;
+    try { conn = net.peer.connect(roomId, { reliable: true }); }
+    catch (e) { net.status = 'error'; net.errorMessage = String(e); return; }
+    if (!conn) { net.status = 'error'; net.errorMessage = 'Failed to start connection'; return; }
+    net.conn = conn;
+    conn.on('open', () => { net.status = 'connected'; });
+    conn.on('data', handleData);
+    conn.on('close', handleDisconnect);
+    conn.on('error', (e) => {
+      net.status = 'error';
+      net.errorMessage = String(e && (e.type || e.message) || e);
+    });
+  });
+  net.peer.on('error', (err) => {
+    net.status = 'error';
+    net.errorMessage = String(err && (err.type || err.message) || err);
+  });
+}
+
+function cancelOnline() {
+  try { if (net.conn) net.conn.close(); } catch {}
+  try { if (net.peer) net.peer.destroy(); } catch {}
+  net.conn = null;
+  net.peer = null;
+  net.role = 'none';
+  net.status = 'idle';
+  net.roomId = '';
+  net.shareUrl = '';
+  net.errorMessage = '';
+  net.copied = false;
+  net.remoteInput.left = net.remoteInput.right = net.remoteInput.space = net.remoteInput.m = false;
+  state.vsMode = 'ai';
+  state.mode = 'menu';
+  state.menuStep = 'mode';
+  // Strip ?room= from URL so user can browse menu without auto-rejoining
+  try {
+    const u = new URL(location.href);
+    if (u.searchParams.has('room')) {
+      u.searchParams.delete('room');
+      history.replaceState(null, '', u.pathname + (u.search ? u.search : '') + u.hash);
+    }
+  } catch {}
+}
+
+function copyShareUrl() {
+  if (!net.shareUrl) return;
+  try {
+    navigator.clipboard.writeText(net.shareUrl).then(() => {
+      net.copied = true;
+      setTimeout(() => { net.copied = false; }, 1500);
+    }, () => { /* ignore */ });
+  } catch {}
+}
+
+function handleData(data) {
+  if (!data || typeof data !== 'object') return;
+  if (data.type === 'config' && net.role === 'guest') {
+    state.timeLimit = data.timeLimit | 0;
+    state.timeLeft  = data.timeLimit | 0;
+    state.mode = 'game';
+    hardReset();
+  } else if (data.type === 'state' && net.role === 'guest') {
+    const s = data.s;
+    if (!s) return;
+    state.p1x = s.p1x; state.p2x = s.p2x;
+    state.bx = s.bx; state.by = s.by; state.bz = s.bz;
+    state.bvx = s.bvx; state.bvy = s.bvy; state.bvz = s.bvz;
+    state.scoreP = s.scoreP; state.scoreA = s.scoreA;
+    state.serving = s.serving;
+    state.inPlay = s.inPlay;
+    state.gameOver = s.gameOver;
+    state.winner = s.winner;
+    state.timeLeft = s.timeLeft;
+    state.timeLimit = s.timeLimit;
+    state.swingP1 = s.swingP1; state.swingP2 = s.swingP2;
+  } else if (data.type === 'input' && net.role === 'host') {
+    net.remoteInput.left  = !!data.l;
+    net.remoteInput.right = !!data.r;
+    net.remoteInput.space = !!data.s;
+    net.remoteInput.m     = !!data.m;
+  }
+}
+
+function handleDisconnect() {
+  if (net.status === 'disconnected' || net.status === 'idle') return;
+  net.status = 'disconnected';
+  net.errorMessage = 'Opponent disconnected';
+  state.mode = 'menu';
+  state.menuStep = 'mode';
+  try { if (net.peer) net.peer.destroy(); } catch {}
+  net.peer = null;
+  net.conn = null;
+}
+
+function sendState() {
+  if (net.role !== 'host' || !net.conn || !net.conn.open) return;
+  try {
+    net.conn.send({
+      type: 'state',
+      s: {
+        p1x: state.p1x, p2x: state.p2x,
+        bx: state.bx, by: state.by, bz: state.bz,
+        bvx: state.bvx, bvy: state.bvy, bvz: state.bvz,
+        scoreP: state.scoreP, scoreA: state.scoreA,
+        serving: state.serving,
+        inPlay: state.inPlay,
+        gameOver: state.gameOver,
+        winner: state.winner,
+        timeLeft: state.timeLeft,
+        timeLimit: state.timeLimit,
+        swingP1: state.swingP1, swingP2: state.swingP2,
+      }
+    });
+  } catch {}
+}
+
+function sendInput() {
+  if (net.role !== 'guest' || !net.conn || !net.conn.open) return;
+  try {
+    net.conn.send({
+      type: 'input',
+      l: !!(keys['KeyA'] || keys['ArrowLeft']),
+      r: !!(keys['KeyD'] || keys['ArrowRight']),
+      s: !!keys['Space'],
+      m: !!keys['KeyM'],
+    });
+  } catch {}
+}
 
 function selectMode(m) { state.vsMode = m; state.menuStep = 'time'; }
 function selectTime(seconds) {
   state.timeLimit = seconds;
   state.timeLeft  = seconds;
-  state.mode = 'game';
-  hardReset();
+  if (state.vsMode === 'online') {
+    state.menuStep = 'online-wait';
+    startHost(seconds);
+  } else {
+    state.mode = 'game';
+    hardReset();
+  }
 }
 function hardReset() {
   state.scoreP = 0; state.scoreA = 0;
@@ -489,14 +1100,15 @@ function hardReset() {
   state.timeLeft = state.timeLimit;
   state.aiSkill = 0.09 + Math.random() * 0.03;
   state.p1x = 0; state.p2x = 0;
+  state.p1xPrev = 0; state.p2xPrev = 0;
   resetRally();
 }
 function resetRally() {
   state.inPlay = false;
   state.bounces = 0;
   state.lastHitBy = null;
-  trailCount = 0;
-  trailGeo.setDrawRange(0, 0);
+  ballHistory.length = 0;
+  for (const g of ghosts) g.material.opacity = 0;
   parkBallAtServer();
 }
 function parkBallAtServer() {
@@ -528,36 +1140,59 @@ const keys = Object.create(null);
 const menuButtons = [];
 
 window.addEventListener('mousemove', e => {
-  if (state.mode === 'game' && state.vsMode === 'ai' && !state.gameOver) {
-    const ndcX = (e.clientX / W) * 2 - 1;
-    state.p1x = ndcX * (COURT_W / 2) * 1.05;
-  }
+  if (state.mode !== 'game' || state.gameOver) return;
+  const allowMouse = state.vsMode === 'ai' || (state.vsMode === 'online' && net.role === 'host');
+  if (!allowMouse) return;
+  const ndcX = (e.clientX / W) * 2 - 1;
+  state.p1x = ndcX * (COURT_W / 2) * 1.05;
 });
 window.addEventListener('keydown', e => {
   if (state.mode === 'menu') {
     if (state.menuStep === 'mode') {
       if (e.code === 'Digit1' || e.code === 'Numpad1') { selectMode('ai');     e.preventDefault(); return; }
       if (e.code === 'Digit2' || e.code === 'Numpad2') { selectMode('friend'); e.preventDefault(); return; }
+      if (e.code === 'Digit3' || e.code === 'Numpad3') { selectMode('online'); e.preventDefault(); return; }
       if (e.code === 'Space' || e.code === 'Enter')    { selectMode(state.vsMode); e.preventDefault(); return; }
-    } else {
+    } else if (state.menuStep === 'time') {
       const map = { Digit1:0, Digit2:1, Digit3:2, Digit4:3, Digit5:4,
                     Numpad1:0, Numpad2:1, Numpad3:2, Numpad4:3, Numpad5:4 };
       if (e.code in map) { selectTime(TIME_OPTIONS[map[e.code]].seconds); e.preventDefault(); return; }
       if (e.code === 'Space' || e.code === 'Enter')    { selectTime(TIME_OPTIONS[1].seconds); e.preventDefault(); return; }
       if (e.code === 'Escape' || e.code === 'Backspace') { state.menuStep = 'mode'; e.preventDefault(); return; }
+    } else if (state.menuStep === 'online-wait' || state.menuStep === 'online-join') {
+      if (e.code === 'Escape' || e.code === 'Backspace' || e.code === 'KeyM') {
+        cancelOnline();
+        e.preventDefault();
+        return;
+      }
+      if (e.code === 'KeyC' && state.menuStep === 'online-wait') {
+        copyShareUrl();
+        e.preventDefault();
+        return;
+      }
     }
     return;
   }
   keys[e.code] = true;
   if (e.code === 'Space') {
-    if (state.gameOver) hardReset();
-    else if (!state.inPlay) serve();
+    if (net.role === 'guest') {
+      // Input forwarded to host via sendInput()
+    } else if (state.gameOver) {
+      hardReset();
+    } else if (!state.inPlay) {
+      serve();
+    }
     e.preventDefault();
   }
-  if (state.gameOver && e.code === 'KeyM') {
-    state.mode = 'menu';
-    state.menuStep = 'mode';
-    e.preventDefault();
+  if (e.code === 'KeyM') {
+    if (net.role === 'host' || net.role === 'guest') {
+      cancelOnline();
+      e.preventDefault();
+    } else if (state.gameOver) {
+      state.mode = 'menu';
+      state.menuStep = 'mode';
+      e.preventDefault();
+    }
   }
   if (['KeyA','KeyD','KeyW','KeyS','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
 });
@@ -567,21 +1202,123 @@ window.addEventListener('mousedown', e => {
     for (const btn of menuButtons) {
       if (e.clientX >= btn.x && e.clientX <= btn.x + btn.w &&
           e.clientY >= btn.y && e.clientY <= btn.y + btn.h) {
-        if      (btn.kind === 'mode') selectMode(btn.value);
-        else if (btn.kind === 'time') selectTime(btn.value);
-        else if (btn.kind === 'back') state.menuStep = 'mode';
+        if      (btn.kind === 'mode')          selectMode(btn.value);
+        else if (btn.kind === 'time')          selectTime(btn.value);
+        else if (btn.kind === 'back')          state.menuStep = 'mode';
+        else if (btn.kind === 'copy')          copyShareUrl();
+        else if (btn.kind === 'cancel-online') cancelOnline();
         return;
       }
     }
     return;
   }
+  if (net.role === 'guest') return;  // guest input goes through key state
   if (state.gameOver) hardReset();
   else if (!state.inPlay) serve();
 });
 
+// ================== ANIMATION HELPERS ==================
+function animatePlayer(player, dxAmount, isMoving, idleTime) {
+  const ud = player.userData;
+  const legs = ud.legs;
+  // Advance leg cycle when moving
+  ud.movePhase = (ud.movePhase || 0) + Math.min(0.6, Math.abs(dxAmount) * 7);
+  // Idle bob
+  const idleBob = Math.sin(idleTime * 2.4) * 0.018;
+
+  if (legs && legs.length === 2) {
+    if (isMoving) {
+      const s = Math.sin(ud.movePhase);
+      const s2 = Math.sin(ud.movePhase + Math.PI / 2);
+      // Hip swings forward/back, knee bends when leg lifts
+      legs[0].hip.rotation.x  = s * 0.55;
+      legs[1].hip.rotation.x  = -s * 0.55;
+      legs[0].knee.rotation.x = Math.max(0, s2) * 0.7;
+      legs[1].knee.rotation.x = Math.max(0, -s2) * 0.7;
+      // Side-shuffle: tilt body slightly with movement
+      player.position.y = idleBob * 0.5 + Math.abs(Math.sin(ud.movePhase * 0.5)) * 0.04;
+    } else {
+      // Smoothly relax legs to neutral
+      legs[0].hip.rotation.x  *= 0.9;
+      legs[1].hip.rotation.x  *= 0.9;
+      legs[0].knee.rotation.x *= 0.9;
+      legs[1].knee.rotation.x *= 0.9;
+      player.position.y = idleBob;
+    }
+  }
+  // Subtle left-arm sway
+  if (ud.lShoulder) {
+    const targetSway = isMoving ? Math.sin(ud.movePhase + Math.PI) * 0.25 : Math.sin(idleTime * 1.8) * 0.04;
+    ud.lShoulder.rotation.x = ud.lShoulder.rotation.x * 0.7 + targetSway * 0.3;
+  }
+}
+
+// ================== GUEST VISUAL SYNC ==================
+function applyVisuals(dt) {
+  // Player X positions from synced state
+  player1.position.x = state.p1x;
+  player2.position.x = state.p2x;
+
+  // Racket pose from synced swing values (host owns swing timing)
+  const restAngle = -Math.PI / 6;
+  const sw1P = Math.sin(state.swingP1 * Math.PI);
+  const sw2P = Math.sin(state.swingP2 * Math.PI);
+  player1.userData.racketPivot.rotation.z = restAngle - sw1P * Math.PI * 0.85;
+  player2.userData.racketPivot.rotation.z = restAngle - sw2P * Math.PI * 0.85;
+  player1.rotation.y = sw1P * 0.20;
+  player2.rotation.y = Math.PI + sw2P * 0.20;
+
+  // Running animation driven by position deltas
+  const p1dx = state.p1x - state.p1xPrev;
+  const p2dx = state.p2x - state.p2xPrev;
+  const tt = performance.now() * 0.001;
+  animatePlayer(player1, p1dx, Math.abs(p1dx) > 0.0005, tt);
+  animatePlayer(player2, p2dx, Math.abs(p2dx) > 0.0005, tt + 1.7);
+  state.p1xPrev = state.p1x;
+  state.p2xPrev = state.p2x;
+
+  // Ball visuals
+  ball.position.set(state.bx, state.by, state.bz);
+  ballGlow.position.copy(ball.position);
+  ballShadow.position.x = state.bx;
+  ballShadow.position.z = state.bz;
+  const sScale = Math.max(0.35, 1.0 - state.by / 6);
+  ballShadow.scale.setScalar(sScale);
+  ballShadow.material.opacity = 0.45 * sScale;
+
+  // Trail ghosts
+  if (state.inPlay) {
+    ballHistory.unshift({ x: state.bx, y: state.by, z: state.bz });
+    if (ballHistory.length > GHOSTS) ballHistory.pop();
+    for (let i = 0; i < GHOSTS; i++) {
+      if (i < ballHistory.length) {
+        const p = ballHistory[i];
+        ghosts[i].position.set(p.x, p.y, p.z);
+        const f = 1 - i / GHOSTS;
+        ghosts[i].material.opacity = f * 0.5;
+        ghosts[i].scale.setScalar(0.6 + f * 0.6);
+      } else {
+        ghosts[i].material.opacity = 0;
+      }
+    }
+  } else {
+    for (const g of ghosts) g.material.opacity = 0;
+    ballHistory.length = 0;
+  }
+}
+
 // ================== UPDATE ==================
+let lastTime = performance.now();
 function update(dt) {
   if (state.mode !== 'game') return;
+
+  // ----- GUEST: skip physics, only animate visuals from synced state -----
+  if (net.role === 'guest') {
+    // Local cancel via M key
+    if (keys['KeyM']) cancelOnline();
+    applyVisuals(dt);
+    return;
+  }
 
   // Timer
   if (state.timeLimit > 0 && !state.gameOver) {
@@ -595,8 +1332,8 @@ function update(dt) {
     }
   }
 
-  // Player 1 keys — arrows only count in AI mode (in friend mode they belong to P2)
-  let p1Left = keys['KeyA'] || keys['KeyW'];
+  // Player 1 keys — arrows only count in AI mode
+  let p1Left  = keys['KeyA'] || keys['KeyW'];
   let p1Right = keys['KeyD'] || keys['KeyS'];
   if (state.vsMode === 'ai') {
     p1Left  = p1Left  || keys['ArrowLeft']  || keys['ArrowUp'];
@@ -610,9 +1347,21 @@ function update(dt) {
   if (state.vsMode === 'friend') {
     if (keys['ArrowLeft']  || keys['ArrowUp'])   state.p2x -= PLAYER_SPEED * dt;
     if (keys['ArrowRight'] || keys['ArrowDown']) state.p2x += PLAYER_SPEED * dt;
+  } else if (state.vsMode === 'online') {
+    // Host receives P2 input from remote peer; edge-detect SPACE for serve/rematch
+    if (net.remoteInput.left)  state.p2x -= PLAYER_SPEED * dt;
+    if (net.remoteInput.right) state.p2x += PLAYER_SPEED * dt;
+    if (net.remoteInput.space && !net.remoteInput.prevSpace) {
+      if (state.gameOver) hardReset();
+      else if (!state.inPlay) serve();
+    }
+    net.remoteInput.prevSpace = net.remoteInput.space;
+    if (net.remoteInput.m && !net.remoteInput.prevM) {
+      cancelOnline();
+    }
+    net.remoteInput.prevM = net.remoteInput.m;
   } else {
     if (state.inPlay && state.bvz < 0) {
-      // Predict ball X at the AI baseline
       const dz = P2_Z - state.bz;
       const tToReach = state.bvz !== 0 ? dz / state.bvz : 1;
       const predX = state.bx + state.bvx * Math.max(0, tToReach);
@@ -620,38 +1369,45 @@ function update(dt) {
       const k = Math.min(1, state.aiSkill * 60 * dt);
       state.p2x += (target - state.p2x) * k;
     } else if (!state.inPlay && state.serving === 'ai') {
-      state.p2x *= Math.pow(0.85, dt * 60);   // drift toward 0
+      state.p2x *= Math.pow(0.85, dt * 60);
       if (Math.random() < 0.012) serve();
     }
   }
   state.p2x = Math.max(-X_LIMIT, Math.min(X_LIMIT, state.p2x));
 
-  // Apply player transforms
+  // Apply player X position
   player1.position.x = state.p1x;
   player2.position.x = state.p2x;
 
-  // Swing/flash decay + racket pose
+  // Running animation
+  const p1dx = state.p1x - state.p1xPrev;
+  const p2dx = state.p2x - state.p2xPrev;
+  const t = performance.now() * 0.001;
+  animatePlayer(player1, p1dx, Math.abs(p1dx) > 0.0005, t);
+  animatePlayer(player2, p2dx, Math.abs(p2dx) > 0.0005, t + 1.7);
+  state.p1xPrev = state.p1x;
+  state.p2xPrev = state.p2x;
+
+  // Swing animation + body lean
   state.swingP1 = Math.max(0, state.swingP1 - dt * 4);
   state.swingP2 = Math.max(0, state.swingP2 - dt * 4);
-  state.hitFlashP1 = Math.max(0, state.hitFlashP1 - dt * 3);
-  state.hitFlashP2 = Math.max(0, state.hitFlashP2 - dt * 3);
   const restAngle = -Math.PI / 6;
-  // Use sin curve so swing goes out and snaps back
-  const sw1Phase = Math.sin(state.swingP1 * Math.PI);
-  const sw2Phase = Math.sin(state.swingP2 * Math.PI);
-  player1.userData.racketPivot.rotation.z = restAngle - sw1Phase * Math.PI * 0.85;
-  player2.userData.racketPivot.rotation.z = restAngle - sw2Phase * Math.PI * 0.85;
-  // Light body lean during swing
-  player1.userData.racketPivot.parent.rotation.y = sw1Phase * 0.18;
-  player2.userData.racketPivot.parent.rotation.y = Math.PI + sw2Phase * 0.18;
+  const sw1P = Math.sin(state.swingP1 * Math.PI);
+  const sw2P = Math.sin(state.swingP2 * Math.PI);
+  player1.userData.racketPivot.rotation.z = restAngle - sw1P * Math.PI * 0.85;
+  player2.userData.racketPivot.rotation.z = restAngle - sw2P * Math.PI * 0.85;
+  player1.rotation.y = sw1P * 0.20;
+  player2.rotation.y = Math.PI + sw2P * 0.20;
 
   if (state.gameOver) return;
 
-  // Ball idle when not in play
+  // Ball idle
   if (!state.inPlay) {
     parkBallAtServer();
     ball.position.set(state.bx, state.by, state.bz);
-    ballShadow.position.x = state.bx; ballShadow.position.z = state.bz;
+    ballGlow.position.copy(ball.position);
+    ballShadow.position.x = state.bx;
+    ballShadow.position.z = state.bz;
     return;
   }
 
@@ -662,10 +1418,9 @@ function update(dt) {
   state.by += state.bvy * dt;
   state.bz += state.bvz * dt;
 
-  // Net crossing check (ball passes z=0)
+  // Net crossing
   if ((state.prevBz > 0 && state.bz <= 0) || (state.prevBz < 0 && state.bz >= 0)) {
     if (state.by < NET_H + BALL_R && Math.abs(state.bx) < NET_HALF_W) {
-      // Net hit — hitter loses
       awardLoss(state.lastHitBy);
       return;
     }
@@ -684,27 +1439,23 @@ function update(dt) {
     const outOfBounds = Math.abs(state.bx) > COURT_W / 2 || Math.abs(state.bz) > COURT_L / 2;
 
     if (state.bounces === 1) {
-      // First bounce must be on opponent's side and in bounds
       const ballSideIsHitterSide = (state.bz > 0) === hitterIsPlayer;
       if (ballSideIsHitterSide || outOfBounds) {
         awardLoss(state.lastHitBy);
         return;
       }
     } else {
-      // 2nd bounce, no return — hitter scores
       awardWin(state.lastHitBy);
       return;
     }
   }
 
-  // Player hit detection
-  // Player 1 zone — ball moving toward +Z and crossing near P1 baseline
+  // Hit zones
   if (state.bvz > 0 && state.bz > P1_Z - 1.2 && state.bz < P1_Z + 0.6 && state.lastHitBy !== 'player') {
     if (Math.abs(state.bx - state.p1x) < PLAYER_REACH && state.by < HIT_Y_MAX) {
       hit('player');
     }
   }
-  // Player 2 zone
   if (state.bvz < 0 && state.bz < P2_Z + 1.2 && state.bz > P2_Z - 0.6 && state.lastHitBy !== 'ai') {
     if (Math.abs(state.bx - state.p2x) < PLAYER_REACH && state.by < HIT_Y_MAX) {
       hit('ai');
@@ -713,7 +1464,6 @@ function update(dt) {
 
   // Out the back
   if (state.bz > P1_Z + 1.2) {
-    // Past P1: if P1 was last hitter, this is "long" -> P1 loses; if AI last hit, AI win (but that needs handling)
     if (state.lastHitBy === 'player') awardLoss('player');
     else                              awardWin('ai');
     return;
@@ -723,35 +1473,39 @@ function update(dt) {
     return;
   }
 
-  // Trail update — shift, push current
-  for (let i = TRAIL_LEN - 1; i > 0; i--) {
-    trailPos[i * 3]     = trailPos[(i - 1) * 3];
-    trailPos[i * 3 + 1] = trailPos[(i - 1) * 3 + 1];
-    trailPos[i * 3 + 2] = trailPos[(i - 1) * 3 + 2];
-  }
-  trailPos[0] = state.bx; trailPos[1] = state.by; trailPos[2] = state.bz;
-  trailCount = Math.min(TRAIL_LEN, trailCount + 1);
-  trailGeo.setDrawRange(0, trailCount);
-  trailGeo.attributes.position.needsUpdate = true;
-
-  // Visuals
+  // Update ball visuals
   ball.position.set(state.bx, state.by, state.bz);
   ball.rotation.x += state.bvz * dt * 0.6;
   ball.rotation.z -= state.bvx * dt * 0.6;
+  ballGlow.position.copy(ball.position);
   ballShadow.position.x = state.bx;
   ballShadow.position.z = state.bz;
   const sScale = Math.max(0.35, 1.0 - state.by / 6);
   ballShadow.scale.setScalar(sScale);
-  ballShadow.material.opacity = 0.4 * sScale;
+  ballShadow.material.opacity = 0.45 * sScale;
+
+  // Update ghost trail
+  ballHistory.unshift({ x: state.bx, y: state.by, z: state.bz });
+  if (ballHistory.length > GHOSTS) ballHistory.pop();
+  for (let i = 0; i < GHOSTS; i++) {
+    if (i < ballHistory.length) {
+      const p = ballHistory[i];
+      ghosts[i].position.set(p.x, p.y, p.z);
+      const f = 1 - i / GHOSTS;
+      ghosts[i].material.opacity = f * 0.5;
+      ghosts[i].scale.setScalar(0.6 + f * 0.6);
+    } else {
+      ghosts[i].material.opacity = 0;
+    }
+  }
 }
 
 function hit(who) {
   const hitterX = who === 'player' ? state.p1x : state.p2x;
-  const offset = (state.bx - hitterX) / PLAYER_REACH; // -1..1
+  const offset = (state.bx - hitterX) / PLAYER_REACH;
   const dir = who === 'player' ? -1 : 1;
   const incomingSpeed = Math.hypot(state.bvx, state.bvz);
   const newSpeed = Math.min(24, incomingSpeed * 1.06 + 5);
-  // Aim slightly with offset
   const aim = offset * 0.55;
   state.bvz = dir * newSpeed * Math.cos(aim);
   state.bvx = newSpeed * Math.sin(aim) + offset * 1.2;
@@ -762,23 +1516,21 @@ function hit(who) {
 
   if (who === 'player') {
     state.swingP1 = 1.0;
-    state.hitFlashP1 = 1.0;
     spawnSparks(state.bx, state.by, state.bz, 0xef4444);
   } else {
     state.swingP2 = 1.0;
-    state.hitFlashP2 = 1.0;
     spawnSparks(state.bx, state.by, state.bz, 0x3b82f6);
   }
+  // Bright burst at hit point
+  spawnSparks(state.bx, state.by, state.bz, 0xffffff);
 }
 
 function awardWin(whoHit) {
-  // The hitter wins this point
   if (whoHit === 'player') { state.scoreP++; state.serving = 'ai'; }
   else                     { state.scoreA++; state.serving = 'player'; }
   endRally();
 }
 function awardLoss(whoHit) {
-  // The hitter loses this point
   if (whoHit === 'player') { state.scoreA++; state.serving = 'player'; }
   else                     { state.scoreP++; state.serving = 'ai'; }
   endRally();
@@ -791,8 +1543,8 @@ function endRally() {
   }
   state.inPlay = false;
   state.bounces = 0;
-  trailCount = 0;
-  trailGeo.setDrawRange(0, 0);
+  ballHistory.length = 0;
+  for (const g of ghosts) g.material.opacity = 0;
 }
 function saveBest() {
   if (state.scoreP > bestScore) {
@@ -801,7 +1553,7 @@ function saveBest() {
   }
 }
 
-// ================== SPARKS UPDATE / RENDER ==================
+// ================== SPARKS UPDATE ==================
 function updateSparks(dt) {
   for (let i = sparkList.length - 1; i >= 0; i--) {
     const p = sparkList[i];
@@ -840,7 +1592,6 @@ function drawHUD() {
   if (state.mode === 'menu') drawMenu();
   else                       drawGameHUD();
 }
-
 function roundRect(x, y, w, h, r) {
   hctx.beginPath();
   hctx.moveTo(x + r, y);
@@ -850,7 +1601,6 @@ function roundRect(x, y, w, h, r) {
   hctx.arcTo(x, y, x + w, y, r);
   hctx.closePath();
 }
-
 function drawMenu() {
   hctx.fillStyle = 'rgba(5,10,24,0.55)';
   hctx.fillRect(0, 0, W, H);
@@ -867,36 +1617,48 @@ function drawMenu() {
     hctx.font = 'bold 18px monospace';
     hctx.fillText('STEP 1  ·  CHOOSE A MODE', W / 2, H * 0.30);
 
-    const btnW = Math.min(320, (W - 80) / 2);
+    const btnW = Math.min(280, (W - 100) / 3);
     const btnH = 130;
-    const gap  = 30;
-    const totalW = btnW * 2 + gap;
+    const gap  = 20;
+    const totalW = btnW * 3 + gap * 2;
     const startX = W / 2 - totalW / 2;
     const btnY   = H * 0.40;
 
     const buttons = [
-      { x: startX, y: btnY, w: btnW, h: btnH, kind: 'mode', value: 'ai',
+      { x: startX,                       y: btnY, w: btnW, h: btnH, kind: 'mode', value: 'ai',
         fill: '#1e3a8a', stroke: '#3b82f6',
         icon: '🤖', label: 'VS  AI', sub: 'You vs the computer' },
-      { x: startX + btnW + gap, y: btnY, w: btnW, h: btnH, kind: 'mode', value: 'friend',
+      { x: startX + (btnW + gap),        y: btnY, w: btnW, h: btnH, kind: 'mode', value: 'friend',
         fill: '#166534', stroke: '#22c55e',
-        icon: '🎮', label: 'VS  FRIEND', sub: 'Local 2-player on one keyboard' },
+        icon: '🎮', label: 'VS  FRIEND', sub: 'Local 2-player, one keyboard' },
+      { x: startX + (btnW + gap) * 2,    y: btnY, w: btnW, h: btnH, kind: 'mode', value: 'online',
+        fill: '#7a1d6b', stroke: '#ec4899',
+        icon: '🌐', label: 'VS  ONLINE', sub: 'Share a link — host is P1' },
     ];
     for (const b of buttons) drawBigBtn(b);
 
     hctx.fillStyle = 'rgba(255,255,255,0.7)';
     hctx.font = '14px monospace';
-    hctx.fillText('Click a mode  ·  or press 1 / 2', W / 2, btnY + btnH + 36);
+    hctx.fillText('Click a mode  ·  or press 1 / 2 / 3', W / 2, btnY + btnH + 36);
 
     hctx.fillStyle = 'rgba(255,255,255,0.55)';
     hctx.font = '13px monospace';
-    hctx.fillText('VS AI  —  mouse or A/D to move',   W / 2, H * 0.80);
-    hctx.fillText('VS FRIEND  —  P1: A/D    P2: ←/→', W / 2, H * 0.83);
-  } else {
+    hctx.fillText('VS AI  —  mouse or A/D to move',                W / 2, H * 0.78);
+    hctx.fillText('VS FRIEND  —  P1: A/D    P2: ←/→',              W / 2, H * 0.81);
+    hctx.fillText('VS ONLINE  —  host generates link, joiner = P2', W / 2, H * 0.84);
+
+    if (net.status === 'disconnected' || net.status === 'error') {
+      hctx.fillStyle = '#ff6b6b';
+      hctx.font = 'bold 14px monospace';
+      hctx.fillText(net.errorMessage || 'Connection lost', W / 2, H * 0.92);
+    }
+  } else if (state.menuStep === 'time') {
     hctx.fillStyle = '#fff';
     hctx.font = 'bold 18px monospace';
-    hctx.fillText(`STEP 2  ·  CHOOSE A TIME LIMIT  (mode: ${state.vsMode === 'ai' ? 'VS AI' : 'VS FRIEND'})`,
-      W / 2, H * 0.30);
+    const modeLabel = state.vsMode === 'ai' ? 'VS AI'
+                    : state.vsMode === 'friend' ? 'VS FRIEND'
+                    : 'VS ONLINE';
+    hctx.fillText(`STEP 2  ·  CHOOSE A TIME LIMIT  (mode: ${modeLabel})`, W / 2, H * 0.30);
 
     const btnW = Math.min(150, (W - 80) / TIME_OPTIONS.length - 14);
     const btnH = 80;
@@ -934,9 +1696,105 @@ function drawMenu() {
       W / 2, H * 0.80);
     hctx.fillText(`Unlimited: first player to ${UNLIMITED_TARGET} points wins.`,
       W / 2, H * 0.83);
+  } else if (state.menuStep === 'online-wait') {
+    // Host: show the share link + waiting indicator
+    hctx.fillStyle = '#fff';
+    hctx.font = 'bold 18px monospace';
+    hctx.fillText('ONLINE MATCH  ·  YOU ARE PLAYER 1 (HOST)', W / 2, H * 0.28);
+
+    hctx.fillStyle = '#fcd34d';
+    hctx.font = 'bold 22px monospace';
+    let statusText;
+    if (net.status === 'creating')      statusText = 'GENERATING LINK…';
+    else if (net.status === 'waiting')  statusText = 'WAITING FOR OPPONENT…' + dotsAnim();
+    else if (net.status === 'connected') statusText = 'CONNECTED — STARTING…';
+    else if (net.status === 'error')    statusText = 'ERROR: ' + (net.errorMessage || 'unknown');
+    else                                 statusText = 'STARTING…';
+    hctx.fillText(statusText, W / 2, H * 0.36);
+
+    if (net.shareUrl) {
+      hctx.fillStyle = 'rgba(255,255,255,0.7)';
+      hctx.font = '13px monospace';
+      hctx.fillText('Share this link with your friend:', W / 2, H * 0.45);
+      // URL display (truncate if too long)
+      hctx.fillStyle = '#a5f3fc';
+      hctx.font = `bold ${Math.min(20, Math.max(14, W / 60))}px monospace`;
+      const maxW = W - 80;
+      let url = net.shareUrl;
+      while (url.length > 5 && hctx.measureText(url).width > maxW) {
+        url = url.slice(0, -1);
+      }
+      if (url !== net.shareUrl) url = url.slice(0, -1) + '…';
+      hctx.fillText(url, W / 2, H * 0.50);
+
+      // Buttons: COPY, CANCEL
+      const btnW = 180;
+      const btnH = 50;
+      const gap  = 20;
+      const totalW = btnW * 2 + gap;
+      const startX = W / 2 - totalW / 2;
+      const btnY = H * 0.58;
+      drawSmallBtn({
+        x: startX, y: btnY, w: btnW, h: btnH,
+        kind: 'copy', value: null,
+        fill: net.copied ? '#166534' : '#1e3a8a',
+        stroke: net.copied ? '#22c55e' : '#3b82f6',
+        label: net.copied ? '✓ COPIED' : 'COPY LINK',
+        sub: '',
+      }, true);
+      drawSmallBtn({
+        x: startX + btnW + gap, y: btnY, w: btnW, h: btnH,
+        kind: 'cancel-online', value: null,
+        fill: '#7f1d1d', stroke: '#ef4444',
+        label: 'CANCEL',
+        sub: '',
+      }, true);
+    }
+
+    hctx.fillStyle = 'rgba(255,255,255,0.5)';
+    hctx.font = '12px monospace';
+    hctx.fillText('Both players need internet — uses public WebRTC signaling.',
+      W / 2, H * 0.78);
+    hctx.fillText('Time limit: ' + (state.timeLimit > 0 ? Math.round(state.timeLimit/60) + ' min' : 'unlimited (first to ' + UNLIMITED_TARGET + ')'),
+      W / 2, H * 0.82);
+  } else if (state.menuStep === 'online-join') {
+    // Guest: connecting screen
+    hctx.fillStyle = '#fff';
+    hctx.font = 'bold 18px monospace';
+    hctx.fillText('ONLINE MATCH  ·  YOU ARE PLAYER 2 (JOINING)', W / 2, H * 0.30);
+
+    hctx.fillStyle = '#fcd34d';
+    hctx.font = 'bold 22px monospace';
+    let statusText;
+    if (net.status === 'connecting')     statusText = 'CONNECTING TO HOST…' + dotsAnim();
+    else if (net.status === 'connected') statusText = 'CONNECTED — STARTING…';
+    else if (net.status === 'error')     statusText = 'ERROR: ' + (net.errorMessage || 'unknown');
+    else                                  statusText = 'PREPARING…';
+    hctx.fillText(statusText, W / 2, H * 0.42);
+
+    hctx.fillStyle = 'rgba(255,255,255,0.7)';
+    hctx.font = '13px monospace';
+    hctx.fillText('Room: ' + (net.roomId || '—'), W / 2, H * 0.50);
+
+    drawSmallBtn({
+      x: W / 2 - 90, y: H * 0.60, w: 180, h: 50,
+      kind: 'cancel-online', value: null,
+      fill: '#7f1d1d', stroke: '#ef4444',
+      label: 'CANCEL',
+      sub: '',
+    }, true);
+
+    hctx.fillStyle = 'rgba(255,255,255,0.5)';
+    hctx.font = '12px monospace';
+    hctx.fillText('If this hangs, ask the host to re-share the link or check internet.',
+      W / 2, H * 0.78);
   }
 }
 
+function dotsAnim() {
+  const n = Math.floor(performance.now() / 400) % 4;
+  return '.'.repeat(n);
+}
 function drawBigBtn(b) {
   roundRect(b.x, b.y, b.w, b.h, 16);
   hctx.fillStyle = b.fill; hctx.fill();
@@ -970,9 +1828,7 @@ function drawSmallBtn(b, compact) {
   }
   menuButtons.push(b);
 }
-
 function drawGameHUD() {
-  // Scoreboard
   const sw = 240, sh = 64;
   const sx = W / 2 - sw / 2, sy = 12;
   hctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -982,7 +1838,7 @@ function drawGameHUD() {
   hctx.font = 'bold 11px monospace';
   hctx.textAlign = 'center';
   hctx.textBaseline = 'alphabetic';
-  hctx.fillText('— TENNIS 3D —', sx + sw / 2, sy + 14);
+  hctx.fillText(state.vsMode === 'online' ? '— TENNIS 3D · ONLINE —' : '— TENNIS 3D —', sx + sw / 2, sy + 14);
   hctx.font = 'bold 36px monospace';
   hctx.fillStyle = '#ef4444';
   hctx.fillText(state.scoreP, sx + 50, sy + 50);
@@ -1010,8 +1866,13 @@ function drawGameHUD() {
   hctx.textAlign = 'right';
   hctx.fillText('Best: ' + bestScore, W - 14, 26);
 
-  const leftLabel  = state.vsMode === 'ai' ? 'YOU' : 'P1';
-  const rightLabel = state.vsMode === 'ai' ? 'CPU' : 'P2';
+  let leftLabel, rightLabel;
+  if (state.vsMode === 'ai')          { leftLabel = 'YOU';  rightLabel = 'CPU'; }
+  else if (state.vsMode === 'online') {
+    leftLabel  = net.role === 'host'  ? 'YOU (P1)' : 'P1 (HOST)';
+    rightLabel = net.role === 'guest' ? 'YOU (P2)' : 'P2 (JOIN)';
+  }
+  else                                { leftLabel = 'P1';   rightLabel = 'P2'; }
   hctx.fillStyle = '#ef4444';
   hctx.font = 'bold 14px monospace';
   hctx.textAlign = 'left';
@@ -1055,16 +1916,39 @@ function drawGameHUD() {
 }
 
 // ================== MAIN LOOP ==================
-let lastTime = performance.now();
-function frame(t) {
-  const dt = Math.min(0.05, (t - lastTime) / 1000);
-  lastTime = t;
+let _lastNetState = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  lastTime = now;
   update(dt);
   updateSparks(dt);
+
+  // Network — host broadcasts state at 30 Hz; guest sends input each frame
+  if (net.role === 'host' && state.mode === 'game') {
+    if (now - _lastNetState > 33) {
+      sendState();
+      _lastNetState = now;
+    }
+  } else if (net.role === 'guest' && state.mode === 'game') {
+    sendInput();
+  }
+
+  // Subtle camera sway (broadcast feel)
+  const t = now * 0.001;
+  camera.position.x = CAM_BASE.x + Math.sin(t * 0.4) * 0.35;
+  camera.position.y = CAM_BASE.y + Math.sin(t * 0.27 + 1) * 0.18;
+  camera.position.z = CAM_BASE.z + Math.cos(t * 0.33) * 0.18;
+  camera.lookAt(CAM_LOOK.x + Math.sin(t * 0.2) * 0.25, CAM_LOOK.y, CAM_LOOK.z);
+
   renderer.render(scene, camera);
   drawHUD();
   requestAnimationFrame(frame);
 }
+
+// Auto-join if URL has ?room=...
+const _roomFromUrl = (new URLSearchParams(location.search)).get('room');
+if (_roomFromUrl) startJoin(_roomFromUrl);
+
 requestAnimationFrame(frame);
 </script>
 </body>
