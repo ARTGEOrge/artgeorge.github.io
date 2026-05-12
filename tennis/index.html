@@ -1,19 +1,22 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tennis</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tennis 3D</title>
 <style>
   html, body {
     margin: 0; padding: 0; height: 100%;
-    background: #050a18;
-    overflow: hidden;
+    background: #050a18; overflow: hidden;
     font-family: 'Segoe UI', system-ui, sans-serif;
-    color: #fff;
-    cursor: crosshair;
+    color: #fff; cursor: crosshair;
   }
   canvas { display: block; }
+  #game, #hud {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+  }
+  #hud { pointer-events: none; }
   #hint {
     position: fixed;
     bottom: 12px; left: 50%; transform: translateX(-50%);
@@ -21,61 +24,413 @@
     color: rgba(255,255,255,0.65);
     pointer-events: none; user-select: none;
     text-shadow: 1px 1px 0 #000;
+    z-index: 5;
   }
 </style>
 </head>
 <body>
-<canvas id="gameCanvas"></canvas>
-<div id="hint">VS AI: mouse or W/S &nbsp;·&nbsp; VS FRIEND: P1 = W/S, P2 = ↑/↓ &nbsp;·&nbsp; SPACE serves &nbsp;·&nbsp; Timed match or first-to-7 unlimited</div>
+<canvas id="game"></canvas>
+<canvas id="hud"></canvas>
+<div id="hint">VS AI: mouse or A/D &nbsp;·&nbsp; VS FRIEND: P1 = A/D, P2 = ←/→ &nbsp;·&nbsp; SPACE serves &nbsp;·&nbsp; Timed match or first-to-7 unlimited</div>
 
-<script>
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
 
-let W, H;
+// ================== RENDERER / SCENE ==================
+const gameCanvas = document.getElementById('game');
+const hudCanvas  = document.getElementById('hud');
+const hctx = hudCanvas.getContext('2d');
+
+const renderer = new THREE.WebGLRenderer({ canvas: gameCanvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x081229);
+scene.fog = new THREE.Fog(0x081229, 38, 95);
+
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
+camera.position.set(0, 10, 21);
+camera.lookAt(0, 1.0, -2);
+
+let W = 0, H = 0;
 function resize() {
-  canvas.width  = window.innerWidth;
-  canvas.height = window.innerHeight;
-  W = canvas.width; H = canvas.height;
+  W = window.innerWidth; H = window.innerHeight;
+  renderer.setSize(W, H, false);
+  camera.aspect = W / H;
+  camera.updateProjectionMatrix();
+  hudCanvas.width = W;
+  hudCanvas.height = H;
 }
 window.addEventListener('resize', resize); resize();
 
-// ================== COURT GEOMETRY ==================
-// Court is rendered with a fixed aspect, centered in the canvas
-function getCourt() {
-  const margin = 60;
-  const aspect = 1.8; // width:height
-  let cw = W - margin * 2;
-  let ch = cw / aspect;
-  if (ch > H - 120) { ch = H - 120; cw = ch * aspect; }
-  const cx = (W - cw) / 2;
-  const cy = (H - ch) / 2 + 20;
-  return { x: cx, y: cy, w: cw, h: ch };
+// ================== LIGHTS ==================
+scene.add(new THREE.HemisphereLight(0x9ec3ff, 0x182040, 0.65));
+const sun = new THREE.DirectionalLight(0xffffff, 1.0);
+sun.position.set(8, 18, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 50;
+sun.shadow.camera.left  = -18;
+sun.shadow.camera.right = 18;
+sun.shadow.camera.top   = 22;
+sun.shadow.camera.bottom = -22;
+sun.shadow.bias = -0.0005;
+scene.add(sun);
+
+const rim = new THREE.DirectionalLight(0x88aaff, 0.35);
+rim.position.set(-10, 6, -10);
+scene.add(rim);
+
+// ================== COURT ==================
+const COURT_W   = 11.0;    // doubles width (X)
+const COURT_L   = 23.77;   // baseline-to-baseline (Z)
+const SINGLES_W = 8.23;
+const NET_H     = 1.07;
+const NET_HALF_W = COURT_W / 2 + 0.3;
+
+function makeCourtTexture() {
+  const baseW = 1024;
+  const cw = baseW;
+  const ch = Math.round(baseW * (COURT_L / COURT_W));
+  const cnv = document.createElement('canvas');
+  cnv.width = cw; cnv.height = ch;
+  const cx = cnv.getContext('2d');
+
+  // Surface
+  const g = cx.createLinearGradient(0, 0, 0, ch);
+  g.addColorStop(0, '#1d6fae');
+  g.addColorStop(1, '#1d5a92');
+  cx.fillStyle = g; cx.fillRect(0, 0, cw, ch);
+
+  // Sheen
+  const sh = cx.createLinearGradient(0, 0, cw, 0);
+  sh.addColorStop(0,   'rgba(255,255,255,0.08)');
+  sh.addColorStop(0.5, 'rgba(255,255,255,0)');
+  sh.addColorStop(1,   'rgba(0,0,0,0.15)');
+  cx.fillStyle = sh; cx.fillRect(0, 0, cw, ch);
+
+  cx.strokeStyle = '#fff';
+  cx.lineCap = 'butt';
+
+  // Outer doubles
+  cx.lineWidth = 6;
+  cx.strokeRect(8, 8, cw - 16, ch - 16);
+
+  // Singles sidelines
+  const singlesInset = ((COURT_W - SINGLES_W) / 2) / COURT_W * cw;
+  cx.lineWidth = 5;
+  cx.beginPath();
+  cx.moveTo(singlesInset + 8, 8);            cx.lineTo(singlesInset + 8, ch - 8);
+  cx.moveTo(cw - singlesInset - 8, 8);       cx.lineTo(cw - singlesInset - 8, ch - 8);
+  cx.stroke();
+
+  // Service lines (~6.4m from net)
+  const serviceY1 = (COURT_L / 2 - 6.4) / COURT_L * ch;
+  const serviceY2 = ch - serviceY1;
+  cx.beginPath();
+  cx.moveTo(singlesInset + 8, serviceY1);    cx.lineTo(cw - singlesInset - 8, serviceY1);
+  cx.moveTo(singlesInset + 8, serviceY2);    cx.lineTo(cw - singlesInset - 8, serviceY2);
+  cx.stroke();
+
+  // Center service line
+  cx.beginPath();
+  cx.moveTo(cw / 2, serviceY1);              cx.lineTo(cw / 2, serviceY2);
+  cx.stroke();
+
+  // Center mark on each baseline
+  cx.lineWidth = 6;
+  cx.beginPath();
+  cx.moveTo(cw / 2 - 14, 8);                 cx.lineTo(cw / 2 + 14, 8);
+  cx.moveTo(cw / 2 - 14, ch - 8);            cx.lineTo(cw / 2 + 14, ch - 8);
+  cx.stroke();
+
+  // Net line across middle (just visual)
+  cx.lineWidth = 4;
+  cx.strokeStyle = 'rgba(255,255,255,0.6)';
+  cx.beginPath();
+  cx.moveTo(0, ch / 2); cx.lineTo(cw, ch / 2);
+  cx.stroke();
+
+  const tex = new THREE.CanvasTexture(cnv);
+  tex.anisotropy = 8;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
-// ================== STATE ==================
-const PADDLE_W = 14;
-const PADDLE_H = 110;
-const BALL_R   = 11;
+const courtTex = makeCourtTexture();
+const courtMat = new THREE.MeshStandardMaterial({
+  map: courtTex, roughness: 0.55, metalness: 0.0,
+});
+const court = new THREE.Mesh(new THREE.PlaneGeometry(COURT_W, COURT_L), courtMat);
+court.rotation.x = -Math.PI / 2;
+court.position.y = 0.005;
+court.receiveShadow = true;
+scene.add(court);
 
-let player, ai, ball;
-let scoreP = 0, scoreA = 0;
-let bestScore = parseInt(localStorage.getItem('tennis-best') || '0', 10);
-let serving = 'player';   // 'player' | 'ai'
-let inPlay = false;
-let gameOver = false, winner = null;
-let lastHit = null;       // 'player' | 'ai'
-let hitFlash = 0;         // 0..1 frames after a paddle hit
-let aiSkill  = 0.10;      // tracking aggressiveness
-let trail = [];
+// Surrounding floor
+const surroundMat = new THREE.MeshStandardMaterial({ color: 0x0c2a52, roughness: 0.9 });
+const surround = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), surroundMat);
+surround.rotation.x = -Math.PI / 2;
+surround.position.y = 0;
+surround.receiveShadow = true;
+scene.add(surround);
 
-// Mode selection
-let mode     = 'menu';    // 'menu' | 'game'
-let menuStep = 'mode';    // 'mode' | 'time'
-let vsMode   = 'ai';      // 'ai' | 'friend'
-let menuButtons = [];     // populated when drawing menu, used for click hits
+// Frame strip around the court
+const frameMat = new THREE.MeshStandardMaterial({ color: 0x143b6e, roughness: 0.85 });
+function strip(w, d, x, z) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.04, d), frameMat);
+  m.position.set(x, 0.002, z);
+  m.receiveShadow = true;
+  scene.add(m);
+}
+const F = 2.0;
+strip(COURT_W + F * 2, F, 0,  COURT_L / 2 + F / 2);
+strip(COURT_W + F * 2, F, 0, -COURT_L / 2 - F / 2);
+strip(F, COURT_L,  COURT_W / 2 + F / 2, 0);
+strip(F, COURT_L, -COURT_W / 2 - F / 2, 0);
 
-// Time / win-condition
+// Stadium silhouettes (low cubes around the arena)
+const standMat = new THREE.MeshStandardMaterial({ color: 0x0a1c3a, roughness: 0.95 });
+function stand(x, z, w, d, h) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), standMat);
+  m.position.set(x, h / 2, z);
+  m.castShadow = false;
+  m.receiveShadow = true;
+  scene.add(m);
+}
+for (let i = -3; i <= 3; i++) {
+  const w = 4.0, gap = 0.6;
+  stand(i * (w + gap),  COURT_L / 2 + F + 2.2, w, 2.5, 1.4);
+  stand(i * (w + gap), -COURT_L / 2 - F - 2.2, w, 2.5, 1.4);
+}
+for (let i = -2; i <= 2; i++) {
+  const d = 4.0, gap = 0.6;
+  stand( COURT_W / 2 + F + 2.2, i * (d + gap), 2.5, d, 1.4);
+  stand(-COURT_W / 2 - F - 2.2, i * (d + gap), 2.5, d, 1.4);
+}
+
+// ================== NET ==================
+const netGroup = new THREE.Group();
+const postGeo = new THREE.CylinderGeometry(0.08, 0.08, NET_H + 0.25, 12);
+const postMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.6, metalness: 0.3 });
+for (const sx of [-1, 1]) {
+  const post = new THREE.Mesh(postGeo, postMat);
+  post.position.set(sx * (COURT_W / 2 + 0.3), (NET_H + 0.25) / 2, 0);
+  post.castShadow = true;
+  netGroup.add(post);
+}
+const netMat = new THREE.MeshStandardMaterial({
+  color: 0x0a0a0a, transparent: true, opacity: 0.55,
+  side: THREE.DoubleSide, roughness: 0.7,
+});
+const netMesh = new THREE.Mesh(new THREE.PlaneGeometry(NET_HALF_W * 2, NET_H), netMat);
+netMesh.position.set(0, NET_H / 2, 0);
+netGroup.add(netMesh);
+const topBand = new THREE.Mesh(
+  new THREE.BoxGeometry(NET_HALF_W * 2, 0.08, 0.05),
+  new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 })
+);
+topBand.position.set(0, NET_H + 0.04, 0);
+topBand.castShadow = true;
+netGroup.add(topBand);
+scene.add(netGroup);
+
+// ================== PLAYERS ==================
+const SKIN = 0xf2cda0;
+function makePlayer(shirtColor, accentColor) {
+  const g = new THREE.Group();
+
+  // Legs
+  const legGeo = new THREE.CylinderGeometry(0.18, 0.18, 0.85, 10);
+  const legMat = new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.5 });
+  for (const dx of [-0.18, 0.18]) {
+    const leg = new THREE.Mesh(legGeo, legMat);
+    leg.position.set(dx, 0.43, 0);
+    leg.castShadow = true; leg.receiveShadow = true;
+    g.add(leg);
+  }
+  // Shorts
+  const shorts = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.30, 0.26, 0.45, 12),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 })
+  );
+  shorts.position.set(0, 0.95, 0);
+  shorts.castShadow = true;
+  g.add(shorts);
+  // Body / shirt
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.30, 0.34, 0.7, 12),
+    new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.55 })
+  );
+  body.position.set(0, 1.45, 0);
+  body.castShadow = true;
+  g.add(body);
+  // Head
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.22, 18, 18),
+    new THREE.MeshStandardMaterial({ color: SKIN, roughness: 0.5 })
+  );
+  head.position.set(0, 1.95, 0);
+  head.castShadow = true;
+  g.add(head);
+  // Headband
+  const hb = new THREE.Mesh(
+    new THREE.TorusGeometry(0.225, 0.045, 8, 18),
+    new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.4 })
+  );
+  hb.position.set(0, 2.0, 0);
+  hb.rotation.x = Math.PI / 2;
+  g.add(hb);
+
+  // Non-racket arm
+  const lArm = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.09, 0.09, 0.6, 8),
+    legMat
+  );
+  lArm.position.set(-0.36, 1.45, 0);
+  lArm.rotation.z = Math.PI / 12;
+  lArm.castShadow = true;
+  g.add(lArm);
+
+  // Racket arm (pivot at shoulder)
+  const racketPivot = new THREE.Group();
+  racketPivot.position.set(0.30, 1.55, 0);
+  racketPivot.rotation.z = -Math.PI / 6;  // resting tilt
+  g.add(racketPivot);
+
+  const armSeg = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.09, 0.08, 0.55, 8),
+    legMat
+  );
+  armSeg.position.set(0, -0.275, 0);
+  armSeg.castShadow = true;
+  racketPivot.add(armSeg);
+
+  const racketGroup = new THREE.Group();
+  // grip ends near hand at y ≈ -0.55
+  racketGroup.position.set(0, -0.55, 0);
+  racketPivot.add(racketGroup);
+
+  const handle = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.045, 0.045, 0.34, 8),
+    new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.6 })
+  );
+  handle.position.set(0, -0.17, 0);
+  handle.castShadow = true;
+  racketGroup.add(handle);
+  const racketHead = new THREE.Mesh(
+    new THREE.TorusGeometry(0.22, 0.035, 10, 28),
+    new THREE.MeshStandardMaterial({
+      color: accentColor, roughness: 0.35,
+      emissive: accentColor, emissiveIntensity: 0.15,
+    })
+  );
+  racketHead.position.set(0, -0.5, 0);
+  racketHead.rotation.y = Math.PI / 2;
+  racketHead.castShadow = true;
+  racketGroup.add(racketHead);
+  const strings = new THREE.Mesh(
+    new THREE.CircleGeometry(0.20, 24),
+    new THREE.MeshStandardMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.55,
+      roughness: 0.4, side: THREE.DoubleSide,
+    })
+  );
+  strings.position.set(0, -0.5, 0);
+  strings.rotation.y = Math.PI / 2;
+  racketGroup.add(strings);
+
+  g.userData = { racketPivot };
+  return g;
+}
+
+const player1 = makePlayer(0xef4444, 0xfca5a5);
+player1.position.set(0, 0, COURT_L / 2 - 0.6);
+scene.add(player1);
+const player2 = makePlayer(0x3b82f6, 0x93c5fd);
+player2.position.set(0, 0, -COURT_L / 2 + 0.6);
+player2.rotation.y = Math.PI;  // face the other side
+scene.add(player2);
+
+// ================== BALL ==================
+const BALL_R = 0.20;
+const ball = new THREE.Mesh(
+  new THREE.SphereGeometry(BALL_R, 22, 22),
+  new THREE.MeshStandardMaterial({
+    color: 0xe6e040, emissive: 0x666000, emissiveIntensity: 0.25,
+    roughness: 0.45, metalness: 0.0,
+  })
+);
+ball.castShadow = true;
+scene.add(ball);
+
+const ballShadow = new THREE.Mesh(
+  new THREE.CircleGeometry(BALL_R * 1.5, 22),
+  new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.4 })
+);
+ballShadow.rotation.x = -Math.PI / 2;
+ballShadow.position.y = 0.015;
+scene.add(ballShadow);
+
+// Ball trail
+const TRAIL_LEN = 16;
+const trailPos = new Float32Array(TRAIL_LEN * 3);
+const trailGeo = new THREE.BufferGeometry();
+trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPos, 3));
+trailGeo.setDrawRange(0, 0);
+const trailLine = new THREE.Line(
+  trailGeo,
+  new THREE.LineBasicMaterial({ color: 0xfff066, transparent: true, opacity: 0.7 })
+);
+scene.add(trailLine);
+let trailCount = 0;
+
+// Hit sparks (cheap particles)
+const SPARK_MAX = 80;
+const sparkGeo = new THREE.BufferGeometry();
+const sparkPos = new Float32Array(SPARK_MAX * 3);
+const sparkCol = new Float32Array(SPARK_MAX * 3);
+sparkGeo.setAttribute('position', new THREE.BufferAttribute(sparkPos, 3));
+sparkGeo.setAttribute('color',    new THREE.BufferAttribute(sparkCol, 3));
+const sparks = new THREE.Points(
+  sparkGeo,
+  new THREE.PointsMaterial({ size: 0.16, vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false })
+);
+scene.add(sparks);
+const sparkList = [];  // {x,y,z,vx,vy,vz,life,maxLife,r,g,b}
+
+function spawnSparks(x, y, z, hexColor) {
+  const r = ((hexColor >> 16) & 255) / 255;
+  const g = ((hexColor >>  8) & 255) / 255;
+  const b = ( hexColor        & 255) / 255;
+  for (let i = 0; i < 14; i++) {
+    if (sparkList.length >= SPARK_MAX) break;
+    const a = Math.random() * Math.PI * 2;
+    const e = Math.random() * Math.PI * 0.5;
+    const sp = 2 + Math.random() * 4;
+    sparkList.push({
+      x, y, z,
+      vx: Math.cos(a) * Math.cos(e) * sp,
+      vy: Math.sin(e) * sp + 1.5,
+      vz: Math.sin(a) * Math.cos(e) * sp,
+      life: 0.5, maxLife: 0.5,
+      r, g, b,
+    });
+  }
+}
+
+// ================== GAME STATE ==================
 const TIME_OPTIONS = [
   { label: '1 MIN',     seconds: 60  },
   { label: '2 MIN',     seconds: 120 },
@@ -83,553 +438,434 @@ const TIME_OPTIONS = [
   { label: '5 MIN',     seconds: 300 },
   { label: 'UNLIMITED', seconds: 0   },
 ];
-const UNLIMITED_TARGET = 7; // first-to-7 in unlimited mode
-let timeLimit = 0;          // seconds; 0 = unlimited
-let timeLeft  = 0;          // seconds remaining
+const UNLIMITED_TARGET = 7;
 
-function reset() {
-  const c = getCourt();
-  player = { y: c.y + c.h / 2 - PADDLE_H / 2, vy: 0 };
-  ai     = { y: c.y + c.h / 2 - PADDLE_H / 2 };
-  ball = { x: c.x + c.w / 2, y: c.y + c.h / 2, vx: 0, vy: 0, rot: 0, vrot: 0 };
-  inPlay = false;
-  trail.length = 0;
-  hitFlash = 0;
-  aiSkill = 0.09 + Math.random() * 0.03;
+const GRAVITY = -18;
+const PLAYER_SPEED = 9.5;     // X units/sec
+const PLAYER_REACH = 1.7;     // half-width the player can hit balls at, in X
+const HIT_Y_MAX    = 2.6;     // how high the racket can reach in Y
+const X_LIMIT      = COURT_W / 2 + 0.4;
+const P1_Z = COURT_L / 2 - 0.6;
+const P2_Z = -COURT_L / 2 + 0.6;
+
+const state = {
+  mode: 'menu',          // 'menu' | 'game'
+  menuStep: 'mode',
+  vsMode: 'ai',          // 'ai' | 'friend'
+  timeLimit: 0,
+  timeLeft:  0,
+
+  scoreP: 0,
+  scoreA: 0,
+  serving: 'player',     // 'player' | 'ai'
+  inPlay: false,
+  gameOver: false,
+  winner: null,
+
+  p1x: 0, p2x: 0,
+  bx: 0, by: 1.0, bz: 0,
+  bvx: 0, bvy: 0, bvz: 0,
+  prevBz: 0,
+
+  lastHitBy: null,       // 'player' | 'ai'
+  bounces: 0,            // since last hit
+  aiSkill: 0.10,
+  swingP1: 0, swingP2: 0, // 0..1 swing pulse
+  hitFlashP1: 0, hitFlashP2: 0,
+};
+let bestScore = parseInt(localStorage.getItem('tennis-best') || '0', 10);
+
+function selectMode(m) { state.vsMode = m; state.menuStep = 'time'; }
+function selectTime(seconds) {
+  state.timeLimit = seconds;
+  state.timeLeft  = seconds;
+  state.mode = 'game';
+  hardReset();
 }
 function hardReset() {
-  scoreP = 0; scoreA = 0;
-  serving = 'player';
-  gameOver = false; winner = null;
-  timeLeft = timeLimit;
-  reset();
+  state.scoreP = 0; state.scoreA = 0;
+  state.serving = 'player';
+  state.gameOver = false; state.winner = null;
+  state.timeLeft = state.timeLimit;
+  state.aiSkill = 0.09 + Math.random() * 0.03;
+  state.p1x = 0; state.p2x = 0;
+  resetRally();
+}
+function resetRally() {
+  state.inPlay = false;
+  state.bounces = 0;
+  state.lastHitBy = null;
+  trailCount = 0;
+  trailGeo.setDrawRange(0, 0);
+  parkBallAtServer();
+}
+function parkBallAtServer() {
+  const fromP = state.serving === 'player';
+  state.bz = fromP ? P1_Z - 0.1 : P2_Z + 0.1;
+  state.bx = (fromP ? state.p1x : state.p2x) + 0.45 * (fromP ? 1 : -1);
+  state.by = 1.2;
+  state.bvx = 0; state.bvy = 0; state.bvz = 0;
+  state.prevBz = state.bz;
+}
+function serve() {
+  const fromP = state.serving === 'player';
+  const dir = fromP ? -1 : 1;
+  state.bx = (fromP ? state.p1x : state.p2x) + 0.4 * dir * -1;
+  state.by = 1.4;
+  state.bz = fromP ? P1_Z - 0.2 : P2_Z + 0.2;
+  state.bvx = (Math.random() - 0.5) * 1.6;
+  state.bvy = 7;
+  state.bvz = dir * 16;
+  state.inPlay = true;
+  state.bounces = 0;
+  state.lastHitBy = fromP ? 'player' : 'ai';
+  state.prevBz = state.bz;
 }
 hardReset();
 
-function serve() {
-  const c = getCourt();
-  const fromPlayer = serving === 'player';
-  ball.x = fromPlayer ? c.x + PADDLE_W * 3 + 8 : c.x + c.w - PADDLE_W * 3 - 8;
-  ball.y = (fromPlayer ? player.y : ai.y) + PADDLE_H / 2;
-  const dir = fromPlayer ? 1 : -1;
-  const speed = Math.min(W, H) * 0.55; // px/sec
-  const angle = (Math.random() - 0.5) * 0.5; // small initial spread
-  ball.vx = dir * Math.cos(angle) * speed;
-  ball.vy = Math.sin(angle) * speed;
-  ball.rot = 0;
-  ball.vrot = (Math.random() - 0.5) * 8;
-  inPlay = true;
-  trail.length = 0;
-}
-
 // ================== INPUT ==================
-function selectMode(m) {
-  vsMode   = m;
-  menuStep = 'time';
-}
-function selectTime(seconds) {
-  timeLimit = seconds;
-  timeLeft  = seconds;
-  mode      = 'game';
-  hardReset();
-}
-window.addEventListener("mousemove", (e) => {
-  // Mouse only steers Player 1 in AI mode (in friend mode both players use keyboard for fairness)
-  if (mode !== 'game' || vsMode !== 'ai') return;
-  const rect = canvas.getBoundingClientRect();
-  player.y = e.clientY - rect.top - PADDLE_H / 2;
-});
 const keys = Object.create(null);
+const menuButtons = [];
+
+window.addEventListener('mousemove', e => {
+  if (state.mode === 'game' && state.vsMode === 'ai' && !state.gameOver) {
+    const ndcX = (e.clientX / W) * 2 - 1;
+    state.p1x = ndcX * (COURT_W / 2) * 1.05;
+  }
+});
 window.addEventListener('keydown', e => {
-  // Menu input
-  if (mode === 'menu') {
-    if (menuStep === 'mode') {
+  if (state.mode === 'menu') {
+    if (state.menuStep === 'mode') {
       if (e.code === 'Digit1' || e.code === 'Numpad1') { selectMode('ai');     e.preventDefault(); return; }
       if (e.code === 'Digit2' || e.code === 'Numpad2') { selectMode('friend'); e.preventDefault(); return; }
-      if (e.code === 'Space' || e.code === 'Enter')    { selectMode(vsMode);   e.preventDefault(); return; }
-    } else if (menuStep === 'time') {
-      const map = { Digit1: 0, Digit2: 1, Digit3: 2, Digit4: 3, Digit5: 4,
-                    Numpad1: 0, Numpad2: 1, Numpad3: 2, Numpad4: 3, Numpad5: 4 };
+      if (e.code === 'Space' || e.code === 'Enter')    { selectMode(state.vsMode); e.preventDefault(); return; }
+    } else {
+      const map = { Digit1:0, Digit2:1, Digit3:2, Digit4:3, Digit5:4,
+                    Numpad1:0, Numpad2:1, Numpad3:2, Numpad4:3, Numpad5:4 };
       if (e.code in map) { selectTime(TIME_OPTIONS[map[e.code]].seconds); e.preventDefault(); return; }
-      if (e.code === 'Space' || e.code === 'Enter') { selectTime(TIME_OPTIONS[1].seconds); e.preventDefault(); return; }
-      if (e.code === 'Escape' || e.code === 'Backspace') { menuStep = 'mode'; e.preventDefault(); return; }
+      if (e.code === 'Space' || e.code === 'Enter')    { selectTime(TIME_OPTIONS[1].seconds); e.preventDefault(); return; }
+      if (e.code === 'Escape' || e.code === 'Backspace') { state.menuStep = 'mode'; e.preventDefault(); return; }
     }
     return;
   }
   keys[e.code] = true;
   if (e.code === 'Space') {
-    if (gameOver) hardReset();
-    else if (!inPlay) serve();
+    if (state.gameOver) hardReset();
+    else if (!state.inPlay) serve();
     e.preventDefault();
   }
-  if (gameOver && e.code === 'KeyM') {
-    mode = 'menu';
-    menuStep = 'mode';
+  if (state.gameOver && e.code === 'KeyM') {
+    state.mode = 'menu';
+    state.menuStep = 'mode';
     e.preventDefault();
   }
-  if (['KeyW','KeyS','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
+  if (['KeyA','KeyD','KeyW','KeyS','ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.code)) e.preventDefault();
 });
 window.addEventListener('keyup', e => { keys[e.code] = false; });
 window.addEventListener('mousedown', e => {
-  if (mode === 'menu') {
+  if (state.mode === 'menu') {
     for (const btn of menuButtons) {
       if (e.clientX >= btn.x && e.clientX <= btn.x + btn.w &&
           e.clientY >= btn.y && e.clientY <= btn.y + btn.h) {
-        if (btn.kind === 'mode')      selectMode(btn.value);
+        if      (btn.kind === 'mode') selectMode(btn.value);
         else if (btn.kind === 'time') selectTime(btn.value);
-        else if (btn.kind === 'back') menuStep = 'mode';
+        else if (btn.kind === 'back') state.menuStep = 'mode';
         return;
       }
     }
     return;
   }
-  if (gameOver) hardReset();
-  else if (!inPlay) serve();
+  if (state.gameOver) hardReset();
+  else if (!state.inPlay) serve();
 });
 
 // ================== UPDATE ==================
-let lastTime = performance.now();
 function update(dt) {
-  if (mode !== 'game') return;
-  // ===== TIME LIMIT =====
-  if (timeLimit > 0 && !gameOver) {
-    timeLeft -= dt;
-    if (timeLeft <= 0) {
-      timeLeft = 0;
-      gameOver = true;
-      winner = scoreP > scoreA ? 'player'
-            : scoreA > scoreP ? 'ai'
-            : 'tie';
+  if (state.mode !== 'game') return;
+
+  // Timer
+  if (state.timeLimit > 0 && !state.gameOver) {
+    state.timeLeft -= dt;
+    if (state.timeLeft <= 0) {
+      state.timeLeft = 0;
+      state.gameOver = true;
+      state.winner = state.scoreP > state.scoreA ? 'player'
+                  : state.scoreA > state.scoreP ? 'ai' : 'tie';
       saveBest();
     }
   }
-  const c = getCourt();
 
-  // Player 1 keyboard movement — W/S always; arrow keys also work in AI mode (where they wouldn't conflict)
-  if (keys['KeyW']) player.y -= 480 * dt;
-  if (keys['KeyS']) player.y += 480 * dt;
-  if (vsMode === 'ai') {
-    if (keys['ArrowUp'])   player.y -= 480 * dt;
-    if (keys['ArrowDown']) player.y += 480 * dt;
+  // Player 1 keys — arrows only count in AI mode (in friend mode they belong to P2)
+  let p1Left = keys['KeyA'] || keys['KeyW'];
+  let p1Right = keys['KeyD'] || keys['KeyS'];
+  if (state.vsMode === 'ai') {
+    p1Left  = p1Left  || keys['ArrowLeft']  || keys['ArrowUp'];
+    p1Right = p1Right || keys['ArrowRight'] || keys['ArrowDown'];
   }
-  player.y = Math.max(c.y, Math.min(c.y + c.h - PADDLE_H, player.y));
+  if (p1Left)  state.p1x -= PLAYER_SPEED * dt;
+  if (p1Right) state.p1x += PLAYER_SPEED * dt;
+  state.p1x = Math.max(-X_LIMIT, Math.min(X_LIMIT, state.p1x));
 
-  if (vsMode === 'friend') {
-    // Player 2 uses the arrow keys
-    if (keys['ArrowUp'])   ai.y -= 480 * dt;
-    if (keys['ArrowDown']) ai.y += 480 * dt;
+  // Player 2 / AI
+  if (state.vsMode === 'friend') {
+    if (keys['ArrowLeft']  || keys['ArrowUp'])   state.p2x -= PLAYER_SPEED * dt;
+    if (keys['ArrowRight'] || keys['ArrowDown']) state.p2x += PLAYER_SPEED * dt;
   } else {
-    // AI tracks predicted ball Y
-    if (inPlay) {
-      const targetY = ball.y - PADDLE_H / 2;
-      const responsiveness = ball.vx > 0 ? aiSkill : aiSkill * 0.35;
-      ai.y += (targetY - ai.y) * Math.min(1, responsiveness * 60 * dt);
-    } else if (serving === 'ai') {
-      const target = c.y + c.h / 2 - PADDLE_H / 2;
-      ai.y += (target - ai.y) * 0.12;
+    if (state.inPlay && state.bvz < 0) {
+      // Predict ball X at the AI baseline
+      const dz = P2_Z - state.bz;
+      const tToReach = state.bvz !== 0 ? dz / state.bvz : 1;
+      const predX = state.bx + state.bvx * Math.max(0, tToReach);
+      const target = Math.max(-X_LIMIT, Math.min(X_LIMIT, predX));
+      const k = Math.min(1, state.aiSkill * 60 * dt);
+      state.p2x += (target - state.p2x) * k;
+    } else if (!state.inPlay && state.serving === 'ai') {
+      state.p2x *= Math.pow(0.85, dt * 60);   // drift toward 0
+      if (Math.random() < 0.012) serve();
     }
   }
-  ai.y = Math.max(c.y, Math.min(c.y + c.h - PADDLE_H, ai.y));
+  state.p2x = Math.max(-X_LIMIT, Math.min(X_LIMIT, state.p2x));
 
-  if (gameOver) return;
-  if (!inPlay) {
-    // Ball follows server's paddle while waiting for serve
-    if (serving === 'player') {
-      ball.x = c.x + PADDLE_W * 3 + 8;
-      ball.y = player.y + PADDLE_H / 2;
-    } else {
-      ball.x = c.x + c.w - PADDLE_W * 3 - 8;
-      ball.y = ai.y + PADDLE_H / 2;
-      ball.vx = 0; ball.vy = 0;
-      // Only auto-serve when the AI is in control — friend P2 must press SPACE themselves
-      if (vsMode === 'ai' && Math.random() < 0.02) serve();
-    }
+  // Apply player transforms
+  player1.position.x = state.p1x;
+  player2.position.x = state.p2x;
+
+  // Swing/flash decay + racket pose
+  state.swingP1 = Math.max(0, state.swingP1 - dt * 4);
+  state.swingP2 = Math.max(0, state.swingP2 - dt * 4);
+  state.hitFlashP1 = Math.max(0, state.hitFlashP1 - dt * 3);
+  state.hitFlashP2 = Math.max(0, state.hitFlashP2 - dt * 3);
+  const restAngle = -Math.PI / 6;
+  // Use sin curve so swing goes out and snaps back
+  const sw1Phase = Math.sin(state.swingP1 * Math.PI);
+  const sw2Phase = Math.sin(state.swingP2 * Math.PI);
+  player1.userData.racketPivot.rotation.z = restAngle - sw1Phase * Math.PI * 0.85;
+  player2.userData.racketPivot.rotation.z = restAngle - sw2Phase * Math.PI * 0.85;
+  // Light body lean during swing
+  player1.userData.racketPivot.parent.rotation.y = sw1Phase * 0.18;
+  player2.userData.racketPivot.parent.rotation.y = Math.PI + sw2Phase * 0.18;
+
+  if (state.gameOver) return;
+
+  // Ball idle when not in play
+  if (!state.inPlay) {
+    parkBallAtServer();
+    ball.position.set(state.bx, state.by, state.bz);
+    ballShadow.position.x = state.bx; ballShadow.position.z = state.bz;
     return;
   }
 
-  // Ball movement
-  ball.x += ball.vx * dt;
-  ball.y += ball.vy * dt;
-  ball.rot += ball.vrot * dt;
+  // Ball physics
+  state.prevBz = state.bz;
+  state.bvy += GRAVITY * dt;
+  state.bx += state.bvx * dt;
+  state.by += state.bvy * dt;
+  state.bz += state.bvz * dt;
 
-  // Trail
-  trail.push({ x: ball.x, y: ball.y, life: 14 });
-  if (trail.length > 14) trail.shift();
-  for (let i = trail.length - 1; i >= 0; i--) trail[i].life--;
-
-  // Top/bottom bounce off court edges
-  if (ball.y - BALL_R < c.y) {
-    ball.y = c.y + BALL_R;
-    ball.vy *= -1;
-  } else if (ball.y + BALL_R > c.y + c.h) {
-    ball.y = c.y + c.h - BALL_R;
-    ball.vy *= -1;
+  // Net crossing check (ball passes z=0)
+  if ((state.prevBz > 0 && state.bz <= 0) || (state.prevBz < 0 && state.bz >= 0)) {
+    if (state.by < NET_H + BALL_R && Math.abs(state.bx) < NET_HALF_W) {
+      // Net hit — hitter loses
+      awardLoss(state.lastHitBy);
+      return;
+    }
   }
 
-  // Paddle collisions
-  // Player paddle (left)
-  const px1 = c.x + PADDLE_W * 2;
-  if (ball.x - BALL_R < px1 + PADDLE_W && ball.x > px1 - 10 &&
-      ball.y > player.y && ball.y < player.y + PADDLE_H && ball.vx < 0) {
-    paddleHit(player, +1);
-  }
-  // AI paddle (right)
-  const ax1 = c.x + c.w - PADDLE_W * 3;
-  if (ball.x + BALL_R > ax1 && ball.x < ax1 + PADDLE_W + 10 &&
-      ball.y > ai.y && ball.y < ai.y + PADDLE_H && ball.vx > 0) {
-    paddleHit(ai, -1);
+  // Ground bounce
+  if (state.by - BALL_R < 0) {
+    state.by = BALL_R;
+    state.bvy = -state.bvy * 0.72;
+    state.bvx *= 0.92;
+    state.bvz *= 0.92;
+    state.bounces++;
+    spawnSparks(state.bx, 0.05, state.bz, 0xffffff);
+
+    const hitterIsPlayer = state.lastHitBy === 'player';
+    const outOfBounds = Math.abs(state.bx) > COURT_W / 2 || Math.abs(state.bz) > COURT_L / 2;
+
+    if (state.bounces === 1) {
+      // First bounce must be on opponent's side and in bounds
+      const ballSideIsHitterSide = (state.bz > 0) === hitterIsPlayer;
+      if (ballSideIsHitterSide || outOfBounds) {
+        awardLoss(state.lastHitBy);
+        return;
+      }
+    } else {
+      // 2nd bounce, no return — hitter scores
+      awardWin(state.lastHitBy);
+      return;
+    }
   }
 
-  // Score
-  if (ball.x + BALL_R < c.x) {
-    scoreA++;
-    serving = 'player';
-    inPlay = false;
-    checkGameOver();
-  } else if (ball.x - BALL_R > c.x + c.w) {
-    scoreP++;
-    serving = 'ai';
-    inPlay = false;
-    checkGameOver();
+  // Player hit detection
+  // Player 1 zone — ball moving toward +Z and crossing near P1 baseline
+  if (state.bvz > 0 && state.bz > P1_Z - 1.2 && state.bz < P1_Z + 0.6 && state.lastHitBy !== 'player') {
+    if (Math.abs(state.bx - state.p1x) < PLAYER_REACH && state.by < HIT_Y_MAX) {
+      hit('player');
+    }
+  }
+  // Player 2 zone
+  if (state.bvz < 0 && state.bz < P2_Z + 1.2 && state.bz > P2_Z - 0.6 && state.lastHitBy !== 'ai') {
+    if (Math.abs(state.bx - state.p2x) < PLAYER_REACH && state.by < HIT_Y_MAX) {
+      hit('ai');
+    }
   }
 
-  // Decay flash
-  if (hitFlash > 0) hitFlash -= dt * 4;
+  // Out the back
+  if (state.bz > P1_Z + 1.2) {
+    // Past P1: if P1 was last hitter, this is "long" -> P1 loses; if AI last hit, AI win (but that needs handling)
+    if (state.lastHitBy === 'player') awardLoss('player');
+    else                              awardWin('ai');
+    return;
+  } else if (state.bz < P2_Z - 1.2) {
+    if (state.lastHitBy === 'ai') awardLoss('ai');
+    else                          awardWin('player');
+    return;
+  }
+
+  // Trail update — shift, push current
+  for (let i = TRAIL_LEN - 1; i > 0; i--) {
+    trailPos[i * 3]     = trailPos[(i - 1) * 3];
+    trailPos[i * 3 + 1] = trailPos[(i - 1) * 3 + 1];
+    trailPos[i * 3 + 2] = trailPos[(i - 1) * 3 + 2];
+  }
+  trailPos[0] = state.bx; trailPos[1] = state.by; trailPos[2] = state.bz;
+  trailCount = Math.min(TRAIL_LEN, trailCount + 1);
+  trailGeo.setDrawRange(0, trailCount);
+  trailGeo.attributes.position.needsUpdate = true;
+
+  // Visuals
+  ball.position.set(state.bx, state.by, state.bz);
+  ball.rotation.x += state.bvz * dt * 0.6;
+  ball.rotation.z -= state.bvx * dt * 0.6;
+  ballShadow.position.x = state.bx;
+  ballShadow.position.z = state.bz;
+  const sScale = Math.max(0.35, 1.0 - state.by / 6);
+  ballShadow.scale.setScalar(sScale);
+  ballShadow.material.opacity = 0.4 * sScale;
 }
 
-function paddleHit(paddle, dir) {
-  // Compute the hit offset on the paddle, [-1, 1], and translate to bounce angle
-  const offset = ((ball.y - paddle.y) / PADDLE_H) * 2 - 1; // -1 top, +1 bottom
-  const speed = Math.hypot(ball.vx, ball.vy);
-  const newSpeed = Math.min(speed * 1.06 + 30, Math.max(W, H) * 1.4);
-  const angle = offset * 0.85; // up to ~50°
-  ball.vx = dir * Math.cos(angle) * newSpeed;
-  ball.vy = Math.sin(angle) * newSpeed;
-  ball.vrot = -dir * offset * 14;
-  // Push ball out so it doesn't re-collide
-  if (dir > 0) ball.x = (paddle === player ? (getCourt().x + PADDLE_W * 3) : 0) + BALL_R + 1;
-  else         ball.x = (paddle === ai ? (getCourt().x + getCourt().w - PADDLE_W * 3) : W) - BALL_R - 1;
-  hitFlash = 1.0;
-  lastHit = paddle === player ? 'player' : 'ai';
-  spawnHitSparks(ball.x, ball.y, paddle === player ? '#ef4444' : '#3b82f6');
+function hit(who) {
+  const hitterX = who === 'player' ? state.p1x : state.p2x;
+  const offset = (state.bx - hitterX) / PLAYER_REACH; // -1..1
+  const dir = who === 'player' ? -1 : 1;
+  const incomingSpeed = Math.hypot(state.bvx, state.bvz);
+  const newSpeed = Math.min(24, incomingSpeed * 1.06 + 5);
+  // Aim slightly with offset
+  const aim = offset * 0.55;
+  state.bvz = dir * newSpeed * Math.cos(aim);
+  state.bvx = newSpeed * Math.sin(aim) + offset * 1.2;
+  state.bvy = 5.5 + Math.random() * 2.0;
+  state.lastHitBy = who;
+  state.bounces = 0;
+  state.prevBz = state.bz;
+
+  if (who === 'player') {
+    state.swingP1 = 1.0;
+    state.hitFlashP1 = 1.0;
+    spawnSparks(state.bx, state.by, state.bz, 0xef4444);
+  } else {
+    state.swingP2 = 1.0;
+    state.hitFlashP2 = 1.0;
+    spawnSparks(state.bx, state.by, state.bz, 0x3b82f6);
+  }
 }
 
-function checkGameOver() {
-  // Timed mode: winner is decided when the clock hits 0 (handled in update())
-  if (timeLimit > 0) return;
-  // Unlimited mode: first to UNLIMITED_TARGET takes the match
-  if (scoreP >= UNLIMITED_TARGET) { gameOver = true; winner = 'player'; saveBest(); }
-  else if (scoreA >= UNLIMITED_TARGET) { gameOver = true; winner = 'ai'; saveBest(); }
+function awardWin(whoHit) {
+  // The hitter wins this point
+  if (whoHit === 'player') { state.scoreP++; state.serving = 'ai'; }
+  else                     { state.scoreA++; state.serving = 'player'; }
+  endRally();
+}
+function awardLoss(whoHit) {
+  // The hitter loses this point
+  if (whoHit === 'player') { state.scoreA++; state.serving = 'player'; }
+  else                     { state.scoreP++; state.serving = 'ai'; }
+  endRally();
+}
+function endRally() {
+  saveBest();
+  if (state.timeLimit === 0) {
+    if      (state.scoreP >= UNLIMITED_TARGET) { state.gameOver = true; state.winner = 'player'; }
+    else if (state.scoreA >= UNLIMITED_TARGET) { state.gameOver = true; state.winner = 'ai'; }
+  }
+  state.inPlay = false;
+  state.bounces = 0;
+  trailCount = 0;
+  trailGeo.setDrawRange(0, 0);
 }
 function saveBest() {
-  if (scoreP > bestScore) {
-    bestScore = scoreP;
-    localStorage.setItem('tennis-best', String(scoreP));
+  if (state.scoreP > bestScore) {
+    bestScore = state.scoreP;
+    try { localStorage.setItem('tennis-best', String(bestScore)); } catch {}
   }
 }
 
-// ================== PARTICLES ==================
-const particles = [];
-function spawnHitSparks(x, y, color) {
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2;
-    const sp = 100 + Math.random() * 200;
-    particles.push({
-      x, y,
-      vx: Math.cos(a) * sp,
-      vy: Math.sin(a) * sp,
-      life: 0.5,
-      maxLife: 0.5,
-      color
-    });
-  }
-}
-function updateParticles(dt) {
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
+// ================== SPARKS UPDATE / RENDER ==================
+function updateSparks(dt) {
+  for (let i = sparkList.length - 1; i >= 0; i--) {
+    const p = sparkList[i];
+    p.vy += GRAVITY * dt * 0.5;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    p.vx *= 0.94;
-    p.vy *= 0.94;
+    p.z += p.vz * dt;
+    p.vx *= 0.92; p.vz *= 0.92;
     p.life -= dt;
-    if (p.life <= 0) particles.splice(i, 1);
+    if (p.life <= 0 || p.y < 0) sparkList.splice(i, 1);
   }
-}
-
-// ================== DRAWING ==================
-function drawCourt() {
-  const c = getCourt();
-  // Background gradient
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#0a1530');
-  g.addColorStop(1, '#1a2e58');
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, W, H);
-
-  // Stadium silhouettes (very simple background flair)
-  ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  for (let x = 0; x < W; x += 38) {
-    const sh = 30 + ((Math.sin(x * 0.13) + 1) * 14);
-    ctx.fillRect(x, c.y - sh - 6, 32, sh);
-  }
-
-  // Court surround (slight darker frame around the court)
-  ctx.fillStyle = '#143b6e';
-  ctx.fillRect(c.x - 30, c.y - 30, c.w + 60, c.h + 60);
-
-  // Court playing surface — Australian Open blue
-  const cg = ctx.createLinearGradient(c.x, c.y, c.x, c.y + c.h);
-  cg.addColorStop(0, '#1d6fae');
-  cg.addColorStop(1, '#1d5a92');
-  ctx.fillStyle = cg;
-  ctx.fillRect(c.x, c.y, c.w, c.h);
-
-  // Sheen
-  const sheen = ctx.createLinearGradient(c.x, c.y, c.x + c.w, c.y);
-  sheen.addColorStop(0,   'rgba(255,255,255,0.06)');
-  sheen.addColorStop(0.5, 'rgba(255,255,255,0)');
-  sheen.addColorStop(1,   'rgba(0,0,0,0.12)');
-  ctx.fillStyle = sheen;
-  ctx.fillRect(c.x, c.y, c.w, c.h);
-
-  // Court lines (thicker = more visible)
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 4;
-  // Outer (doubles) court
-  ctx.strokeRect(c.x, c.y, c.w, c.h);
-
-  // Singles sidelines (inset from doubles by ~6% of height)
-  ctx.lineWidth = 3;
-  const sideInset = c.h * 0.07;
-  ctx.beginPath();
-  ctx.moveTo(c.x, c.y + sideInset);             ctx.lineTo(c.x + c.w, c.y + sideInset);
-  ctx.moveTo(c.x, c.y + c.h - sideInset);       ctx.lineTo(c.x + c.w, c.y + c.h - sideInset);
-  ctx.stroke();
-
-  // Service line on each half (vertical, ~25% from each baseline)
-  const serveOff = c.w * 0.25;
-  ctx.beginPath();
-  ctx.moveTo(c.x + serveOff,           c.y + sideInset);
-  ctx.lineTo(c.x + serveOff,           c.y + c.h - sideInset);
-  ctx.moveTo(c.x + c.w - serveOff,     c.y + sideInset);
-  ctx.lineTo(c.x + c.w - serveOff,     c.y + c.h - sideInset);
-  ctx.stroke();
-
-  // Center service line (horizontal, between service lines)
-  ctx.beginPath();
-  ctx.moveTo(c.x + serveOff,           c.y + c.h / 2);
-  ctx.lineTo(c.x + c.w - serveOff,     c.y + c.h / 2);
-  ctx.stroke();
-
-  // Center mark on each baseline
-  ctx.beginPath();
-  ctx.moveTo(c.x,        c.y + c.h / 2);
-  ctx.lineTo(c.x + 14,   c.y + c.h / 2);
-  ctx.moveTo(c.x + c.w,  c.y + c.h / 2);
-  ctx.lineTo(c.x + c.w - 14, c.y + c.h / 2);
-  ctx.stroke();
-
-  // Net — vertical down the middle with crosshatch
-  const netX = c.x + c.w / 2;
-  ctx.fillStyle = 'rgba(0,0,0,0.55)';
-  ctx.fillRect(netX - 4, c.y - 12, 8, c.h + 24);
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(netX - 4, c.y - 14, 8, 4);
-  ctx.fillRect(netX - 4, c.y + c.h + 10, 8, 4);
-  // Cross-hatch
-  ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-  ctx.lineWidth = 1;
-  for (let yy = c.y; yy < c.y + c.h; yy += 6) {
-    ctx.beginPath();
-    ctx.moveTo(netX - 4, yy);
-    ctx.lineTo(netX + 4, yy + 6);
-    ctx.moveTo(netX + 4, yy);
-    ctx.lineTo(netX - 4, yy + 6);
-    ctx.stroke();
-  }
-}
-
-function drawPaddle(side, p, color, rim) {
-  const c = getCourt();
-  const x = side === 'left' ? c.x + PADDLE_W * 2 : c.x + c.w - PADDLE_W * 3;
-  // Paddle body
-  const grad = ctx.createLinearGradient(x, 0, x + PADDLE_W, 0);
-  grad.addColorStop(0, rim);
-  grad.addColorStop(0.5, color);
-  grad.addColorStop(1, rim);
-  ctx.fillStyle = grad;
-  ctx.fillRect(x, p.y, PADDLE_W, PADDLE_H);
-  // Trim band
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(x, p.y + PADDLE_H / 2 - 1, PADDLE_W, 2);
-  ctx.fillStyle = rim;
-  ctx.fillRect(x, p.y, PADDLE_W, 4);
-  ctx.fillRect(x, p.y + PADDLE_H - 4, PADDLE_W, 4);
-  // Hit flash glow
-  if (hitFlash > 0 && lastHit === (side === 'left' ? 'player' : 'ai')) {
-    ctx.fillStyle = `rgba(255,255,200,${hitFlash * 0.4})`;
-    ctx.fillRect(x - 4, p.y - 4, PADDLE_W + 8, PADDLE_H + 8);
-  }
-}
-
-function drawBall() {
-  // Trail
-  for (let i = 0; i < trail.length; i++) {
-    const tr = trail[i];
-    const a = tr.life / 14;
-    ctx.fillStyle = `rgba(220,255,80,${a * 0.45})`;
-    ctx.beginPath();
-    ctx.arc(tr.x, tr.y, BALL_R * (0.4 + (i / trail.length) * 0.6), 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // Shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.35)';
-  ctx.beginPath();
-  ctx.ellipse(ball.x + 3, ball.y + 4, BALL_R, BALL_R * 0.6, 0, 0, Math.PI * 2);
-  ctx.fill();
-  // Ball
-  ctx.save();
-  ctx.translate(ball.x, ball.y);
-  ctx.rotate(ball.rot);
-  const grad = ctx.createRadialGradient(-BALL_R * 0.4, -BALL_R * 0.4, 1, 0, 0, BALL_R);
-  grad.addColorStop(0, '#fff8a8');
-  grad.addColorStop(0.6, '#e6e040');
-  grad.addColorStop(1, '#5a5800');
-  ctx.fillStyle = grad;
-  ctx.beginPath(); ctx.arc(0, 0, BALL_R, 0, Math.PI * 2); ctx.fill();
-  // Seam
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.arc(0, 0, BALL_R - 1, -0.4, 0.4); ctx.stroke();
-  ctx.beginPath(); ctx.arc(0, 0, BALL_R - 1, Math.PI - 0.4, Math.PI + 0.4); ctx.stroke();
-  ctx.restore();
-}
-
-function drawParticles() {
-  for (const p of particles) {
-    const a = p.life / p.maxLife;
-    ctx.fillStyle = p.color;
-    ctx.globalAlpha = a;
-    ctx.fillRect(p.x - 1.5, p.y - 1.5, 3, 3);
-  }
-  ctx.globalAlpha = 1;
-}
-
-function drawHUD() {
-  // Scoreboard
-  const sw = 220, sh = 64;
-  const sx = W / 2 - sw / 2, sy = 12;
-  ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.strokeStyle = '#fcd34d';
-  ctx.lineWidth = 2;
-  if (ctx.roundRect) {
-    ctx.beginPath(); ctx.roundRect(sx, sy, sw, sh, 10); ctx.fill(); ctx.stroke();
-  } else {
-    ctx.fillRect(sx, sy, sw, sh);
-    ctx.strokeRect(sx, sy, sw, sh);
-  }
-  ctx.fillStyle = '#fcd34d';
-  ctx.font = 'bold 11px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText('— TENNIS —', sx + sw / 2, sy + 14);
-  ctx.font = 'bold 36px monospace';
-  ctx.fillStyle = '#ef4444';
-  ctx.fillText(scoreP, sx + 50, sy + 50);
-  ctx.fillStyle = '#fff';
-  ctx.fillText(':', sx + sw / 2, sy + 48);
-  ctx.fillStyle = '#3b82f6';
-  ctx.fillText(scoreA, sx + sw - 50, sy + 50);
-
-  // Timer (timed) or "first to 7" hint (unlimited) under scoreboard
-  if (timeLimit > 0) {
-    const mm = Math.floor(timeLeft / 60).toString().padStart(2, '0');
-    const ss = Math.floor(Math.max(0, timeLeft) % 60).toString().padStart(2, '0');
-    const lowTime = !gameOver && timeLeft < 10;
-    const blink = lowTime && Math.floor(performance.now() / 250) % 2 === 0;
-    ctx.fillStyle = blink ? '#ff3b3b' : '#fcd34d';
-    ctx.font = 'bold 22px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(`${mm}:${ss}`, sx + sw / 2, sy + sh + 26);
-  } else {
-    ctx.fillStyle = '#fcd34d';
-    ctx.font = 'bold 12px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText(`FIRST TO ${UNLIMITED_TARGET}`, sx + sw / 2, sy + sh + 18);
-  }
-
-  // Best score
-  ctx.fillStyle = '#fcd34d';
-  ctx.font = '14px monospace';
-  ctx.textAlign = 'right';
-  ctx.fillText('Best: ' + bestScore, W - 14, 26);
-
-  // Player labels
-  const leftLabel  = vsMode === 'ai' ? 'YOU' : 'P1';
-  const rightLabel = vsMode === 'ai' ? 'CPU' : 'P2';
-  ctx.fillStyle = '#ef4444';
-  ctx.font = 'bold 14px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillText(leftLabel, 14, 26);
-  ctx.fillStyle = '#3b82f6';
-  ctx.textAlign = 'right';
-  ctx.fillText(rightLabel, W - 14, H - 16);
-
-  // Serve prompt
-  if (!inPlay && !gameOver) {
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 22px monospace';
-    ctx.textAlign = 'center';
-    let msg;
-    if (serving === 'player') msg = (vsMode === 'ai' ? 'Press SPACE to serve' : 'P1: Press SPACE to serve');
-    else                      msg = (vsMode === 'ai' ? 'Opponent serving…'   : 'P2: Press SPACE to serve');
-    ctx.fillText(msg, W / 2, H - 60);
-  }
-
-  // Game over
-  if (gameOver) {
-    ctx.fillStyle = 'rgba(0,0,0,0.65)';
-    ctx.fillRect(0, 0, W, H);
-    ctx.textAlign = 'center';
-    let color, name;
-    if (winner === 'tie') {
-      color = '#fcd34d'; name = "IT'S A TIE!";
+  for (let i = 0; i < SPARK_MAX; i++) {
+    const p = sparkList[i];
+    if (p) {
+      sparkPos[i * 3]     = p.x;
+      sparkPos[i * 3 + 1] = p.y;
+      sparkPos[i * 3 + 2] = p.z;
+      const a = Math.max(0, p.life / p.maxLife);
+      sparkCol[i * 3]     = p.r * a;
+      sparkCol[i * 3 + 1] = p.g * a;
+      sparkCol[i * 3 + 2] = p.b * a;
     } else {
-      color = winner === 'player' ? '#ef4444' : '#3b82f6';
-      if (vsMode === 'ai') name = winner === 'player' ? 'YOU WIN!' : 'CPU WINS!';
-      else                 name = winner === 'player' ? 'PLAYER 1 WINS!' : 'PLAYER 2 WINS!';
+      sparkPos[i * 3] = 0; sparkPos[i * 3 + 1] = -100; sparkPos[i * 3 + 2] = 0;
+      sparkCol[i * 3] = 0; sparkCol[i * 3 + 1] = 0;    sparkCol[i * 3 + 2] = 0;
     }
-    ctx.fillStyle = '#000';
-    ctx.font = 'bold 80px Impact, "Arial Black", sans-serif';
-    ctx.fillText(name, W / 2 + 4, H / 2 + 4);
-    ctx.fillStyle = color;
-    ctx.fillText(name, W / 2, H / 2);
-    ctx.fillStyle = '#fff';
-    ctx.font = '22px monospace';
-    ctx.fillText(`Final score:  ${scoreP}  —  ${scoreA}`, W / 2, H / 2 + 50);
-    ctx.fillText('SPACE for rematch  ·  M for menu', W / 2, H / 2 + 90);
   }
+  sparkGeo.attributes.position.needsUpdate = true;
+  sparkGeo.attributes.color.needsUpdate = true;
+  sparkGeo.setDrawRange(0, Math.max(1, sparkList.length));
+}
+
+// ================== HUD (2D overlay) ==================
+function drawHUD() {
+  hctx.clearRect(0, 0, W, H);
+  hctx.textBaseline = 'alphabetic';
+  if (state.mode === 'menu') drawMenu();
+  else                       drawGameHUD();
+}
+
+function roundRect(x, y, w, h, r) {
+  hctx.beginPath();
+  hctx.moveTo(x + r, y);
+  hctx.arcTo(x + w, y, x + w, y + h, r);
+  hctx.arcTo(x + w, y + h, x, y + h, r);
+  hctx.arcTo(x, y + h, x, y, r);
+  hctx.arcTo(x, y, x + w, y, r);
+  hctx.closePath();
 }
 
 function drawMenu() {
-  // Backdrop — show a faded court behind the menu
-  drawCourt();
-  ctx.fillStyle = 'rgba(0,0,0,0.7)';
-  ctx.fillRect(0, 0, W, H);
+  hctx.fillStyle = 'rgba(5,10,24,0.55)';
+  hctx.fillRect(0, 0, W, H);
+  hctx.textAlign = 'center';
+  hctx.textBaseline = 'middle';
+  hctx.fillStyle = '#fcd34d';
+  hctx.font = `900 ${Math.min(110, W * 0.10)}px Impact, "Arial Black", sans-serif`;
+  hctx.fillText('TENNIS  3D', W / 2, H * 0.18);
 
-  // Title
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#fcd34d';
-  ctx.font = `900 ${Math.min(110, W * 0.10)}px Impact, "Arial Black", sans-serif`;
-  ctx.fillText('TENNIS', W / 2, H * 0.18);
+  menuButtons.length = 0;
 
-  menuButtons = [];
-
-  if (menuStep === 'mode') {
-    // Step 1: pick the mode
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 18px monospace';
-    ctx.fillText('STEP 1  ·  CHOOSE A MODE', W / 2, H * 0.30);
+  if (state.menuStep === 'mode') {
+    hctx.fillStyle = '#fff';
+    hctx.font = 'bold 18px monospace';
+    hctx.fillText('STEP 1  ·  CHOOSE A MODE', W / 2, H * 0.30);
 
     const btnW = Math.min(320, (W - 80) / 2);
     const btnH = 130;
@@ -648,20 +884,19 @@ function drawMenu() {
     ];
     for (const b of buttons) drawBigBtn(b);
 
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.font = '14px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('Click a mode  ·  or press 1 / 2', W / 2, btnY + btnH + 36);
+    hctx.fillStyle = 'rgba(255,255,255,0.7)';
+    hctx.font = '14px monospace';
+    hctx.fillText('Click a mode  ·  or press 1 / 2', W / 2, btnY + btnH + 36);
 
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = '13px monospace';
-    ctx.fillText('VS AI  —  mouse or W/S to move',     W / 2, H * 0.80);
-    ctx.fillText('VS FRIEND  —  P1: W/S    P2: ↑/↓',   W / 2, H * 0.83);
-  } else if (menuStep === 'time') {
-    // Step 2: pick the time limit (or unlimited)
-    ctx.fillStyle = '#fff';
-    ctx.font = 'bold 18px monospace';
-    ctx.fillText(`STEP 2  ·  CHOOSE A TIME LIMIT  (mode: ${vsMode === 'ai' ? 'VS AI' : 'VS FRIEND'})`, W / 2, H * 0.30);
+    hctx.fillStyle = 'rgba(255,255,255,0.55)';
+    hctx.font = '13px monospace';
+    hctx.fillText('VS AI  —  mouse or A/D to move',   W / 2, H * 0.80);
+    hctx.fillText('VS FRIEND  —  P1: A/D    P2: ←/→', W / 2, H * 0.83);
+  } else {
+    hctx.fillStyle = '#fff';
+    hctx.font = 'bold 18px monospace';
+    hctx.fillText(`STEP 2  ·  CHOOSE A TIME LIMIT  (mode: ${state.vsMode === 'ai' ? 'VS AI' : 'VS FRIEND'})`,
+      W / 2, H * 0.30);
 
     const btnW = Math.min(150, (W - 80) / TIME_OPTIONS.length - 14);
     const btnH = 80;
@@ -672,95 +907,162 @@ function drawMenu() {
 
     TIME_OPTIONS.forEach((opt, i) => {
       const isUnlimited = opt.seconds === 0;
-      const b = {
-        x: startX + i * (btnW + gap),
-        y: btnY, w: btnW, h: btnH,
+      drawSmallBtn({
+        x: startX + i * (btnW + gap), y: btnY, w: btnW, h: btnH,
         kind: 'time', value: opt.seconds,
         fill: isUnlimited ? '#7a4f00' : '#143b6e',
         stroke: isUnlimited ? '#fcd34d' : '#3b82f6',
         label: opt.label,
         sub: isUnlimited ? `first to ${UNLIMITED_TARGET}` : 'timed match',
-      };
-      drawSmallBtn(b);
+      });
     });
 
-    // Back button
-    const back = {
+    drawSmallBtn({
       x: W / 2 - 70, y: btnY + btnH + 60, w: 140, h: 40,
-      kind: 'back', value: null,
-      fill: '#222', stroke: '#888',
+      kind: 'back', value: null, fill: '#222', stroke: '#888',
       label: '← BACK', sub: '',
-    };
-    drawSmallBtn(back, true);
+    }, true);
 
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
-    ctx.font = '14px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('Click a time  ·  or press 1–5  ·  Esc to go back', W / 2, btnY + btnH + 130);
+    hctx.fillStyle = 'rgba(255,255,255,0.7)';
+    hctx.font = '14px monospace';
+    hctx.fillText('Click a time  ·  or press 1–5  ·  Esc to go back',
+      W / 2, btnY + btnH + 130);
 
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font = '13px monospace';
-    ctx.fillText('Timed: highest score when the clock hits 0 wins (ties allowed).',  W / 2, H * 0.80);
-    ctx.fillText(`Unlimited: first player to ${UNLIMITED_TARGET} points wins.`,      W / 2, H * 0.83);
+    hctx.fillStyle = 'rgba(255,255,255,0.55)';
+    hctx.font = '13px monospace';
+    hctx.fillText('Timed: highest score when the clock hits 0 wins (ties allowed).',
+      W / 2, H * 0.80);
+    hctx.fillText(`Unlimited: first player to ${UNLIMITED_TARGET} points wins.`,
+      W / 2, H * 0.83);
   }
 }
 
 function drawBigBtn(b) {
-  ctx.fillStyle = b.fill;
-  ctx.strokeStyle = b.stroke;
-  ctx.lineWidth = 4;
-  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 16); ctx.fill(); ctx.stroke(); }
-  else { ctx.fillRect(b.x, b.y, b.w, b.h); ctx.strokeRect(b.x, b.y, b.w, b.h); }
-  ctx.fillStyle = '#fff';
-  ctx.textAlign = 'center';
-  ctx.font = '48px sans-serif';
-  ctx.fillText(b.icon, b.x + 50, b.y + b.h / 2 + 4);
-  ctx.font = 'bold 32px Impact, "Arial Black", sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(b.label, b.x + 90, b.y + b.h / 2 - 8);
-  ctx.font = '13px monospace';
-  ctx.fillStyle = '#cfe6ff';
-  ctx.fillText(b.sub, b.x + 90, b.y + b.h / 2 + 18);
+  roundRect(b.x, b.y, b.w, b.h, 16);
+  hctx.fillStyle = b.fill; hctx.fill();
+  hctx.strokeStyle = b.stroke; hctx.lineWidth = 4; hctx.stroke();
+  hctx.fillStyle = '#fff';
+  hctx.textAlign = 'center';
+  hctx.textBaseline = 'middle';
+  hctx.font = '48px sans-serif';
+  hctx.fillText(b.icon, b.x + 50, b.y + b.h / 2);
+  hctx.font = 'bold 32px Impact, "Arial Black", sans-serif';
+  hctx.textAlign = 'left';
+  hctx.fillText(b.label, b.x + 90, b.y + b.h / 2 - 12);
+  hctx.font = '13px monospace';
+  hctx.fillStyle = '#cfe6ff';
+  hctx.fillText(b.sub, b.x + 90, b.y + b.h / 2 + 18);
   menuButtons.push(b);
 }
-
 function drawSmallBtn(b, compact) {
-  ctx.fillStyle = b.fill;
-  ctx.strokeStyle = b.stroke;
-  ctx.lineWidth = 3;
-  if (ctx.roundRect) { ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 10); ctx.fill(); ctx.stroke(); }
-  else { ctx.fillRect(b.x, b.y, b.w, b.h); ctx.strokeRect(b.x, b.y, b.w, b.h); }
-  ctx.fillStyle = '#fff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = `bold ${compact ? 18 : 22}px Impact, "Arial Black", sans-serif`;
-  ctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 - (compact ? 0 : 8));
+  roundRect(b.x, b.y, b.w, b.h, 10);
+  hctx.fillStyle = b.fill; hctx.fill();
+  hctx.strokeStyle = b.stroke; hctx.lineWidth = 3; hctx.stroke();
+  hctx.fillStyle = '#fff';
+  hctx.textAlign = 'center';
+  hctx.textBaseline = 'middle';
+  hctx.font = `bold ${compact ? 18 : 22}px Impact, "Arial Black", sans-serif`;
+  hctx.fillText(b.label, b.x + b.w / 2, b.y + b.h / 2 - (compact ? 0 : 8));
   if (b.sub) {
-    ctx.font = '11px monospace';
-    ctx.fillStyle = '#cfe6ff';
-    ctx.fillText(b.sub, b.x + b.w / 2, b.y + b.h / 2 + 14);
+    hctx.font = '11px monospace';
+    hctx.fillStyle = '#cfe6ff';
+    hctx.fillText(b.sub, b.x + b.w / 2, b.y + b.h / 2 + 14);
   }
   menuButtons.push(b);
 }
 
+function drawGameHUD() {
+  // Scoreboard
+  const sw = 240, sh = 64;
+  const sx = W / 2 - sw / 2, sy = 12;
+  hctx.fillStyle = 'rgba(0,0,0,0.6)';
+  roundRect(sx, sy, sw, sh, 10); hctx.fill();
+  hctx.strokeStyle = '#fcd34d'; hctx.lineWidth = 2; hctx.stroke();
+  hctx.fillStyle = '#fcd34d';
+  hctx.font = 'bold 11px monospace';
+  hctx.textAlign = 'center';
+  hctx.textBaseline = 'alphabetic';
+  hctx.fillText('— TENNIS 3D —', sx + sw / 2, sy + 14);
+  hctx.font = 'bold 36px monospace';
+  hctx.fillStyle = '#ef4444';
+  hctx.fillText(state.scoreP, sx + 50, sy + 50);
+  hctx.fillStyle = '#fff';
+  hctx.fillText(':', sx + sw / 2, sy + 48);
+  hctx.fillStyle = '#3b82f6';
+  hctx.fillText(state.scoreA, sx + sw - 50, sy + 50);
+
+  if (state.timeLimit > 0) {
+    const mm = Math.floor(state.timeLeft / 60).toString().padStart(2, '0');
+    const ss = Math.floor(Math.max(0, state.timeLeft) % 60).toString().padStart(2, '0');
+    const lowTime = !state.gameOver && state.timeLeft < 10;
+    const blink = lowTime && Math.floor(performance.now() / 250) % 2 === 0;
+    hctx.fillStyle = blink ? '#ff3b3b' : '#fcd34d';
+    hctx.font = 'bold 22px monospace';
+    hctx.fillText(`${mm}:${ss}`, sx + sw / 2, sy + sh + 26);
+  } else {
+    hctx.fillStyle = '#fcd34d';
+    hctx.font = 'bold 12px monospace';
+    hctx.fillText(`FIRST TO ${UNLIMITED_TARGET}`, sx + sw / 2, sy + sh + 18);
+  }
+
+  hctx.fillStyle = '#fcd34d';
+  hctx.font = '14px monospace';
+  hctx.textAlign = 'right';
+  hctx.fillText('Best: ' + bestScore, W - 14, 26);
+
+  const leftLabel  = state.vsMode === 'ai' ? 'YOU' : 'P1';
+  const rightLabel = state.vsMode === 'ai' ? 'CPU' : 'P2';
+  hctx.fillStyle = '#ef4444';
+  hctx.font = 'bold 14px monospace';
+  hctx.textAlign = 'left';
+  hctx.fillText(leftLabel, 14, 26);
+  hctx.fillStyle = '#3b82f6';
+  hctx.textAlign = 'right';
+  hctx.fillText(rightLabel, W - 14, H - 16);
+
+  if (!state.inPlay && !state.gameOver) {
+    hctx.fillStyle = '#fff';
+    hctx.font = 'bold 22px monospace';
+    hctx.textAlign = 'center';
+    let msg;
+    if (state.serving === 'player') msg = (state.vsMode === 'ai' ? 'Press SPACE to serve' : 'P1: Press SPACE to serve');
+    else                            msg = (state.vsMode === 'ai' ? 'Opponent serving…'   : 'P2: Press SPACE to serve');
+    hctx.fillText(msg, W / 2, H - 60);
+  }
+
+  if (state.gameOver) {
+    hctx.fillStyle = 'rgba(0,0,0,0.65)';
+    hctx.fillRect(0, 0, W, H);
+    hctx.textAlign = 'center';
+    let color, name;
+    if (state.winner === 'tie') {
+      color = '#fcd34d'; name = "IT'S A TIE!";
+    } else {
+      color = state.winner === 'player' ? '#ef4444' : '#3b82f6';
+      if (state.vsMode === 'ai') name = state.winner === 'player' ? 'YOU WIN!' : 'CPU WINS!';
+      else                       name = state.winner === 'player' ? 'PLAYER 1 WINS!' : 'PLAYER 2 WINS!';
+    }
+    hctx.fillStyle = '#000';
+    hctx.font = 'bold 80px Impact, "Arial Black", sans-serif';
+    hctx.fillText(name, W / 2 + 4, H / 2 + 4);
+    hctx.fillStyle = color;
+    hctx.fillText(name, W / 2, H / 2);
+    hctx.fillStyle = '#fff';
+    hctx.font = '22px monospace';
+    hctx.fillText(`Final score:  ${state.scoreP}  —  ${state.scoreA}`, W / 2, H / 2 + 50);
+    hctx.fillText('SPACE for rematch  ·  M for menu',                    W / 2, H / 2 + 90);
+  }
+}
+
 // ================== MAIN LOOP ==================
+let lastTime = performance.now();
 function frame(t) {
   const dt = Math.min(0.05, (t - lastTime) / 1000);
   lastTime = t;
   update(dt);
-  updateParticles(dt);
-
-  if (mode === 'menu') {
-    drawMenu();
-  } else {
-    drawCourt();
-    drawPaddle('left',  player, '#ef4444', '#7f1d1d');
-    drawPaddle('right', ai,     '#3b82f6', '#1e3a8a');
-    drawBall();
-    drawParticles();
-    drawHUD();
-  }
-
+  updateSparks(dt);
+  renderer.render(scene, camera);
+  drawHUD();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
