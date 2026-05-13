@@ -4,6 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Tennis 3D</title>
+<link rel="preconnect" href="https://unpkg.com" crossorigin />
+<link rel="modulepreload" href="https://unpkg.com/three@0.160.0/build/three.module.js" crossorigin />
 <style>
   html, body {
     margin: 0; padding: 0; height: 100%;
@@ -33,7 +35,6 @@
 <canvas id="hud"></canvas>
 <div id="hint">VS AI · VS FRIEND · VS ONLINE (share a link) &nbsp;·&nbsp; A/D or ←/→ to move &nbsp;·&nbsp; SPACE serves &nbsp;·&nbsp; Timed or first-to-7</div>
 
-<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script type="importmap">
 {
   "imports": {
@@ -71,6 +72,20 @@ const CAM_LOOK = new THREE.Vector3(0, 1.0, -2);
 camera.position.copy(CAM_BASE);
 camera.lookAt(CAM_LOOK);
 
+// Defer queue — non-critical scene parts get pushed here and built after the
+// first frame renders, so the playable scene appears faster.
+const _deferredBuilders = [];
+const deferBuild = (fn) => _deferredBuilders.push(fn);
+let _deferredFlushed = false;
+function flushDeferredBuilders() {
+  if (_deferredFlushed) return;
+  _deferredFlushed = true;
+  for (const fn of _deferredBuilders) {
+    try { fn(); } catch (e) { console.error(e); }
+  }
+  _deferredBuilders.length = 0;
+}
+
 let W = 0, H = 0;
 function resize() {
   W = window.innerWidth; H = window.innerHeight;
@@ -87,7 +102,7 @@ scene.add(new THREE.HemisphereLight(0xb6d4ff, 0x1a2c52, 0.7));
 const sun = new THREE.DirectionalLight(0xffffff, 1.15);
 sun.position.set(8, 22, 12);
 sun.castShadow = true;
-sun.shadow.mapSize.set(4096, 4096);
+sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.camera.near = 1;
 sun.shadow.camera.far = 70;
 sun.shadow.camera.left   = -22;
@@ -134,7 +149,7 @@ const NET_HALF_W = COURT_W / 2 + 0.3;
 const F = 2.0;  // surround frame thickness
 
 function makeCourtTexture() {
-  const cw = 2048;
+  const cw = 1024;
   const ch = Math.round(cw * (COURT_L / COURT_W));
   const c = document.createElement('canvas');
   c.width = cw; c.height = ch;
@@ -147,17 +162,21 @@ function makeCourtTexture() {
   g.addColorStop(1, '#174f80');
   cx.fillStyle = g; cx.fillRect(0, 0, cw, ch);
 
-  // Speckled texture — gives the surface that gritty cushioned-acrylic look
-  const speckles = cx.createImageData(cw, ch);
-  for (let i = 0; i < speckles.data.length; i += 4) {
-    const n = (Math.random() - 0.5) * 24;
-    speckles.data[i]     = 255; speckles.data[i+1] = 255;
-    speckles.data[i+2]   = 255; speckles.data[i+3] = Math.max(0, n);
+  // Speckle — cheap sparse dots instead of per-pixel ImageData (was ~9M iterations).
+  // Density tuned to read as gritty cushion acrylic at the camera distance.
+  const speckleCount = Math.floor((cw * ch) / 800);
+  cx.fillStyle = 'rgba(255,255,255,0.12)';
+  for (let i = 0; i < speckleCount; i++) {
+    const x = Math.random() * cw;
+    const y = Math.random() * ch;
+    cx.fillRect(x, y, 1, 1);
   }
-  cx.putImageData(speckles, 0, 0);
-  // Re-darken to keep tone — overlay subtle gradient again at low opacity
-  cx.fillStyle = 'rgba(20,60,100,0.18)';
-  cx.fillRect(0, 0, cw, ch);
+  cx.fillStyle = 'rgba(0,0,0,0.10)';
+  for (let i = 0; i < speckleCount; i++) {
+    const x = Math.random() * cw;
+    const y = Math.random() * ch;
+    cx.fillRect(x, y, 1, 1);
+  }
 
   // Subtle horizontal banding
   for (let y = 0; y < ch; y += 24) {
@@ -175,14 +194,14 @@ function makeCourtTexture() {
   // Sponsor logos (text) — placed on each baseline, big and faded so they read as paint
   cx.save();
   cx.fillStyle = 'rgba(255,255,255,0.10)';
-  cx.font = '900 110px Impact, "Arial Black", sans-serif';
+  cx.font = '900 56px Impact, "Arial Black", sans-serif';
   cx.textAlign = 'center'; cx.textBaseline = 'middle';
   cx.translate(cw / 2, ch * 0.10);
   cx.fillText('TENNIS  3D', 0, 0);
   cx.restore();
   cx.save();
   cx.fillStyle = 'rgba(255,255,255,0.10)';
-  cx.font = '900 110px Impact, "Arial Black", sans-serif';
+  cx.font = '900 56px Impact, "Arial Black", sans-serif';
   cx.textAlign = 'center'; cx.textBaseline = 'middle';
   cx.translate(cw / 2, ch * 0.90);
   cx.rotate(Math.PI);
@@ -193,23 +212,23 @@ function makeCourtTexture() {
   cx.lineCap = 'butt';
 
   // Outer doubles
-  cx.lineWidth = 12;
-  cx.strokeRect(16, 16, cw - 32, ch - 32);
+  cx.lineWidth = 6;
+  cx.strokeRect(8, 8, cw - 16, ch - 16);
 
   // Singles sidelines
   const singlesInset = ((COURT_W - SINGLES_W) / 2) / COURT_W * cw;
-  cx.lineWidth = 10;
+  cx.lineWidth = 5;
   cx.beginPath();
-  cx.moveTo(singlesInset + 16, 16);          cx.lineTo(singlesInset + 16, ch - 16);
-  cx.moveTo(cw - singlesInset - 16, 16);     cx.lineTo(cw - singlesInset - 16, ch - 16);
+  cx.moveTo(singlesInset + 8, 8);            cx.lineTo(singlesInset + 8, ch - 8);
+  cx.moveTo(cw - singlesInset - 8, 8);       cx.lineTo(cw - singlesInset - 8, ch - 8);
   cx.stroke();
 
   // Service lines
   const serviceY1 = (COURT_L / 2 - 6.4) / COURT_L * ch;
   const serviceY2 = ch - serviceY1;
   cx.beginPath();
-  cx.moveTo(singlesInset + 16, serviceY1);   cx.lineTo(cw - singlesInset - 16, serviceY1);
-  cx.moveTo(singlesInset + 16, serviceY2);   cx.lineTo(cw - singlesInset - 16, serviceY2);
+  cx.moveTo(singlesInset + 8, serviceY1);    cx.lineTo(cw - singlesInset - 8, serviceY1);
+  cx.moveTo(singlesInset + 8, serviceY2);    cx.lineTo(cw - singlesInset - 8, serviceY2);
   cx.stroke();
 
   // Center service line
@@ -218,21 +237,21 @@ function makeCourtTexture() {
   cx.stroke();
 
   // Center marks
-  cx.lineWidth = 12;
+  cx.lineWidth = 6;
   cx.beginPath();
-  cx.moveTo(cw / 2 - 28, 16);                cx.lineTo(cw / 2 + 28, 16);
-  cx.moveTo(cw / 2 - 28, ch - 16);           cx.lineTo(cw / 2 + 28, ch - 16);
+  cx.moveTo(cw / 2 - 14, 8);                 cx.lineTo(cw / 2 + 14, 8);
+  cx.moveTo(cw / 2 - 14, ch - 8);            cx.lineTo(cw / 2 + 14, ch - 8);
   cx.stroke();
 
   // Net line (faint shadow under the net)
-  cx.lineWidth = 8;
+  cx.lineWidth = 4;
   cx.strokeStyle = 'rgba(0,0,0,0.30)';
   cx.beginPath();
   cx.moveTo(0, ch / 2); cx.lineTo(cw, ch / 2);
   cx.stroke();
 
   const tex = new THREE.CanvasTexture(c);
-  tex.anisotropy = 16;
+  tex.anisotropy = 12;
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
@@ -362,8 +381,10 @@ function buildCrowd() {
   const points = new THREE.Points(geo, mat);
   return points;
 }
-const crowd = buildCrowd();
-scene.add(crowd);
+deferBuild(() => {
+  const crowd = buildCrowd();
+  scene.add(crowd);
+});
 
 // Floodlight pylons in 4 corners
 const pylonGroup = new THREE.Group();
@@ -432,10 +453,12 @@ function makePylon(x, z) {
 
 const pylonOff = COURT_W / 2 + F + 5.5;
 const pylonOffZ = COURT_L / 2 + F + 6;
-pylonGroup.add(makePylon( pylonOff,  pylonOffZ));
-pylonGroup.add(makePylon(-pylonOff,  pylonOffZ));
-pylonGroup.add(makePylon( pylonOff, -pylonOffZ));
-pylonGroup.add(makePylon(-pylonOff, -pylonOffZ));
+deferBuild(() => {
+  pylonGroup.add(makePylon( pylonOff,  pylonOffZ));
+  pylonGroup.add(makePylon(-pylonOff,  pylonOffZ));
+  pylonGroup.add(makePylon( pylonOff, -pylonOffZ));
+  pylonGroup.add(makePylon(-pylonOff, -pylonOffZ));
+});
 
 // ================== SPONSOR BANNERS + JUMBOTRON ==================
 function makeBannerTexture(text, fg, bg) {
@@ -489,10 +512,12 @@ function addBanner(xCenter, zCenter, length, faceX, faceZ, specIdx) {
 // Front-tier banners on each side (in front of the lowest grandstand row)
 const bannerY = COURT_L / 2 + F + 0.6;
 const bannerX = COURT_W / 2 + F + 0.6;
-addBanner(0,  bannerY, COURT_W + 8, 0,  1, 0);
-addBanner(0, -bannerY, COURT_W + 8, 0, -1, 1);
-addBanner( bannerX, 0, COURT_L + 4, 1, 0, 2);
-addBanner(-bannerX, 0, COURT_L + 4,-1, 0, 3);
+deferBuild(() => {
+  addBanner(0,  bannerY, COURT_W + 8, 0,  1, 0);
+  addBanner(0, -bannerY, COURT_W + 8, 0, -1, 1);
+  addBanner( bannerX, 0, COURT_L + 4, 1, 0, 2);
+  addBanner(-bannerX, 0, COURT_L + 4,-1, 0, 3);
+});
 
 // Jumbotron — big back-wall scoreboard behind P2's end
 function makeJumbotronTexture() {
@@ -525,31 +550,32 @@ function makeJumbotronTexture() {
   t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 16;
   return t;
 }
-const jumboTex = makeJumbotronTexture();
-const jumboMat = new THREE.MeshStandardMaterial({
-  map: jumboTex, emissive: 0xffffff, emissiveMap: jumboTex,
-  emissiveIntensity: 0.55, roughness: 0.45, metalness: 0.2,
-});
-const jumboW = 12, jumboH = 6;
-const jumbotron = new THREE.Mesh(new THREE.PlaneGeometry(jumboW, jumboH), jumboMat);
-jumbotron.position.set(0, 7.5, -COURT_L / 2 - F - 9);
-jumbotron.rotation.y = 0; // facing toward +Z (camera/court)
-scene.add(jumbotron);
-// Frame for the jumbotron
-const jumboFrameMat = new THREE.MeshStandardMaterial({ color: 0x0c0c14, roughness: 0.5, metalness: 0.4 });
-const jumboFrame = new THREE.Mesh(
-  new THREE.BoxGeometry(jumboW + 0.6, jumboH + 0.6, 0.3), jumboFrameMat
-);
-jumboFrame.position.set(0, 7.5, -COURT_L / 2 - F - 9.18);
-scene.add(jumboFrame);
-// Support poles
-for (const ss of [-1, 1]) {
-  const pole = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.12, 0.14, 7.5, 12), jumboFrameMat
+deferBuild(() => {
+  const jumboTex = makeJumbotronTexture();
+  const jumboMat = new THREE.MeshStandardMaterial({
+    map: jumboTex, emissive: 0xffffff, emissiveMap: jumboTex,
+    emissiveIntensity: 0.55, roughness: 0.45, metalness: 0.2,
+  });
+  const jumboW = 12, jumboH = 6;
+  const jumbotron = new THREE.Mesh(new THREE.PlaneGeometry(jumboW, jumboH), jumboMat);
+  jumbotron.position.set(0, 7.5, -COURT_L / 2 - F - 9);
+  scene.add(jumbotron);
+  // Frame for the jumbotron
+  const jumboFrameMat = new THREE.MeshStandardMaterial({ color: 0x0c0c14, roughness: 0.5, metalness: 0.4 });
+  const jumboFrame = new THREE.Mesh(
+    new THREE.BoxGeometry(jumboW + 0.6, jumboH + 0.6, 0.3), jumboFrameMat
   );
-  pole.position.set(ss * (jumboW / 2 - 0.5), 3.7, -COURT_L / 2 - F - 9.4);
-  scene.add(pole);
-}
+  jumboFrame.position.set(0, 7.5, -COURT_L / 2 - F - 9.18);
+  scene.add(jumboFrame);
+  // Support poles
+  for (const ss of [-1, 1]) {
+    const pole = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.12, 0.14, 7.5, 12), jumboFrameMat
+    );
+    pole.position.set(ss * (jumboW / 2 - 0.5), 3.7, -COURT_L / 2 - F - 9.4);
+    scene.add(pole);
+  }
+});
 
 // ================== NET ==================
 function makeNetTexture() {
@@ -1464,6 +1490,23 @@ const net = {
   remoteInput: { left: false, right: false, space: false, m: false, prevSpace: false, prevM: false },
 };
 
+// Lazy-load PeerJS only when the user picks online mode — saves ~70KB on every
+// load for solo / friend matches.
+let _peerLoadPromise = null;
+function loadPeerJS() {
+  if (typeof window.Peer !== 'undefined') return Promise.resolve();
+  if (_peerLoadPromise) return _peerLoadPromise;
+  _peerLoadPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+    s.async = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('PeerJS failed to load (check internet)'));
+    document.head.appendChild(s);
+  });
+  return _peerLoadPromise;
+}
+
 function newRoomId() {
   return 'tns-' + Math.random().toString(36).slice(2, 8);
 }
@@ -1478,18 +1521,19 @@ function buildShareUrl(id) {
 }
 
 function startHost(timeLimit) {
-  if (typeof Peer === 'undefined') {
-    net.status = 'error';
-    net.errorMessage = 'PeerJS library failed to load (check internet)';
-    return;
-  }
   state.vsMode = 'online';
   state.timeLimit = timeLimit;
   state.timeLeft  = timeLimit;
   net.role = 'host';
   net.status = 'creating';
   net.errorMessage = '';
-  const id = newRoomId();
+  loadPeerJS().then(() => _startHostInternal(newRoomId()), (err) => {
+    net.status = 'error';
+    net.errorMessage = String(err && err.message || err);
+  });
+}
+function _startHostInternal(id) {
+  if (net.role !== 'host') return;  // user cancelled while loading
   try {
     net.peer = new Peer(id, { debug: 0 });
   } catch (e) {
@@ -1522,11 +1566,6 @@ function startHost(timeLimit) {
 }
 
 function startJoin(roomId) {
-  if (typeof Peer === 'undefined') {
-    net.status = 'error';
-    net.errorMessage = 'PeerJS library failed to load (check internet)';
-    return;
-  }
   state.vsMode = 'online';
   state.mode = 'menu';
   state.menuStep = 'online-join';
@@ -1534,6 +1573,13 @@ function startJoin(roomId) {
   net.status = 'connecting';
   net.roomId = roomId;
   net.errorMessage = '';
+  loadPeerJS().then(() => _startJoinInternal(roomId), (err) => {
+    net.status = 'error';
+    net.errorMessage = String(err && err.message || err);
+  });
+}
+function _startJoinInternal(roomId) {
+  if (net.role !== 'guest') return;  // user cancelled while loading
   try {
     net.peer = new Peer({ debug: 0 });
   } catch (e) {
@@ -2532,6 +2578,15 @@ function frame(now) {
 
   renderer.render(scene, camera);
   drawHUD();
+  // After the very first paint, build deferred decorations on the next idle slot
+  // so the playable scene appears as fast as possible.
+  if (!_deferredFlushed) {
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(flushDeferredBuilders, { timeout: 200 });
+    } else {
+      setTimeout(flushDeferredBuilders, 0);
+    }
+  }
   requestAnimationFrame(frame);
 }
 
