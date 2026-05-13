@@ -49,13 +49,17 @@ const gameCanvas = document.getElementById('game');
 const hudCanvas  = document.getElementById('hud');
 const hctx = hudCanvas.getContext('2d');
 
-const renderer = new THREE.WebGLRenderer({ canvas: gameCanvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const renderer = new THREE.WebGLRenderer({
+  canvas: gameCanvas, antialias: true, powerPreference: 'high-performance',
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2.5));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.18;
+renderer.toneMappingExposure = 1.22;
+// Keep the older intensity scaling so the hand-tuned light values stay readable.
+renderer.useLegacyLights = true;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x06112a);
@@ -79,28 +83,47 @@ function resize() {
 window.addEventListener('resize', resize); resize();
 
 // ================== LIGHTS ==================
-scene.add(new THREE.HemisphereLight(0x9ec3ff, 0x14223e, 0.55));
-const sun = new THREE.DirectionalLight(0xffffff, 1.05);
+scene.add(new THREE.HemisphereLight(0xb6d4ff, 0x1a2c52, 0.7));
+const sun = new THREE.DirectionalLight(0xffffff, 1.15);
 sun.position.set(8, 22, 12);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.mapSize.set(4096, 4096);
 sun.shadow.camera.near = 1;
-sun.shadow.camera.far = 60;
-sun.shadow.camera.left   = -20;
-sun.shadow.camera.right  = 20;
-sun.shadow.camera.top    = 24;
-sun.shadow.camera.bottom = -24;
-sun.shadow.bias = -0.0004;
-sun.shadow.normalBias = 0.04;
+sun.shadow.camera.far = 70;
+sun.shadow.camera.left   = -22;
+sun.shadow.camera.right  = 22;
+sun.shadow.camera.top    = 28;
+sun.shadow.camera.bottom = -28;
+sun.shadow.bias = -0.00025;
+sun.shadow.normalBias = 0.035;
+sun.shadow.radius = 4;
 scene.add(sun);
 
-const rim = new THREE.DirectionalLight(0x88aaff, 0.45);
-rim.position.set(-12, 8, -12);
+const rim = new THREE.DirectionalLight(0x90b8ff, 0.55);
+rim.position.set(-14, 10, -14);
 scene.add(rim);
 
-const fill = new THREE.DirectionalLight(0xffd7a0, 0.18);
+const fill = new THREE.DirectionalLight(0xffd7a0, 0.24);
 fill.position.set(0, 6, 22);
 scene.add(fill);
+
+// Court spot lights — like stadium key/fill from the four corners
+function addCourtSpot(x, y, z, intensity) {
+  const sl = new THREE.SpotLight(0xfff4d8, intensity, 60, Math.PI / 4.5, 0.45, 1.0);
+  sl.position.set(x, y, z);
+  sl.target.position.set(0, 0, 0);
+  scene.add(sl);
+  scene.add(sl.target);
+}
+addCourtSpot( 14, 14,  16, 1.4);
+addCourtSpot(-14, 14,  16, 1.4);
+addCourtSpot( 14, 14, -16, 1.2);
+addCourtSpot(-14, 14, -16, 1.2);
+
+// Ground bounce — soft, court-tinted up-light
+const bounce = new THREE.PointLight(0x4f7fbf, 0.35, 30, 2);
+bounce.position.set(0, 0.4, 0);
+scene.add(bounce);
 
 // ================== COURT ==================
 const COURT_W   = 11.0;
@@ -111,7 +134,7 @@ const NET_HALF_W = COURT_W / 2 + 0.3;
 const F = 2.0;  // surround frame thickness
 
 function makeCourtTexture() {
-  const cw = 1024;
+  const cw = 2048;
   const ch = Math.round(cw * (COURT_L / COURT_W));
   const c = document.createElement('canvas');
   c.width = cw; c.height = ch;
@@ -119,45 +142,74 @@ function makeCourtTexture() {
 
   // Base gradient (Aussie-blue)
   const g = cx.createLinearGradient(0, 0, 0, ch);
-  g.addColorStop(0, '#1f78bd');
+  g.addColorStop(0, '#2284cb');
   g.addColorStop(0.5, '#1d6fae');
-  g.addColorStop(1, '#1b5d96');
+  g.addColorStop(1, '#174f80');
   cx.fillStyle = g; cx.fillRect(0, 0, cw, ch);
 
+  // Speckled texture — gives the surface that gritty cushioned-acrylic look
+  const speckles = cx.createImageData(cw, ch);
+  for (let i = 0; i < speckles.data.length; i += 4) {
+    const n = (Math.random() - 0.5) * 24;
+    speckles.data[i]     = 255; speckles.data[i+1] = 255;
+    speckles.data[i+2]   = 255; speckles.data[i+3] = Math.max(0, n);
+  }
+  cx.putImageData(speckles, 0, 0);
+  // Re-darken to keep tone — overlay subtle gradient again at low opacity
+  cx.fillStyle = 'rgba(20,60,100,0.18)';
+  cx.fillRect(0, 0, cw, ch);
+
   // Subtle horizontal banding
-  for (let y = 0; y < ch; y += 12) {
-    cx.fillStyle = `rgba(255,255,255,${(y % 24 === 0 ? 0.02 : 0.0)})`;
-    cx.fillRect(0, y, cw, 6);
+  for (let y = 0; y < ch; y += 24) {
+    cx.fillStyle = (y % 48 === 0) ? 'rgba(255,255,255,0.025)' : 'rgba(0,0,0,0.04)';
+    cx.fillRect(0, y, cw, 12);
   }
 
   // Side sheen
   const sh = cx.createLinearGradient(0, 0, cw, 0);
-  sh.addColorStop(0,   'rgba(255,255,255,0.10)');
+  sh.addColorStop(0,   'rgba(255,255,255,0.12)');
   sh.addColorStop(0.5, 'rgba(255,255,255,0)');
-  sh.addColorStop(1,   'rgba(0,0,0,0.18)');
+  sh.addColorStop(1,   'rgba(0,0,0,0.20)');
   cx.fillStyle = sh; cx.fillRect(0, 0, cw, ch);
+
+  // Sponsor logos (text) — placed on each baseline, big and faded so they read as paint
+  cx.save();
+  cx.fillStyle = 'rgba(255,255,255,0.10)';
+  cx.font = '900 110px Impact, "Arial Black", sans-serif';
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.translate(cw / 2, ch * 0.10);
+  cx.fillText('TENNIS  3D', 0, 0);
+  cx.restore();
+  cx.save();
+  cx.fillStyle = 'rgba(255,255,255,0.10)';
+  cx.font = '900 110px Impact, "Arial Black", sans-serif';
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.translate(cw / 2, ch * 0.90);
+  cx.rotate(Math.PI);
+  cx.fillText('TENNIS  3D', 0, 0);
+  cx.restore();
 
   cx.strokeStyle = '#fff';
   cx.lineCap = 'butt';
 
   // Outer doubles
-  cx.lineWidth = 6;
-  cx.strokeRect(8, 8, cw - 16, ch - 16);
+  cx.lineWidth = 12;
+  cx.strokeRect(16, 16, cw - 32, ch - 32);
 
   // Singles sidelines
   const singlesInset = ((COURT_W - SINGLES_W) / 2) / COURT_W * cw;
-  cx.lineWidth = 5;
+  cx.lineWidth = 10;
   cx.beginPath();
-  cx.moveTo(singlesInset + 8, 8);            cx.lineTo(singlesInset + 8, ch - 8);
-  cx.moveTo(cw - singlesInset - 8, 8);       cx.lineTo(cw - singlesInset - 8, ch - 8);
+  cx.moveTo(singlesInset + 16, 16);          cx.lineTo(singlesInset + 16, ch - 16);
+  cx.moveTo(cw - singlesInset - 16, 16);     cx.lineTo(cw - singlesInset - 16, ch - 16);
   cx.stroke();
 
   // Service lines
   const serviceY1 = (COURT_L / 2 - 6.4) / COURT_L * ch;
   const serviceY2 = ch - serviceY1;
   cx.beginPath();
-  cx.moveTo(singlesInset + 8, serviceY1);    cx.lineTo(cw - singlesInset - 8, serviceY1);
-  cx.moveTo(singlesInset + 8, serviceY2);    cx.lineTo(cw - singlesInset - 8, serviceY2);
+  cx.moveTo(singlesInset + 16, serviceY1);   cx.lineTo(cw - singlesInset - 16, serviceY1);
+  cx.moveTo(singlesInset + 16, serviceY2);   cx.lineTo(cw - singlesInset - 16, serviceY2);
   cx.stroke();
 
   // Center service line
@@ -166,28 +218,29 @@ function makeCourtTexture() {
   cx.stroke();
 
   // Center marks
-  cx.lineWidth = 6;
+  cx.lineWidth = 12;
   cx.beginPath();
-  cx.moveTo(cw / 2 - 14, 8);                 cx.lineTo(cw / 2 + 14, 8);
-  cx.moveTo(cw / 2 - 14, ch - 8);            cx.lineTo(cw / 2 + 14, ch - 8);
+  cx.moveTo(cw / 2 - 28, 16);                cx.lineTo(cw / 2 + 28, 16);
+  cx.moveTo(cw / 2 - 28, ch - 16);           cx.lineTo(cw / 2 + 28, ch - 16);
   cx.stroke();
 
-  // Net line
-  cx.lineWidth = 4;
-  cx.strokeStyle = 'rgba(255,255,255,0.55)';
+  // Net line (faint shadow under the net)
+  cx.lineWidth = 8;
+  cx.strokeStyle = 'rgba(0,0,0,0.30)';
   cx.beginPath();
   cx.moveTo(0, ch / 2); cx.lineTo(cw, ch / 2);
   cx.stroke();
 
   const tex = new THREE.CanvasTexture(c);
-  tex.anisotropy = 12;
+  tex.anisotropy = 16;
   tex.colorSpace = THREE.SRGBColorSpace;
   return tex;
 }
 
 const courtTex = makeCourtTexture();
 const courtMat = new THREE.MeshStandardMaterial({
-  map: courtTex, roughness: 0.45, metalness: 0.08,
+  map: courtTex, roughness: 0.42, metalness: 0.10,
+  envMapIntensity: 0.6,
 });
 const court = new THREE.Mesh(new THREE.PlaneGeometry(COURT_W, COURT_L), courtMat);
 court.rotation.x = -Math.PI / 2;
@@ -384,6 +437,120 @@ pylonGroup.add(makePylon(-pylonOff,  pylonOffZ));
 pylonGroup.add(makePylon( pylonOff, -pylonOffZ));
 pylonGroup.add(makePylon(-pylonOff, -pylonOffZ));
 
+// ================== SPONSOR BANNERS + JUMBOTRON ==================
+function makeBannerTexture(text, fg, bg) {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 128;
+  const cx = c.getContext('2d');
+  // Banner background with stripes
+  cx.fillStyle = bg; cx.fillRect(0, 0, 1024, 128);
+  cx.strokeStyle = 'rgba(255,255,255,0.10)'; cx.lineWidth = 2;
+  for (let x = -128; x < 1024; x += 64) {
+    cx.beginPath(); cx.moveTo(x, 0); cx.lineTo(x + 64, 128); cx.stroke();
+  }
+  // Repeated text
+  cx.fillStyle = fg;
+  cx.font = '900 80px Impact, "Arial Black", sans-serif';
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  for (let i = 0; i < 4; i++) {
+    cx.fillText(text, 128 + i * 256, 64);
+  }
+  // Top/bottom trim
+  cx.fillStyle = 'rgba(0,0,0,0.45)';
+  cx.fillRect(0, 0, 1024, 8); cx.fillRect(0, 120, 1024, 8);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping; t.repeat.set(1, 1);
+  t.anisotropy = 12;
+  return t;
+}
+const bannerSpecs = [
+  { text: 'TENNIS  3D',    fg: '#fff7c0', bg: '#16335f' },
+  { text: 'POWER  SLAM',   fg: '#fcd34d', bg: '#7a1d1d' },
+  { text: 'TOPSPIN  PRO',  fg: '#a5f3fc', bg: '#0f3a4d' },
+  { text: 'GRAND  RALLY',  fg: '#bef264', bg: '#1d3a1d' },
+];
+
+function addBanner(xCenter, zCenter, length, faceX, faceZ, specIdx) {
+  const spec = bannerSpecs[specIdx % bannerSpecs.length];
+  const tex = makeBannerTexture(spec.text, spec.fg, spec.bg);
+  const isLong = Math.abs(faceZ) > Math.abs(faceX);
+  const w = isLong ? length : 0.05;
+  const d = isLong ? 0.05 : length;
+  const h = 0.95;
+  const mat = new THREE.MeshStandardMaterial({
+    map: tex, roughness: 0.7, metalness: 0.0,
+    emissive: 0x222222, emissiveIntensity: 0.15,
+  });
+  const m = new THREE.Mesh(new THREE.BoxGeometry(Math.max(w, 0.05), h, Math.max(d, 0.05)), mat);
+  m.position.set(xCenter, h / 2 + 0.1, zCenter);
+  scene.add(m);
+}
+// Front-tier banners on each side (in front of the lowest grandstand row)
+const bannerY = COURT_L / 2 + F + 0.6;
+const bannerX = COURT_W / 2 + F + 0.6;
+addBanner(0,  bannerY, COURT_W + 8, 0,  1, 0);
+addBanner(0, -bannerY, COURT_W + 8, 0, -1, 1);
+addBanner( bannerX, 0, COURT_L + 4, 1, 0, 2);
+addBanner(-bannerX, 0, COURT_L + 4,-1, 0, 3);
+
+// Jumbotron — big back-wall scoreboard behind P2's end
+function makeJumbotronTexture() {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 512;
+  const cx = c.getContext('2d');
+  // Frame
+  cx.fillStyle = '#0a0a14'; cx.fillRect(0, 0, 1024, 512);
+  cx.fillStyle = '#181826'; cx.fillRect(20, 20, 984, 472);
+  // Top header
+  cx.fillStyle = '#fcd34d';
+  cx.font = '900 72px Impact, "Arial Black", sans-serif';
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.fillText('TENNIS  3D  CHAMPIONSHIP', 512, 80);
+  // P1 / P2 panels
+  cx.fillStyle = '#ef4444'; cx.fillRect(80, 160, 380, 280);
+  cx.fillStyle = '#3b82f6'; cx.fillRect(564, 160, 380, 280);
+  cx.fillStyle = '#fff';
+  cx.font = '900 56px Impact, "Arial Black", sans-serif';
+  cx.fillText('PLAYER 1', 270, 220);
+  cx.fillText('PLAYER 2', 754, 220);
+  cx.font = '900 160px Impact, "Arial Black", sans-serif';
+  cx.fillText('•', 270, 360);
+  cx.fillText('•', 754, 360);
+  // VS
+  cx.fillStyle = '#fcd34d';
+  cx.font = '900 80px Impact, "Arial Black", sans-serif';
+  cx.fillText('VS', 512, 300);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 16;
+  return t;
+}
+const jumboTex = makeJumbotronTexture();
+const jumboMat = new THREE.MeshStandardMaterial({
+  map: jumboTex, emissive: 0xffffff, emissiveMap: jumboTex,
+  emissiveIntensity: 0.55, roughness: 0.45, metalness: 0.2,
+});
+const jumboW = 12, jumboH = 6;
+const jumbotron = new THREE.Mesh(new THREE.PlaneGeometry(jumboW, jumboH), jumboMat);
+jumbotron.position.set(0, 7.5, -COURT_L / 2 - F - 9);
+jumbotron.rotation.y = 0; // facing toward +Z (camera/court)
+scene.add(jumbotron);
+// Frame for the jumbotron
+const jumboFrameMat = new THREE.MeshStandardMaterial({ color: 0x0c0c14, roughness: 0.5, metalness: 0.4 });
+const jumboFrame = new THREE.Mesh(
+  new THREE.BoxGeometry(jumboW + 0.6, jumboH + 0.6, 0.3), jumboFrameMat
+);
+jumboFrame.position.set(0, 7.5, -COURT_L / 2 - F - 9.18);
+scene.add(jumboFrame);
+// Support poles
+for (const ss of [-1, 1]) {
+  const pole = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.12, 0.14, 7.5, 12), jumboFrameMat
+  );
+  pole.position.set(ss * (jumboW / 2 - 0.5), 3.7, -COURT_L / 2 - F - 9.4);
+  scene.add(pole);
+}
+
 // ================== NET ==================
 function makeNetTexture() {
   const c = document.createElement('canvas');
@@ -461,18 +628,74 @@ const stringsTex = makeStringsTexture();
 // ================== PLAYERS ==================
 const SKIN = 0xf2cda0;
 
-function makePlayer(shirtColor, accentColor) {
+// Procedural jersey texture: shirtColor with diagonal stripe + jersey number on the back
+function makeJerseyTexture(shirtColor, accentColor, number) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 256;
+  const cx = c.getContext('2d');
+  const hex = (n) => '#' + n.toString(16).padStart(6, '0');
+  // Base fill — vertical gradient for subtle sheen
+  const g = cx.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, hex(shirtColor));
+  g.addColorStop(0.5, hex(shirtColor));
+  g.addColorStop(1, '#000');
+  cx.fillStyle = g; cx.fillRect(0, 0, 512, 256);
+  // Side panels (accent color)
+  cx.fillStyle = hex(accentColor);
+  cx.fillRect(0, 0, 32, 256);
+  cx.fillRect(512 - 32, 0, 32, 256);
+  // Chest sash diagonal
+  cx.save();
+  cx.translate(256, 128);
+  cx.rotate(-Math.PI / 14);
+  cx.fillStyle = 'rgba(255,255,255,0.18)';
+  cx.fillRect(-260, -22, 520, 44);
+  cx.restore();
+  // Brand triangle on chest
+  cx.fillStyle = '#fff';
+  cx.beginPath();
+  cx.moveTo(170, 70); cx.lineTo(190, 70); cx.lineTo(180, 84); cx.closePath();
+  cx.fill();
+  // Jersey number (centered on what becomes the back of the torso)
+  cx.font = '900 168px Impact, "Arial Black", sans-serif';
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.lineWidth = 8; cx.strokeStyle = '#000';
+  cx.fillStyle = '#fff';
+  cx.strokeText(String(number), 384, 132);
+  cx.fillText(String(number), 384, 132);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 8;
+  return t;
+}
+
+function makePlayer(opts) {
+  const shirtColor  = opts.shirtColor;
+  const accentColor = opts.accentColor;
+  const skinColor   = opts.skinColor   || SKIN;
+  const hairColor   = opts.hairColor   || 0x2a1a0d;
+  const headgear    = opts.headgear    || 'band';   // 'cap' | 'band' | 'visor'
+  const hairStyle   = opts.hairStyle   || 'short';  // 'short' | 'pony' | 'buzz'
+  const number      = opts.number != null ? opts.number : 1;
+  const shoeColor   = opts.shoeColor   || 0x0a0a0a;
+
   const g = new THREE.Group();
-  const skinMat   = new THREE.MeshStandardMaterial({ color: SKIN,    roughness: 0.55 });
-  const shirtMat  = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.5, metalness: 0.05 });
+  const skinMat   = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.55 });
+  const jerseyTex = makeJerseyTexture(shirtColor, accentColor, number);
+  const shirtMat  = new THREE.MeshStandardMaterial({ map: jerseyTex, color: 0xffffff, roughness: 0.45, metalness: 0.05 });
+  const shirtPlainMat = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.5, metalness: 0.05 });
   const shortsMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55 });
   const sockMat   = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 });
-  const shoeMat   = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 0.35, metalness: 0.15 });
-  const shoeAcc   = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.4, metalness: 0.3, emissive: accentColor, emissiveIntensity: 0.18 });
+  const shoeMat   = new THREE.MeshStandardMaterial({ color: shoeColor, roughness: 0.32, metalness: 0.18 });
+  const shoeAcc   = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.4, metalness: 0.3, emissive: accentColor, emissiveIntensity: 0.22 });
   const darkMat   = new THREE.MeshStandardMaterial({ color: 0x121212, roughness: 0.5 });
-  const hairMat   = new THREE.MeshStandardMaterial({ color: 0x2a1a0d, roughness: 0.8 });
+  const hairMat   = new THREE.MeshStandardMaterial({ color: hairColor, roughness: 0.85 });
   const bandMat   = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.45 });
-  const eyeMat    = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4 });
+  const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xfafafa, roughness: 0.3 });
+  const irisMat   = new THREE.MeshStandardMaterial({ color: 0x1a3a6e, roughness: 0.4 });
+  const pupilMat  = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.3 });
+  const lipMat    = new THREE.MeshStandardMaterial({ color: 0x9a3a3a, roughness: 0.5 });
+  const browMat   = new THREE.MeshStandardMaterial({ color: hairColor, roughness: 0.7 });
 
   // ===== LEGS (hip → knee → foot, each animatable) =====
   const legs = [];
@@ -481,8 +704,9 @@ function makePlayer(shirtColor, accentColor) {
     hip.position.set(side * 0.15, 0.95, 0);
     g.add(hip);
 
+    // Thigh — slight quad bulge (capsule-ish via lathe-like cylinders)
     const thigh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.12, 0.105, 0.46, 12), skinMat
+      new THREE.CylinderGeometry(0.13, 0.10, 0.46, 14), skinMat
     );
     thigh.position.set(0, -0.23, 0);
     thigh.castShadow = true;
@@ -492,152 +716,447 @@ function makePlayer(shirtColor, accentColor) {
     knee.position.set(0, -0.46, 0);
     hip.add(knee);
 
-    const shin = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.10, 0.09, 0.40, 12), skinMat
+    // Kneecap
+    const kneecap = new THREE.Mesh(
+      new THREE.SphereGeometry(0.105, 14, 14), skinMat
     );
-    shin.position.set(0, -0.20, 0);
-    shin.castShadow = true;
-    knee.add(shin);
+    kneecap.position.set(0, 0, 0.02);
+    kneecap.castShadow = true;
+    knee.add(kneecap);
 
-    const sock = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.105, 0.10, 0.13, 12), sockMat
+    // Calf (bulge)
+    const calf = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.095, 0.075, 0.30, 12), skinMat
     );
-    sock.position.set(0, -0.36, 0);
+    calf.position.set(0, -0.17, -0.005);
+    calf.castShadow = true;
+    knee.add(calf);
+
+    // Ankle
+    const ankle = new THREE.Mesh(
+      new THREE.SphereGeometry(0.072, 12, 12), skinMat
+    );
+    ankle.position.set(0, -0.35, 0);
+    knee.add(ankle);
+
+    // Crew sock with colored band
+    const sock = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.105, 0.10, 0.16, 14), sockMat
+    );
+    sock.position.set(0, -0.30, 0);
     sock.castShadow = true;
     knee.add(sock);
+    const sockBand = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.107, 0.107, 0.04, 14), bandMat
+    );
+    sockBand.position.set(0, -0.235, 0);
+    knee.add(sockBand);
 
-    // Shoe (boxy)
-    const shoe = new THREE.Mesh(
-      new THREE.BoxGeometry(0.18, 0.10, 0.30), shoeMat
+    // Shoe — sculpted sole + upper
+    const sole = new THREE.Mesh(
+      new THREE.BoxGeometry(0.19, 0.05, 0.34), shoeAcc
     );
-    shoe.position.set(0, -0.46, 0.07);
-    shoe.castShadow = true;
-    knee.add(shoe);
-    // Shoe accent stripe
-    const stripe = new THREE.Mesh(
-      new THREE.BoxGeometry(0.182, 0.035, 0.18), shoeAcc
+    sole.position.set(0, -0.435, 0.08);
+    sole.castShadow = true;
+    knee.add(sole);
+    const upper = new THREE.Mesh(
+      new THREE.BoxGeometry(0.18, 0.10, 0.28), shoeMat
     );
-    stripe.position.set(0, -0.45, 0.03);
-    knee.add(stripe);
+    upper.position.set(0, -0.36, 0.07);
+    upper.castShadow = true;
+    knee.add(upper);
+    // Toe cap (rounded front via sphere flattened)
+    const toe = new THREE.Mesh(
+      new THREE.SphereGeometry(0.10, 14, 12, 0, Math.PI * 2, 0, Math.PI / 2), shoeMat
+    );
+    toe.position.set(0, -0.36, 0.21);
+    toe.rotation.x = Math.PI / 2;
+    toe.scale.set(0.9, 0.55, 1);
+    knee.add(toe);
+    // Side swoosh stripe
+    for (const ss of [-1, 1]) {
+      const stripe = new THREE.Mesh(
+        new THREE.BoxGeometry(0.012, 0.06, 0.18), shoeAcc
+      );
+      stripe.position.set(ss * 0.092, -0.36, 0.06);
+      knee.add(stripe);
+    }
+    // Tongue / laces detail
+    const tongue = new THREE.Mesh(
+      new THREE.BoxGeometry(0.10, 0.04, 0.10), darkMat
+    );
+    tongue.position.set(0, -0.31, 0.04);
+    knee.add(tongue);
 
     legs.push({ hip, knee, side });
   }
 
   // ===== SHORTS =====
   const shorts = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.32, 0.30, 0.38, 16), shortsMat
+    new THREE.CylinderGeometry(0.34, 0.30, 0.42, 18), shortsMat
   );
   shorts.position.set(0, 1.07, 0);
   shorts.castShadow = true;
   g.add(shorts);
-  const shortsBand = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.325, 0.325, 0.05, 16), bandMat
+  // Inseam split (small dark box at center bottom — adds tailored look)
+  const inseam = new THREE.Mesh(
+    new THREE.BoxGeometry(0.04, 0.16, 0.4),
+    new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.6 })
   );
-  shortsBand.position.set(0, 0.90, 0);
+  inseam.position.set(0, 0.92, 0);
+  g.add(inseam);
+  // Side stripe on shorts
+  for (const ss of [-1, 1]) {
+    const sst = new THREE.Mesh(
+      new THREE.BoxGeometry(0.025, 0.40, 0.04), bandMat
+    );
+    sst.position.set(ss * 0.33, 1.07, 0);
+    g.add(sst);
+  }
+  const shortsBand = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.345, 0.345, 0.06, 18), bandMat
+  );
+  shortsBand.position.set(0, 0.92, 0);
   g.add(shortsBand);
 
   // ===== TORSO =====
-  const torso = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.30, 0.34, 0.68, 16), shirtMat
+  // Lower torso (waist)
+  const waist = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.30, 0.32, 0.28, 18), shirtMat
   );
-  torso.position.set(0, 1.55, 0);
+  waist.position.set(0, 1.36, 0);
+  waist.castShadow = true;
+  g.add(waist);
+  // Upper torso (chest) — wider at top for shoulders
+  const torso = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.34, 0.30, 0.46, 18), shirtMat
+  );
+  torso.position.set(0, 1.65, 0);
   torso.castShadow = true;
   g.add(torso);
-  // Chest accent stripe
-  const chest = new THREE.Mesh(
-    new THREE.BoxGeometry(0.4, 0.08, 0.55),
-    new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.4 })
+  // Pecs / chest sphere — slight bulge
+  const pecs = new THREE.Mesh(
+    new THREE.SphereGeometry(0.30, 18, 14), shirtPlainMat
   );
-  chest.position.set(0, 1.62, 0);
-  g.add(chest);
-  // Collar
+  pecs.position.set(0, 1.65, 0.05);
+  pecs.scale.set(1.05, 0.55, 0.55);
+  g.add(pecs);
+  // Shoulder caps (deltoids)
+  for (const ss of [-1, 1]) {
+    const delt = new THREE.Mesh(
+      new THREE.SphereGeometry(0.135, 16, 14), shirtPlainMat
+    );
+    delt.position.set(ss * 0.32, 1.82, 0);
+    delt.castShadow = true;
+    g.add(delt);
+  }
+  // V-neck collar (white)
   const collar = new THREE.Mesh(
-    new THREE.TorusGeometry(0.20, 0.05, 8, 20),
+    new THREE.TorusGeometry(0.16, 0.04, 10, 24),
     new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 })
   );
-  collar.position.set(0, 1.86, 0);
+  collar.position.set(0, 1.89, 0);
   collar.rotation.x = Math.PI / 2;
+  collar.scale.set(1, 1, 0.6);
   g.add(collar);
+  // V-neck notch
+  const vNotch = new THREE.Mesh(
+    new THREE.ConeGeometry(0.07, 0.12, 4),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 })
+  );
+  vNotch.position.set(0, 1.82, 0.21);
+  vNotch.rotation.x = -Math.PI / 2.2;
+  g.add(vNotch);
 
   // ===== NECK + HEAD =====
   const neck = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.10, 0.115, 0.12, 12), skinMat
+    new THREE.CylinderGeometry(0.10, 0.115, 0.13, 14), skinMat
   );
-  neck.position.set(0, 1.93, 0);
+  neck.position.set(0, 1.94, 0);
   neck.castShadow = true;
   g.add(neck);
 
+  // Head as its own group so we can attach face features to it
+  const headGroup = new THREE.Group();
+  headGroup.position.set(0, 2.14, 0);
+  g.add(headGroup);
+
   const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.21, 22, 22), skinMat
+    new THREE.SphereGeometry(0.22, 28, 28), skinMat
   );
-  head.position.set(0, 2.14, 0);
-  head.scale.set(1.0, 1.05, 0.96);
+  head.scale.set(1.0, 1.08, 0.97);
   head.castShadow = true;
-  g.add(head);
+  headGroup.add(head);
 
-  // Hair cap (hemisphere)
-  const hair = new THREE.Mesh(
-    new THREE.SphereGeometry(0.218, 22, 22, 0, Math.PI * 2, 0, Math.PI / 2.1),
-    hairMat
+  // Jaw bulge (chin) — slight cone for definition
+  const jaw = new THREE.Mesh(
+    new THREE.SphereGeometry(0.16, 18, 16), skinMat
   );
-  hair.position.set(0, 2.15, 0);
-  hair.scale.set(1.0, 0.95, 1.02);
-  hair.castShadow = true;
-  g.add(hair);
+  jaw.position.set(0, -0.07, 0.04);
+  jaw.scale.set(0.95, 0.55, 0.85);
+  headGroup.add(jaw);
 
-  // Eyes
-  for (const dx of [-0.075, 0.075]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 10), eyeMat);
-    eye.position.set(dx, 2.14, 0.19);
-    g.add(eye);
+  // Ears
+  for (const ss of [-1, 1]) {
+    const ear = new THREE.Mesh(
+      new THREE.SphereGeometry(0.045, 12, 12), skinMat
+    );
+    ear.position.set(ss * 0.21, 0.0, -0.005);
+    ear.scale.set(0.5, 1.0, 1.0);
+    headGroup.add(ear);
+    const earInner = new THREE.Mesh(
+      new THREE.SphereGeometry(0.022, 10, 10),
+      new THREE.MeshStandardMaterial({ color: 0xc88a78, roughness: 0.6 })
+    );
+    earInner.position.set(ss * 0.215, 0.0, 0.005);
+    earInner.scale.set(0.4, 0.85, 0.6);
+    headGroup.add(earInner);
   }
-  // Smile (a tiny dark torus arc segment is overkill — skip for now)
 
-  // Headband
-  const hb = new THREE.Mesh(
-    new THREE.TorusGeometry(0.215, 0.045, 8, 22), bandMat
+  // Nose
+  const nose = new THREE.Mesh(
+    new THREE.ConeGeometry(0.038, 0.10, 8), skinMat
   );
-  hb.position.set(0, 2.20, 0);
-  hb.rotation.x = Math.PI / 2;
-  g.add(hb);
+  nose.position.set(0, -0.005, 0.21);
+  nose.rotation.x = Math.PI / 2;
+  headGroup.add(nose);
+  // Nostrils
+  for (const ss of [-1, 1]) {
+    const nostril = new THREE.Mesh(
+      new THREE.SphereGeometry(0.008, 8, 8),
+      new THREE.MeshStandardMaterial({ color: 0x3a1a14, roughness: 0.5 })
+    );
+    nostril.position.set(ss * 0.012, -0.04, 0.235);
+    headGroup.add(nostril);
+  }
+
+  // Eyes — whites + iris + pupil
+  for (const ss of [-1, 1]) {
+    const eyeWhite = new THREE.Mesh(
+      new THREE.SphereGeometry(0.034, 14, 14), eyeWhiteMat
+    );
+    eyeWhite.position.set(ss * 0.082, 0.025, 0.195);
+    eyeWhite.scale.set(1.1, 0.85, 0.6);
+    headGroup.add(eyeWhite);
+    const iris = new THREE.Mesh(
+      new THREE.SphereGeometry(0.018, 12, 12), irisMat
+    );
+    iris.position.set(ss * 0.082, 0.022, 0.218);
+    iris.scale.set(1, 1, 0.5);
+    headGroup.add(iris);
+    const pupil = new THREE.Mesh(
+      new THREE.SphereGeometry(0.009, 10, 10), pupilMat
+    );
+    pupil.position.set(ss * 0.082, 0.022, 0.225);
+    pupil.scale.set(1, 1, 0.4);
+    headGroup.add(pupil);
+    // Eyebrow
+    const brow = new THREE.Mesh(
+      new THREE.BoxGeometry(0.07, 0.012, 0.025), browMat
+    );
+    brow.position.set(ss * 0.082, 0.075, 0.205);
+    brow.rotation.z = ss * -0.10;
+    headGroup.add(brow);
+  }
+
+  // Mouth — gentle smile via a curved tube
+  const mouthCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.055, -0.07, 0.205),
+    new THREE.Vector3( 0.0,   -0.085, 0.225),
+    new THREE.Vector3( 0.055, -0.07, 0.205),
+  ]);
+  const mouth = new THREE.Mesh(
+    new THREE.TubeGeometry(mouthCurve, 12, 0.0085, 6, false), lipMat
+  );
+  headGroup.add(mouth);
+
+  // ===== HAIR / HEADGEAR =====
+  let hair;
+  if (hairStyle === 'buzz') {
+    hair = new THREE.Mesh(
+      new THREE.SphereGeometry(0.225, 24, 24, 0, Math.PI * 2, 0, Math.PI / 2.4),
+      hairMat
+    );
+    hair.position.set(0, 0.005, 0);
+    hair.scale.set(1.0, 0.55, 1.02);
+  } else if (hairStyle === 'pony') {
+    // Skull cap of hair
+    hair = new THREE.Mesh(
+      new THREE.SphereGeometry(0.232, 26, 26, 0, Math.PI * 2, 0, Math.PI / 1.9),
+      hairMat
+    );
+    hair.position.set(0, 0.02, 0);
+    hair.scale.set(1.02, 0.95, 1.04);
+    // Ponytail (back tuft)
+    const pony = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.05, 0.085, 0.32, 12), hairMat
+    );
+    pony.position.set(0, -0.06, -0.21);
+    pony.rotation.x = 0.55;
+    pony.castShadow = true;
+    headGroup.add(pony);
+    const ponyTip = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 10, 10), hairMat
+    );
+    ponyTip.position.set(0, -0.21, -0.32);
+    headGroup.add(ponyTip);
+    const tieMat = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.5 });
+    const tie = new THREE.Mesh(
+      new THREE.TorusGeometry(0.06, 0.018, 8, 14), tieMat
+    );
+    tie.position.set(0, 0.0, -0.21);
+    tie.rotation.x = 0.55;
+    headGroup.add(tie);
+  } else {
+    // 'short' — tousled cap with a few extra tuft spheres
+    hair = new THREE.Mesh(
+      new THREE.SphereGeometry(0.228, 26, 26, 0, Math.PI * 2, 0, Math.PI / 2.0),
+      hairMat
+    );
+    hair.position.set(0, 0.015, 0);
+    hair.scale.set(1.0, 1.0, 1.04);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI - Math.PI / 2;
+      const tuft = new THREE.Mesh(
+        new THREE.SphereGeometry(0.05 + Math.random() * 0.02, 10, 10), hairMat
+      );
+      tuft.position.set(Math.sin(a) * 0.18, 0.13 + Math.random() * 0.02, Math.cos(a) * 0.16);
+      headGroup.add(tuft);
+    }
+  }
+  hair.castShadow = true;
+  headGroup.add(hair);
+
+  // Headgear
+  if (headgear === 'cap') {
+    const capColor = accentColor;
+    const capMat = new THREE.MeshStandardMaterial({ color: capColor, roughness: 0.6 });
+    const crown = new THREE.Mesh(
+      new THREE.SphereGeometry(0.235, 24, 20, 0, Math.PI * 2, 0, Math.PI / 2.1),
+      capMat
+    );
+    crown.position.set(0, 0.05, 0);
+    crown.scale.set(1.0, 0.85, 1.04);
+    crown.castShadow = true;
+    headGroup.add(crown);
+    // Brim
+    const brim = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.30, 0.30, 0.022, 24, 1, false, -Math.PI / 2.5, Math.PI / 1.25),
+      capMat
+    );
+    brim.position.set(0, 0.06, 0.13);
+    brim.scale.set(1.0, 1, 0.7);
+    headGroup.add(brim);
+    // Logo dot on the front
+    const logo = new THREE.Mesh(
+      new THREE.CircleGeometry(0.025, 16),
+      new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.4 })
+    );
+    logo.position.set(0, 0.10, 0.225);
+    headGroup.add(logo);
+  } else if (headgear === 'visor') {
+    const visorMat = new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.55 });
+    const band = new THREE.Mesh(
+      new THREE.TorusGeometry(0.225, 0.035, 10, 24), visorMat
+    );
+    band.position.set(0, 0.07, 0);
+    band.rotation.x = Math.PI / 2;
+    headGroup.add(band);
+    const brim = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.30, 0.30, 0.018, 24, 1, false, -Math.PI / 2.5, Math.PI / 1.25),
+      visorMat
+    );
+    brim.position.set(0, 0.07, 0.13);
+    brim.scale.set(1.0, 1, 0.7);
+    headGroup.add(brim);
+  } else {
+    // Headband (default)
+    const hb = new THREE.Mesh(
+      new THREE.TorusGeometry(0.225, 0.045, 10, 24), bandMat
+    );
+    hb.position.set(0, 0.07, 0);
+    hb.rotation.x = Math.PI / 2;
+    headGroup.add(hb);
+  }
 
   // ===== LEFT ARM (non-racket) =====
   const lShoulder = new THREE.Group();
-  lShoulder.position.set(-0.34, 1.80, 0);
+  lShoulder.position.set(-0.36, 1.82, 0);
   lShoulder.rotation.z = Math.PI * 0.08;
   g.add(lShoulder);
-  const lUpper = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.085, 0.075, 0.35, 10), skinMat
+  // Sleeve cap (shirt sleeve covers top of upper arm)
+  const lSleeve = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.105, 0.095, 0.16, 14), shirtPlainMat
   );
-  lUpper.position.set(0, -0.175, 0);
+  lSleeve.position.set(0, -0.07, 0);
+  lSleeve.castShadow = true;
+  lShoulder.add(lSleeve);
+  // Sleeve trim
+  const lSleeveTrim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.097, 0.012, 10, 18), bandMat
+  );
+  lSleeveTrim.position.set(0, -0.15, 0);
+  lSleeveTrim.rotation.x = Math.PI / 2;
+  lShoulder.add(lSleeveTrim);
+  // Upper arm (skin) — taper for bicep
+  const lUpper = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.092, 0.075, 0.26, 12), skinMat
+  );
+  lUpper.position.set(0, -0.23, 0);
   lUpper.castShadow = true;
   lShoulder.add(lUpper);
   const lElbow = new THREE.Group();
   lElbow.position.set(0, -0.35, 0);
   lShoulder.add(lElbow);
-  const lFore = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.075, 0.07, 0.32, 10), skinMat
+  // Elbow joint
+  const lElbowJoint = new THREE.Mesh(
+    new THREE.SphereGeometry(0.07, 12, 12), skinMat
   );
-  lFore.position.set(0, -0.16, 0);
+  lElbow.add(lElbowJoint);
+  const lFore = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.07, 0.062, 0.32, 12), skinMat
+  );
+  lFore.position.set(0, -0.17, 0);
   lFore.castShadow = true;
   lElbow.add(lFore);
   const lWB = new THREE.Mesh(
-    new THREE.TorusGeometry(0.078, 0.028, 8, 16), bandMat
+    new THREE.TorusGeometry(0.075, 0.030, 10, 18), bandMat
   );
   lWB.position.set(0, -0.32, 0);
   lWB.rotation.x = Math.PI / 2;
   lElbow.add(lWB);
+  // Hand
+  const lHand = new THREE.Mesh(
+    new THREE.SphereGeometry(0.072, 14, 14), skinMat
+  );
+  lHand.position.set(0, -0.38, 0);
+  lHand.scale.set(0.8, 1.1, 0.65);
+  lHand.castShadow = true;
+  lElbow.add(lHand);
 
   // ===== RACKET ARM =====
   const racketPivot = new THREE.Group();
-  racketPivot.position.set(0.34, 1.80, 0);
+  racketPivot.position.set(0.36, 1.82, 0);
   racketPivot.rotation.z = -Math.PI / 6;  // resting
   g.add(racketPivot);
 
-  const rUpper = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.085, 0.075, 0.35, 10), skinMat
+  // Sleeve cap
+  const rSleeve = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.105, 0.095, 0.16, 14), shirtPlainMat
   );
-  rUpper.position.set(0, -0.175, 0);
+  rSleeve.position.set(0, -0.07, 0);
+  rSleeve.castShadow = true;
+  racketPivot.add(rSleeve);
+  const rSleeveTrim = new THREE.Mesh(
+    new THREE.TorusGeometry(0.097, 0.012, 10, 18), bandMat
+  );
+  rSleeveTrim.position.set(0, -0.15, 0);
+  rSleeveTrim.rotation.x = Math.PI / 2;
+  racketPivot.add(rSleeveTrim);
+  const rUpper = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.092, 0.075, 0.26, 12), skinMat
+  );
+  rUpper.position.set(0, -0.23, 0);
   rUpper.castShadow = true;
   racketPivot.add(rUpper);
 
@@ -645,19 +1164,40 @@ function makePlayer(shirtColor, accentColor) {
   rElbow.position.set(0, -0.35, 0);
   racketPivot.add(rElbow);
 
-  const rFore = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.075, 0.07, 0.32, 10), skinMat
+  const rElbowJoint = new THREE.Mesh(
+    new THREE.SphereGeometry(0.07, 12, 12), skinMat
   );
-  rFore.position.set(0, -0.16, 0);
+  rElbow.add(rElbowJoint);
+  const rFore = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.07, 0.062, 0.32, 12), skinMat
+  );
+  rFore.position.set(0, -0.17, 0);
   rFore.castShadow = true;
   rElbow.add(rFore);
 
   const rWB = new THREE.Mesh(
-    new THREE.TorusGeometry(0.078, 0.028, 8, 16), bandMat
+    new THREE.TorusGeometry(0.075, 0.030, 10, 18), bandMat
   );
   rWB.position.set(0, -0.32, 0);
   rWB.rotation.x = Math.PI / 2;
   rElbow.add(rWB);
+  // Glove (slightly darker than skin)
+  const gloveMat = new THREE.MeshStandardMaterial({
+    color: 0x2a2a2a, roughness: 0.5, metalness: 0.05,
+  });
+  const rHand = new THREE.Mesh(
+    new THREE.SphereGeometry(0.078, 14, 14), gloveMat
+  );
+  rHand.position.set(0, -0.38, 0);
+  rHand.scale.set(0.85, 1.1, 0.7);
+  rHand.castShadow = true;
+  rElbow.add(rHand);
+  // Knuckle pad accent
+  const knuckle = new THREE.Mesh(
+    new THREE.BoxGeometry(0.10, 0.018, 0.05), bandMat
+  );
+  knuckle.position.set(0, -0.41, 0.04);
+  rElbow.add(knuckle);
 
   // ===== RACKET =====
   const racketGroup = new THREE.Group();
@@ -666,70 +1206,120 @@ function makePlayer(shirtColor, accentColor) {
 
   // Handle / grip
   const handle = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.038, 0.038, 0.32, 12), darkMat
+    new THREE.CylinderGeometry(0.038, 0.038, 0.32, 14), darkMat
   );
   handle.position.set(0, -0.16, 0);
   handle.castShadow = true;
   racketGroup.add(handle);
-  // Grip wrap (slightly larger cylinder)
+  // Butt cap
+  const buttCap = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.052, 0.052, 0.022, 14),
+    new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.4 })
+  );
+  buttCap.position.set(0, -0.32, 0);
+  racketGroup.add(buttCap);
+  // Grip wrap with overgrip stripes (canvas tex)
+  const gripCanvas = document.createElement('canvas');
+  gripCanvas.width = 64; gripCanvas.height = 32;
+  {
+    const cx = gripCanvas.getContext('2d');
+    cx.fillStyle = '#' + accentColor.toString(16).padStart(6, '0');
+    cx.fillRect(0, 0, 64, 32);
+    cx.strokeStyle = 'rgba(0,0,0,0.35)'; cx.lineWidth = 1.6;
+    for (let i = -10; i < 70; i += 8) {
+      cx.beginPath(); cx.moveTo(i, 0); cx.lineTo(i + 14, 32); cx.stroke();
+    }
+  }
+  const gripTex = new THREE.CanvasTexture(gripCanvas);
+  gripTex.wrapS = THREE.RepeatWrapping;
+  gripTex.repeat.set(2, 1);
+  gripTex.colorSpace = THREE.SRGBColorSpace;
   const grip = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.046, 0.046, 0.20, 12),
-    new THREE.MeshStandardMaterial({ color: accentColor, roughness: 0.55 })
+    new THREE.CylinderGeometry(0.046, 0.046, 0.22, 14),
+    new THREE.MeshStandardMaterial({ map: gripTex, color: 0xffffff, roughness: 0.6 })
   );
   grip.position.set(0, -0.10, 0);
   racketGroup.add(grip);
 
-  // Throat (V piece from grip to head)
-  const throat = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.032, 0.045, 0.18, 8),
-    new THREE.MeshStandardMaterial({
-      color: accentColor, roughness: 0.3, metalness: 0.6,
-      emissive: accentColor, emissiveIntensity: 0.3,
-    })
-  );
-  throat.position.set(0, -0.32, 0);
-  racketGroup.add(throat);
+  // Throat — paired struts (V), more authentic than a single cone
+  const throatStrutMat = new THREE.MeshStandardMaterial({
+    color: accentColor, roughness: 0.25, metalness: 0.7,
+    emissive: accentColor, emissiveIntensity: 0.35,
+  });
+  for (const ss of [-1, 1]) {
+    const strut = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.018, 0.022, 0.22, 8), throatStrutMat
+    );
+    strut.position.set(ss * 0.06, -0.36, 0);
+    strut.rotation.z = ss * 0.32;
+    racketGroup.add(strut);
+  }
 
-  // Frame (head) — neon glow ring
+  // Frame (head) — glossy ring
   const frameMat = new THREE.MeshStandardMaterial({
-    color: accentColor, metalness: 0.65, roughness: 0.22,
+    color: accentColor, metalness: 0.75, roughness: 0.18,
     emissive: accentColor, emissiveIntensity: 0.55,
   });
   const racketHead = new THREE.Mesh(
-    new THREE.TorusGeometry(0.21, 0.026, 14, 40), frameMat
+    new THREE.TorusGeometry(0.22, 0.028, 18, 56), frameMat
   );
-  racketHead.position.set(0, -0.55, 0);
+  racketHead.position.set(0, -0.58, 0);
   racketHead.rotation.y = Math.PI / 2;
-  racketHead.scale.set(1, 1.12, 1);
+  racketHead.scale.set(1, 1.15, 1);
   racketHead.castShadow = true;
   racketGroup.add(racketHead);
-
-  // Strings (textured plane inside the head)
-  const strings = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.38, 0.44),
-    new THREE.MeshStandardMaterial({
-      map: stringsTex, transparent: true, side: THREE.DoubleSide,
-      roughness: 0.5, alphaTest: 0.05,
-    })
+  // Frame inner highlight ring (thin shiny torus)
+  const frameInner = new THREE.Mesh(
+    new THREE.TorusGeometry(0.205, 0.005, 12, 48),
+    new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 0.9, roughness: 0.05 })
   );
-  strings.position.set(0, -0.55, 0);
+  frameInner.position.set(0, -0.58, 0);
+  frameInner.rotation.y = Math.PI / 2;
+  frameInner.scale.set(1, 1.15, 1);
+  racketGroup.add(frameInner);
+
+  // Strings (textured plane inside the head) — both sides
+  const stringsMat = new THREE.MeshStandardMaterial({
+    map: stringsTex, transparent: true, side: THREE.DoubleSide,
+    roughness: 0.5, alphaTest: 0.05,
+  });
+  const strings = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.40, 0.48), stringsMat
+  );
+  strings.position.set(0, -0.58, 0);
   strings.rotation.y = Math.PI / 2;
   racketGroup.add(strings);
+  // String dampener (small accent dot at the bottom of the bed)
+  const dampener = new THREE.Mesh(
+    new THREE.SphereGeometry(0.018, 10, 10), bandMat
+  );
+  dampener.position.set(0, -0.78, 0);
+  racketGroup.add(dampener);
 
   g.userData = {
     racketPivot,
     legs,
     lShoulder, lElbow,
-    head, hair,
+    head, hair, headGroup,
     movePhase: 0,
   };
   return g;
 }
 
-const player1 = makePlayer(0xef4444, 0xfca5a5);
+const player1 = makePlayer({
+  shirtColor: 0xef4444, accentColor: 0xfca5a5,
+  hairColor:  0x2a1a0d, skinColor: 0xf2cda0,
+  headgear:   'cap',    hairStyle: 'short',
+  shoeColor:  0xffffff, number: 7,
+});
 player1.position.set(0, 0, COURT_L / 2 - 0.6);
 scene.add(player1);
-const player2 = makePlayer(0x3b82f6, 0x93c5fd);
+const player2 = makePlayer({
+  shirtColor: 0x3b82f6, accentColor: 0x93c5fd,
+  hairColor:  0x4a2a14, skinColor: 0xd8a87a,
+  headgear:   'visor',  hairStyle: 'pony',
+  shoeColor:  0x101010, number: 23,
+});
 player2.position.set(0, 0, -COURT_L / 2 + 0.6);
 player2.rotation.y = Math.PI;
 scene.add(player2);
