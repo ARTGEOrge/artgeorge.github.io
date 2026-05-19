@@ -1320,7 +1320,7 @@ function makeTrain(lane) {
   const TRAIN_BODY_H = 2.4;
   const COACH_LEN    = 7.0;
   const COUPLING_LEN = 0.5;
-  const NUM_COACHES  = 3 + Math.floor(Math.random() * 3); // 3, 4, or 5 coaches
+  const NUM_COACHES  = 15 + Math.floor(Math.random() * 15); // 15-29 coaches (5x longer)
   const TOTAL_LEN    = NUM_COACHES * COACH_LEN + (NUM_COACHES - 1) * COUPLING_LEN;
   const TRAIN_TOP_Y  = TRAIN_BODY_H + 0.15;
   const HALF_TOTAL   = TOTAL_LEN / 2;
