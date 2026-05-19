@@ -2560,7 +2560,10 @@ function update(dt) {
   for (let i = obstacles.length - 1; i >= 0; i--) {
     const o = obstacles[i];
     const oz = o.mesh.position.z;
-    if (oz > 5) {
+    // For long obstacles (trains), wait until the BACK has cleared the camera before despawning,
+    // otherwise the mesh disappears while most of it is still in front of the player.
+    const despawnZ = 5 + (o.length ? o.length / 2 : 0);
+    if (oz > despawnZ) {
       if (o.neonParts) cleanupTrainNeon(o);
       scene.remove(o.mesh);
       obstacles.splice(i, 1);
