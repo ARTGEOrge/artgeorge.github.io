@@ -1945,6 +1945,22 @@ function makeCoin(lane, yOff) {
   return { mesh: m, lane, yOff };
 }
 
+// Spawn a line of coins riding the roof of a train. trainZ is the train's mesh world-z (its center).
+function addCoinsOnTrain(train, trainZ) {
+  const yOff = train.topY - 1 + 0.5;          // coin world Y = topY + 0.5 (sits above the roof)
+  const half = train.length / 2;
+  const spacing = 0.9;
+  const margin  = 0.6;                         // keep coins off the very ends so they read as "on" the train
+  const usable  = train.length - 2 * margin;
+  const count   = Math.max(1, Math.floor(usable / spacing));
+  const startZ  = trainZ + half - margin;      // front of the train, minus margin
+  for (let i = 0; i < count; i++) {
+    const c = makeCoin(train.lane, yOff);
+    c.mesh.position.z = startZ - i * spacing;
+    coins.push(c);
+  }
+}
+
 // ============== SPAWN ==============
 function pickWeighted(items, weights) {
   let total = 0;
@@ -1979,7 +1995,7 @@ function spawnRow() {
       extraGap = Math.max(extraGap, (obs.length || 0) + 6);
       delete obs._extras;
     }
-    if (factory === makeTrain) extraGap = Math.max(extraGap, obs.length || 0);
+    if (factory === makeTrain) { extraGap = Math.max(extraGap, obs.length || 0); addCoinsOnTrain(obs, lastSpawnZ); }
     // Don't double-up climb towers — they're large structures that need their own space
     if (factory !== makeClimbTower && Math.random() < 0.4) {
       const otherLane = (lane + 1 + Math.floor(Math.random() * 2)) % 3;
@@ -1987,7 +2003,7 @@ function spawnRow() {
       const obs2 = factory2(otherLane);
       obs2.mesh.position.z = lastSpawnZ;
       obstacles.push(obs2);
-      if (factory2 === makeTrain) extraGap = Math.max(extraGap, obs2.length || 0);
+      if (factory2 === makeTrain) { extraGap = Math.max(extraGap, obs2.length || 0); addCoinsOnTrain(obs2, lastSpawnZ); }
     }
   } else if (r < 0.85) {
     const lane = Math.floor(Math.random() * 3);
