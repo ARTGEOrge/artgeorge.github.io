@@ -79,26 +79,43 @@
   <p class="hint">Press SPACE / ENTER (or tap) to restart</p>
 </div>
 
-<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-<script>
-if (typeof THREE === 'undefined') {
-  document.getElementById('loadhint').textContent = 'Failed to load Three.js. Check your connection.';
-} else {
-  document.getElementById('loadhint').remove();
-  document.getElementById('hud').style.display = '';
-  document.getElementById('best').style.display = '';
-  document.getElementById('hint').style.display = '';
-  start();
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
 }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass }     from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js';
+import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js';
+
+window.addEventListener('error', () => {
+  const h = document.getElementById('loadhint');
+  if (h) h.textContent = 'Failed to load 3D engine. Check your connection.';
+});
+
+document.getElementById('loadhint').remove();
+document.getElementById('hud').style.display = '';
+document.getElementById('best').style.display = '';
+document.getElementById('hint').style.display = '';
+start();
 
 function start() {
 // ============== RENDERER / SCENE / CAMERA ==============
 const canvas = document.getElementById('game');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(2.5, window.devicePixelRatio || 1));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0c1730);
@@ -108,30 +125,58 @@ const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 200);
 camera.position.set(0, 4.2, 8.5);
 camera.lookAt(0, 1.8, -4);
 
+// ============== POST-PROCESSING (bloom + motion blur) ==============
+const composer = new EffectComposer(renderer);
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+// Subtle frame-blend motion blur — accumulates previous frames for a sense of speed
+const afterimagePass = new AfterimagePass();
+afterimagePass.uniforms['damp'].value = 0.78;   // lower = sharper, higher = more trail
+composer.addPass(afterimagePass);
+
+// Bloom glow on neon / emissives
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.85, 0.85);
+// strength, radius, threshold — only the brightest pixels (neon trim, lit windows, coins) bleed
+composer.addPass(bloomPass);
+
+// Final output pass handles tone mapping + sRGB conversion correctly in the post chain
+composer.addPass(new OutputPass());
+
 function resize() {
   const W = window.innerWidth, H = window.innerHeight;
   renderer.setSize(W, H);
+  composer.setSize(W, H);
+  composer.setPixelRatio(Math.min(2.5, window.devicePixelRatio || 1));
+  bloomPass.setSize(W, H);
   camera.aspect = W / H;
   camera.updateProjectionMatrix();
 }
 window.addEventListener('resize', resize); resize();
 
 // ============== LIGHTING ==============
-scene.add(new THREE.HemisphereLight(0x6688cc, 0x222a44, 0.85));
-const sun = new THREE.DirectionalLight(0xffeec8, 1.15);
+scene.add(new THREE.HemisphereLight(0x6688cc, 0x222a44, 1.05));
+const sun = new THREE.DirectionalLight(0xffeec8, 1.55);
 sun.position.set(6, 14, 6);
 sun.castShadow = true;
-sun.shadow.mapSize.set(1024, 1024);
-sun.shadow.camera.left = -10;
-sun.shadow.camera.right = 10;
-sun.shadow.camera.top = 10;
-sun.shadow.camera.bottom = -10;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -12;
+sun.shadow.camera.right = 12;
+sun.shadow.camera.top = 12;
+sun.shadow.camera.bottom = -12;
 sun.shadow.camera.near = 1;
 sun.shadow.camera.far = 50;
-sun.shadow.bias = -0.0008;
+sun.shadow.bias = -0.0005;
+sun.shadow.normalBias = 0.02;
+sun.shadow.radius = 4;
 scene.add(sun);
 
-const playerGlow = new THREE.PointLight(0xffeeaa, 0.6, 14);
+// Rim/fill light from behind to pop the character against the dark city
+const rim = new THREE.DirectionalLight(0x88bbff, 0.45);
+rim.position.set(-4, 6, -10);
+scene.add(rim);
+
+const playerGlow = new THREE.PointLight(0xffeeaa, 0.85, 16);
 playerGlow.position.set(0, 5, 7);
 scene.add(playerGlow);
 
@@ -781,14 +826,20 @@ const playerGroup = new THREE.Group();
 playerGroup.position.set(0, 0, 0);
 scene.add(playerGroup);
 
-const skinMat   = new THREE.MeshStandardMaterial({ color: 0xfdc97a, roughness: 0.55 });
-const hoodieMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.65 });
-const hoodieDarkMat = new THREE.MeshStandardMaterial({ color: 0x14823c, roughness: 0.7 });
-const pantsMat  = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.8 });
-const pantsDarkMat = new THREE.MeshStandardMaterial({ color: 0x132a66, roughness: 0.85 });
-const beanieMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.55 });
-const stripeRedMat = new THREE.MeshStandardMaterial({ color: 0xdc2626 });
-const shoeMat   = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55 });
+const skinMat   = new THREE.MeshStandardMaterial({ color: 0xfdc97a, roughness: 0.45, metalness: 0.05 });
+const hoodieMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.55, metalness: 0.05 });
+const hoodieDarkMat = new THREE.MeshStandardMaterial({ color: 0x14823c, roughness: 0.6, metalness: 0.05 });
+const pantsMat  = new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.7, metalness: 0.08 });
+const pantsDarkMat = new THREE.MeshStandardMaterial({ color: 0x132a66, roughness: 0.75 });
+const beanieMat = new THREE.MeshStandardMaterial({ color: 0xfacc15, roughness: 0.45, metalness: 0.05, emissive: 0x332200, emissiveIntensity: 0.15 });
+const stripeRedMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, emissive: 0x441111, emissiveIntensity: 0.2 });
+const shoeMat   = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45, metalness: 0.1 });
+const hairMat   = new THREE.MeshStandardMaterial({ color: 0x2a1b0e, roughness: 0.5, metalness: 0.05 });
+const browMat   = new THREE.MeshStandardMaterial({ color: 0x2a1b0e, roughness: 0.6 });
+const watchBandMat = new THREE.MeshStandardMaterial({ color: 0x181818, roughness: 0.55, metalness: 0.25 });
+const watchFaceMat = new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.15, metalness: 0.85, emissive: 0x0a1a44, emissiveIntensity: 0.5 });
+const reflectiveMat = new THREE.MeshStandardMaterial({ color: 0xc8eaff, emissive: 0x66aaff, emissiveIntensity: 0.6, roughness: 0.25, metalness: 0.6 });
+const swooshMat = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.4, emissive: 0x331111, emissiveIntensity: 0.3 });
 
 // Capsule-based limb: pivot at the joint (shoulder/hip), segment extends down
 function makeLimb(material, totalLen, radius, jointMat) {
@@ -808,61 +859,128 @@ function makeLimb(material, totalLen, radius, jointMat) {
 }
 
 // --- Head with proper 3D features (ears, nose, mouth) ---
-const head = new THREE.Mesh(new THREE.SphereGeometry(0.36, 22, 20), skinMat);
+const head = new THREE.Mesh(new THREE.SphereGeometry(0.36, 36, 32), skinMat);
 head.position.y = 2.48;
 head.castShadow = true;
 playerGroup.add(head);
+// Jawline contour — slightly narrower box under the chin to suggest a jaw
+const jaw = new THREE.Mesh(new THREE.SphereGeometry(0.28, 24, 18), skinMat);
+jaw.position.set(0, 2.27, 0.04);
+jaw.scale.set(0.95, 0.55, 0.85);
+playerGroup.add(jaw);
 // Ears (slightly flattened spheres on the sides)
-const earL = new THREE.Mesh(new THREE.SphereGeometry(0.085, 10, 8), skinMat);
+const earL = new THREE.Mesh(new THREE.SphereGeometry(0.085, 14, 12), skinMat);
 earL.position.set(-0.34, 2.46, 0.02);
 earL.scale.set(0.55, 1.0, 0.85);
 playerGroup.add(earL);
 const earR = earL.clone(); earR.position.x = 0.34; playerGroup.add(earR);
-// Nose
-const nose = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.12, 10), skinMat);
+// Earlobe darker recess for depth
+const earLobeMat = new THREE.MeshStandardMaterial({ color: 0xd9a85d, roughness: 0.6 });
+const earInL = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 8), earLobeMat);
+earInL.position.set(-0.345, 2.46, 0.06);
+playerGroup.add(earInL);
+const earInR = earInL.clone(); earInR.position.x = 0.345; playerGroup.add(earInR);
+// Nose with a slight bridge
+const nose = new THREE.Mesh(new THREE.ConeGeometry(0.055, 0.14, 14), skinMat);
 nose.position.set(0, 2.43, 0.36);
 nose.rotation.x = Math.PI / 2;
 playerGroup.add(nose);
-// Mouth (small dark slot)
+const noseBridge = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.04, 0.14, 10), skinMat);
+noseBridge.position.set(0, 2.5, 0.34);
+noseBridge.rotation.x = -0.25;
+playerGroup.add(noseBridge);
+// Mouth (small dark slot) + subtle upper lip
 const mouth = new THREE.Mesh(
-  new THREE.BoxGeometry(0.14, 0.03, 0.02),
+  new THREE.BoxGeometry(0.16, 0.03, 0.02),
   new THREE.MeshBasicMaterial({ color: 0x6e1b22 })
 );
-mouth.position.set(0, 2.33, 0.34);
+mouth.position.set(0, 2.32, 0.34);
 playerGroup.add(mouth);
-// Eyes (rounded with iris/pupil)
-const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3 });
-const eyeWhiteL = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 10), eyeWhiteMat);
+const lipMat = new THREE.MeshStandardMaterial({ color: 0xb86a55, roughness: 0.55 });
+const upperLip = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.025, 0.02), lipMat);
+upperLip.position.set(0, 2.345, 0.345);
+playerGroup.add(upperLip);
+// Eyes (rounded with iris + pupil + highlight)
+const eyeWhiteMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.2 });
+const eyeWhiteL = new THREE.Mesh(new THREE.SphereGeometry(0.072, 14, 14), eyeWhiteMat);
 eyeWhiteL.position.set(-0.12, 2.5, 0.31);
 eyeWhiteL.scale.z = 0.4;
 playerGroup.add(eyeWhiteL);
 const eyeWhiteR = eyeWhiteL.clone(); eyeWhiteR.position.x = 0.12; playerGroup.add(eyeWhiteR);
+const irisMat = new THREE.MeshStandardMaterial({ color: 0x2d6cb3, roughness: 0.25 });
+const irisL = new THREE.Mesh(new THREE.SphereGeometry(0.04, 12, 12), irisMat);
+irisL.position.set(-0.12, 2.5, 0.34);
+playerGroup.add(irisL);
+const irisR = irisL.clone(); irisR.position.x = 0.12; playerGroup.add(irisR);
 const eyeMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), eyeMat);
-eyeL.position.set(-0.12, 2.5, 0.345);
+const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.022, 10, 10), eyeMat);
+eyeL.position.set(-0.12, 2.5, 0.358);
 playerGroup.add(eyeL);
 const eyeR = eyeL.clone(); eyeR.position.x = 0.12; playerGroup.add(eyeR);
+// Catchlight (tiny white dot in each pupil for life)
+const catchlightMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const clL = new THREE.Mesh(new THREE.SphereGeometry(0.009, 6, 6), catchlightMat);
+clL.position.set(-0.114, 2.508, 0.366);
+playerGroup.add(clL);
+const clR = clL.clone(); clR.position.x = 0.126; playerGroup.add(clR);
+// Eyebrows — slim slanted slabs above each eye
+const browL = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.025, 0.04), browMat);
+browL.position.set(-0.12, 2.585, 0.33);
+browL.rotation.z = 0.12;
+playerGroup.add(browL);
+const browR = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.025, 0.04), browMat);
+browR.position.set(0.12, 2.585, 0.33);
+browR.rotation.z = -0.12;
+playerGroup.add(browR);
+// Hair tufts peeking out under the beanie (sides + back)
+function addHair(x, y, z, sx, sy, sz) {
+  const t = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 10), hairMat);
+  t.position.set(x, y, z);
+  t.scale.set(sx, sy, sz);
+  playerGroup.add(t);
+}
+addHair(-0.28, 2.32, 0.12, 1.1, 0.6, 0.9);   // left sideburn
+addHair( 0.28, 2.32, 0.12, 1.1, 0.6, 0.9);   // right sideburn
+addHair(-0.18, 2.22, -0.28, 1.2, 0.7, 1.0);  // back-left
+addHair( 0.18, 2.22, -0.28, 1.2, 0.7, 1.0);  // back-right
+addHair( 0,    2.18, -0.32, 1.4, 0.6, 1.0);  // back-center
 
 // --- Beanie (rounded hat) ---
-const beanieGeom = new THREE.SphereGeometry(0.39, 22, 14, 0, Math.PI * 2, 0, Math.PI / 2);
+const beanieGeom = new THREE.SphereGeometry(0.39, 32, 22, 0, Math.PI * 2, 0, Math.PI / 2);
 const beanieMesh = new THREE.Mesh(beanieGeom, beanieMat);
 beanieMesh.position.y = 2.52;
 beanieMesh.castShadow = true;
 playerGroup.add(beanieMesh);
 // Beanie folded brim (slightly larger ring at the bottom)
-const beanieBrim = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.07, 8, 22), beanieMat);
+const beanieBrim = new THREE.Mesh(new THREE.TorusGeometry(0.36, 0.07, 16, 32), beanieMat);
 beanieBrim.position.y = 2.52;
 beanieBrim.rotation.x = Math.PI / 2;
 playerGroup.add(beanieBrim);
 // Red contrast stripe just above the brim
-const beanieStripe = new THREE.Mesh(new THREE.CylinderGeometry(0.39, 0.39, 0.08, 22), stripeRedMat);
+const beanieStripe = new THREE.Mesh(new THREE.CylinderGeometry(0.39, 0.39, 0.08, 32), stripeRedMat);
 beanieStripe.position.y = 2.6;
 playerGroup.add(beanieStripe);
+// Knit ribs around the beanie — small vertical bumps for texture
+for (let i = 0; i < 18; i++) {
+  const a = (i / 18) * Math.PI * 2;
+  const rib = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.32, 0.04), beanieMat);
+  rib.position.set(Math.cos(a) * 0.395, 2.78, Math.sin(a) * 0.395);
+  rib.lookAt(0, 2.78, 0);
+  playerGroup.add(rib);
+}
 // Pom-pom on top
-const pom = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 10),
+const pom = new THREE.Mesh(new THREE.SphereGeometry(0.13, 18, 14),
   new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55 }));
-pom.position.y = 2.96;
+pom.position.y = 2.99;
 playerGroup.add(pom);
+// Pom-pom fluff dots
+const pomFluffMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.7 });
+for (let i = 0; i < 8; i++) {
+  const a = (i / 8) * Math.PI * 2;
+  const fl = new THREE.Mesh(new THREE.SphereGeometry(0.045, 8, 8), pomFluffMat);
+  fl.position.set(Math.cos(a) * 0.11, 2.99 + Math.sin(i) * 0.04, Math.sin(a) * 0.11);
+  playerGroup.add(fl);
+}
 
 // --- Neck (small skin cylinder connecting head to torso) ---
 const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.17, 0.2, 14), skinMat);
@@ -870,11 +988,16 @@ neck.position.y = 2.16;
 playerGroup.add(neck);
 
 // --- Torso (rounded egg-shape via scaled sphere) ---
-const body = new THREE.Mesh(new THREE.SphereGeometry(0.52, 22, 18), hoodieMat);
+const body = new THREE.Mesh(new THREE.SphereGeometry(0.52, 36, 28), hoodieMat);
 body.scale.set(0.96, 1.18, 0.62);
 body.position.y = 1.7;
 body.castShadow = true;
 playerGroup.add(body);
+// Subtle chest panel for layered look
+const chestPanel = new THREE.Mesh(new THREE.SphereGeometry(0.5, 24, 18), hoodieDarkMat);
+chestPanel.scale.set(0.55, 0.7, 0.35);
+chestPanel.position.set(0, 1.78, 0.18);
+playerGroup.add(chestPanel);
 // Hoodie waist hem (slightly narrower band at the bottom of the torso)
 const waist = new THREE.Mesh(
   new THREE.CylinderGeometry(0.42, 0.38, 0.2, 18),
@@ -923,27 +1046,42 @@ addDrawstring(-0.07);
 addDrawstring(0.07);
 
 // Backpack — rounded box (chamfered via slight scaling) with straps over the shoulders
-const backpack = new THREE.Mesh(
-  new THREE.BoxGeometry(0.58, 0.72, 0.28),
-  new THREE.MeshStandardMaterial({ color: 0xa52e0e, roughness: 0.7 })
-);
+const backpackMat = new THREE.MeshStandardMaterial({ color: 0xa52e0e, roughness: 0.55, metalness: 0.1 });
+const backpack = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.72, 0.28), backpackMat);
 backpack.position.set(0, 1.7, -0.38);
 backpack.castShadow = true;
 playerGroup.add(backpack);
 // Backpack top flap
-const flap = new THREE.Mesh(
-  new THREE.BoxGeometry(0.6, 0.18, 0.3),
-  new THREE.MeshStandardMaterial({ color: 0x7a1f08, roughness: 0.7 })
-);
+const flapMat = new THREE.MeshStandardMaterial({ color: 0x7a1f08, roughness: 0.6, metalness: 0.1 });
+const flap = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.18, 0.3), flapMat);
 flap.position.set(0, 2.0, -0.36);
 playerGroup.add(flap);
+// Backpack zipper line (vertical) + zipper pull
+const bpZipMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.8, roughness: 0.25 });
+const bpZipper = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.6, 0.02), bpZipMat);
+bpZipper.position.set(0, 1.7, -0.255);
+playerGroup.add(bpZipper);
+const bpPull = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.03), bpZipMat);
+bpPull.position.set(0, 1.42, -0.245);
+playerGroup.add(bpPull);
+// Reflective stripes on the sides — horizontal accents
+const reflStripeL = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.55, 0.28), reflectiveMat);
+reflStripeL.position.set(-0.31, 1.7, -0.38);
+playerGroup.add(reflStripeL);
+const reflStripeR = reflStripeL.clone(); reflStripeR.position.x = 0.31; playerGroup.add(reflStripeR);
 // Backpack straps (curve over the shoulders to the chest)
-const strapMat = new THREE.MeshStandardMaterial({ color: 0x6a2010, roughness: 0.7 });
+const strapMat = new THREE.MeshStandardMaterial({ color: 0x6a2010, roughness: 0.6, metalness: 0.1 });
 const strapL2 = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.78, 0.05), strapMat);
 strapL2.position.set(-0.22, 1.75, 0.22);
 strapL2.rotation.x = -0.18;
 playerGroup.add(strapL2);
 const strapR2 = strapL2.clone(); strapR2.position.x = 0.22; playerGroup.add(strapR2);
+// Strap clip buckles on the chest
+const buckleMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4, metalness: 0.4 });
+const buckleL = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.07, 0.03), buckleMat);
+buckleL.position.set(-0.22, 1.55, 0.34);
+playerGroup.add(buckleL);
+const buckleR = buckleL.clone(); buckleR.position.x = 0.22; playerGroup.add(buckleR);
 
 // --- Arms (capsule + shoulder cap) ---
 const armL = makeLimb(hoodieMat, 0.88, 0.11, hoodieMat);
@@ -952,16 +1090,46 @@ playerGroup.add(armL);
 const armR = makeLimb(hoodieMat, 0.88, 0.11, hoodieMat);
 armR.position.set(0.5, 2.04, 0);
 playerGroup.add(armR);
-// Sleeve cuffs (ring at the wrist)
-const cuffMat = new THREE.MeshStandardMaterial({ color: 0x14823c, roughness: 0.6 });
-const cuffL = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.08, 12), cuffMat);
+// Sleeve cuffs (ring at the wrist) — slightly chunkier
+const cuffMat = new THREE.MeshStandardMaterial({ color: 0x14823c, roughness: 0.55 });
+const cuffL = new THREE.Mesh(new THREE.CylinderGeometry(0.135, 0.13, 0.1, 18), cuffMat);
 cuffL.position.y = -0.78; armL.add(cuffL);
 const cuffR = cuffL.clone(); armR.add(cuffR);
-// Hands
-const handMatBall = new THREE.MeshStandardMaterial({ color: 0xfdc97a, roughness: 0.55 });
-const handL = new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 10), handMatBall);
-handL.position.y = -0.88; handL.scale.z = 0.8; armL.add(handL);
-const handR = handL.clone(); armR.add(handR);
+// Hands — rounded fists with knuckle bumps
+const handMatBall = new THREE.MeshStandardMaterial({ color: 0xfdc97a, roughness: 0.45, metalness: 0.05 });
+function buildHand() {
+  const hand = new THREE.Group();
+  const palm = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 14), handMatBall);
+  palm.scale.set(1.0, 0.9, 0.85);
+  palm.castShadow = true;
+  hand.add(palm);
+  // Knuckle bumps across the top
+  for (let i = 0; i < 4; i++) {
+    const k = new THREE.Mesh(new THREE.SphereGeometry(0.038, 10, 8), handMatBall);
+    k.position.set(-0.075 + i * 0.05, 0.06, 0.07);
+    hand.add(k);
+  }
+  // Thumb nub
+  const thumb = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), handMatBall);
+  thumb.position.set(0.13, 0.0, 0.05);
+  thumb.scale.set(0.7, 1.0, 0.9);
+  hand.add(thumb);
+  return hand;
+}
+const handL = buildHand();
+handL.position.y = -0.92;
+armL.add(handL);
+const handR = buildHand();
+handR.position.y = -0.92;
+handR.scale.x = -1;   // mirror so thumb points inward on the other side
+armR.add(handR);
+// Wristwatch on the LEFT wrist — band + dark face
+const watchBand = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 0.05, 18), watchBandMat);
+watchBand.position.y = -0.72;
+armL.add(watchBand);
+const watchFace = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.04, 0.08), watchFaceMat);
+watchFace.position.set(0, -0.72, 0.12);
+armL.add(watchFace);
 
 // --- Legs (capsule + hip cap) ---
 const legL = makeLimb(pantsMat, 0.98, 0.135, pantsMat);
@@ -979,28 +1147,53 @@ const shoeL = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.18, 0.5), shoeMat);
 shoeL.position.set(0, -1.0, 0.08); legL.add(shoeL);
 const shoeR = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.18, 0.5), shoeMat);
 shoeR.position.set(0, -1.0, 0.08); legR.add(shoeR);
-// Rounded toe caps
-const toeL = new THREE.Mesh(new THREE.SphereGeometry(0.16, 12, 10), shoeMat);
+// Rounded toe caps — higher poly for a smoother bullet shape
+const toeL = new THREE.Mesh(new THREE.SphereGeometry(0.16, 18, 14), shoeMat);
 toeL.position.set(0, -1.0, 0.33); toeL.scale.set(1.0, 0.6, 0.8); legL.add(toeL);
 const toeR = toeL.clone(); legR.add(toeR);
+// Heel cup (rounded back of the shoe)
+const heelL = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 12), shoeMat);
+heelL.position.set(0, -0.98, -0.18); heelL.scale.set(1.0, 0.8, 0.8); legL.add(heelL);
+const heelR = heelL.clone(); legR.add(heelR);
 // Shoe tongues
-const tongueMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.5 });
+const tongueMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.4, metalness: 0.05 });
 const tongueL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.18), tongueMat);
 tongueL.position.set(0, -0.87, 0.16); legL.add(tongueL);
 const tongueR = tongueL.clone(); legR.add(tongueR);
-// Lace strips (thin dark bars across the top of the shoe)
+// Lace strips (thin dark bars across the top of the shoe) + lace eyelets
 const laceMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
+const eyeletMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.8, roughness: 0.3 });
 for (let i = 0; i < 3; i++) {
   const laceL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.02, 0.03), laceMat);
   laceL.position.set(0, -0.87 + i * 0.025, 0.22 - i * 0.04);
   legL.add(laceL);
   const laceR2 = laceL.clone(); legR.add(laceR2);
+  // Eyelets on each side
+  for (const sx of [-0.11, 0.11]) {
+    const eyL = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.025, 8), eyeletMat);
+    eyL.rotation.z = Math.PI / 2;
+    eyL.position.set(sx, -0.86 + i * 0.025, 0.22 - i * 0.04);
+    legL.add(eyL);
+    const eyR = eyL.clone(); legR.add(eyR);
+  }
 }
-// Red soles
-const soleL = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.06, 0.52),
-  new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.7 }));
+// Swoosh accent stripe on the outer side of each shoe
+const swooshL = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.06, 0.34), swooshMat);
+swooshL.position.set(-0.16, -0.98, 0.06); legL.add(swooshL);
+const swooshR = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.06, 0.34), swooshMat);
+swooshR.position.set(0.16, -0.98, 0.06); legR.add(swooshR);
+// Red soles + a tread strip on the bottom for grip detail
+const soleMatGS = new THREE.MeshStandardMaterial({ color: 0xdc2626, roughness: 0.55, metalness: 0.05, emissive: 0x331111, emissiveIntensity: 0.15 });
+const soleL = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.06, 0.52), soleMatGS);
 soleL.position.set(0, -1.1, 0.08); legL.add(soleL);
 const soleR = soleL.clone(); legR.add(soleR);
+// Tread bumps under the sole
+const treadMat = new THREE.MeshStandardMaterial({ color: 0x880000, roughness: 0.8 });
+for (let i = 0; i < 4; i++) {
+  const trL = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.02, 0.04), treadMat);
+  trL.position.set(0, -1.135, -0.12 + i * 0.12); legL.add(trL);
+  const trR = trL.clone(); legR.add(trR);
+}
 
 // Glowing trail behind the player (3 fading planes for ghost effect)
 const playerTrails = [];
@@ -1233,7 +1426,7 @@ const player = {
 };
 // Free-roam steering: continuous X movement instead of 3-lane snap
 const FREE_X_LIMIT = LANE_WIDTH * 2.0;   // slightly wider than the outer lane center
-const STEER_SPEED  = 8.5;                // m/s lateral while holding left/right
+const STEER_SPEED  = 13.0;               // m/s lateral while holding left/right (snappier feel)
 const COLLISION_HALF_W = 0.9;            // half-width for X-distance collision checks
 const keysHeld = { left: false, right: false };
 const PLAYER_JUMP_V = 15;
@@ -2069,7 +2262,7 @@ window.addEventListener('touchend', e => {
   const dy = e.changedTouches[0].clientY - touchStart.y;
   const ax = Math.abs(dx), ay = Math.abs(dy);
   touchStart = null;
-  if (Math.max(ax, ay) < 28) { tryJump(); return; }
+  if (Math.max(ax, ay) < 18) { tryJump(); return; }
   if (ax > ay) {
     if (dx < 0) trySwitch(-1); else trySwitch(1);
   } else {
@@ -2197,7 +2390,7 @@ function update(dt) {
   if (keysHeld.left)  player.targetX -= STEER_SPEED * dt;
   if (keysHeld.right) player.targetX += STEER_SPEED * dt;
   player.targetX = Math.max(-FREE_X_LIMIT, Math.min(FREE_X_LIMIT, player.targetX));
-  player.displayX += (player.targetX - player.displayX) * Math.min(1, dt * 12);
+  player.displayX += (player.targetX - player.displayX) * Math.min(1, dt * 20);
   playerGroup.position.x = player.displayX;
   // Derived lane index for any legacy reads (collision now uses X-distance directly)
   player.lane = Math.max(0, Math.min(LANE_COUNT - 1,
@@ -2630,7 +2823,9 @@ function frame(t) {
   const dt = Math.min(0.05, (t - lastTime) / 1000);
   lastTime = t;
   update(dt);
-  renderer.render(scene, camera);
+  // Modulate motion-blur strength with speed for a stronger "sense of velocity" at high speeds
+  afterimagePass.uniforms['damp'].value = 0.62 + Math.min(0.28, (speed - 14) * 0.012);
+  composer.render();
   requestAnimationFrame(frame);
 }
 
