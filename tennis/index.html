@@ -1487,7 +1487,8 @@ const net = {
   shareUrl: '',
   errorMessage: '',
   copied: false,
-  remoteInput: { left: false, right: false, space: false, m: false, prevSpace: false, prevM: false },
+  remoteInput: { left: false, right: false, space: false, m: false, prevSpace: false, prevM: false, targetX: null },
+  guestMouseTargetX: null,  // guest-side: pending absolute world-x from trackpad, sent next frame
 };
 
 // Lazy-load PeerJS only when the user picks online mode — saves ~70KB on every
@@ -1619,6 +1620,8 @@ function cancelOnline() {
   net.errorMessage = '';
   net.copied = false;
   net.remoteInput.left = net.remoteInput.right = net.remoteInput.space = net.remoteInput.m = false;
+  net.remoteInput.targetX = null;
+  net.guestMouseTargetX = null;
   state.vsMode = 'ai';
   state.mode = 'menu';
   state.menuStep = 'mode';
@@ -1668,6 +1671,7 @@ function handleData(data) {
     net.remoteInput.right = !!data.r;
     net.remoteInput.space = !!data.s;
     net.remoteInput.m     = !!data.m;
+    if (typeof data.tx === 'number') net.remoteInput.targetX = data.tx;
   }
 }
 
@@ -1707,13 +1711,21 @@ function sendState() {
 function sendInput() {
   if (net.role !== 'guest' || !net.conn || !net.conn.open) return;
   try {
-    net.conn.send({
+    // Guest's camera is mirrored 180° so player 2 is near the screen, which
+    // flips the on-screen x-axis. Swap left/right so a Right-Arrow press
+    // moves the player visually to the right on the guest's display.
+    const msg = {
       type: 'input',
-      l: !!(keys['KeyA'] || keys['ArrowLeft']),
-      r: !!(keys['KeyD'] || keys['ArrowRight']),
+      l: !!(keys['KeyD'] || keys['ArrowRight']),
+      r: !!(keys['KeyA'] || keys['ArrowLeft']),
       s: !!keys['Space'],
       m: !!keys['KeyM'],
-    });
+    };
+    if (net.guestMouseTargetX != null) {
+      msg.tx = net.guestMouseTargetX;
+      net.guestMouseTargetX = null;
+    }
+    net.conn.send(msg);
   } catch {}
 }
 
@@ -1777,10 +1789,13 @@ const menuButtons = [];
 
 window.addEventListener('mousemove', e => {
   if (state.mode !== 'game' || state.gameOver) return;
-  const allowMouse = state.vsMode === 'ai' || (state.vsMode === 'online' && net.role === 'host');
-  if (!allowMouse) return;
   const ndcX = (e.clientX / W) * 2 - 1;
-  state.p1x = ndcX * (COURT_W / 2) * 1.05;
+  if (state.vsMode === 'ai' || (state.vsMode === 'online' && net.role === 'host')) {
+    state.p1x = ndcX * (COURT_W / 2) * 1.05;
+  } else if (state.vsMode === 'online' && net.role === 'guest') {
+    // Camera is mirrored on the guest, so invert ndcX before mapping to world.
+    net.guestMouseTargetX = -ndcX * (COURT_W / 2) * 1.05;
+  }
 });
 window.addEventListener('keydown', e => {
   if (state.mode === 'menu') {
@@ -1985,6 +2000,10 @@ function update(dt) {
     if (keys['ArrowRight'] || keys['ArrowDown']) state.p2x += PLAYER_SPEED * dt;
   } else if (state.vsMode === 'online') {
     // Host receives P2 input from remote peer; edge-detect SPACE for serve/rematch
+    if (typeof net.remoteInput.targetX === 'number') {
+      state.p2x = net.remoteInput.targetX;
+      net.remoteInput.targetX = null;
+    }
     if (net.remoteInput.left)  state.p2x -= PLAYER_SPEED * dt;
     if (net.remoteInput.right) state.p2x += PLAYER_SPEED * dt;
     if (net.remoteInput.space && !net.remoteInput.prevSpace) {
@@ -2569,12 +2588,14 @@ function frame(now) {
     sendInput();
   }
 
-  // Subtle camera sway (broadcast feel)
+  // Subtle camera sway (broadcast feel). Guest sees the court from P2's side
+  // so their own player is near the screen, so flip the z components.
   const t = now * 0.001;
+  const zSign = net.role === 'guest' ? -1 : 1;
   camera.position.x = CAM_BASE.x + Math.sin(t * 0.4) * 0.35;
   camera.position.y = CAM_BASE.y + Math.sin(t * 0.27 + 1) * 0.18;
-  camera.position.z = CAM_BASE.z + Math.cos(t * 0.33) * 0.18;
-  camera.lookAt(CAM_LOOK.x + Math.sin(t * 0.2) * 0.25, CAM_LOOK.y, CAM_LOOK.z);
+  camera.position.z = zSign * CAM_BASE.z + Math.cos(t * 0.33) * 0.18;
+  camera.lookAt(CAM_LOOK.x + Math.sin(t * 0.2) * 0.25, CAM_LOOK.y, zSign * CAM_LOOK.z);
 
   renderer.render(scene, camera);
   drawHUD();
