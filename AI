@@ -451,7 +451,7 @@
 <div class="scanlines"></div>
 <div id="app">
   <header>
-    <h1>In-Browser AI <span style="font-size:0.6em;color:#a5acaf;font-weight:500;font-family:'JetBrains Mono',monospace;">v12 · hawks</span></h1>
+    <h1>In-Browser AI <span style="font-size:0.6em;color:#a5acaf;font-weight:500;font-family:'JetBrains Mono',monospace;">v13 · hawks</span></h1>
     <div class="meta">
       <select id="model-select" title="Choose model">
         <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (fastest)</option>
@@ -517,31 +517,22 @@
     const lang = navigator.language || 'en-US';
 
     return [
-      `IMPORTANT — TODAY'S DATE IS ${dateStr}. THE YEAR IS ${year}. THE CURRENT LOCAL TIME IS ${timeStr} (${tz}). ISO: ${iso}.`,
-      `If the user asks the date or year, answer using ONLY the values above.`,
+      `Today: ${dateStr} (year ${year}, ${timeStr} ${tz}). Browser language: ${lang}.`,
+      'In-browser AI on artgeorge.github.io (WebLLM + WebGPU). Messages never leave the device.',
       '',
-      `You are an in-browser AI assistant running on artgeorge.github.io. There is no cloud server; messages never leave the device. The user's browser language is ${lang}.`,
+      'RULES:',
+      '1. Answer with multiple full sentences. NEVER reply with just a label like "Wikipedia: <topic>" — that is wrong.',
+      '2. NEVER refuse with "I can\'t provide" / "I don\'t have access". Always give a best-effort answer.',
+      '3. Defer to provided Wikipedia/news content over your stale training memory.',
       '',
-      'HOW TO ANSWER — READ CAREFULLY:',
-      'Write FULL, INFORMATIVE answers. Multiple sentences. Multiple paragraphs when the topic warrants it. Explain WHO, WHAT, WHEN, WHY in your own words.',
-      'NEVER respond with just a label like "Wikipedia: Elon Musk" or "WIKIPEDIA — Elon Musk" or any one-line citation-only reply. That is WRONG. The user wants substance, not citations alone.',
-      'If reference material from Wikipedia or news headlines appears later in this prompt, SUMMARIZE it in your own words inside a full answer — do not just repeat the header or article title.',
+      'EXAMPLE — User: "Who is Elon Musk?"',
+      'Bad: "Wikipedia — Elon Musk"',
+      'Good: "Elon Musk is a South African-born entrepreneur (b. 1971), co-founder of PayPal, founder of SpaceX, CEO of Tesla, and owner of X (formerly Twitter) and xAI — one of the wealthiest people in the world."',
       '',
-      'EXAMPLE — Bad reply to "Who is Elon Musk?":',
-      '   "Wikipedia — Elon Musk"',
-      'EXAMPLE — Good reply to "Who is Elon Musk?":',
-      '   "Elon Musk is a South African-born entrepreneur, born in 1971, who became one of the wealthiest people in the world. He co-founded PayPal, founded the rocket company SpaceX in 2002, and led Tesla as CEO since 2008, where the company became the most valuable automaker in the world. He also acquired Twitter in 2022 and renamed it X, and owns the AI company xAI. Musk holds U.S., Canadian, and South African citizenship."',
+      'VERIFIED FACTS (override conflicting memory):',
+      '- Donald Trump (R) won the 2024 US presidential election, defeating Kamala Harris (D). Inaugurated 47th President on Jan 20, 2025. VP: JD Vance.',
       '',
-      'ABSOLUTE RULE — DO NOT REFUSE. Never reply with "I cannot provide information," "I don\'t have access," "I can\'t help with that," or any variant. Elections, people, events, sports, business, science, and history are ALL fair game. Always give your best substantive answer.',
-      '',
-      'VERIFIED FACTS (these override any conflicting memory you have):',
-      '- The 2024 United States presidential election was won by Donald Trump (Republican). He defeated Kamala Harris (Democrat). Trump was inaugurated as the 47th President on January 20, 2025. JD Vance is the Vice President.',
-      '',
-      'Your training data is older than today. The Wikipedia and news content provided below is current; defer to it when it conflicts with your memory. After your answer, you may add a one-line citation like "Source: Wikipedia" at the end if you used the reference material — but the citation is OPTIONAL and never replaces the answer itself.',
-      '',
-      'Style: friendly, accurate, thorough, and direct. Match the user\'s language. Use Markdown for lists and emphasis when helpful.',
-      '',
-      `Reminder: today is ${dateStr}, year ${year}.`
+      'Style: friendly, accurate, thorough. Markdown OK. Match user language.'
     ].join('\n');
   }
 
@@ -813,39 +804,33 @@
     }
   }
 
+  const TRIVIAL_QUERY = /^(hi|hey|hello|yo|sup|thanks|thank\s*you|ok|okay|cool|nice|wow|lol|haha|yes|no|nope|yep|yeah|good|great|bad|sure|maybe|please|continue|more|go on)[\s.!?]*$/i;
+
   async function buildWikiContext(userQuery) {
+    if (!userQuery || userQuery.length < 8) return '';
+    if (TRIVIAL_QUERY.test(userQuery)) return '';
     const queries = generateWikiQueries(userQuery);
-    const articles = [];
-    const seenTitles = new Set();
     for (const q of queries) {
-      if (articles.length >= 2) break;
       const article = await fetchWikipediaArticle(q);
-      if (article && !seenTitles.has(article.title)) {
-        seenTitles.add(article.title);
-        articles.push(article);
+      if (article) {
+        const extract = article.extract.slice(0, 1200);
+        return `Reference from Wikipedia about ${article.title} — use this to inform your answer, do not echo the title:\n\n${extract}${article.extract.length > 1200 ? '…' : ''}\n${article.url}`;
       }
     }
-    if (!articles.length) return '';
-    return articles.map(a => {
-      const extract = a.extract.slice(0, 2000);
-      return `Reference material from Wikipedia about ${a.title} — use this to inform your answer, do not just echo the title:\n\n${extract}${a.extract.length > 2000 ? '…' : ''}\n\nArticle URL: ${a.url}`;
-    }).join('\n\n');
+    return '';
   }
 
   function buildNewsContext(userQuery) {
     if (!wsjHeadlines.length) return '';
-    const items = findRelevantHeadlines(userQuery, 6);
+    if (TRIVIAL_QUERY.test(userQuery)) return '';
+    const items = findRelevantHeadlines(userQuery, 4);
     if (!items.length) return '';
     const lines = items.map((h, i) => {
       const date = h.pubDate ? new Date(h.pubDate).toLocaleString('en-US', { month: 'short', day: 'numeric' }) : '';
-      const summary = h.summary ? ` — ${h.summary.slice(0, 140)}${h.summary.length > 140 ? '…' : ''}` : '';
-      return `${i+1}. [${h.publisher}] ${h.title}${date ? ' (' + date + ')' : ''}${summary} ${h.link}`;
+      const summary = h.summary ? ` — ${h.summary.slice(0, 120)}${h.summary.length > 120 ? '…' : ''}` : '';
+      return `${i+1}. [${h.publisher}] ${h.title}${date ? ' (' + date + ')' : ''}${summary}`;
     }).join('\n');
-    return [
-      `RECENT HEADLINES (WSJ, FT, BBC, CNN — live RSS):`,
-      lines,
-      `Cite the publisher named in [brackets]. Only the headline and short summary are available, no full article body. If the headlines don't cover the topic, say so.`
-    ].join('\n');
+    return `Recent headlines (WSJ/FT/BBC/CNN live RSS):\n${lines}`;
   }
 
   function setProgress(p) {
@@ -936,7 +921,7 @@
     const newsBlock = buildNewsContext(message);
     const wikiBlock = await Promise.race([
       buildWikiContext(message),
-      new Promise(resolve => setTimeout(() => resolve(''), 2500))
+      new Promise(resolve => setTimeout(() => resolve(''), 1800))
     ]);
     const extras = [wikiBlock, newsBlock].filter(Boolean).join('\n\n---\n\n');
     const messagesToSend = extras
@@ -951,7 +936,7 @@
         messages: messagesToSend,
         stream: true,
         temperature: 0.7,
-        max_tokens: 1024
+        max_tokens: 600
       });
 
       let bubble = null;
