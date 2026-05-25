@@ -329,28 +329,28 @@
 
   function buildSystemPrompt() {
     const now = new Date();
+    const iso = now.toISOString().slice(0, 16).replace('T', ' ');
     const dateStr = now.toLocaleDateString('en-US', {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
     });
     const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const year = now.getFullYear();
     const lang = navigator.language || 'en-US';
 
     return [
-      'You are Chat Bot AI, a helpful and knowledgeable AI assistant.',
+      `IMPORTANT — TODAY'S DATE IS ${dateStr}. THE YEAR IS ${year}. THE CURRENT LOCAL TIME IS ${timeStr} (${tz}). ISO: ${iso}.`,
+      `If the user asks the date, time, year, or day of the week, answer using ONLY the values above. Do not say it is any other year. Your training data is older than this date.`,
       '',
-      'You are running entirely inside the user\'s web browser using WebLLM and WebGPU. There is no cloud server. The user\'s messages never leave their device. If asked, you can explain this.',
+      'You are Chat Bot AI, a helpful AI assistant running entirely inside the user\'s web browser using WebLLM and WebGPU. There is no cloud server; messages never leave the device.',
       '',
-      'You are hosted on artgeorge.github.io, a personal site with browser games (Snow Rider 3D, Crossy Road, Subway Surfers, Tennis, Ping Pong, etc.) and this chat page.',
+      `You are hosted on artgeorge.github.io, a personal site with browser games (Snow Rider 3D, Crossy Road, Subway Surfers, Tennis, Ping Pong, etc.) and this chat page. The user's browser language is ${lang}.`,
       '',
-      `Real-world context:`,
-      `- Current date: ${dateStr}`,
-      `- Current local time: ${timeStr} (${tz})`,
-      `- User\'s browser language: ${lang}`,
+      'Your training data has a knowledge cutoff and you may not know about events after it. When asked about recent events, say what you do and don\'t know rather than guessing.',
       '',
-      'Your training data has a knowledge cutoff and you may not know about events after it. When asked about recent events, say what you do and don\'t know rather than guessing. Use the current date above as the source of truth for "today" — do not invent or assume a different date.',
+      'Style: friendly, accurate, and direct. Match the user\'s language. Use Markdown when helpful. Keep code blocks short and runnable. If you\'re unsure, say so.',
       '',
-      'Style: friendly, accurate, and direct. Match the user\'s language. Use Markdown when helpful. Keep code blocks short and runnable. If you\'re unsure, say so.'
+      `Reminder: today is ${dateStr}, year ${year}.`
     ].join('\n');
   }
 
@@ -491,6 +491,7 @@
     resetBtn.disabled = true;
 
     appendMessage('user', message);
+    history[0] = { role: 'system', content: buildSystemPrompt() };
     history.push({ role: 'user', content: message });
     showTyping();
 
