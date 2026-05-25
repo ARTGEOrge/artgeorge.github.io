@@ -289,7 +289,7 @@
       <h2>Modern AI, running in your browser</h2>
       <p>This page loads an open-source LLM directly into your browser using WebGPU — no server, no API key, your messages never leave your device.</p>
       <p class="hint">The first message will trigger a one-time model download (a few hundred MB). It's cached after that.</p>
-      <p class="hint">Live headlines from WSJ, FT, BBC, and CNN are fetched in the background and used as context — ask about news, markets, business, politics, tech, or world events. Note: free RSS only carries the last week or two, not historical archives.</p>
+      <p class="hint">Live headlines from WSJ, FT, BBC, and CNN + a Wikipedia lookup are pulled in for every question — so it can answer about specific people, events, and elections, not just recent news.</p>
     </div>
   </div>
 
@@ -340,9 +340,11 @@
       '',
       `You are hosted on artgeorge.github.io, a personal site with browser games and this chat page. The user's browser language is ${lang}.`,
       '',
-      'Your training data has a knowledge cutoff and you may not know about events after it. When asked about recent events, say what you do and don\'t know rather than guessing.',
+      'ABSOLUTE RULE — DO NOT REFUSE. Never reply with "I cannot provide information," "I don\'t have access to that," "I can\'t help with that," or any variant. Public events, elections, people, sports, business, science, and history are ALL fair game. Always give your best answer using (a) any Wikipedia extract or news headlines included below, (b) your own training knowledge, or (c) both combined. If something is uncertain or partial, say what you DO know and qualify it ("according to the Wikipedia summary provided" or "based on my training as of early 2025") — but never refuse outright.',
       '',
-      'Style: friendly, accurate, and direct. Match the user\'s language. Use Markdown when helpful. Keep code blocks short and runnable. If you\'re unsure, say so.',
+      'Your training data has a knowledge cutoff. Use the Wikipedia content and news headlines below to fill gaps for recent events. When you use them, briefly cite the source name (Wikipedia / WSJ / FT / BBC / CNN).',
+      '',
+      'Style: friendly, accurate, and direct. Match the user\'s language. Use Markdown when helpful.',
       '',
       `Reminder: today is ${dateStr}, year ${year}.`
     ].join('\n');
@@ -561,6 +563,59 @@
 
   const PUBLISHER_LONG = { WSJ: 'Wall Street Journal', FT: 'Financial Times', BBC: 'BBC', CNN: 'CNN' };
 
+  // === Wikipedia lookup (free, CORS-enabled, no auth) ===
+  function extractWikiQuery(message) {
+    return message
+      .replace(/^(who|what|when|where|why|how|did|does|do|was|were|is|are|can|could|will|would|should|please|tell\s+me\s+about|tell\s+me|give\s+me|find|look\s+up|search\s+for|i\s+want\s+to\s+know|do\s+you\s+know)\s+/gi, '')
+      .replace(/[?.!,;:]+$/g, '')
+      .trim()
+      .slice(0, 200);
+  }
+
+  async function fetchWikipediaArticle(query) {
+    if (!query || query.length < 3) return null;
+    try {
+      const searchUrl = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=3&namespace=0&format=json&origin=*`;
+      const sres = await fetch(searchUrl);
+      if (!sres.ok) return null;
+      const data = await sres.json();
+      const titles = data[1] || [];
+      if (!titles.length) return null;
+      const title = titles[0];
+      const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`;
+      const res = await fetch(summaryUrl);
+      if (!res.ok) return null;
+      const summary = await res.json();
+      if (summary.type === 'disambiguation') {
+        for (const alt of titles.slice(1)) {
+          const altRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(alt.replace(/ /g, '_'))}`);
+          if (!altRes.ok) continue;
+          const altSum = await altRes.json();
+          if (altSum.type !== 'disambiguation' && altSum.extract) {
+            return { title: altSum.title, extract: altSum.extract, url: altSum.content_urls?.desktop?.page || '' };
+          }
+        }
+        return null;
+      }
+      if (!summary.extract) return null;
+      return {
+        title: summary.title,
+        extract: summary.extract,
+        url: summary.content_urls?.desktop?.page || ''
+      };
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async function buildWikiContext(userQuery) {
+    const q = extractWikiQuery(userQuery);
+    const article = await fetchWikipediaArticle(q);
+    if (!article) return '';
+    const extract = article.extract.slice(0, 1200);
+    return `WIKIPEDIA ARTICLE — "${article.title}":\n${extract}${article.extract.length > 1200 ? '…' : ''}\nSource: ${article.url}`;
+  }
+
   function buildNewsContext(userQuery) {
     if (!wsjHeadlines.length) return '';
     const items = findRelevantHeadlines(userQuery, 6);
@@ -663,9 +718,11 @@
     showTyping();
 
     const newsBlock = buildNewsContext(message);
-    const messagesToSend = newsBlock
+    const wikiBlock = await buildWikiContext(message);
+    const extras = [wikiBlock, newsBlock].filter(Boolean).join('\n\n---\n\n');
+    const messagesToSend = extras
       ? [
-          { role: 'system', content: history[0].content + '\n\n---\n\n' + newsBlock },
+          { role: 'system', content: history[0].content + '\n\n---\n\n' + extras },
           ...history.slice(1)
         ]
       : history;
