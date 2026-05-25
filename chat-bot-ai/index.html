@@ -625,7 +625,10 @@
 
     const newsBlock = buildNewsContext(message);
     const messagesToSend = newsBlock
-      ? [history[0], { role: 'system', content: newsBlock }, ...history.slice(1)]
+      ? [
+          { role: 'system', content: history[0].content + '\n\n---\n\n' + newsBlock },
+          ...history.slice(1)
+        ]
       : history;
 
     try {
