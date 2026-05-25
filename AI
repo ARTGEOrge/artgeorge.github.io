@@ -289,7 +289,7 @@
       <h2>Modern AI, running in your browser</h2>
       <p>This page loads an open-source LLM directly into your browser using WebGPU — no server, no API key, your messages never leave your device.</p>
       <p class="hint">The first message will trigger a one-time model download (a few hundred MB). It's cached after that.</p>
-      <p class="hint">Live Wall Street Journal headlines are fetched in the background and used as context — ask about news, markets, business, or world events.</p>
+      <p class="hint">Live Wall Street Journal + Financial Times headlines are fetched in the background and used as context — ask about news, markets, business, or world events. Note: free RSS only carries the last week or two, not historical archives.</p>
     </div>
   </div>
 
@@ -400,14 +400,22 @@
     if (t) t.remove();
   }
 
-  // === WSJ news (live RSS via CORS proxy) ===
-  const WSJ_FEEDS = [
-    { name: 'World', url: 'https://feeds.a.dj.com/rss/RSSWorldNews.xml' },
-    { name: 'US Business', url: 'https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml' },
-    { name: 'Markets', url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml' },
-    { name: 'Tech', url: 'https://feeds.a.dj.com/rss/RSSWSJD.xml' },
-    { name: 'Opinion', url: 'https://feeds.a.dj.com/rss/RSSOpinion.xml' },
-    { name: 'Lifestyle', url: 'https://feeds.a.dj.com/rss/RSSLifestyle.xml' }
+  // === Live news (WSJ + FT RSS via CORS proxy) ===
+  const NEWS_FEEDS = [
+    // Wall Street Journal
+    { name: 'World', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSWorldNews.xml' },
+    { name: 'US Business', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml' },
+    { name: 'Markets', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml' },
+    { name: 'Tech', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSWSJD.xml' },
+    { name: 'Opinion', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSOpinion.xml' },
+    { name: 'Lifestyle', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSLifestyle.xml' },
+    // Financial Times
+    { name: 'Home', publisher: 'FT', url: 'https://www.ft.com/?format=rss' },
+    { name: 'World', publisher: 'FT', url: 'https://www.ft.com/world?format=rss' },
+    { name: 'Companies', publisher: 'FT', url: 'https://www.ft.com/companies?format=rss' },
+    { name: 'Markets', publisher: 'FT', url: 'https://www.ft.com/markets?format=rss' },
+    { name: 'Opinion', publisher: 'FT', url: 'https://www.ft.com/opinion?format=rss' },
+    { name: 'Tech', publisher: 'FT', url: 'https://www.ft.com/technology?format=rss' }
   ];
   const CORS_PROXIES = [
     u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
@@ -431,9 +439,9 @@
 
   function renderStatus() {
     const parts = [modelStatusText];
-    if (newsState === 'loading') parts.push('loading WSJ…');
-    else if (newsState === 'ok') parts.push(`WSJ ✓ (${wsjHeadlines.length})`);
-    else if (newsState === 'error') parts.push('WSJ ✕');
+    if (newsState === 'loading') parts.push('loading news…');
+    else if (newsState === 'ok') parts.push(`news ✓ (${wsjHeadlines.length})`);
+    else if (newsState === 'error') parts.push('news ✕');
     statusLabel.textContent = parts.join(' · ');
   }
 
@@ -453,7 +461,7 @@
     throw lastErr;
   }
 
-  function parseRSS(xml, category) {
+  function parseRSS(xml, feed) {
     try {
       const doc = new DOMParser().parseFromString(xml, 'text/xml');
       if (doc.querySelector('parsererror')) return [];
@@ -462,7 +470,8 @@
         summary: (item.querySelector('description')?.textContent || '').replace(/<[^>]+>/g, '').trim(),
         pubDate: item.querySelector('pubDate')?.textContent || '',
         link: item.querySelector('link')?.textContent || '',
-        category
+        category: feed.name,
+        publisher: feed.publisher
       })).filter(i => i.title);
     } catch (err) {
       return [];
@@ -473,7 +482,7 @@
     setNewsState('loading');
     try {
       const results = await Promise.allSettled(
-        WSJ_FEEDS.map(async f => parseRSS(await fetchViaProxy(f.url), f.name))
+        NEWS_FEEDS.map(async f => parseRSS(await fetchViaProxy(f.url), f))
       );
       const all = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
       if (!all.length) throw new Error('all feeds failed');
@@ -520,14 +529,14 @@
     const lines = items.map((h, i) => {
       const date = h.pubDate ? new Date(h.pubDate).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
       const summary = h.summary ? `\n   ${h.summary.slice(0, 240)}${h.summary.length > 240 ? '…' : ''}` : '';
-      return `${i+1}. [${h.category}] ${h.title}${date ? ' (' + date + ')' : ''}${summary}\n   ${h.link}`;
+      return `${i+1}. [${h.publisher} · ${h.category}] ${h.title}${date ? ' (' + date + ')' : ''}${summary}\n   ${h.link}`;
     }).join('\n\n');
     return [
-      `RECENT WALL STREET JOURNAL HEADLINES (live RSS, retrieved ${new Date().toLocaleString()}):`,
+      `RECENT HEADLINES from the Wall Street Journal and Financial Times (live RSS, retrieved ${new Date().toLocaleString()}):`,
       '',
       lines,
       '',
-      'If the user\'s question relates to current events, business, markets, tech, or world news, use these headlines as your primary source and attribute as "according to the Wall Street Journal" — include the article title and link. Only the headline and short RSS summary are available; do NOT fabricate article details beyond what is shown. If the headlines don\'t cover the topic, say so.'
+      'If the user\'s question relates to current events, business, markets, tech, or world news, use these headlines as your primary source. Attribute each fact as "according to the Wall Street Journal" or "according to the Financial Times" based on the [WSJ] or [FT] tag in brackets — include the article title and link. Only the headline and short RSS summary are available (no full article body, no archive earlier than the last week or two); do NOT fabricate article details beyond what is shown. If the headlines don\'t cover the topic, say so.'
     ].join('\n');
   }
 
