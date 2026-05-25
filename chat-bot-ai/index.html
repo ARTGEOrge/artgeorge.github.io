@@ -326,11 +326,36 @@
 
   let engine = null;
   let isGenerating = false;
+
+  function buildSystemPrompt() {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-US', {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+    });
+    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const lang = navigator.language || 'en-US';
+
+    return [
+      'You are Chat Bot AI, a helpful and knowledgeable AI assistant.',
+      '',
+      'You are running entirely inside the user\'s web browser using WebLLM and WebGPU. There is no cloud server. The user\'s messages never leave their device. If asked, you can explain this.',
+      '',
+      'You are hosted on artgeorge.github.io, a personal site with browser games (Snow Rider 3D, Crossy Road, Subway Surfers, Tennis, Ping Pong, etc.) and this chat page.',
+      '',
+      `Real-world context:`,
+      `- Current date: ${dateStr}`,
+      `- Current local time: ${timeStr} (${tz})`,
+      `- User\'s browser language: ${lang}`,
+      '',
+      'Your training data has a knowledge cutoff and you may not know about events after it. When asked about recent events, say what you do and don\'t know rather than guessing. Use the current date above as the source of truth for "today" — do not invent or assume a different date.',
+      '',
+      'Style: friendly, accurate, and direct. Match the user\'s language. Use Markdown when helpful. Keep code blocks short and runnable. If you\'re unsure, say so.'
+    ].join('\n');
+  }
+
   let history = [
-    {
-      role: 'system',
-      content: 'You are a helpful, concise AI assistant running locally in the user\'s browser via WebLLM. Be friendly, accurate, and direct.'
-    }
+    { role: 'system', content: buildSystemPrompt() }
   ];
 
   function escapeHtml(text) {
@@ -512,7 +537,7 @@
 
   function resetChat() {
     if (isGenerating) return;
-    history = [history[0]];
+    history = [{ role: 'system', content: buildSystemPrompt() }];
     chatWindow.innerHTML = `
       <div class="welcome" id="welcome-msg">
         <h2>Fresh chat</h2>
@@ -539,7 +564,7 @@
 
   modelSelect.addEventListener('change', async () => {
     if (isGenerating) return;
-    history = [history[0]];
+    history = [{ role: 'system', content: buildSystemPrompt() }];
     chatWindow.innerHTML = `
       <div class="welcome" id="welcome-msg">
         <h2>Switching model…</h2>
