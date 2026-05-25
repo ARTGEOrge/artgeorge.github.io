@@ -277,12 +277,12 @@
     <h1>Chat Bot AI</h1>
     <div class="meta">
       <select id="model-select" title="Choose model">
-        <option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B (balanced)</option>
-        <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (fast)</option>
-        <option value="Phi-3.5-mini-instruct-q4f16_1-MLC">Phi 3.5 Mini</option>
-        <option value="Qwen2.5-3B-Instruct-q4f16_1-MLC">Qwen 2.5 3B</option>
+        <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (fastest)</option>
+        <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen 2.5 1.5B (fast)</option>
         <option value="gemma-2-2b-it-q4f16_1-MLC">Gemma 2 2B</option>
-        <option value="Hermes-3-Llama-3.2-3B-q4f16_1-MLC">Hermes 3 (Llama 3.2 3B)</option>
+        <option value="Phi-3.5-mini-instruct-q4f16_1-MLC">Phi 3.5 Mini</option>
+        <option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B (smarter, slower)</option>
+        <option value="Hermes-3-Llama-3.2-3B-q4f16_1-MLC">Hermes 3 (3B, slower)</option>
       </select>
       <span id="status-label">initializing…</span>
     </div>
@@ -296,7 +296,7 @@
       <h2>Modern AI, running in your browser</h2>
       <p>This page loads an open-source LLM directly into your browser using WebGPU — no server, no API key, your messages never leave your device.</p>
       <p class="hint">The first message will trigger a one-time model download (a few hundred MB). It's cached after that.</p>
-      <p class="hint">Live Wall Street Journal + Financial Times headlines are fetched in the background and used as context — ask about news, markets, business, or world events. Note: free RSS only carries the last week or two, not historical archives.</p>
+      <p class="hint">Live headlines from WSJ, FT, BBC, and CNN are fetched in the background and used as context — ask about news, markets, business, politics, tech, or world events. Note: free RSS only carries the last week or two, not historical archives.</p>
     </div>
   </div>
 
@@ -407,7 +407,7 @@
     if (t) t.remove();
   }
 
-  // === Live news (WSJ + FT RSS via CORS proxy) ===
+  // === Live news (WSJ + FT + BBC + CNN RSS via CORS proxy) ===
   const NEWS_FEEDS = [
     // Wall Street Journal
     { name: 'World', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSWorldNews.xml' },
@@ -415,15 +415,26 @@
     { name: 'Markets', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml' },
     { name: 'Tech', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSWSJD.xml' },
     { name: 'Opinion', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSOpinion.xml' },
-    { name: 'Lifestyle', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSLifestyle.xml' },
     // Financial Times
     { name: 'Home', publisher: 'FT', url: 'https://www.ft.com/?format=rss' },
     { name: 'World', publisher: 'FT', url: 'https://www.ft.com/world?format=rss' },
     { name: 'Companies', publisher: 'FT', url: 'https://www.ft.com/companies?format=rss' },
     { name: 'Markets', publisher: 'FT', url: 'https://www.ft.com/markets?format=rss' },
-    { name: 'Opinion', publisher: 'FT', url: 'https://www.ft.com/opinion?format=rss' },
-    { name: 'Tech', publisher: 'FT', url: 'https://www.ft.com/technology?format=rss' }
+    // BBC
+    { name: 'Top', publisher: 'BBC', url: 'https://feeds.bbci.co.uk/news/rss.xml' },
+    { name: 'World', publisher: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml' },
+    { name: 'Business', publisher: 'BBC', url: 'https://feeds.bbci.co.uk/news/business/rss.xml' },
+    { name: 'Politics', publisher: 'BBC', url: 'https://feeds.bbci.co.uk/news/politics/rss.xml' },
+    { name: 'Tech', publisher: 'BBC', url: 'https://feeds.bbci.co.uk/news/technology/rss.xml' },
+    // CNN
+    { name: 'Top', publisher: 'CNN', url: 'http://rss.cnn.com/rss/cnn_topstories.rss' },
+    { name: 'World', publisher: 'CNN', url: 'http://rss.cnn.com/rss/edition_world.rss' },
+    { name: 'US', publisher: 'CNN', url: 'http://rss.cnn.com/rss/edition_us.rss' },
+    { name: 'Tech', publisher: 'CNN', url: 'http://rss.cnn.com/rss/edition_technology.rss' },
+    { name: 'Business', publisher: 'CNN', url: 'http://rss.cnn.com/rss/money_news_international.rss' }
   ];
+  const NEWS_CACHE_KEY = 'news-headlines-v2';
+  const NEWS_CACHE_TTL_MS = 10 * 60 * 1000;
   const CORS_PROXIES = [
     u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
     u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
@@ -485,7 +496,32 @@
     }
   }
 
-  async function loadNews() {
+  function loadCachedNews() {
+    try {
+      const raw = localStorage.getItem(NEWS_CACHE_KEY);
+      if (!raw) return null;
+      const { ts, headlines } = JSON.parse(raw);
+      if (!headlines || !headlines.length) return null;
+      if (Date.now() - ts > NEWS_CACHE_TTL_MS) return null;
+      return headlines;
+    } catch { return null; }
+  }
+
+  function saveCachedNews(headlines) {
+    try {
+      localStorage.setItem(NEWS_CACHE_KEY, JSON.stringify({ ts: Date.now(), headlines }));
+    } catch {}
+  }
+
+  async function loadNews(force = false) {
+    if (!force) {
+      const cached = loadCachedNews();
+      if (cached) {
+        wsjHeadlines = cached;
+        setNewsState('ok');
+        return;
+      }
+    }
     setNewsState('loading');
     try {
       const results = await Promise.allSettled(
@@ -496,9 +532,10 @@
       wsjHeadlines = all.sort((a, b) =>
         new Date(b.pubDate || 0) - new Date(a.pubDate || 0)
       );
+      saveCachedNews(wsjHeadlines);
       setNewsState('ok');
     } catch (err) {
-      console.warn('WSJ news fetch failed', err);
+      console.warn('news fetch failed', err);
       setNewsState('error');
     }
   }
@@ -529,21 +566,21 @@
     return matches.slice(0, limit);
   }
 
+  const PUBLISHER_LONG = { WSJ: 'Wall Street Journal', FT: 'Financial Times', BBC: 'BBC', CNN: 'CNN' };
+
   function buildNewsContext(userQuery) {
     if (!wsjHeadlines.length) return '';
-    const items = findRelevantHeadlines(userQuery, 10);
+    const items = findRelevantHeadlines(userQuery, 6);
     if (!items.length) return '';
     const lines = items.map((h, i) => {
-      const date = h.pubDate ? new Date(h.pubDate).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
-      const summary = h.summary ? `\n   ${h.summary.slice(0, 240)}${h.summary.length > 240 ? '…' : ''}` : '';
-      return `${i+1}. [${h.publisher} · ${h.category}] ${h.title}${date ? ' (' + date + ')' : ''}${summary}\n   ${h.link}`;
-    }).join('\n\n');
+      const date = h.pubDate ? new Date(h.pubDate).toLocaleString('en-US', { month: 'short', day: 'numeric' }) : '';
+      const summary = h.summary ? ` — ${h.summary.slice(0, 140)}${h.summary.length > 140 ? '…' : ''}` : '';
+      return `${i+1}. [${h.publisher}] ${h.title}${date ? ' (' + date + ')' : ''}${summary} ${h.link}`;
+    }).join('\n');
     return [
-      `RECENT HEADLINES from the Wall Street Journal and Financial Times (live RSS, retrieved ${new Date().toLocaleString()}):`,
-      '',
+      `RECENT HEADLINES (WSJ, FT, BBC, CNN — live RSS):`,
       lines,
-      '',
-      'If the user\'s question relates to current events, business, markets, tech, or world news, use these headlines as your primary source. Attribute each fact as "according to the Wall Street Journal" or "according to the Financial Times" based on the [WSJ] or [FT] tag in brackets — include the article title and link. Only the headline and short RSS summary are available (no full article body, no archive earlier than the last week or two); do NOT fabricate article details beyond what is shown. If the headlines don\'t cover the topic, say so.'
+      `Cite the publisher named in [brackets]. Only the headline and short summary are available, no full article body. If the headlines don't cover the topic, say so.`
     ].join('\n');
   }
 
@@ -645,7 +682,7 @@
         messages: messagesToSend,
         stream: true,
         temperature: 0.7,
-        max_tokens: 1024
+        max_tokens: 512
       });
 
       let bubble = null;
