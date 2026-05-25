@@ -453,7 +453,7 @@
 <div class="scanlines"></div>
 <div id="app">
   <header>
-    <h1>Chat Bot AI <span style="font-size:0.6em;color:#6b7280;font-weight:500;font-family:'JetBrains Mono',monospace;">v10</span></h1>
+    <h1>Chat Bot AI <span style="font-size:0.6em;color:#6b7280;font-weight:500;font-family:'JetBrains Mono',monospace;">v11</span></h1>
     <div class="meta">
       <select id="model-select" title="Choose model">
         <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (fastest)</option>
@@ -936,7 +936,10 @@
     showTyping();
 
     const newsBlock = buildNewsContext(message);
-    const wikiBlock = await buildWikiContext(message);
+    const wikiBlock = await Promise.race([
+      buildWikiContext(message),
+      new Promise(resolve => setTimeout(() => resolve(''), 2500))
+    ]);
     const extras = [wikiBlock, newsBlock].filter(Boolean).join('\n\n---\n\n');
     const messagesToSend = extras
       ? [
@@ -955,6 +958,7 @@
 
       let bubble = null;
       let full = '';
+      let pending = '';
 
       for await (const chunk of stream) {
         const delta = chunk.choices[0]?.delta?.content || '';
@@ -964,13 +968,20 @@
           bubble = appendMessage('assistant', '');
         }
         full += delta;
-        bubble.textContent = full;
-        chatWindow.scrollTop = chatWindow.scrollHeight;
+        pending += delta;
+        if (pending.includes('\n') || /[.!?]\s/.test(pending) || pending.length >= 100) {
+          bubble.textContent = full;
+          chatWindow.scrollTop = chatWindow.scrollHeight;
+          pending = '';
+        }
       }
 
       if (!bubble) {
         removeTyping();
         bubble = appendMessage('assistant', '(empty response)');
+      } else if (full !== bubble.textContent) {
+        bubble.textContent = full;
+        chatWindow.scrollTop = chatWindow.scrollHeight;
       }
       history.push({ role: 'assistant', content: full });
     } catch (err) {
