@@ -1445,10 +1445,6 @@
     <div class="spacer"></div>
 
     <span class="autosave" id="autosave-indicator" title="Autosaved to your browser"><span class="autosave-dot"></span> Saved</span>
-    <button class="btn" id="btn-new" data-tip="New project (Ctrl+N)">
-      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
-      New
-    </button>
     <button class="btn" id="btn-projects" data-tip="Browse projects (Ctrl+O)">
       <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
       Projects
@@ -3399,7 +3395,6 @@ function closeProjectsModal() {
 }
 
 document.getElementById('btn-projects').addEventListener('click', openProjectsModal);
-document.getElementById('btn-new').addEventListener('click', () => createProject('Untitled design'));
 document.getElementById('btn-new-from-modal').addEventListener('click', () => {
   createProject('Untitled design');
 });
