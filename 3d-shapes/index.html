@@ -14,35 +14,37 @@
        Design tokens
        ========================================================= */
     :root {
-      --bg-0:        #07090d;
-      --bg-1:        #0e1218;
-      --bg-2:        #141923;
-      --bg-3:        #1c2230;
-      --bg-4:        #262d3e;
-      --border-1:    rgba(255,255,255,0.06);
-      --border-2:    rgba(255,255,255,0.10);
-      --border-3:    rgba(255,255,255,0.16);
-      --text-0:      #f3f6fb;
-      --text-1:      #c9d1de;
-      --text-2:      #8590a4;
-      --text-3:      #5a6478;
-      --text-4:      #3e4659;
-      --accent:      #5b8dff;
-      --accent-2:    #b15cff;
-      --accent-3:    #ff8855;
-      --accent-soft: rgba(91,141,255,0.14);
-      --hole:        #e64575;
-      --danger:      #ef4444;
-      --good:        #22c55e;
-      --grad-brand:  linear-gradient(135deg, #5b8dff 0%, #b15cff 50%, #ff7a5c 100%);
-      --grad-panel:  linear-gradient(180deg, #141923 0%, #0e1218 100%);
-      --shadow-1:    0 1px 2px rgba(0,0,0,0.4);
-      --shadow-2:    0 6px 20px rgba(0,0,0,0.45);
-      --shadow-glow: 0 0 24px rgba(91,141,255,0.35);
-      --r-sm: 6px;
-      --r-md: 10px;
-      --r-lg: 14px;
-      --r-xl: 20px;
+      /* Onshape-style light theme */
+      --bg-0:        #f0f3f7;
+      --bg-1:        #fafbfc;
+      --bg-2:        #ffffff;
+      --bg-3:        #eef2f7;
+      --bg-4:        #e0e7f0;
+      --border-1:    rgba(15, 23, 42, 0.08);
+      --border-2:    rgba(15, 23, 42, 0.14);
+      --border-3:    rgba(15, 23, 42, 0.22);
+      --text-0:      #1a1d22;
+      --text-1:      #2d3340;
+      --text-2:      #5b6473;
+      --text-3:      #8a909c;
+      --text-4:      #b1b6c0;
+      --accent:      #1976d2;
+      --accent-2:    #1565c0;
+      --accent-3:    #ff9800;
+      --accent-soft: rgba(25, 118, 210, 0.10);
+      --hole:        #c2185b;
+      --danger:      #d32f2f;
+      --good:        #2e7d32;
+      --warn:        #f57c00;
+      --grad-brand:  linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+      --grad-panel:  linear-gradient(180deg, #ffffff 0%, #f5f7fa 100%);
+      --shadow-1:    0 1px 2px rgba(15, 23, 42, 0.08);
+      --shadow-2:    0 4px 14px rgba(15, 23, 42, 0.12);
+      --shadow-glow: 0 0 0 3px rgba(25, 118, 210, 0.20);
+      --r-sm: 4px;
+      --r-md: 6px;
+      --r-lg: 8px;
+      --r-xl: 12px;
       --ease: cubic-bezier(0.22, 1, 0.36, 1);
     }
 
@@ -73,10 +75,11 @@
     #app {
       display: grid;
       grid-template-columns: 244px 1fr 296px;
-      grid-template-rows: 56px 1fr 32px;
+      grid-template-rows: 52px 1fr 34px 28px;
       grid-template-areas:
         "topbar topbar topbar"
         "palette viewport inspector"
+        "tabs    tabs     tabs"
         "footer  footer   footer";
       width: 100vw;
       height: 100vh;
@@ -223,24 +226,141 @@
     .btn.danger:hover { background: #5a2024; }
 
     /* =========================================================
-       Shape palette
+       Left sidebar: Features tree + Primitives palette
        ========================================================= */
     .palette {
       grid-area: palette;
       background: var(--bg-1);
       border-right: 1px solid var(--border-1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ---- Features tree ---- */
+    .features {
+      flex: 0 0 42%;
+      min-height: 200px;
+      display: flex;
+      flex-direction: column;
+      border-bottom: 1px solid var(--border-1);
+      background: var(--bg-1);
+    }
+    .features-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-1);
+      background: var(--bg-2);
+    }
+    .features-head .ti {
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: var(--text-2);
+    }
+    .features-head .cnt {
+      font-size: 10px;
+      color: var(--text-3);
+      font-family: 'JetBrains Mono', monospace;
+      background: var(--bg-3);
+      padding: 2px 7px;
+      border-radius: 99px;
+      font-weight: 600;
+    }
+    .features-list {
+      flex: 1;
       overflow-y: auto;
-      padding: 18px 14px 28px;
+      padding: 6px 0;
+      font-size: 12px;
+    }
+    .fgroup {
+      padding: 4px 0;
+    }
+    .fgroup-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px 4px 10px;
+      color: var(--text-3);
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      font-weight: 700;
+      cursor: pointer;
+      user-select: none;
+    }
+    .fgroup-head svg.caret { width: 9px; height: 9px; stroke: currentColor; stroke-width: 2.4; fill: none; transition: transform 0.15s var(--ease); }
+    .fgroup.collapsed .fgroup-head svg.caret { transform: rotate(-90deg); }
+    .fgroup.collapsed .fgroup-items { display: none; }
+
+    .fitem {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 12px 5px 24px;
+      cursor: pointer;
+      color: var(--text-1);
+      border-left: 2px solid transparent;
+      transition: background 0.1s var(--ease), border-color 0.1s var(--ease), color 0.1s var(--ease);
+    }
+    .fitem:hover { background: var(--bg-3); }
+    .fitem.selected {
+      background: var(--accent-soft);
+      border-left-color: var(--accent);
+      color: var(--accent-2);
+      font-weight: 600;
+    }
+    .fitem.hidden-part { opacity: 0.45; }
+    .fitem .fi-icon {
+      width: 14px; height: 14px;
+      display: inline-flex; align-items: center; justify-content: center;
+      flex: 0 0 14px;
+    }
+    .fitem .fi-icon svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.8; fill: none; }
+    .fitem.plane .fi-icon { color: #c2185b; }
+    .fitem.plane.front .fi-icon { color: #2e7d32; }
+    .fitem.plane.right .fi-icon { color: var(--accent); }
+    .fitem.origin .fi-icon { color: #5b6473; }
+    .fitem.part .fi-icon { color: var(--accent); }
+    .fitem .fi-name {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 12px;
+    }
+    .fitem .fi-vis {
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 2px;
+      color: var(--text-3);
+      opacity: 0;
+      transition: opacity 0.15s var(--ease), color 0.15s var(--ease);
+      display: inline-flex;
+    }
+    .fitem:hover .fi-vis, .fitem.hidden-part .fi-vis { opacity: 1; }
+    .fitem .fi-vis:hover { color: var(--accent); }
+    .fitem .fi-vis svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.8; fill: none; }
+
+    /* ---- Primitives palette ---- */
+    .primitives {
+      flex: 1 1 58%;
+      overflow-y: auto;
+      padding: 12px 12px 22px;
     }
     .palette-header {
       font-size: 10px;
-      letter-spacing: 2px;
+      letter-spacing: 1.5px;
       text-transform: uppercase;
-      color: var(--text-3);
+      color: var(--text-2);
       font-weight: 700;
-      margin: 4px 6px 12px;
+      margin: 4px 4px 10px;
     }
-    .palette-header:not(:first-child) { margin-top: 22px; }
+    .palette-header:not(:first-child) { margin-top: 16px; }
 
     .shape-grid {
       display: grid;
@@ -289,17 +409,15 @@
     .viewport {
       grid-area: viewport;
       position: relative;
-      background:
-        radial-gradient(ellipse at 50% 0%, #1a2238 0%, #0a0d14 50%, #06080d 100%);
+      background: linear-gradient(180deg, #d6dfe9 0%, #b0bdcc 100%);
       overflow: hidden;
     }
     #scene { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 
-    /* Vignette overlay */
     .viewport::after {
       content: '';
       position: absolute; inset: 0;
-      background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+      background: radial-gradient(ellipse at center, transparent 65%, rgba(40,55,75,0.18) 100%);
       pointer-events: none;
       z-index: 2;
     }
@@ -314,37 +432,130 @@
       filter: drop-shadow(0 2px 6px rgba(0,0,0,0.5));
     }
 
-    .view-presets {
+    /* ---- 3D view cube (Onshape style) ---- */
+    .vcube-wrap {
       position: absolute;
       top: 14px;
       right: 14px;
-      display: flex;
-      gap: 4px;
-      background: rgba(14,18,24,0.7);
-      backdrop-filter: blur(14px);
-      -webkit-backdrop-filter: blur(14px);
-      border: 1px solid var(--border-2);
-      border-radius: var(--r-md);
-      padding: 4px;
+      width: 96px;
+      height: 96px;
+      perspective: 360px;
       z-index: 5;
-      box-shadow: var(--shadow-2);
     }
-    .view-presets .preset {
-      width: 38px; height: 30px;
+    .vcube {
+      width: 64px;
+      height: 64px;
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      transform-style: preserve-3d;
+      transform: rotateX(-30deg) rotateY(-45deg);
+      transition: transform 0.36s var(--ease);
+    }
+    .vcube-face {
+      position: absolute;
+      width: 64px; height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.94);
+      color: var(--text-1);
+      border: 1px solid rgba(15,23,42,0.18);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background 0.15s var(--ease), color 0.15s var(--ease);
+      box-shadow: inset 0 0 24px rgba(15,23,42,0.04);
+      backface-visibility: hidden;
+    }
+    .vcube-face:hover {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent-2);
+    }
+    .vcube-face.top    { transform: rotateX( 90deg) translateZ(32px); }
+    .vcube-face.bottom { transform: rotateX(-90deg) translateZ(32px); }
+    .vcube-face.front  { transform: rotateY(  0deg) translateZ(32px); }
+    .vcube-face.back   { transform: rotateY(180deg) translateZ(32px); }
+    .vcube-face.right  { transform: rotateY( 90deg) translateZ(32px); }
+    .vcube-face.left   { transform: rotateY(-90deg) translateZ(32px); }
+
+    .vcube-home {
+      position: absolute;
+      bottom: -4px;
+      right: -4px;
+      width: 26px; height: 26px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: #fff;
+      border: 1px solid var(--border-2);
+      border-radius: 50%;
+      color: var(--accent);
+      cursor: pointer;
+      box-shadow: var(--shadow-1);
+      z-index: 6;
+    }
+    .vcube-home:hover { background: var(--accent); color: #fff; border-color: var(--accent-2); }
+    .vcube-home svg { width: 13px; height: 13px; stroke: currentColor; stroke-width: 2; fill: none; }
+
+    /* ---- Floating primitive ribbon at top of viewport ---- */
+
+    /* ---- Bottom Part Studio tabs ---- */
+    .studio-tabs {
+      grid-area: tabs;
+      background: var(--bg-1);
+      border-top: 1px solid var(--border-1);
+      border-bottom: 1px solid var(--border-1);
+      display: flex;
+      align-items: stretch;
+      padding-left: 8px;
+      gap: 2px;
+      overflow-x: auto;
+    }
+    .studio-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 16px;
+      background: transparent;
+      border: none;
+      border-top: 2px solid transparent;
+      color: var(--text-2);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.2px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: background 0.15s var(--ease), color 0.15s var(--ease), border-color 0.15s var(--ease);
+    }
+    .studio-tab:hover { background: var(--bg-3); color: var(--text-0); }
+    .studio-tab.active {
+      background: var(--bg-2);
+      color: var(--accent);
+      border-top-color: var(--accent);
+    }
+    .studio-tab svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.8; fill: none; }
+    .studio-tab .tab-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-left: 4px;
+    }
+    .studio-tab-add {
+      width: 30px;
       display: inline-flex; align-items: center; justify-content: center;
       background: transparent;
       border: none;
-      color: var(--text-2);
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.8px;
+      color: var(--text-3);
       cursor: pointer;
+      align-self: center;
+      height: 24px;
       border-radius: var(--r-sm);
-      transition: background 0.15s var(--ease), color 0.15s var(--ease);
-      font-family: inherit;
     }
-    .view-presets .preset:hover { background: var(--bg-3); color: var(--text-0); }
-    .view-presets .preset.active { background: var(--accent-soft); color: var(--accent); }
+    .studio-tab-add:hover { background: var(--bg-3); color: var(--accent); }
+    .studio-tab-add svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; }
 
     .viewport-hint {
       position: absolute;
@@ -501,10 +712,10 @@
       cursor: pointer;
       border: 2px solid transparent;
       transition: transform 0.1s var(--ease), border-color 0.1s var(--ease);
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08), 0 2px 6px rgba(0,0,0,0.3);
+      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.10), 0 1px 2px rgba(0,0,0,0.12);
     }
     .swatch:hover { transform: scale(1.1); }
-    .swatch.selected { border-color: var(--text-0); transform: scale(1.05); }
+    .swatch.selected { border-color: var(--accent); transform: scale(1.05); box-shadow: var(--shadow-glow); }
     .color-picker {
       width: 30px; height: 30px;
       padding: 0;
@@ -656,9 +867,9 @@
     .modal-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(4, 6, 10, 0.65);
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
+      background: rgba(30, 40, 55, 0.45);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
       display: none;
       align-items: center;
       justify-content: center;
@@ -802,8 +1013,7 @@
     .pc-thumb {
       height: 70px;
       border-radius: var(--r-sm);
-      background:
-        linear-gradient(135deg, #1a2238 0%, #0a0e18 100%);
+      background: linear-gradient(135deg, #eaf0f6 0%, #c9d3df 100%);
       position: relative;
       overflow: hidden;
       border: 1px solid var(--border-1);
@@ -995,9 +1205,18 @@
     </button>
   </div>
 
-  <!-- ========= PALETTE ========= -->
+  <!-- ========= LEFT SIDEBAR: Features + Primitives ========= -->
   <aside class="palette">
-    <div class="palette-header">Primitives</div>
+    <section class="features">
+      <div class="features-head">
+        <span class="ti">Features</span>
+        <span class="cnt" id="features-count">0</span>
+      </div>
+      <div class="features-list" id="features-list"></div>
+    </section>
+
+    <section class="primitives">
+      <div class="palette-header">Primitives</div>
     <div class="shape-grid">
       <div class="shape-tile" data-kind="box"><svg width="42" height="42" viewBox="0 0 42 42"><defs><linearGradient id="g1a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7ab4ff"/><stop offset="1" stop-color="#3b6cd8"/></linearGradient><linearGradient id="g1b" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5b8dff"/><stop offset="1" stop-color="#2855c0"/></linearGradient><linearGradient id="g1c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b6cd8"/><stop offset="1" stop-color="#1a3a90"/></linearGradient></defs><polygon points="7,15 21,8 35,15 21,22" fill="url(#g1a)" stroke="#1a3a90" stroke-width="0.8"/><polygon points="7,15 21,22 21,36 7,29" fill="url(#g1b)" stroke="#1a3a90" stroke-width="0.8"/><polygon points="35,15 21,22 21,36 35,29" fill="url(#g1c)" stroke="#1a3a90" stroke-width="0.8"/></svg><span>Box</span></div>
       <div class="shape-tile" data-kind="sphere"><svg width="42" height="42" viewBox="0 0 42 42"><defs><radialGradient id="g2" cx="35%" cy="30%" r="70%"><stop offset="0" stop-color="#ffa8a8"/><stop offset="0.4" stop-color="#ef4444"/><stop offset="1" stop-color="#7a1212"/></radialGradient></defs><circle cx="21" cy="21" r="15" fill="url(#g2)"/><ellipse cx="16" cy="15" rx="5" ry="3" fill="rgba(255,255,255,0.45)"/></svg><span>Sphere</span></div>
@@ -1095,6 +1314,7 @@
         </svg><span>Dome</span>
       </div>
     </div>
+    </section>
   </aside>
 
   <!-- ========= VIEWPORT ========= -->
@@ -1117,11 +1337,18 @@
       <circle cx="40" cy="40" r="2.5" fill="#cdd5e0"/>
     </svg>
 
-    <div class="view-presets">
-      <button class="preset" data-view="iso">ISO</button>
-      <button class="preset" data-view="top">TOP</button>
-      <button class="preset" data-view="front">FRONT</button>
-      <button class="preset" data-view="side">SIDE</button>
+    <div class="vcube-wrap">
+      <div class="vcube" id="vcube">
+        <div class="vcube-face top"    data-view="top">TOP</div>
+        <div class="vcube-face bottom" data-view="bottom">BOT</div>
+        <div class="vcube-face front"  data-view="front">FRONT</div>
+        <div class="vcube-face back"   data-view="back">BACK</div>
+        <div class="vcube-face right"  data-view="right">RIGHT</div>
+        <div class="vcube-face left"   data-view="left">LEFT</div>
+      </div>
+      <button class="vcube-home" id="vcube-home" title="Home / Isometric (F)">
+        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      </button>
     </div>
 
     <div class="selection-info" id="selection-info"></div>
@@ -1216,10 +1443,22 @@
     </div>
   </aside>
 
+  <!-- ========= PART STUDIO TABS ========= -->
+  <div class="studio-tabs">
+    <button class="studio-tab active" id="studio-tab">
+      <svg viewBox="0 0 24 24"><path d="M12 2l9 5-9 5-9-5 9-5zM3 12l9 5 9-5M3 17l9 5 9-5"/></svg>
+      <span id="studio-tab-name">Part Studio 1</span>
+      <span class="tab-dot" id="tab-dot" style="display:none;"></span>
+    </button>
+    <button class="studio-tab-add" id="btn-projects-tab" title="Browse projects (Ctrl+O)">
+      <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+    </button>
+  </div>
+
   <!-- ========= FOOTER ========= -->
   <div class="footer">
-    <span class="stat"><span class="pulse"></span> <b id="shape-count">0</b> shapes &nbsp;·&nbsp; <b id="selected-count">0</b> selected</span>
-    <span class="status" id="status-text">3D Shapes Studio</span>
+    <span class="stat"><span class="pulse"></span> <b id="shape-count">0</b> parts &nbsp;·&nbsp; <b id="selected-count">0</b> selected</span>
+    <span class="status" id="status-text">Onshape-style Part Studio · mm</span>
     <span class="stat"><kbd>Ctrl+N</kbd> new · <kbd>Ctrl+O</kbd> projects · <kbd>Ctrl+Z</kbd> undo</span>
   </div>
 
@@ -1315,7 +1554,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
 // transparent — let the CSS gradient show through
-scene.fog = new THREE.Fog(0x080c14, 50, 130);
+scene.fog = new THREE.Fog(0xb0bdcc, 60, 160);
 
 const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
 camera.position.set(28, 24, 28);
@@ -1332,11 +1571,11 @@ window.addEventListener('resize', resize);
 resize();
 
 /* ============================================================
-   Lighting — three-point + soft hemi for richer materials
+   Lighting — Onshape-style bright neutral
    ============================================================ */
-scene.add(new THREE.HemisphereLight(0x8caaff, 0x1a0e2a, 0.55));
+scene.add(new THREE.HemisphereLight(0xdde6f2, 0xa9b4c3, 0.95));
 
-const key = new THREE.DirectionalLight(0xfff5e6, 1.4);
+const key = new THREE.DirectionalLight(0xffffff, 1.3);
 key.position.set(22, 38, 18);
 key.castShadow = true;
 key.shadow.mapSize.set(2048, 2048);
@@ -1352,12 +1591,12 @@ key.shadow.camera.near = 1;
 key.shadow.camera.far = 120;
 scene.add(key);
 
-const fill = new THREE.DirectionalLight(0x6e9eff, 0.45);
+const fill = new THREE.DirectionalLight(0xc8d9ee, 0.5);
 fill.position.set(-26, 18, -10);
 scene.add(fill);
 
-const rim = new THREE.DirectionalLight(0xff8855, 0.3);
-rim.position.set(-10, 6, -28);
+const rim = new THREE.DirectionalLight(0xffffff, 0.35);
+rim.position.set(-10, 12, -28);
 scene.add(rim);
 
 /* ============================================================
@@ -1367,9 +1606,11 @@ const WORKPLANE_SIZE = 80;
 
 const wpGeo = new THREE.CircleGeometry(WORKPLANE_SIZE * 0.7, 96);
 const wpMat = new THREE.MeshStandardMaterial({
-  color: 0x161c2a,
-  roughness: 0.96,
+  color: 0xeaf0f6,
+  roughness: 0.95,
   metalness: 0.0,
+  transparent: true,
+  opacity: 0.65,
 });
 const workplane = new THREE.Mesh(wpGeo, wpMat);
 workplane.rotation.x = -Math.PI / 2;
@@ -1378,35 +1619,36 @@ workplane.receiveShadow = true;
 scene.add(workplane);
 
 // Fine grid
-const fineGrid = new THREE.GridHelper(WORKPLANE_SIZE, WORKPLANE_SIZE, 0x2a3344, 0x1a2032);
+const fineGrid = new THREE.GridHelper(WORKPLANE_SIZE, WORKPLANE_SIZE, 0x9aa9bd, 0xc3cdd8);
 fineGrid.material.transparent = true;
 fineGrid.material.opacity = 0.6;
 fineGrid.position.y = 0.001;
 scene.add(fineGrid);
 
 // Major grid every 5 units, accent
-const majorGrid = new THREE.GridHelper(WORKPLANE_SIZE, WORKPLANE_SIZE / 5, 0x5b8dff, 0x3a5dbf);
+const majorGrid = new THREE.GridHelper(WORKPLANE_SIZE, WORKPLANE_SIZE / 5, 0x1976d2, 0x4d8edd);
 majorGrid.material.transparent = true;
-majorGrid.material.opacity = 0.22;
+majorGrid.material.opacity = 0.35;
 majorGrid.position.y = 0.002;
 scene.add(majorGrid);
 
 // Origin marker rings
 const ringGeo = new THREE.RingGeometry(0.85, 0.95, 64);
-const ringMat = new THREE.MeshBasicMaterial({ color: 0x5b8dff, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
+const ringMat = new THREE.MeshBasicMaterial({ color: 0x1976d2, transparent: true, opacity: 0.7, side: THREE.DoubleSide });
 const ring = new THREE.Mesh(ringGeo, ringMat);
 ring.rotation.x = -Math.PI / 2;
 ring.position.y = 0.005;
 scene.add(ring);
 
-// Axis lines on the workplane
-function makeAxisLine(color, vec) {
-  const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0.004,0), vec]);
-  const m = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.55 });
+// X (red) and Z (blue) axis lines on the workplane, Y (green) coming up
+function makeAxisLine(color, vec, opacity = 0.7) {
+  const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.004, 0), vec]);
+  const m = new THREE.LineBasicMaterial({ color, transparent: true, opacity });
   return new THREE.Line(g, m);
 }
-scene.add(makeAxisLine(0xff6b6b, new THREE.Vector3(WORKPLANE_SIZE/2, 0.004, 0)));
-scene.add(makeAxisLine(0x5b8dff, new THREE.Vector3(0, 0.004, WORKPLANE_SIZE/2)));
+scene.add(makeAxisLine(0xd32f2f, new THREE.Vector3(WORKPLANE_SIZE / 2, 0.004, 0)));
+scene.add(makeAxisLine(0x1976d2, new THREE.Vector3(0, 0.004, WORKPLANE_SIZE / 2)));
+scene.add(makeAxisLine(0x2e7d32, new THREE.Vector3(0, 6, 0), 0.55));
 
 /* ============================================================
    Controls
@@ -1524,10 +1766,11 @@ let snapEnabled = true;
 let nextId = 1;
 
 const outlineMat = new THREE.LineBasicMaterial({
-  color: 0x5b8dff,
+  color: 0xff9800,
   transparent: true,
-  opacity: 0.95,
+  opacity: 1,
   depthTest: false,
+  linewidth: 2,
 });
 const outlineGroup = new THREE.Group();
 outlineGroup.renderOrder = 999;
@@ -1829,6 +2072,83 @@ function duplicateShapes(meshes) {
 function updateCount() {
   document.getElementById('shape-count').textContent = shapes.length;
   document.getElementById('selected-count').textContent = selection.size;
+  renderFeatureTree();
+}
+
+/* ============================================================
+   Features tree
+   ============================================================ */
+const FEATURE_ICONS = {
+  planeTop:   '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="1"/><path d="M3 12h18"/></svg>',
+  planeFront: '<svg viewBox="0 0 24 24"><rect x="6" y="3" width="12" height="18" rx="1"/><path d="M6 12h12"/></svg>',
+  planeRight: '<svg viewBox="0 0 24 24"><path d="M5 7l7-4 7 4v10l-7 4-7-4z"/><path d="M5 7l7 4 7-4M12 11v10"/></svg>',
+  origin:     '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M12 4v4M12 16v4M4 12h4M16 12h4"/></svg>',
+  eye:        '<svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff:     '<svg viewBox="0 0 24 24"><path d="M17.94 17.94A10 10 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19M1 1l22 22M14.12 14.12a3 3 0 1 1-4.24-4.24"/></svg>',
+  cube:       '<svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>',
+};
+
+const featuresListEl = document.getElementById('features-list');
+
+function partLabel(m, i) {
+  const k = m.userData.kind;
+  return `Part ${i + 1} <span style="color:var(--text-3); font-weight:500; margin-left:4px; font-size:11px;">${k}</span>`;
+}
+
+function renderFeatureTree() {
+  document.getElementById('features-count').textContent = shapes.length;
+
+  featuresListEl.innerHTML = `
+    <div class="fgroup" data-key="defaults">
+      <div class="fgroup-head"><svg class="caret" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg> Default geometry</div>
+      <div class="fgroup-items">
+        <div class="fitem plane top"   data-action="planeTop">   <span class="fi-icon">${FEATURE_ICONS.planeTop}</span>   <span class="fi-name">Top Plane</span></div>
+        <div class="fitem plane front" data-action="planeFront"> <span class="fi-icon">${FEATURE_ICONS.planeFront}</span> <span class="fi-name">Front Plane</span></div>
+        <div class="fitem plane right" data-action="planeRight"> <span class="fi-icon">${FEATURE_ICONS.planeRight}</span> <span class="fi-name">Right Plane</span></div>
+        <div class="fitem origin"      data-action="origin">     <span class="fi-icon">${FEATURE_ICONS.origin}</span>     <span class="fi-name">Origin</span></div>
+      </div>
+    </div>
+    <div class="fgroup" data-key="parts">
+      <div class="fgroup-head"><svg class="caret" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg> Parts <span style="margin-left:auto; color:var(--text-3); font-family:'JetBrains Mono',monospace;">${shapes.length}</span></div>
+      <div class="fgroup-items" id="parts-items"></div>
+    </div>
+  `;
+
+  const partsEl = featuresListEl.querySelector('#parts-items');
+  shapes.forEach((m, i) => {
+    const isSel = selection.has(m);
+    const isHidden = m.visible === false;
+    const row = document.createElement('div');
+    row.className = 'fitem part' + (isSel ? ' selected' : '') + (isHidden ? ' hidden-part' : '');
+    row.dataset.id = m.userData.id;
+    row.innerHTML = `
+      <span class="fi-icon">${FEATURE_ICONS.cube}</span>
+      <span class="fi-name">${partLabel(m, i)}</span>
+      <button class="fi-vis" title="${isHidden ? 'Show' : 'Hide'}">${isHidden ? FEATURE_ICONS.eyeOff : FEATURE_ICONS.eye}</button>
+    `;
+    row.addEventListener('click', e => {
+      if (e.target.closest('.fi-vis')) return;
+      if (e.ctrlKey || e.metaKey) toggleInSelection(m);
+      else setSelection([m]);
+    });
+    row.querySelector('.fi-vis').addEventListener('click', e => {
+      e.stopPropagation();
+      m.visible = !m.visible;
+      renderFeatureTree();
+    });
+    partsEl.appendChild(row);
+  });
+
+  // Hook up plane / origin clicks → switch to that view
+  featuresListEl.querySelector('[data-action="planeTop"]')  .addEventListener('click', () => setView('top'));
+  featuresListEl.querySelector('[data-action="planeFront"]').addEventListener('click', () => setView('front'));
+  featuresListEl.querySelector('[data-action="planeRight"]').addEventListener('click', () => setView('right'));
+  featuresListEl.querySelector('[data-action="origin"]')    .addEventListener('click', () => setView('iso'));
+
+  // Collapsible groups
+  featuresListEl.querySelectorAll('.fgroup-head').forEach(h => {
+    h.addEventListener('click', () => h.parentElement.classList.toggle('collapsed'));
+  });
 }
 
 /* ============================================================
@@ -1905,20 +2225,21 @@ canvas.addEventListener('pointerup', e => {
 });
 
 /* ============================================================
-   View presets
+   View cube + view presets
    ============================================================ */
 const VIEW_POS = {
-  iso:   { p: [28, 24, 28], t: [0, 3, 0] },
-  top:   { p: [0, 50, 0.01], t: [0, 0, 0] },
-  front: { p: [0, 8, 42],    t: [0, 4, 0] },
-  side:  { p: [42, 8, 0],    t: [0, 4, 0] },
+  iso:    { p: [28, 24, 28],  t: [0, 3, 0] },
+  top:    { p: [0, 50, 0.01], t: [0, 0, 0] },
+  bottom: { p: [0, -50, 0.01],t: [0, 0, 0] },
+  front:  { p: [0,  8, 42],   t: [0, 4, 0] },
+  back:   { p: [0,  8, -42],  t: [0, 4, 0] },
+  right:  { p: [42, 8, 0],    t: [0, 4, 0] },
+  left:   { p: [-42, 8, 0],   t: [0, 4, 0] },
 };
-let currentView = 'iso';
 function setView(name) {
-  currentView = name;
   const v = VIEW_POS[name];
+  if (!v) return;
   animateCamera(new THREE.Vector3(...v.p), new THREE.Vector3(...v.t));
-  document.querySelectorAll('.preset').forEach(b => b.classList.toggle('active', b.dataset.view === name));
 }
 
 function animateCamera(targetPos, targetLook, ms = 380) {
@@ -1936,10 +2257,22 @@ function animateCamera(targetPos, targetLook, ms = 380) {
   frame();
 }
 
-document.querySelectorAll('.preset').forEach(b => {
-  b.addEventListener('click', () => setView(b.dataset.view));
+const vcubeEl = document.getElementById('vcube');
+document.querySelectorAll('.vcube-face').forEach(f => {
+  f.addEventListener('click', () => setView(f.dataset.view));
 });
-document.querySelector('.preset[data-view="iso"]').classList.add('active');
+document.getElementById('vcube-home').addEventListener('click', () => setView('iso'));
+
+function updateViewCube() {
+  // Compute camera azimuth + elevation relative to orbit target.
+  const off = new THREE.Vector3().subVectors(camera.position, orbit.target);
+  const azim = Math.atan2(off.x, off.z);                          // around Y
+  const elev = Math.atan2(off.y, Math.sqrt(off.x*off.x + off.z*off.z));
+  const aDeg = THREE.MathUtils.radToDeg(azim);
+  const eDeg = THREE.MathUtils.radToDeg(elev);
+  vcubeEl.style.transition = 'none';
+  vcubeEl.style.transform = `rotateX(${-eDeg}deg) rotateY(${-aDeg}deg)`;
+}
 
 /* ============================================================
    Inspector
@@ -2297,7 +2630,7 @@ window.addEventListener('keydown', e => {
   else if (e.key === '1') setView('iso');
   else if (e.key === '2') setView('top');
   else if (e.key === '3') setView('front');
-  else if (e.key === '4') setView('side');
+  else if (e.key === '4') setView('right');
   else if (e.key === 'Delete' || e.key === 'Backspace') deleteSelection();
   else if (e.key === 'Escape') {
     if (projectsModal.classList.contains('show')) closeProjectsModal();
@@ -2345,6 +2678,7 @@ function loadDoc(doc) {
   suppressAutosave = true;
   while (shapes.length) deleteShape(shapes[0]);
   titleInput.value = doc.title || 'Untitled design';
+  syncStudioTab();
   for (const s of doc.shapes || []) {
     addShape(s.kind, {
       color: s.color, hole: s.hole,
@@ -2473,10 +2807,17 @@ function duplicateProject(id) {
 }
 
 /* Title input → rename current */
+const studioTabName = document.getElementById('studio-tab-name');
+function syncStudioTab() {
+  studioTabName.textContent = titleInput.value || 'Untitled';
+}
 titleInput.addEventListener('input', () => {
   if (!currentProjectId) return;
+  syncStudioTab();
   scheduleAutosave();
 });
+
+document.getElementById('btn-projects-tab').addEventListener('click', () => openProjectsModal());
 
 /* Hook autosave into history pushes & live edits */
 const origPushHistory = pushHistory;
@@ -2724,6 +3065,8 @@ function showToast(msg) {
   localStorage.setItem(CURRENT_KEY, id);
   setAutosaveState('saved');
 })();
+syncStudioTab();
+renderFeatureTree();
 updateOutline();
 
 /* ============================================================
@@ -2733,7 +3076,8 @@ function tick() {
   orbit.update();
   // subtle ring breathing
   const t = performance.now() * 0.001;
-  ring.material.opacity = 0.4 + Math.sin(t * 1.3) * 0.15;
+  ring.material.opacity = 0.5 + Math.sin(t * 1.3) * 0.18;
+  updateViewCube();
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
