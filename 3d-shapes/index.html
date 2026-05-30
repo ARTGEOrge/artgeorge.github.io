@@ -357,7 +357,8 @@
 
     <button class="btn" id="btn-save">Save</button>
     <button class="btn" id="btn-load">Load</button>
-    <button class="btn primary" id="btn-export">Export .json</button>
+    <button class="btn" id="btn-export">.json</button>
+    <button class="btn primary" id="btn-export-stl">Download STL</button>
   </div>
 
   <aside class="palette">
@@ -564,6 +565,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import { STLExporter } from 'three/addons/exporters/STLExporter.js';
 
 /* ============================================================
    Scene
@@ -1164,14 +1166,42 @@ document.getElementById('btn-load').addEventListener('click', () => {
 
 document.getElementById('btn-export').addEventListener('click', () => {
   const data = JSON.stringify(serialize(), null, 2);
-  const blob = new Blob([data], { type: 'application/json' });
+  downloadBlob(new Blob([data], { type: 'application/json' }), '.json');
+});
+
+document.getElementById('btn-export-stl').addEventListener('click', exportSTL);
+
+function exportSTL() {
+  const solids = shapes.filter(m => !m.userData.hole);
+  if (!solids.length) { flashFooter('Nothing to export'); return; }
+
+  const exportRoot = new THREE.Group();
+  // Tinkercad's Z axis is up; Three.js uses Y up. Rotate the whole export
+  // so slicers see it the way it looks on the workplane.
+  exportRoot.rotation.x = -Math.PI / 2;
+
+  for (const m of solids) {
+    const clone = m.clone();
+    clone.material = m.material;
+    exportRoot.add(clone);
+  }
+  exportRoot.updateMatrixWorld(true);
+
+  const exporter = new STLExporter();
+  const buffer = exporter.parse(exportRoot, { binary: true });
+  const blob = new Blob([buffer], { type: 'application/octet-stream' });
+  downloadBlob(blob, '.stl');
+  flashFooter('STL downloaded (' + solids.length + ' shape' + (solids.length === 1 ? '' : 's') + ')');
+}
+
+function downloadBlob(blob, ext) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = (titleInput.value || 'design') + '.json';
+  a.download = (titleInput.value || 'design') + ext;
   a.click();
   URL.revokeObjectURL(url);
-});
+}
 
 const flashEl = document.querySelector('.footer span:nth-child(2)');
 let flashTimer;
