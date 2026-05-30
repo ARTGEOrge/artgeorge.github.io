@@ -473,7 +473,7 @@
       <circle cx="40" cy="40" r="3" fill="#cdd5e0"/>
     </svg>
     <div class="viewport-hint">
-      <kbd>LMB</kbd> select &nbsp;·&nbsp; <kbd>RMB</kbd> orbit &nbsp;·&nbsp; <kbd>Wheel</kbd> zoom &nbsp;·&nbsp; <kbd>W</kbd>/<kbd>E</kbd>/<kbd>R</kbd> gizmo &nbsp;·&nbsp; <kbd>Del</kbd> remove &nbsp;·&nbsp; <kbd>Ctrl+D</kbd> duplicate
+      <kbd>LMB</kbd> select &nbsp;·&nbsp; <kbd>RMB</kbd> orbit &nbsp;·&nbsp; <kbd>MMB</kbd>/<kbd>Shift+Drag</kbd>/<kbd>2-finger</kbd> pan &nbsp;·&nbsp; <kbd>Wheel</kbd>/<kbd>Pinch</kbd> zoom &nbsp;·&nbsp; <kbd>W</kbd>/<kbd>E</kbd>/<kbd>R</kbd> gizmo &nbsp;·&nbsp; <kbd>Del</kbd> remove
     </div>
   </main>
 
@@ -656,17 +656,75 @@ scene.add(outline);
 const orbit = new OrbitControls(camera, canvas);
 orbit.mouseButtons = {
   LEFT: null,
-  MIDDLE: THREE.MOUSE.DOLLY,
+  MIDDLE: THREE.MOUSE.PAN,
   RIGHT: THREE.MOUSE.ROTATE,
 };
 orbit.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
 orbit.enableDamping = true;
 orbit.dampingFactor = 0.08;
+orbit.enablePan = true;
+orbit.panSpeed = 1.0;
+orbit.screenSpacePanning = true;
 orbit.minDistance = 8;
 orbit.maxDistance = 120;
 orbit.maxPolarAngle = Math.PI / 2 - 0.02;
 orbit.target.set(0, 2, 0);
 orbit.update();
+
+/* ---- Pan helpers (Shift+drag and trackpad two-finger swipe) ---- */
+let panning = false;
+let panStart = { x: 0, y: 0 };
+
+function panView(dx, dy) {
+  const dist = camera.position.distanceTo(orbit.target);
+  const fov = camera.fov * Math.PI / 180;
+  const worldPerPixel = (2 * Math.tan(fov / 2) * dist) / canvas.clientHeight;
+
+  const right = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0);
+  const up    = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
+
+  const move = new THREE.Vector3();
+  move.addScaledVector(right, -dx * worldPerPixel);
+  move.addScaledVector(up,     dy * worldPerPixel);
+
+  camera.position.add(move);
+  orbit.target.add(move);
+  orbit.update();
+}
+
+// Shift + left-click drag → pan
+canvas.addEventListener('pointerdown', e => {
+  if (e.button === 0 && e.shiftKey) {
+    panning = true;
+    panStart = { x: e.clientX, y: e.clientY };
+    canvas.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }
+});
+canvas.addEventListener('pointermove', e => {
+  if (!panning) return;
+  const dx = e.clientX - panStart.x;
+  const dy = e.clientY - panStart.y;
+  panStart = { x: e.clientX, y: e.clientY };
+  panView(dx, dy);
+});
+canvas.addEventListener('pointerup', e => {
+  if (panning) {
+    panning = false;
+    try { canvas.releasePointerCapture(e.pointerId); } catch {}
+  }
+});
+
+// Trackpad two-finger swipe → pan, pinch (ctrlKey) → zoom (OrbitControls default).
+// We treat ANY horizontal delta, OR shift+wheel, as a pan; otherwise let it zoom.
+canvas.addEventListener('wheel', e => {
+  if (e.ctrlKey) return; // pinch-zoom — let OrbitControls dolly it
+  const isPan = e.shiftKey || Math.abs(e.deltaX) > 0;
+  if (!isPan) return;     // plain vertical wheel — zoom via OrbitControls
+  e.preventDefault();
+  e.stopPropagation();
+  panView(e.deltaX, -e.deltaY);
+}, { passive: false, capture: true });
 
 const gizmo = new TransformControls(camera, canvas);
 gizmo.setSize(0.85);
@@ -858,6 +916,7 @@ canvas.addEventListener('pointerdown', e => {
 
 canvas.addEventListener('pointerup', e => {
   if (e.button !== 0) return;
+  if (e.shiftKey || panning) return;
   if (Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y) > 4) return;
 
   const r = canvas.getBoundingClientRect();
