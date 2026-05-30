@@ -840,6 +840,88 @@
     .ctx-shortcut { margin-left: auto; color: var(--text-3); font-family: 'JetBrains Mono', monospace; font-size: 10px; }
 
     /* =========================================================
+       Export dropdown
+       ========================================================= */
+    .export-menu-wrap { position: relative; }
+    .export-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      width: 320px;
+      background: var(--bg-2);
+      border: 1px solid var(--border-2);
+      border-radius: var(--r-md);
+      box-shadow: 0 12px 36px rgba(15,23,42,0.20);
+      z-index: 220;
+      display: none;
+      overflow: hidden;
+      animation: ctxIn 0.14s var(--ease);
+    }
+    .export-menu.show { display: block; }
+    .export-section { padding: 6px; }
+    .export-section + .export-section { border-top: 1px solid var(--border-1); }
+    .export-section-title {
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--text-3);
+      font-weight: 700;
+      padding: 6px 10px 4px;
+    }
+    .export-item {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      width: 100%;
+      padding: 9px 10px;
+      background: transparent;
+      border: none;
+      border-radius: var(--r-sm);
+      cursor: pointer;
+      text-align: left;
+      font-family: inherit;
+      transition: background 0.12s var(--ease);
+    }
+    .export-item:hover { background: var(--bg-3); }
+    .export-item .ei-icon {
+      width: 34px; height: 34px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: var(--accent-soft);
+      border: 1px solid rgba(25,118,210,0.18);
+      border-radius: var(--r-sm);
+      color: var(--accent);
+      flex: 0 0 34px;
+    }
+    .export-item .ei-icon svg { width: 17px; height: 17px; stroke: currentColor; stroke-width: 1.6; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .export-item .ei-text { flex: 1; min-width: 0; }
+    .export-item .ei-name {
+      font-size: 12.5px;
+      font-weight: 700;
+      color: var(--text-0);
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .export-item .ei-tag {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: var(--accent-soft);
+      padding: 2px 5px;
+      border-radius: 3px;
+    }
+    .export-item .ei-desc {
+      font-size: 11px;
+      color: var(--text-3);
+      margin-top: 2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    /* =========================================================
        Autosave indicator
        ========================================================= */
     .autosave {
@@ -1371,11 +1453,66 @@
       <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
       Projects
     </button>
-    <button class="btn" id="btn-export" data-tip="Export design as JSON">.json</button>
-    <button class="btn primary" id="btn-export-stl">
-      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
-      Download STL
-    </button>
+    <div class="export-menu-wrap">
+      <button class="btn primary" id="btn-export-menu" data-tip="Download in any format">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/></svg>
+        Export
+        <svg viewBox="0 0 24 24" style="width:11px; height:11px; margin-left:2px;"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="export-menu" id="export-menu">
+        <div class="export-section">
+          <div class="export-section-title">3D Models</div>
+          <button class="export-item" data-format="stl">
+            <span class="ei-icon">
+              <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>
+            </span>
+            <div class="ei-text">
+              <div class="ei-name">STL <span class="ei-tag">printing</span></div>
+              <div class="ei-desc">Binary mesh for slicers (Cura, Prusa, Bambu)</div>
+            </div>
+          </button>
+          <button class="export-item" data-format="obj">
+            <span class="ei-icon">
+              <svg viewBox="0 0 24 24"><path d="M12 2l9 5v10l-9 5-9-5V7z"/><path d="M3 7l9 5 9-5M12 12v10"/></svg>
+            </span>
+            <div class="ei-text">
+              <div class="ei-name">OBJ</div>
+              <div class="ei-desc">Universal mesh — Blender, Maya, Unity</div>
+            </div>
+          </button>
+          <button class="export-item" data-format="glb">
+            <span class="ei-icon">
+              <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+            </span>
+            <div class="ei-text">
+              <div class="ei-name">GLB <span class="ei-tag">+colors</span></div>
+              <div class="ei-desc">glTF binary — web, AR, model viewers</div>
+            </div>
+          </button>
+        </div>
+        <div class="export-section">
+          <div class="export-section-title">Other</div>
+          <button class="export-item" data-format="png">
+            <span class="ei-icon">
+              <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+            </span>
+            <div class="ei-text">
+              <div class="ei-name">PNG screenshot</div>
+              <div class="ei-desc">Snapshot of the current viewport</div>
+            </div>
+          </button>
+          <button class="export-item" data-format="json">
+            <span class="ei-icon">
+              <svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg>
+            </span>
+            <div class="ei-text">
+              <div class="ei-name">Project (.json)</div>
+              <div class="ei-desc">Reload later or share the design source</div>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ========= LEFT SIDEBAR: Features + Primitives ========= -->
@@ -1768,6 +1905,8 @@ import * as THREE from 'three';
 import { OrbitControls }     from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { STLExporter }       from 'three/addons/exporters/STLExporter.js';
+import { OBJExporter }       from 'three/addons/exporters/OBJExporter.js';
+import { GLTFExporter }      from 'three/addons/exporters/GLTFExporter.js';
 import { FontLoader }        from 'three/addons/loaders/FontLoader.js';
 import { TextGeometry }      from 'three/addons/geometries/TextGeometry.js';
 import { Brush, Evaluator, ADDITION, SUBTRACTION, INTERSECTION } from 'three-bvh-csg';
@@ -1778,7 +1917,7 @@ import { Brush, Evaluator, ADDITION, SUBTRACTION, INTERSECTION } from 'three-bvh
 const canvas = document.getElementById('scene');
 const viewportEl = canvas.parentElement;
 
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -3269,11 +3408,76 @@ projectsModal.addEventListener('click', e => {
   if (e.target === projectsModal) closeProjectsModal();
 });
 
-document.getElementById('btn-export').addEventListener('click', () => {
+/* ---- Export dropdown ---- */
+const exportMenuEl = document.getElementById('export-menu');
+document.getElementById('btn-export-menu').addEventListener('click', e => {
+  e.stopPropagation();
+  exportMenuEl.classList.toggle('show');
+});
+window.addEventListener('click', e => {
+  if (!e.target.closest('.export-menu-wrap')) exportMenuEl.classList.remove('show');
+});
+document.querySelectorAll('.export-item').forEach(b => {
+  b.addEventListener('click', () => {
+    exportMenuEl.classList.remove('show');
+    const fmt = b.dataset.format;
+    if      (fmt === 'stl')  exportSTL();
+    else if (fmt === 'obj')  exportOBJ();
+    else if (fmt === 'glb')  exportGLB();
+    else if (fmt === 'png')  exportPNG();
+    else if (fmt === 'json') exportJSON();
+  });
+});
+
+function exportJSON() {
   downloadBlob(new Blob([JSON.stringify(serialize(), null, 2)], { type: 'application/json' }), '.json');
   showToast('JSON downloaded');
-});
-document.getElementById('btn-export-stl').addEventListener('click', exportSTL);
+}
+
+function exportOBJ() {
+  const solids = shapes.filter(m => !m.userData.hole && m.visible !== false);
+  if (!solids.length) { showToast('Nothing to export'); return; }
+  const root = new THREE.Group();
+  root.rotation.x = -Math.PI / 2;       // Z-up
+  for (const m of solids) {
+    const c = m.clone();
+    c.material = m.material;
+    root.add(c);
+  }
+  root.updateMatrixWorld(true);
+  const str = new OBJExporter().parse(root);
+  downloadBlob(new Blob([str], { type: 'text/plain' }), '.obj');
+  showToast(`OBJ exported · ${solids.length} part${solids.length === 1 ? '' : 's'}`);
+}
+
+function exportGLB() {
+  const solids = shapes.filter(m => m.visible !== false);
+  if (!solids.length) { showToast('Nothing to export'); return; }
+  const root = new THREE.Group();
+  for (const m of solids) {
+    const c = m.clone();
+    c.material = m.material;
+    root.add(c);
+  }
+  root.updateMatrixWorld(true);
+  new GLTFExporter().parse(root,
+    (gltf) => {
+      downloadBlob(new Blob([gltf], { type: 'model/gltf-binary' }), '.glb');
+      showToast(`GLB exported · ${solids.length} part${solids.length === 1 ? '' : 's'}`);
+    },
+    (err) => { console.error(err); showToast('GLB export failed'); },
+    { binary: true },
+  );
+}
+
+function exportPNG() {
+  renderer.render(scene, camera);
+  renderer.domElement.toBlob(blob => {
+    if (!blob) { showToast('PNG export failed'); return; }
+    downloadBlob(blob, '.png');
+    showToast('PNG screenshot saved');
+  }, 'image/png');
+}
 
 function exportSTL() {
   const solids = shapes.filter(m => !m.userData.hole);
