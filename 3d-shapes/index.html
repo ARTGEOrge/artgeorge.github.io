@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>3D Shapes — ARTGEOrge CAD</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #1a1d24;
+      color: #e8ecf2;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      user-select: none;
+    }
+
+    /* ===== Layout ===== */
+    #app {
+      display: grid;
+      grid-template-columns: 220px 1fr 260px;
+      grid-template-rows: 48px 1fr 28px;
+      grid-template-areas:
+        "topbar topbar topbar"
+        "palette viewport inspector"
+        "footer  footer   footer";
+      width: 100vw;
+      height: 100vh;
+    }
+
+    /* ===== Top Bar ===== */
+    .topbar {
+      grid-area: topbar;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 0 16px;
+      background: #23272f;
+      border-bottom: 1px solid #0f1217;
+    }
+    .brand {
+      font-size: 11px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: #7a8599;
+      text-decoration: none;
+      margin-right: 8px;
+    }
+    .brand:hover { color: #fbbf24; }
+    .doc-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #cdd5e0;
+      background: transparent;
+      border: 1px solid transparent;
+      padding: 4px 8px;
+      border-radius: 4px;
+      outline: none;
+      font-family: inherit;
+      min-width: 140px;
+    }
+    .doc-title:focus, .doc-title:hover { border-color: #3a4150; background: #1a1d24; }
+
+    .toolbar-group {
+      display: flex;
+      gap: 4px;
+      padding: 0 8px;
+      border-left: 1px solid #2f3540;
+      height: 32px;
+      align-items: center;
+    }
+    .toolbar-group:first-of-type { border-left: none; }
+
+    .tool {
+      width: 32px; height: 32px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      color: #cdd5e0;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.1s, border-color 0.1s;
+    }
+    .tool:hover { background: #2f3540; }
+    .tool.active { background: #2563eb; color: #fff; border-color: #1d4ed8; }
+    .tool[title]:hover::after {
+      content: attr(title);
+      position: absolute;
+      margin-top: 56px;
+      background: #0c0f14;
+      color: #cdd5e0;
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+      border: 1px solid #2f3540;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    .btn {
+      background: #2f3540;
+      color: #e8ecf2;
+      border: 1px solid #3a4150;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .btn:hover { background: #3a4150; }
+    .btn.primary { background: #2563eb; border-color: #1d4ed8; color: #fff; }
+    .btn.primary:hover { background: #1d4ed8; }
+    .btn.danger { background: #7f1d1d; border-color: #991b1b; color: #fff; }
+    .btn.danger:hover { background: #991b1b; }
+    .spacer { flex: 1; }
+
+    /* ===== Shape Palette ===== */
+    .palette {
+      grid-area: palette;
+      background: #1f232b;
+      border-right: 1px solid #0f1217;
+      overflow-y: auto;
+      padding: 14px 12px;
+    }
+    .palette h3 {
+      font-size: 10px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: #6b7384;
+      margin-bottom: 10px;
+      padding-left: 4px;
+    }
+    .shape-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .shape-tile {
+      background: #2a2f3a;
+      border: 1px solid #3a4150;
+      border-radius: 8px;
+      padding: 12px 6px 8px;
+      text-align: center;
+      cursor: grab;
+      color: #cdd5e0;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      transition: transform 0.12s, border-color 0.12s, background 0.12s;
+    }
+    .shape-tile:hover {
+      background: #313846;
+      border-color: #2563eb;
+      transform: translateY(-2px);
+    }
+    .shape-tile:active { cursor: grabbing; }
+    .shape-tile svg { display: block; margin: 0 auto 6px; }
+
+    /* ===== Viewport ===== */
+    .viewport {
+      grid-area: viewport;
+      position: relative;
+      background: #0f1217;
+      overflow: hidden;
+    }
+    #scene { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
+
+    .viewport-hint {
+      position: absolute;
+      bottom: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #4b5566;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .axis-gizmo {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      width: 70px; height: 70px;
+      pointer-events: none;
+    }
+
+    /* ===== Inspector ===== */
+    .inspector {
+      grid-area: inspector;
+      background: #1f232b;
+      border-left: 1px solid #0f1217;
+      overflow-y: auto;
+      padding: 14px;
+    }
+    .inspector h3 {
+      font-size: 10px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: #6b7384;
+      margin-bottom: 10px;
+    }
+    .inspector .empty {
+      color: #4b5566;
+      font-size: 12px;
+      text-align: center;
+      padding: 30px 0;
+      font-style: italic;
+    }
+    .field {
+      margin-bottom: 12px;
+    }
+    .field-label {
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #6b7384;
+      margin-bottom: 4px;
+      display: block;
+    }
+    .vec3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 4px;
+    }
+    .vec3 input {
+      width: 100%;
+      background: #14171d;
+      border: 1px solid #2f3540;
+      color: #e8ecf2;
+      padding: 5px 6px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-family: 'Consolas', monospace;
+      outline: none;
+    }
+    .vec3 input:focus { border-color: #2563eb; }
+    .vec3-label { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; margin-bottom: 2px; }
+    .vec3-label span { font-size: 9px; color: #6b7384; text-align: center; letter-spacing: 1px; }
+
+    .color-row {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 4px;
+    }
+    .swatch {
+      aspect-ratio: 1;
+      border-radius: 4px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: transform 0.1s;
+    }
+    .swatch:hover { transform: scale(1.15); }
+    .swatch.selected { border-color: #fff; }
+
+    .toggle-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+    }
+    .toggle {
+      background: #2a2f3a;
+      border: 1px solid #3a4150;
+      color: #cdd5e0;
+      padding: 7px 10px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      font-family: inherit;
+    }
+    .toggle:hover { background: #313846; }
+    .toggle.active { background: #2563eb; border-color: #1d4ed8; color: #fff; }
+    .toggle.active.hole { background: #be185d; border-color: #9d174d; }
+
+    .action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+
+    .divider {
+      height: 1px;
+      background: #2f3540;
+      margin: 14px -14px;
+    }
+
+    /* ===== Footer ===== */
+    .footer {
+      grid-area: footer;
+      background: #14171d;
+      border-top: 1px solid #0f1217;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      font-size: 11px;
+      color: #6b7384;
+      letter-spacing: 1px;
+    }
+    .footer span.hot { color: #cdd5e0; }
+    kbd {
+      background: #2a2f3a;
+      border: 1px solid #3a4150;
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-family: 'Consolas', monospace;
+      font-size: 10px;
+      color: #cdd5e0;
+      margin: 0 2px;
+    }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 900px) {
+      #app {
+        grid-template-columns: 160px 1fr 220px;
+      }
+    }
+    @media (max-width: 700px) {
+      #app {
+        grid-template-columns: 1fr;
+        grid-template-rows: 48px 1fr 200px 28px;
+        grid-template-areas:
+          "topbar"
+          "viewport"
+          "inspector"
+          "footer";
+      }
+      .palette { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<div id="app">
+
+  <div class="topbar">
+    <a href="/" class="brand">&larr; ARTGEOrge</a>
+    <input class="doc-title" id="doc-title" value="Untitled design" />
+
+    <div class="toolbar-group">
+      <button class="tool active" id="tool-translate" title="Move (W)">&#x2725;</button>
+      <button class="tool" id="tool-rotate" title="Rotate (E)">&#x21BB;</button>
+      <button class="tool" id="tool-scale" title="Scale (R)">&#x21F2;</button>
+    </div>
+    <div class="toolbar-group">
+      <button class="tool" id="tool-snap" title="Toggle grid snap (G)">&#x229E;</button>
+      <button class="tool" id="tool-view" title="Reset view (F)">&#x2316;</button>
+    </div>
+
+    <div class="spacer"></div>
+
+    <button class="btn" id="btn-save">Save</button>
+    <button class="btn" id="btn-load">Load</button>
+    <button class="btn primary" id="btn-export">Export .json</button>
+  </div>
+
+  <aside class="palette">
+    <h3>Basic Shapes</h3>
+    <div class="shape-grid">
+      <div class="shape-tile" data-kind="box">
+        <svg width="40" height="40" viewBox="0 0 40 40">
+          <polygon points="6,14 20,7 34,14 20,21" fill="#5fa9ff" stroke="#1d4ed8" stroke-width="1.2"/>
+          <polygon points="6,14 20,21 20,35 6,28" fill="#3b82f6" stroke="#1d4ed8" stroke-width="1.2"/>
+          <polygon points="34,14 20,21 20,35 34,28" fill="#1d65d8" stroke="#1d4ed8" stroke-width="1.2"/>
+        </svg>
+        Box
+      </div>
+      <div class="shape-tile" data-kind="sphere">
+        <svg width="40" height="40" viewBox="0 0 40 40">
+          <circle cx="20" cy="20" r="14" fill="#ef4444" stroke="#7f1d1d" stroke-width="1.2"/>
+          <ellipse cx="15" cy="15" rx="5" ry="3" fill="rgba(255,255,255,0.5)"/>
+        </svg>
+        Sphere
+      </div>
+      <div class="shape-tile" data-kind="cylinder">
+        <svg width="40" height="40" viewBox="0 0 40 40">
+          <ellipse cx="20" cy="10" rx="12" ry="4" fill="#22c55e" stroke="#15803d" stroke-width="1.2"/>
+          <rect x="8" y="10" width="24" height="20" fill="#16a34a" stroke="#15803d" stroke-width="1.2"/>
+          <ellipse cx="20" cy="30" rx="12" ry="4" fill="#15803d" stroke="#0f5f25" stroke-width="1.2"/>
+        </svg>
+        Cylinder
+      </div>
+      <div class="shape-tile" data-kind="cone">
+        <svg width="40" height="40" viewBox="0 0 40 40">
+          <polygon points="20,5 8,30 32,30" fill="#facc15" stroke="#a16207" stroke-width="1.2"/>
+          <ellipse cx="20" cy="30" rx="12" ry="4" fill="#ca8a04" stroke="#a16207" stroke-width="1.2"/>
+        </svg>
+        Cone
+      </div>
+      <div class="shape-tile" data-kind="pyramid">
+        <svg width="40" height="40" viewBox="0 0 40 40">
+          <polygon points="20,5 6,30 20,24" fill="#a855f7" stroke="#6b21a8" stroke-width="1.2"/>
+          <polygon points="20,5 34,30 20,24" fill="#7e22ce" stroke="#6b21a8" stroke-width="1.2"/>
+          <polygon points="6,30 34,30 20,24" fill="#5b1496" stroke="#6b21a8" stroke-width="1.2"/>
+        </svg>
+        Pyramid
+      </div>
+      <div class="shape-tile" data-kind="torus">
+        <svg width="40" height="40" viewBox="0 0 40 40">
+          <ellipse cx="20" cy="22" rx="14" ry="8" fill="none" stroke="#f97316" stroke-width="5"/>
+          <ellipse cx="20" cy="22" rx="14" ry="8" fill="none" stroke="#fdba74" stroke-width="1.5"/>
+        </svg>
+        Torus
+      </div>
+      <div class="shape-tile" data-kind="wedge">
+        <svg width="40" height="40" viewBox="0 0 40 40">
+          <polygon points="6,30 34,30 34,10" fill="#06b6d4" stroke="#0e7490" stroke-width="1.2"/>
+          <polygon points="6,30 34,10 28,8 2,28" fill="#22d3ee" stroke="#0e7490" stroke-width="1.2"/>
+          <polygon points="6,30 2,28 28,28 34,30" fill="#0891b2" stroke="#0e7490" stroke-width="1.2"/>
+        </svg>
+        Wedge
+      </div>
+      <div class="shape-tile" data-kind="tetra">
+        <svg width="40" height="40" viewBox="0 0 40 40">
+          <polygon points="20,5 6,32 34,32" fill="#10b981" stroke="#065f46" stroke-width="1.2"/>
+          <polygon points="20,5 34,32 22,22" fill="#059669" stroke="#065f46" stroke-width="1.2"/>
+        </svg>
+        Tetra
+      </div>
+    </div>
+
+    <h3>Advanced</h3>
+    <div class="shape-grid">
+      <div class="shape-tile" data-kind="dodeca">
+        <svg width="40" height="40" viewBox="0 0 40 40">
+          <polygon points="20,6 32,14 28,28 12,28 8,14"
+                   fill="#ec4899" stroke="#9d174d" stroke-width="1.2"/>
+          <polygon points="20,6 28,28 20,22 12,28" fill="#db2777" stroke="#9d174d" stroke-width="1.2"/>
+        </svg>
+        Dodec
+      </div>
+      <div class="shape-tile" data-kind="icosa">
+        <svg width="40" height="40" viewBox="0 0 40 40">
+          <polygon points="20,5 33,14 28,30 12,30 7,14" fill="#f59e0b" stroke="#92400e" stroke-width="1.2"/>
+          <polygon points="20,5 28,30 20,22 12,30" fill="#d97706" stroke="#92400e" stroke-width="1.2"/>
+        </svg>
+        Icosa
+      </div>
+      <div class="shape-tile" data-kind="knot">
+        <svg width="40" height="40" viewBox="0 0 40 40">
+          <path d="M10,20 Q10,8 20,8 Q30,8 30,20 Q30,32 20,32 Q10,32 10,20 Z"
+                fill="none" stroke="#22d3ee" stroke-width="4"/>
+          <path d="M14,14 Q26,14 26,26" fill="none" stroke="#0891b2" stroke-width="3"/>
+        </svg>
+        Knot
+      </div>
+      <div class="shape-tile" data-kind="capsule">
+        <svg width="40" height="40" viewBox="0 0 40 40">
+          <rect x="13" y="10" width="14" height="20" fill="#84cc16" stroke="#4d7c0f" stroke-width="1.2"/>
+          <circle cx="20" cy="10" r="7" fill="#a3e635" stroke="#4d7c0f" stroke-width="1.2"/>
+          <circle cx="20" cy="30" r="7" fill="#65a30d" stroke="#4d7c0f" stroke-width="1.2"/>
+        </svg>
+        Capsule
+      </div>
+    </div>
+  </aside>
+
+  <main class="viewport">
+    <canvas id="scene"></canvas>
+    <svg class="axis-gizmo" viewBox="0 0 80 80">
+      <line x1="40" y1="40" x2="70" y2="40" stroke="#ef4444" stroke-width="2.5"/>
+      <text x="74" y="44" fill="#ef4444" font-size="11" font-weight="700">X</text>
+      <line x1="40" y1="40" x2="40" y2="10" stroke="#22c55e" stroke-width="2.5"/>
+      <text x="44" y="14" fill="#22c55e" font-size="11" font-weight="700">Y</text>
+      <line x1="40" y1="40" x2="18" y2="60" stroke="#3b82f6" stroke-width="2.5"/>
+      <text x="6" y="68" fill="#3b82f6" font-size="11" font-weight="700">Z</text>
+      <circle cx="40" cy="40" r="3" fill="#cdd5e0"/>
+    </svg>
+    <div class="viewport-hint">
+      <kbd>LMB</kbd> select &nbsp;·&nbsp; <kbd>RMB</kbd> orbit &nbsp;·&nbsp; <kbd>Wheel</kbd> zoom &nbsp;·&nbsp; <kbd>W</kbd>/<kbd>E</kbd>/<kbd>R</kbd> gizmo &nbsp;·&nbsp; <kbd>Del</kbd> remove &nbsp;·&nbsp; <kbd>Ctrl+D</kbd> duplicate
+    </div>
+  </main>
+
+  <aside class="inspector" id="inspector">
+    <div class="empty" id="inspector-empty">No shape selected.<br/><br/>Click a shape in the palette to add one to the workplane.</div>
+
+    <div id="inspector-body" style="display:none;">
+      <h3>Shape</h3>
+      <div class="field">
+        <span class="field-label">Type</span>
+        <div id="shape-type" style="font-size:13px; color:#cdd5e0; font-weight:600;"></div>
+      </div>
+
+      <div class="field">
+        <span class="field-label">Mode</span>
+        <div class="toggle-row">
+          <button class="toggle active" id="mode-solid">Solid</button>
+          <button class="toggle hole" id="mode-hole">Hole</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="field-label">Color</span>
+        <div class="color-row" id="color-row"></div>
+      </div>
+
+      <div class="divider"></div>
+
+      <h3>Transform</h3>
+
+      <div class="field">
+        <span class="field-label">Position</span>
+        <div class="vec3-label"><span>X</span><span>Y</span><span>Z</span></div>
+        <div class="vec3">
+          <input type="number" step="0.5" id="pos-x" />
+          <input type="number" step="0.5" id="pos-y" />
+          <input type="number" step="0.5" id="pos-z" />
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="field-label">Size</span>
+        <div class="vec3-label"><span>W</span><span>H</span><span>D</span></div>
+        <div class="vec3">
+          <input type="number" step="0.5" min="0.1" id="size-x" />
+          <input type="number" step="0.5" min="0.1" id="size-y" />
+          <input type="number" step="0.5" min="0.1" id="size-z" />
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="field-label">Rotation (deg)</span>
+        <div class="vec3-label"><span>X</span><span>Y</span><span>Z</span></div>
+        <div class="vec3">
+          <input type="number" step="15" id="rot-x" />
+          <input type="number" step="15" id="rot-y" />
+          <input type="number" step="15" id="rot-z" />
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="action-row">
+        <button class="btn" id="btn-duplicate">Duplicate</button>
+        <button class="btn danger" id="btn-delete">Delete</button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="footer">
+    <span><span class="hot" id="shape-count">0</span> shapes</span>
+    <span>3D Shapes CAD · by ARTGEOrge</span>
+    <span><kbd>F</kbd> reset view · <kbd>G</kbd> snap</span>
+  </div>
+
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
+
+/* ============================================================
+   Scene
+   ============================================================ */
+const canvas = document.getElementById('scene');
+const viewportEl = canvas.parentElement;
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0f1217);
+
+const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+camera.position.set(30, 28, 30);
+camera.lookAt(0, 0, 0);
+
+function resize() {
+  const w = viewportEl.clientWidth;
+  const h = viewportEl.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+resize();
+
+/* ============================================================
+   Lighting
+   ============================================================ */
+scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+sun.position.set(30, 50, 25);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 120;
+sun.shadow.camera.left = -40;
+sun.shadow.camera.right = 40;
+sun.shadow.camera.top = 40;
+sun.shadow.camera.bottom = -40;
+scene.add(sun);
+
+const fill = new THREE.DirectionalLight(0x88aaff, 0.35);
+fill.position.set(-20, 30, -20);
+scene.add(fill);
+
+/* ============================================================
+   Workplane
+   ============================================================ */
+const WORKPLANE_SIZE = 60;
+
+const workplaneGeo = new THREE.PlaneGeometry(WORKPLANE_SIZE, WORKPLANE_SIZE);
+const workplaneMat = new THREE.MeshStandardMaterial({
+  color: 0x1e2530,
+  roughness: 0.92,
+  metalness: 0.0,
+});
+const workplane = new THREE.Mesh(workplaneGeo, workplaneMat);
+workplane.rotation.x = -Math.PI / 2;
+workplane.receiveShadow = true;
+workplane.name = '__workplane';
+scene.add(workplane);
+
+const grid = new THREE.GridHelper(WORKPLANE_SIZE, WORKPLANE_SIZE, 0x3a4150, 0x2a3140);
+grid.material.transparent = true;
+grid.material.opacity = 0.55;
+grid.position.y = 0.001;
+scene.add(grid);
+
+const majorGrid = new THREE.GridHelper(WORKPLANE_SIZE, WORKPLANE_SIZE / 5, 0x4f7cff, 0x4f7cff);
+majorGrid.material.transparent = true;
+majorGrid.material.opacity = 0.25;
+majorGrid.position.y = 0.002;
+scene.add(majorGrid);
+
+// Workplane outline
+const outlineGeo = new THREE.EdgesGeometry(new THREE.PlaneGeometry(WORKPLANE_SIZE, WORKPLANE_SIZE));
+const outline = new THREE.LineSegments(outlineGeo, new THREE.LineBasicMaterial({ color: 0x4f7cff, transparent: true, opacity: 0.6 }));
+outline.rotation.x = -Math.PI / 2;
+outline.position.y = 0.003;
+scene.add(outline);
+
+/* ============================================================
+   Controls
+   ============================================================ */
+const orbit = new OrbitControls(camera, canvas);
+orbit.mouseButtons = {
+  LEFT: null,
+  MIDDLE: THREE.MOUSE.DOLLY,
+  RIGHT: THREE.MOUSE.ROTATE,
+};
+orbit.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+orbit.enableDamping = true;
+orbit.dampingFactor = 0.08;
+orbit.minDistance = 8;
+orbit.maxDistance = 120;
+orbit.maxPolarAngle = Math.PI / 2 - 0.02;
+orbit.target.set(0, 2, 0);
+orbit.update();
+
+const gizmo = new TransformControls(camera, canvas);
+gizmo.setSize(0.85);
+scene.add(gizmo);
+
+gizmo.addEventListener('dragging-changed', e => { orbit.enabled = !e.value; });
+gizmo.addEventListener('objectChange', () => {
+  if (snapEnabled && gizmo.mode === 'translate' && selected) {
+    selected.position.x = Math.round(selected.position.x);
+    selected.position.z = Math.round(selected.position.z);
+    selected.position.y = Math.max(0, Math.round(selected.position.y));
+  }
+  syncInspector();
+});
+
+/* ============================================================
+   Shape model
+   ============================================================ */
+const TINKERCAD_COLORS = [
+  0xef4444, 0xf97316, 0xfacc15, 0x22c55e,
+  0x06b6d4, 0x3b82f6, 0xa855f7, 0xec4899,
+];
+
+const shapes = [];
+let selected = null;
+let snapEnabled = true;
+let nextId = 1;
+
+function makeGeometry(kind) {
+  switch (kind) {
+    case 'box':      return new THREE.BoxGeometry(1, 1, 1);
+    case 'sphere':   return new THREE.SphereGeometry(0.5, 32, 24);
+    case 'cylinder': return new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
+    case 'cone':     return new THREE.ConeGeometry(0.5, 1, 32);
+    case 'pyramid':  return new THREE.ConeGeometry(0.7, 1, 4);
+    case 'torus':    return new THREE.TorusGeometry(0.4, 0.16, 16, 48);
+    case 'wedge':    return makeWedge();
+    case 'tetra':    return new THREE.TetrahedronGeometry(0.65);
+    case 'dodeca':   return new THREE.DodecahedronGeometry(0.6);
+    case 'icosa':    return new THREE.IcosahedronGeometry(0.6);
+    case 'knot':     return new THREE.TorusKnotGeometry(0.35, 0.13, 100, 16);
+    case 'capsule':  return new THREE.CapsuleGeometry(0.4, 0.6, 8, 16);
+    default:         return new THREE.BoxGeometry(1, 1, 1);
+  }
+}
+
+function makeWedge() {
+  const g = new THREE.BufferGeometry();
+  const v = new Float32Array([
+    -0.5, -0.5, -0.5,
+     0.5, -0.5, -0.5,
+     0.5, -0.5,  0.5,
+    -0.5, -0.5,  0.5,
+    -0.5,  0.5, -0.5,
+     0.5,  0.5, -0.5,
+  ]);
+  const i = [
+    0,1,2, 0,2,3,
+    0,4,5, 0,5,1,
+    2,1,5, 4,0,3,
+    2,5,4, 2,4,3,
+  ];
+  g.setAttribute('position', new THREE.BufferAttribute(v, 3));
+  g.setIndex(i);
+  g.computeVertexNormals();
+  return g;
+}
+
+function defaultSize(kind) {
+  switch (kind) {
+    case 'box':      return new THREE.Vector3(8, 8, 8);
+    case 'sphere':   return new THREE.Vector3(8, 8, 8);
+    case 'cylinder': return new THREE.Vector3(8, 8, 8);
+    case 'cone':     return new THREE.Vector3(8, 8, 8);
+    case 'pyramid':  return new THREE.Vector3(8, 8, 8);
+    case 'torus':    return new THREE.Vector3(10, 4, 10);
+    case 'wedge':    return new THREE.Vector3(8, 8, 8);
+    case 'tetra':    return new THREE.Vector3(8, 8, 8);
+    case 'dodeca':   return new THREE.Vector3(8, 8, 8);
+    case 'icosa':    return new THREE.Vector3(8, 8, 8);
+    case 'knot':     return new THREE.Vector3(10, 10, 10);
+    case 'capsule':  return new THREE.Vector3(6, 10, 6);
+    default:         return new THREE.Vector3(8, 8, 8);
+  }
+}
+
+function makeMaterial(color, hole) {
+  if (hole) {
+    return new THREE.MeshStandardMaterial({
+      color: 0x444444,
+      roughness: 0.5,
+      metalness: 0.1,
+      transparent: true,
+      opacity: 0.45,
+      side: THREE.DoubleSide,
+    });
+  }
+  return new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.45,
+    metalness: 0.2,
+  });
+}
+
+function bottomOffsetY(kind) {
+  // For shapes whose geometry is centered at origin, lift them so they rest on the workplane.
+  switch (kind) {
+    case 'sphere':   return 0.5;
+    case 'tetra':    return 0.5;
+    case 'dodeca':   return 0.5;
+    case 'icosa':    return 0.5;
+    case 'torus':    return 0.5;
+    case 'knot':     return 0.5;
+    case 'capsule':  return 0.5;
+    default:         return 0.5;
+  }
+}
+
+function addShape(kind, opts = {}) {
+  const geo = makeGeometry(kind);
+  const color = opts.color ?? TINKERCAD_COLORS[Math.floor(Math.random() * TINKERCAD_COLORS.length)];
+  const hole = opts.hole ?? false;
+  const mat = makeMaterial(color, hole);
+  const mesh = new THREE.Mesh(geo, mat);
+
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+
+  const size = opts.size ? opts.size.clone() : defaultSize(kind);
+  mesh.scale.copy(size);
+
+  const pos = opts.position
+    ? opts.position.clone()
+    : new THREE.Vector3(0, size.y * bottomOffsetY(kind), 0);
+  mesh.position.copy(pos);
+
+  if (opts.rotation) mesh.rotation.copy(opts.rotation);
+
+  mesh.userData = {
+    id: nextId++,
+    kind,
+    color,
+    hole,
+  };
+
+  scene.add(mesh);
+  shapes.push(mesh);
+  updateCount();
+  return mesh;
+}
+
+function deleteShape(mesh) {
+  const i = shapes.indexOf(mesh);
+  if (i < 0) return;
+  if (selected === mesh) selectShape(null);
+  scene.remove(mesh);
+  mesh.geometry.dispose();
+  mesh.material.dispose();
+  shapes.splice(i, 1);
+  updateCount();
+}
+
+function duplicateShape(mesh) {
+  const copy = addShape(mesh.userData.kind, {
+    color: mesh.userData.color,
+    hole: mesh.userData.hole,
+    size: mesh.scale.clone(),
+    position: mesh.position.clone().add(new THREE.Vector3(2, 0, 2)),
+    rotation: mesh.rotation.clone(),
+  });
+  selectShape(copy);
+}
+
+function updateCount() {
+  document.getElementById('shape-count').textContent = shapes.length;
+}
+
+/* ============================================================
+   Selection
+   ============================================================ */
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+
+let pointerDownPos = { x: 0, y: 0 };
+
+canvas.addEventListener('pointerdown', e => {
+  pointerDownPos = { x: e.clientX, y: e.clientY };
+});
+
+canvas.addEventListener('pointerup', e => {
+  if (e.button !== 0) return;
+  if (Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y) > 4) return;
+
+  const r = canvas.getBoundingClientRect();
+  pointer.x =  ((e.clientX - r.left) / r.width) * 2 - 1;
+  pointer.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  const hits = raycaster.intersectObjects(shapes, false);
+  if (hits.length) {
+    selectShape(hits[0].object);
+  } else {
+    selectShape(null);
+  }
+});
+
+function selectShape(mesh) {
+  selected = mesh;
+  if (mesh) {
+    gizmo.attach(mesh);
+  } else {
+    gizmo.detach();
+  }
+  syncInspector();
+}
+
+/* ============================================================
+   Inspector
+   ============================================================ */
+const insEmpty = document.getElementById('inspector-empty');
+const insBody = document.getElementById('inspector-body');
+const shapeTypeEl = document.getElementById('shape-type');
+
+const inputs = {
+  px: document.getElementById('pos-x'),
+  py: document.getElementById('pos-y'),
+  pz: document.getElementById('pos-z'),
+  sx: document.getElementById('size-x'),
+  sy: document.getElementById('size-y'),
+  sz: document.getElementById('size-z'),
+  rx: document.getElementById('rot-x'),
+  ry: document.getElementById('rot-y'),
+  rz: document.getElementById('rot-z'),
+};
+
+function syncInspector() {
+  if (!selected) {
+    insEmpty.style.display = 'block';
+    insBody.style.display = 'none';
+    return;
+  }
+  insEmpty.style.display = 'none';
+  insBody.style.display = 'block';
+
+  shapeTypeEl.textContent = selected.userData.kind.toUpperCase();
+
+  inputs.px.value = round1(selected.position.x);
+  inputs.py.value = round1(selected.position.y);
+  inputs.pz.value = round1(selected.position.z);
+
+  inputs.sx.value = round1(selected.scale.x);
+  inputs.sy.value = round1(selected.scale.y);
+  inputs.sz.value = round1(selected.scale.z);
+
+  inputs.rx.value = Math.round(THREE.MathUtils.radToDeg(selected.rotation.x));
+  inputs.ry.value = Math.round(THREE.MathUtils.radToDeg(selected.rotation.y));
+  inputs.rz.value = Math.round(THREE.MathUtils.radToDeg(selected.rotation.z));
+
+  // Mode buttons
+  document.getElementById('mode-solid').classList.toggle('active', !selected.userData.hole);
+  document.getElementById('mode-hole').classList.toggle('active', selected.userData.hole);
+
+  // Color swatches
+  for (const sw of colorRow.children) {
+    sw.classList.toggle('selected', parseInt(sw.dataset.color, 16) === selected.userData.color);
+  }
+}
+
+function round1(n) { return Math.round(n * 10) / 10; }
+
+function bindVecInput(input, apply) {
+  input.addEventListener('input', () => {
+    if (!selected) return;
+    const v = parseFloat(input.value);
+    if (Number.isFinite(v)) apply(v);
+  });
+}
+
+bindVecInput(inputs.px, v => selected.position.x = v);
+bindVecInput(inputs.py, v => selected.position.y = v);
+bindVecInput(inputs.pz, v => selected.position.z = v);
+bindVecInput(inputs.sx, v => selected.scale.x = Math.max(0.1, v));
+bindVecInput(inputs.sy, v => selected.scale.y = Math.max(0.1, v));
+bindVecInput(inputs.sz, v => selected.scale.z = Math.max(0.1, v));
+bindVecInput(inputs.rx, v => selected.rotation.x = THREE.MathUtils.degToRad(v));
+bindVecInput(inputs.ry, v => selected.rotation.y = THREE.MathUtils.degToRad(v));
+bindVecInput(inputs.rz, v => selected.rotation.z = THREE.MathUtils.degToRad(v));
+
+// Color swatches
+const colorRow = document.getElementById('color-row');
+for (const c of TINKERCAD_COLORS) {
+  const sw = document.createElement('div');
+  sw.className = 'swatch';
+  sw.style.background = '#' + c.toString(16).padStart(6, '0');
+  sw.dataset.color = c.toString(16).padStart(6, '0');
+  sw.addEventListener('click', () => {
+    if (!selected) return;
+    selected.userData.color = c;
+    if (!selected.userData.hole) selected.material.color.setHex(c);
+    syncInspector();
+  });
+  colorRow.appendChild(sw);
+}
+
+document.getElementById('mode-solid').addEventListener('click', () => setHole(false));
+document.getElementById('mode-hole').addEventListener('click', () => setHole(true));
+
+function setHole(hole) {
+  if (!selected) return;
+  selected.userData.hole = hole;
+  selected.material.dispose();
+  selected.material = makeMaterial(selected.userData.color, hole);
+  syncInspector();
+}
+
+document.getElementById('btn-duplicate').addEventListener('click', () => {
+  if (selected) duplicateShape(selected);
+});
+document.getElementById('btn-delete').addEventListener('click', () => {
+  if (selected) deleteShape(selected);
+});
+
+/* ============================================================
+   Palette
+   ============================================================ */
+document.querySelectorAll('.shape-tile').forEach(t => {
+  t.addEventListener('click', () => {
+    const mesh = addShape(t.dataset.kind);
+    selectShape(mesh);
+  });
+});
+
+/* ============================================================
+   Toolbar
+   ============================================================ */
+const toolBtns = {
+  translate: document.getElementById('tool-translate'),
+  rotate:    document.getElementById('tool-rotate'),
+  scale:     document.getElementById('tool-scale'),
+};
+
+function setMode(m) {
+  gizmo.setMode(m);
+  for (const k of Object.keys(toolBtns)) toolBtns[k].classList.toggle('active', k === m);
+}
+toolBtns.translate.addEventListener('click', () => setMode('translate'));
+toolBtns.rotate.addEventListener('click', () => setMode('rotate'));
+toolBtns.scale.addEventListener('click', () => setMode('scale'));
+
+const snapBtn = document.getElementById('tool-snap');
+snapBtn.classList.add('active');
+snapBtn.addEventListener('click', () => {
+  snapEnabled = !snapEnabled;
+  snapBtn.classList.toggle('active', snapEnabled);
+});
+
+document.getElementById('tool-view').addEventListener('click', resetView);
+
+function resetView() {
+  camera.position.set(30, 28, 30);
+  orbit.target.set(0, 2, 0);
+  orbit.update();
+}
+
+/* ============================================================
+   Keyboard
+   ============================================================ */
+window.addEventListener('keydown', e => {
+  if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+
+  if (e.key === 'w' || e.key === 'W') setMode('translate');
+  else if (e.key === 'e' || e.key === 'E') setMode('rotate');
+  else if (e.key === 'r' || e.key === 'R') setMode('scale');
+  else if (e.key === 'g' || e.key === 'G') {
+    snapEnabled = !snapEnabled;
+    snapBtn.classList.toggle('active', snapEnabled);
+  }
+  else if (e.key === 'f' || e.key === 'F') resetView();
+  else if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (selected) deleteShape(selected);
+  }
+  else if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+    if (selected) { e.preventDefault(); duplicateShape(selected); }
+  }
+  else if (e.key === 'Escape') {
+    selectShape(null);
+  }
+});
+
+/* ============================================================
+   Save / Load / Export
+   ============================================================ */
+const DOC_KEY = 'artgeorge_cad_doc';
+const titleInput = document.getElementById('doc-title');
+
+function serialize() {
+  return {
+    title: titleInput.value,
+    shapes: shapes.map(m => ({
+      kind: m.userData.kind,
+      color: m.userData.color,
+      hole: m.userData.hole,
+      position: m.position.toArray(),
+      scale: m.scale.toArray(),
+      rotation: m.rotation.toArray().slice(0, 3),
+    })),
+  };
+}
+
+function loadDoc(doc) {
+  while (shapes.length) deleteShape(shapes[0]);
+  if (doc.title) titleInput.value = doc.title;
+  for (const s of doc.shapes || []) {
+    addShape(s.kind, {
+      color: s.color,
+      hole: s.hole,
+      position: new THREE.Vector3().fromArray(s.position),
+      size: new THREE.Vector3().fromArray(s.scale),
+      rotation: new THREE.Euler().fromArray(s.rotation),
+    });
+  }
+}
+
+document.getElementById('btn-save').addEventListener('click', () => {
+  localStorage.setItem(DOC_KEY, JSON.stringify(serialize()));
+  flashFooter('Saved to browser');
+});
+
+document.getElementById('btn-load').addEventListener('click', () => {
+  const raw = localStorage.getItem(DOC_KEY);
+  if (!raw) { flashFooter('Nothing saved yet'); return; }
+  try {
+    loadDoc(JSON.parse(raw));
+    flashFooter('Loaded');
+  } catch { flashFooter('Load failed'); }
+});
+
+document.getElementById('btn-export').addEventListener('click', () => {
+  const data = JSON.stringify(serialize(), null, 2);
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (titleInput.value || 'design') + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+const flashEl = document.querySelector('.footer span:nth-child(2)');
+let flashTimer;
+function flashFooter(msg) {
+  const orig = '3D Shapes CAD · by ARTGEOrge';
+  flashEl.textContent = msg;
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { flashEl.textContent = orig; }, 1600);
+}
+
+/* ============================================================
+   Seed scene
+   ============================================================ */
+addShape('box', { position: new THREE.Vector3(0, 4, 0), size: new THREE.Vector3(8, 8, 8), color: 0x3b82f6 });
+addShape('cylinder', { position: new THREE.Vector3(10, 4, 0), size: new THREE.Vector3(6, 8, 6), color: 0x22c55e });
+addShape('sphere', { position: new THREE.Vector3(-10, 4, 0), size: new THREE.Vector3(8, 8, 8), color: 0xef4444 });
+
+/* ============================================================
+   Render loop
+   ============================================================ */
+function tick() {
+  orbit.update();
+  renderer.render(scene, camera);
+  requestAnimationFrame(tick);
+}
+tick();
+</script>
+
+</body>
+</html>

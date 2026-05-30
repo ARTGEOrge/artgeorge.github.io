@@ -118,6 +118,7 @@
     .card--subway  { --accent: #22c55e; --accent-glow: rgba(34,197,94,0.5); }
     .card--tennis  { --accent: #d4ed31; --accent-glow: rgba(212,237,49,0.5); }
     .card--pong    { --accent: #ff5577; --accent-glow: rgba(255,85,119,0.5); }
+    .card--shapes  { --accent: #a855f7; --accent-glow: rgba(168,85,247,0.5); }
 
     .card-body { padding: 20px 22px 24px; }
 
@@ -205,6 +206,99 @@
   </header>
 
   <div class="games">
+
+    <a href="/3d-shapes/" class="card card--shapes">
+      <div class="play-btn">&#9654; OPEN</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="shapesBg" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#1a0f3a"/>
+              <stop offset="100%" stop-color="#05060f"/>
+            </linearGradient>
+            <linearGradient id="shapesCube" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#22d3ee"/>
+              <stop offset="100%" stop-color="#0ea5b7"/>
+            </linearGradient>
+            <radialGradient id="shapesSphere" cx="35%" cy="35%" r="65%">
+              <stop offset="0%" stop-color="#ff7eb6"/>
+              <stop offset="60%" stop-color="#a855f7"/>
+              <stop offset="100%" stop-color="#4c1d95"/>
+            </radialGradient>
+            <linearGradient id="shapesCone" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#ffd23f"/>
+              <stop offset="100%" stop-color="#ff7a1a"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#shapesBg)"/>
+          <!-- Glow blobs -->
+          <circle cx="80"  cy="60"  r="70" fill="rgba(168,85,247,0.18)"/>
+          <circle cx="320" cy="120" r="70" fill="rgba(34,211,238,0.18)"/>
+          <!-- Floor grid -->
+          <g stroke="rgba(168,85,247,0.25)" stroke-width="1">
+            <line x1="20"  y1="150" x2="380" y2="150"/>
+            <line x1="40"  y1="170" x2="360" y2="170"/>
+            <line x1="120" y1="130" x2="120" y2="170"/>
+            <line x1="200" y1="125" x2="200" y2="175"/>
+            <line x1="280" y1="130" x2="280" y2="170"/>
+          </g>
+          <!-- Sparkle stars -->
+          <g fill="#fff" opacity="0.85">
+            <circle cx="40"  cy="30" r="1.5"/>
+            <circle cx="120" cy="22" r="1"/>
+            <circle cx="360" cy="38" r="1.5"/>
+            <circle cx="300" cy="20" r="1"/>
+          </g>
+          <!-- Torus (knot-ish, back-left) -->
+          <g transform="translate(78,80)" opacity="0.95">
+            <ellipse cx="0" cy="0" rx="34" ry="14" fill="none" stroke="#ff7a1a" stroke-width="9"/>
+            <ellipse cx="0" cy="0" rx="34" ry="14" fill="none" stroke="#ffd23f" stroke-width="3"/>
+          </g>
+          <!-- Cone (back-right) -->
+          <g transform="translate(310,90)">
+            <polygon points="-22,30 22,30 0,-30" fill="url(#shapesCone)" stroke="#7a3a08" stroke-width="1.5"/>
+            <ellipse cx="0" cy="30" rx="22" ry="6" fill="#cc5a08"/>
+            <polygon points="-22,30 0,-30 -6,-20" fill="rgba(255,255,255,0.18)"/>
+          </g>
+          <!-- Cube (foreground left) -->
+          <g transform="translate(140,118)">
+            <!-- Top face -->
+            <polygon points="-26,-18 0,-32 26,-18 0,-4" fill="#67e8f9" stroke="#0c4a52" stroke-width="1.5"/>
+            <!-- Left face -->
+            <polygon points="-26,-18 0,-4 0,28 -26,14" fill="#22d3ee" stroke="#0c4a52" stroke-width="1.5"/>
+            <!-- Right face -->
+            <polygon points="26,-18 0,-4 0,28 26,14" fill="#0e9bb3" stroke="#0c4a52" stroke-width="1.5"/>
+          </g>
+          <!-- Sphere (center-right) -->
+          <g transform="translate(245,110)">
+            <circle cx="0" cy="0" r="34" fill="url(#shapesSphere)"/>
+            <ellipse cx="-10" cy="-12" rx="10" ry="6" fill="rgba(255,255,255,0.4)"/>
+          </g>
+          <!-- Tetrahedron (small, front) -->
+          <g transform="translate(195,150)">
+            <polygon points="0,-18 -16,12 16,12" fill="#4ade80" stroke="#15803d" stroke-width="1.5"/>
+            <polygon points="0,-18 -16,12 0,4"   fill="#22c55e"/>
+          </g>
+          <!-- Title shimmer dots -->
+          <g fill="#a855f7">
+            <circle cx="60"  cy="160" r="2"/>
+            <circle cx="200" cy="172" r="2"/>
+            <circle cx="350" cy="158" r="2"/>
+          </g>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">3D · WebGL</div>
+        <div class="card-title">3D Shapes</div>
+        <p class="card-desc">Spawn cubes, spheres, cones, knots and more into a physics arena. Drag to orbit, scroll to zoom, click a shape to give it a kick.</p>
+        <div class="card-tags">
+          <span class="tag">3D</span>
+          <span class="tag">Physics</span>
+          <span class="tag">Sandbox</span>
+          <span class="tag">WebGL</span>
+        </div>
+      </div>
+    </a>
 
     <a href="/escape-road-city-2/" class="card card--escape">
       <div class="play-btn">&#9654; PLAY</div>
