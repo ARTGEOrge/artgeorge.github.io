@@ -629,6 +629,272 @@
     .ctx-shortcut { margin-left: auto; color: var(--text-3); font-family: 'JetBrains Mono', monospace; font-size: 10px; }
 
     /* =========================================================
+       Autosave indicator
+       ========================================================= */
+    .autosave {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11px;
+      color: var(--text-3);
+      letter-spacing: 0.4px;
+      padding: 0 10px;
+      font-weight: 500;
+      transition: color 0.2s var(--ease);
+      white-space: nowrap;
+    }
+    .autosave.saving { color: var(--accent); }
+    .autosave.saved { color: var(--good); }
+    .autosave-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 6px currentColor;
+    }
+    .autosave.saving .autosave-dot { animation: pulse 1s var(--ease) infinite; }
+
+    /* =========================================================
+       Projects modal
+       ========================================================= */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(4, 6, 10, 0.65);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 400;
+      padding: 24px;
+      animation: backIn 0.18s var(--ease);
+    }
+    .modal-backdrop.show { display: flex; }
+    @keyframes backIn { from { opacity: 0; } to { opacity: 1; } }
+
+    .modal {
+      background: var(--bg-1);
+      border: 1px solid var(--border-2);
+      border-radius: var(--r-xl);
+      width: min(820px, 100%);
+      max-height: 86vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(91,141,255,0.08);
+      animation: modalIn 0.22s var(--ease);
+      overflow: hidden;
+    }
+    @keyframes modalIn {
+      from { opacity: 0; transform: scale(0.96) translateY(8px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border-1);
+      background: var(--bg-2);
+    }
+    .modal-title {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+      background: var(--grad-brand);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .modal-sub {
+      font-size: 11px;
+      color: var(--text-3);
+      letter-spacing: 0.4px;
+      margin-top: 2px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .modal-close {
+      width: 32px; height: 32px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: transparent;
+      border: 1px solid var(--border-2);
+      border-radius: var(--r-sm);
+      color: var(--text-2);
+      cursor: pointer;
+      transition: all 0.15s var(--ease);
+    }
+    .modal-close:hover { background: var(--bg-3); color: var(--text-0); border-color: var(--border-3); }
+    .modal-close svg { width: 16px; height: 16px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; }
+
+    .modal-body {
+      padding: 20px 24px 28px;
+      overflow-y: auto;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 14px;
+    }
+    .modal-empty {
+      padding: 60px 24px;
+      text-align: center;
+      color: var(--text-2);
+      font-size: 14px;
+    }
+    .modal-empty .empty-icon {
+      width: 64px; height: 64px;
+      margin: 0 auto 16px;
+      border-radius: 50%;
+      background: var(--bg-2);
+      border: 1px solid var(--border-2);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-3);
+    }
+    .modal-empty .empty-icon svg { width: 28px; height: 28px; }
+    .modal-empty .hint {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--text-3);
+    }
+    .modal-empty .hint b { color: var(--text-1); font-weight: 600; }
+
+    .project-card {
+      background: var(--bg-2);
+      border: 1px solid var(--border-1);
+      border-radius: var(--r-md);
+      padding: 14px;
+      cursor: pointer;
+      transition: all 0.18s var(--ease);
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      min-height: 150px;
+    }
+    .project-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: var(--grad-brand);
+      opacity: 0;
+      transition: opacity 0.2s var(--ease);
+      pointer-events: none;
+    }
+    .project-card:hover {
+      transform: translateY(-3px);
+      border-color: var(--border-3);
+      box-shadow: 0 10px 26px rgba(0,0,0,0.45);
+    }
+    .project-card:hover::before { opacity: 0.05; }
+    .project-card.current {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent), 0 8px 24px rgba(91,141,255,0.25);
+    }
+    .project-card.current::after {
+      content: 'OPEN';
+      position: absolute;
+      top: 10px; right: 10px;
+      font-size: 9px;
+      font-weight: 800;
+      letter-spacing: 1.5px;
+      color: var(--accent);
+      background: var(--accent-soft);
+      padding: 3px 7px;
+      border-radius: 4px;
+    }
+
+    .pc-thumb {
+      height: 70px;
+      border-radius: var(--r-sm);
+      background:
+        linear-gradient(135deg, #1a2238 0%, #0a0e18 100%);
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--border-1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .pc-thumb svg { width: 100%; height: 100%; }
+    .pc-thumb .empty-thumb {
+      color: var(--text-4);
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      font-weight: 600;
+    }
+
+    .pc-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-0);
+      letter-spacing: -0.1px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      position: relative;
+      z-index: 1;
+    }
+    .pc-meta {
+      font-size: 10.5px;
+      color: var(--text-3);
+      letter-spacing: 0.3px;
+      font-family: 'JetBrains Mono', monospace;
+      display: flex;
+      justify-content: space-between;
+      position: relative;
+      z-index: 1;
+    }
+    .pc-actions {
+      display: flex;
+      gap: 4px;
+      margin-top: auto;
+      position: relative;
+      z-index: 1;
+    }
+    .pc-act {
+      flex: 1;
+      background: transparent;
+      border: 1px solid var(--border-1);
+      color: var(--text-2);
+      padding: 5px 6px;
+      border-radius: 5px;
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s var(--ease);
+      display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+    }
+    .pc-act:hover { background: var(--bg-3); color: var(--text-0); border-color: var(--border-3); }
+    .pc-act svg { width: 11px; height: 11px; stroke: currentColor; stroke-width: 2; fill: none; }
+    .pc-act.danger:hover { background: #3a1418; color: #ffabab; border-color: #5a2024; }
+
+    .new-card {
+      background: transparent;
+      border: 2px dashed var(--border-2);
+      color: var(--text-2);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 150px;
+      transition: all 0.18s var(--ease);
+      cursor: pointer;
+      border-radius: var(--r-md);
+    }
+    .new-card:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .new-card svg { width: 28px; height: 28px; stroke: currentColor; stroke-width: 1.5; fill: none; }
+    .new-card .lab {
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    /* =========================================================
        Toast
        ========================================================= */
     .toast {
@@ -713,13 +979,14 @@
 
     <div class="spacer"></div>
 
-    <button class="btn" id="btn-save" data-tip="Save to browser">
-      <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
-      Save
+    <span class="autosave" id="autosave-indicator" title="Autosaved to your browser"><span class="autosave-dot"></span> Saved</span>
+    <button class="btn" id="btn-new" data-tip="New project (Ctrl+N)">
+      <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      New
     </button>
-    <button class="btn" id="btn-load" data-tip="Load from browser">
+    <button class="btn" id="btn-projects" data-tip="Browse projects (Ctrl+O)">
       <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-      Load
+      Projects
     </button>
     <button class="btn" id="btn-export" data-tip="Export design as JSON">.json</button>
     <button class="btn primary" id="btn-export-stl">
@@ -874,7 +1141,7 @@
   <div class="footer">
     <span class="stat"><span class="pulse"></span> <b id="shape-count">0</b> shapes &nbsp;·&nbsp; <b id="selected-count">0</b> selected</span>
     <span class="status" id="status-text">3D Shapes Studio</span>
-    <span class="stat"><kbd>F</kbd> view · <kbd>G</kbd> snap · <kbd>Ctrl+Z</kbd> undo</span>
+    <span class="stat"><kbd>Ctrl+N</kbd> new · <kbd>Ctrl+O</kbd> projects · <kbd>Ctrl+Z</kbd> undo</span>
   </div>
 
 </div>
@@ -906,6 +1173,37 @@
 
 <!-- ========= TOAST ========= -->
 <div class="toast" id="toast"><span class="pulse"></span><span id="toast-text"></span></div>
+
+<!-- ========= PROJECTS MODAL ========= -->
+<div class="modal-backdrop" id="projects-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title">Your Projects</div>
+        <div class="modal-sub" id="projects-sub">0 projects saved in this browser</div>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button class="btn primary" id="btn-new-from-modal">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          New Project
+        </button>
+        <button class="modal-close" id="modal-close" aria-label="Close">
+          <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    </div>
+    <div class="modal-body" id="projects-list">
+      <!-- project cards injected here -->
+    </div>
+    <div class="modal-empty" id="projects-empty" style="display:none;">
+      <div class="empty-icon">
+        <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" fill="none"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      </div>
+      <div>No saved projects yet.</div>
+      <div class="hint">Click <b>New Project</b> to start your first design.</div>
+    </div>
+  </div>
+</div>
 
 <script type="importmap">
 {
@@ -1742,7 +2040,9 @@ window.addEventListener('keydown', e => {
   if (meta && ((e.key === 'z' || e.key === 'Z') && e.shiftKey || e.key === 'y' || e.key === 'Y')) { e.preventDefault(); redo(); return; }
   if (meta && (e.key === 'd' || e.key === 'D')) { e.preventDefault(); if (selection.size) duplicateShapes(selectionList()); return; }
   if (meta && (e.key === 'a' || e.key === 'A')) { e.preventDefault(); setSelection(shapes); return; }
-  if (meta && (e.key === 's' || e.key === 'S')) { e.preventDefault(); saveLocal(); return; }
+  if (meta && (e.key === 'n' || e.key === 'N')) { e.preventDefault(); createProject('Untitled design'); return; }
+  if (meta && (e.key === 'o' || e.key === 'O')) { e.preventDefault(); openProjectsModal(); return; }
+  if (meta && (e.key === 's' || e.key === 'S')) { e.preventDefault(); scheduleAutosave(); showToast('Autosave is on'); return; }
 
   if (e.key === 'w' || e.key === 'W') setGizmoMode('translate');
   else if (e.key === 'e' || e.key === 'E') setGizmoMode('rotate');
@@ -1754,14 +2054,33 @@ window.addEventListener('keydown', e => {
   else if (e.key === '3') setView('front');
   else if (e.key === '4') setView('side');
   else if (e.key === 'Delete' || e.key === 'Backspace') deleteSelection();
-  else if (e.key === 'Escape') { setSelection([]); ctxMenu.classList.remove('show'); }
+  else if (e.key === 'Escape') {
+    if (projectsModal.classList.contains('show')) closeProjectsModal();
+    else { setSelection([]); ctxMenu.classList.remove('show'); }
+  }
 });
 
 /* ============================================================
-   Save / Load / Export
+   Multi-project storage
    ============================================================ */
-const DOC_KEY = 'artgeorge_cad_doc';
+const PROJECTS_KEY = 'artgeorge_cad_projects_v1';
+const CURRENT_KEY  = 'artgeorge_cad_current_v1';
 const titleInput = document.getElementById('doc-title');
+const autosaveEl = document.getElementById('autosave-indicator');
+
+let currentProjectId = null;
+let suppressAutosave = false;
+
+function loadProjects() {
+  try { return JSON.parse(localStorage.getItem(PROJECTS_KEY)) || {}; }
+  catch { return {}; }
+}
+function writeProjects(p) {
+  localStorage.setItem(PROJECTS_KEY, JSON.stringify(p));
+}
+function newId() {
+  return 'p_' + Math.random().toString(36).slice(2, 9) + Date.now().toString(36).slice(-4);
+}
 
 function serialize() {
   return {
@@ -1778,9 +2097,9 @@ function serialize() {
 }
 
 function loadDoc(doc) {
-  pushHistory();
+  suppressAutosave = true;
   while (shapes.length) deleteShape(shapes[0]);
-  if (doc.title) titleInput.value = doc.title;
+  titleInput.value = doc.title || 'Untitled design';
   for (const s of doc.shapes || []) {
     addShape(s.kind, {
       color: s.color, hole: s.hole,
@@ -1790,20 +2109,289 @@ function loadDoc(doc) {
     });
   }
   refreshSelection();
+  undoStack.length = 0;
+  redoStack.length = 0;
+  suppressAutosave = false;
 }
 
-function saveLocal() {
-  localStorage.setItem(DOC_KEY, JSON.stringify(serialize()));
-  flashStatus('Saved');
-  showToast('Saved to browser');
+function setAutosaveState(state) {
+  autosaveEl.classList.remove('saving', 'saved');
+  if (state === 'saving')      { autosaveEl.classList.add('saving'); autosaveEl.innerHTML = '<span class="autosave-dot"></span> Saving…'; }
+  else if (state === 'saved')  { autosaveEl.classList.add('saved');  autosaveEl.innerHTML = '<span class="autosave-dot"></span> Saved'; }
+  else                          { autosaveEl.innerHTML = '<span class="autosave-dot"></span> Unsaved'; }
 }
-document.getElementById('btn-save').addEventListener('click', saveLocal);
-document.getElementById('btn-load').addEventListener('click', () => {
-  const raw = localStorage.getItem(DOC_KEY);
-  if (!raw) { showToast('Nothing saved yet'); return; }
-  try { loadDoc(JSON.parse(raw)); showToast('Loaded'); }
-  catch { showToast('Load failed'); }
+
+let autosaveTimer = null;
+function scheduleAutosave() {
+  if (suppressAutosave) return;
+  if (!currentProjectId) return;
+  setAutosaveState('saving');
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    const projects = loadProjects();
+    const data = serialize();
+    projects[currentProjectId] = {
+      ...data,
+      id: currentProjectId,
+      updated: Date.now(),
+      created: projects[currentProjectId]?.created || Date.now(),
+    };
+    writeProjects(projects);
+    localStorage.setItem(CURRENT_KEY, currentProjectId);
+    setAutosaveState('saved');
+  }, 600);
+}
+
+function createProject(title = 'Untitled design', openIt = true) {
+  const id = newId();
+  const projects = loadProjects();
+  projects[id] = {
+    id,
+    title,
+    shapes: [],
+    created: Date.now(),
+    updated: Date.now(),
+  };
+  writeProjects(projects);
+  if (openIt) openProject(id);
+  return id;
+}
+
+function flushAutosave() {
+  if (!currentProjectId) return;
+  clearTimeout(autosaveTimer);
+  autosaveTimer = null;
+  const projects = loadProjects();
+  if (!projects[currentProjectId]) return;
+  const data = serialize();
+  projects[currentProjectId] = {
+    ...projects[currentProjectId],
+    ...data,
+    id: currentProjectId,
+    updated: Date.now(),
+  };
+  writeProjects(projects);
+}
+
+function openProject(id) {
+  flushAutosave();
+  const projects = loadProjects();
+  const doc = projects[id];
+  if (!doc) return;
+  currentProjectId = id;
+  localStorage.setItem(CURRENT_KEY, id);
+  loadDoc(doc);
+  setAutosaveState('saved');
+  closeProjectsModal();
+  flashStatus('Opened: ' + (doc.title || 'Untitled'));
+}
+
+window.addEventListener('beforeunload', flushAutosave);
+
+function deleteProject(id) {
+  const projects = loadProjects();
+  if (!projects[id]) return;
+  const wasCurrent = id === currentProjectId;
+  delete projects[id];
+  writeProjects(projects);
+  if (wasCurrent) {
+    const remaining = Object.keys(projects);
+    if (remaining.length) openProject(remaining[remaining.length - 1]);
+    else { currentProjectId = null; createProject(); }
+  }
+  renderProjectsList();
+}
+
+function renameProject(id, newTitle) {
+  const projects = loadProjects();
+  if (!projects[id]) return;
+  projects[id].title = newTitle;
+  projects[id].updated = Date.now();
+  writeProjects(projects);
+  if (id === currentProjectId) titleInput.value = newTitle;
+  renderProjectsList();
+}
+
+function duplicateProject(id) {
+  const projects = loadProjects();
+  const src = projects[id];
+  if (!src) return;
+  const dup = JSON.parse(JSON.stringify(src));
+  dup.id = newId();
+  dup.title = (src.title || 'Untitled') + ' (copy)';
+  dup.created = Date.now();
+  dup.updated = Date.now();
+  projects[dup.id] = dup;
+  writeProjects(projects);
+  renderProjectsList();
+  flashStatus('Duplicated');
+}
+
+/* Title input → rename current */
+titleInput.addEventListener('input', () => {
+  if (!currentProjectId) return;
+  scheduleAutosave();
 });
+
+/* Hook autosave into history pushes & live edits */
+const origPushHistory = pushHistory;
+pushHistory = function(s) {
+  origPushHistory(s);
+  scheduleAutosave();
+};
+gizmo.addEventListener('objectChange', scheduleAutosave);
+
+/* ============================================================
+   Projects modal
+   ============================================================ */
+const projectsModal = document.getElementById('projects-modal');
+const projectsList  = document.getElementById('projects-list');
+const projectsEmpty = document.getElementById('projects-empty');
+const projectsSub   = document.getElementById('projects-sub');
+
+function timeAgo(ts) {
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 60) return 'just now';
+  if (s < 3600) return Math.round(s / 60) + 'm ago';
+  if (s < 86400) return Math.round(s / 3600) + 'h ago';
+  const d = Math.round(s / 86400);
+  if (d < 30) return d + 'd ago';
+  const mo = Math.round(d / 30);
+  if (mo < 12) return mo + 'mo ago';
+  return Math.round(mo / 12) + 'y ago';
+}
+
+function thumbSvg(doc) {
+  if (!doc.shapes || !doc.shapes.length) return '<div class="empty-thumb">EMPTY</div>';
+  // Project all shapes onto isometric view as colored rects sized by scale
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  const items = doc.shapes.map(s => {
+    const x = s.position[0], y = s.position[1], z = s.position[2];
+    const w = s.scale[0],    h = s.scale[1],    d = s.scale[2];
+    // simple iso projection
+    const px = (x - z) * 0.866;
+    const py = -(y) + (x + z) * 0.5;
+    const size = Math.max(w, h, d);
+    minX = Math.min(minX, px - size); maxX = Math.max(maxX, px + size);
+    minY = Math.min(minY, py - size); maxY = Math.max(maxY, py + size);
+    const color = '#' + (s.color | 0).toString(16).padStart(6, '0');
+    return { px, py, size, color, hole: s.hole };
+  });
+  const w = maxX - minX || 1, h = maxY - minY || 1;
+  const pad = Math.max(w, h) * 0.1;
+  const vbX = minX - pad, vbY = minY - pad;
+  const vbW = w + pad * 2, vbH = h + pad * 2;
+  return `<svg viewBox="${vbX} ${vbY} ${vbW} ${vbH}" preserveAspectRatio="xMidYMid meet">
+    ${items.map(i => i.hole
+      ? `<rect x="${i.px - i.size/2}" y="${i.py - i.size/2}" width="${i.size}" height="${i.size}" fill="none" stroke="#e64575" stroke-width="${vbW * 0.012}" stroke-dasharray="${vbW*0.02},${vbW*0.015}" rx="${i.size*0.1}"/>`
+      : `<rect x="${i.px - i.size/2}" y="${i.py - i.size/2}" width="${i.size}" height="${i.size}" fill="${i.color}" opacity="0.85" rx="${i.size*0.1}"/>`
+    ).join('')}
+  </svg>`;
+}
+
+function renderProjectsList() {
+  const projects = loadProjects();
+  const list = Object.values(projects).sort((a, b) => b.updated - a.updated);
+  projectsSub.textContent = `${list.length} project${list.length === 1 ? '' : 's'} saved in this browser`;
+
+  projectsList.innerHTML = '';
+
+  if (!list.length) {
+    projectsEmpty.style.display = 'block';
+    projectsList.style.display = 'none';
+    return;
+  }
+  projectsEmpty.style.display = 'none';
+  projectsList.style.display = 'grid';
+
+  for (const p of list) {
+    const isCurrent = p.id === currentProjectId;
+    const card = document.createElement('div');
+    card.className = 'project-card' + (isCurrent ? ' current' : '');
+
+    const shapeCount = (p.shapes || []).length;
+    card.innerHTML = `
+      <div class="pc-thumb">${thumbSvg(p)}</div>
+      <div class="pc-title">${escapeHtml(p.title || 'Untitled')}</div>
+      <div class="pc-meta">
+        <span>${shapeCount} shape${shapeCount === 1 ? '' : 's'}</span>
+        <span>${timeAgo(p.updated)}</span>
+      </div>
+      <div class="pc-actions">
+        <button class="pc-act" data-act="rename">
+          <svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+          Rename
+        </button>
+        <button class="pc-act" data-act="duplicate">
+          <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+          Copy
+        </button>
+        <button class="pc-act danger" data-act="delete">
+          <svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>
+          Del
+        </button>
+      </div>
+    `;
+
+    card.addEventListener('click', e => {
+      if (e.target.closest('.pc-act')) return;
+      openProject(p.id);
+    });
+    card.querySelector('[data-act="rename"]').addEventListener('click', e => {
+      e.stopPropagation();
+      const t = prompt('Rename project:', p.title || 'Untitled');
+      if (t !== null && t.trim()) renameProject(p.id, t.trim());
+    });
+    card.querySelector('[data-act="duplicate"]').addEventListener('click', e => {
+      e.stopPropagation();
+      duplicateProject(p.id);
+    });
+    card.querySelector('[data-act="delete"]').addEventListener('click', e => {
+      e.stopPropagation();
+      if (confirm(`Delete "${p.title || 'Untitled'}"? This cannot be undone.`)) {
+        deleteProject(p.id);
+      }
+    });
+
+    projectsList.appendChild(card);
+  }
+
+  // "New" tile at the end
+  const newCard = document.createElement('div');
+  newCard.className = 'new-card';
+  newCard.innerHTML = `
+    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+    <div class="lab">New Project</div>
+  `;
+  newCard.addEventListener('click', () => {
+    createProject('Untitled design');
+    renderProjectsList();
+  });
+  projectsList.appendChild(newCard);
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function openProjectsModal() {
+  renderProjectsList();
+  projectsModal.classList.add('show');
+}
+function closeProjectsModal() {
+  projectsModal.classList.remove('show');
+}
+
+document.getElementById('btn-projects').addEventListener('click', openProjectsModal);
+document.getElementById('btn-new').addEventListener('click', () => createProject('Untitled design'));
+document.getElementById('btn-new-from-modal').addEventListener('click', () => {
+  createProject('Untitled design');
+});
+document.getElementById('modal-close').addEventListener('click', closeProjectsModal);
+projectsModal.addEventListener('click', e => {
+  if (e.target === projectsModal) closeProjectsModal();
+});
+
 document.getElementById('btn-export').addEventListener('click', () => {
   downloadBlob(new Blob([JSON.stringify(serialize(), null, 2)], { type: 'application/json' }), '.json');
   showToast('JSON downloaded');
@@ -1856,11 +2444,41 @@ function showToast(msg) {
 }
 
 /* ============================================================
-   Seed scene
+   Initial project boot
    ============================================================ */
-addShape('box',      { position: new THREE.Vector3(0, 4, 0),  size: new THREE.Vector3(8, 8, 8), color: 0x5b8dff });
-addShape('cylinder', { position: new THREE.Vector3(11, 4, 2), size: new THREE.Vector3(6, 8, 6), color: 0x22c55e });
-addShape('sphere',   { position: new THREE.Vector3(-11, 4, 1),size: new THREE.Vector3(8, 8, 8), color: 0xef4444 });
+(function bootProject() {
+  const projects = loadProjects();
+  const lastId = localStorage.getItem(CURRENT_KEY);
+
+  if (lastId && projects[lastId]) {
+    currentProjectId = lastId;
+    loadDoc(projects[lastId]);
+    setAutosaveState('saved');
+    return;
+  }
+
+  // No saved project: create a starter with three primitives so the scene isn't empty.
+  const id = newId();
+  currentProjectId = id;
+  titleInput.value = 'Untitled design';
+  suppressAutosave = true;
+  addShape('box',      { position: new THREE.Vector3(0, 4, 0),  size: new THREE.Vector3(8, 8, 8), color: 0x5b8dff });
+  addShape('cylinder', { position: new THREE.Vector3(11, 4, 2), size: new THREE.Vector3(6, 8, 6), color: 0x22c55e });
+  addShape('sphere',   { position: new THREE.Vector3(-11, 4, 1),size: new THREE.Vector3(8, 8, 8), color: 0xef4444 });
+  suppressAutosave = false;
+
+  const allProjects = loadProjects();
+  allProjects[id] = {
+    id,
+    title: titleInput.value,
+    created: Date.now(),
+    updated: Date.now(),
+    ...serialize(),
+  };
+  writeProjects(allProjects);
+  localStorage.setItem(CURRENT_KEY, id);
+  setAutosaveState('saved');
+})();
 updateOutline();
 
 /* ============================================================
