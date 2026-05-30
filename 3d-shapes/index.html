@@ -1105,6 +1105,149 @@
     }
 
     /* =========================================================
+       Tool dialog (Mirror/Pattern/Text/Boolean confirmation)
+       ========================================================= */
+    .tool-dialog {
+      position: fixed;
+      top: 76px;
+      right: 316px;
+      width: 280px;
+      background: var(--bg-2);
+      border: 1px solid var(--border-2);
+      border-radius: var(--r-lg);
+      box-shadow: 0 12px 36px rgba(15,23,42,0.20);
+      z-index: 250;
+      display: none;
+      animation: ctxIn 0.16s var(--ease);
+    }
+    .tool-dialog.show { display: block; }
+    .td-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border-1);
+      background: linear-gradient(180deg, var(--accent) 0%, var(--accent-2) 100%);
+      color: #fff;
+      border-radius: var(--r-lg) var(--r-lg) 0 0;
+    }
+    .td-title {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+    }
+    .td-close {
+      width: 22px; height: 22px;
+      background: rgba(255,255,255,0.15);
+      border: none;
+      border-radius: var(--r-sm);
+      color: #fff;
+      cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .td-close:hover { background: rgba(255,255,255,0.28); }
+    .td-close svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 2.4; fill: none; }
+    .td-body {
+      padding: 14px 16px 6px;
+      font-size: 12px;
+      color: var(--text-1);
+    }
+    .td-body .td-row { margin-bottom: 12px; }
+    .td-body label {
+      display: block;
+      font-size: 10px;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+      color: var(--text-2);
+      font-weight: 700;
+      margin-bottom: 5px;
+    }
+    .td-body input[type="number"],
+    .td-body input[type="text"],
+    .td-body select {
+      width: 100%;
+      background: var(--bg-1);
+      border: 1px solid var(--border-2);
+      color: var(--text-0);
+      padding: 7px 9px;
+      border-radius: var(--r-sm);
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      outline: none;
+      transition: border-color 0.15s var(--ease);
+    }
+    .td-body input:focus, .td-body select:focus { border-color: var(--accent); }
+    .td-body .axis-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 5px;
+    }
+    .td-body .axis-btn {
+      background: var(--bg-1);
+      border: 1px solid var(--border-2);
+      color: var(--text-1);
+      padding: 8px 0;
+      border-radius: var(--r-sm);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: all 0.15s var(--ease);
+    }
+    .td-body .axis-btn:hover { background: var(--bg-3); }
+    .td-body .axis-btn.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      color: var(--accent-2);
+    }
+    .td-body .axis-btn.x.active { color: #d32f2f; border-color: #d32f2f; background: rgba(211,47,47,0.08); }
+    .td-body .axis-btn.y.active { color: #2e7d32; border-color: #2e7d32; background: rgba(46,125,50,0.08); }
+    .td-body .axis-btn.z.active { color: var(--accent); }
+    .td-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+      padding: 10px 14px 12px;
+      border-top: 1px solid var(--border-1);
+    }
+    .td-help {
+      font-size: 11px;
+      color: var(--text-3);
+      margin-bottom: 12px;
+      line-height: 1.5;
+    }
+
+    /* ---- Align section in inspector ---- */
+    .align-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 4px;
+    }
+    .align-grid + .align-grid { margin-top: 5px; }
+    .align-btn {
+      background: var(--bg-2);
+      border: 1px solid var(--border-1);
+      color: var(--text-2);
+      padding: 6px 0;
+      border-radius: var(--r-sm);
+      font-family: inherit;
+      cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center;
+      transition: all 0.15s var(--ease);
+    }
+    .align-btn:hover { background: var(--bg-3); color: var(--accent); border-color: var(--accent); }
+    .align-btn svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 1.8; fill: none; }
+    .align-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      color: var(--text-3);
+      text-align: center;
+      margin: 6px 0 2px;
+    }
+
+    /* =========================================================
        Toast
        ========================================================= */
     .toast {
@@ -1184,6 +1327,36 @@
       </button>
       <button class="icon-btn" id="tool-view" data-tip="Reset view (F)">
         <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>
+      </button>
+    </div>
+
+    <div class="toolbar-group">
+      <button class="icon-btn" id="tool-union" data-tip="Boolean Union">
+        <svg viewBox="0 0 24 24"><circle cx="9" cy="12" r="6"/><circle cx="15" cy="12" r="6"/></svg>
+      </button>
+      <button class="icon-btn" id="tool-subtract" data-tip="Boolean Subtract">
+        <svg viewBox="0 0 24 24"><path d="M9 6a6 6 0 1 0 0 12 6 6 0 0 0 6-6"/><circle cx="15" cy="12" r="6" stroke-dasharray="2 2"/></svg>
+      </button>
+      <button class="icon-btn" id="tool-intersect" data-tip="Boolean Intersect">
+        <svg viewBox="0 0 24 24"><path d="M9 6a6 6 0 1 0 0 12"/><path d="M15 18a6 6 0 1 0 0-12"/><path d="M10.5 17.2a6 6 0 0 0 3 0M10.5 6.8a6 6 0 0 1 3 0"/></svg>
+      </button>
+    </div>
+
+    <div class="toolbar-group">
+      <button class="icon-btn" id="tool-mirror" data-tip="Mirror selection">
+        <svg viewBox="0 0 24 24"><path d="M12 3v18M8 6L4 12l4 6M16 6l4 6-4 6"/></svg>
+      </button>
+      <button class="icon-btn" id="tool-pattern" data-tip="Pattern (Linear/Circular)">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="6" height="6"/><rect x="15" y="3" width="6" height="6"/><rect x="3" y="15" width="6" height="6"/><rect x="15" y="15" width="6" height="6"/><path d="M11 6h2M11 18h2M6 11v2M18 11v2"/></svg>
+      </button>
+      <button class="icon-btn" id="tool-text" data-tip="Insert 3D Text">
+        <svg viewBox="0 0 24 24"><path d="M4 7V5h16v2M9 5v14M15 19h-2"/></svg>
+      </button>
+      <button class="icon-btn" id="tool-edges" data-tip="Toggle visible edges">
+        <svg viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>
+      </button>
+      <button class="icon-btn" id="tool-section" data-tip="Section view (clipping plane)">
+        <svg viewBox="0 0 24 24"><path d="M3 12h18M5 8h14M7 4h10M5 16h14M3 20h18"/></svg>
       </button>
     </div>
 
@@ -1430,6 +1603,48 @@
 
       <div class="divider"></div>
 
+      <div class="section-title">Align</div>
+      <div class="field">
+        <div class="align-label">X axis</div>
+        <div class="align-grid">
+          <button class="align-btn" data-align="x-min"  title="Align min X">
+            <svg viewBox="0 0 24 24"><path d="M4 4v16M8 8h12M8 16h8"/></svg>
+          </button>
+          <button class="align-btn" data-align="x-center" title="Center on X">
+            <svg viewBox="0 0 24 24"><path d="M12 4v16M6 8h12M9 16h6"/></svg>
+          </button>
+          <button class="align-btn" data-align="x-max"  title="Align max X">
+            <svg viewBox="0 0 24 24"><path d="M20 4v16M4 8h12M12 16h8"/></svg>
+          </button>
+        </div>
+        <div class="align-label">Y axis (height)</div>
+        <div class="align-grid">
+          <button class="align-btn" data-align="y-min"  title="Align bottom">
+            <svg viewBox="0 0 24 24"><path d="M4 20h16M8 16V4M16 16V8"/></svg>
+          </button>
+          <button class="align-btn" data-align="y-center" title="Center on Y">
+            <svg viewBox="0 0 24 24"><path d="M4 12h16M8 18V6M16 15V9"/></svg>
+          </button>
+          <button class="align-btn" data-align="y-max"  title="Align top">
+            <svg viewBox="0 0 24 24"><path d="M4 4h16M8 8v12M16 8v8"/></svg>
+          </button>
+        </div>
+        <div class="align-label">Z axis (depth)</div>
+        <div class="align-grid">
+          <button class="align-btn" data-align="z-min"  title="Align min Z">
+            <svg viewBox="0 0 24 24"><path d="M4 4v16M8 8h12M8 16h8"/></svg>
+          </button>
+          <button class="align-btn" data-align="z-center" title="Center on Z">
+            <svg viewBox="0 0 24 24"><path d="M12 4v16M6 8h12M9 16h6"/></svg>
+          </button>
+          <button class="align-btn" data-align="z-max"  title="Align max Z">
+            <svg viewBox="0 0 24 24"><path d="M20 4v16M4 8h12M12 16h8"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
       <div class="action-row">
         <button class="btn" id="btn-duplicate">
           <svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
@@ -1492,6 +1707,20 @@
 <!-- ========= TOAST ========= -->
 <div class="toast" id="toast"><span class="pulse"></span><span id="toast-text"></span></div>
 
+<!-- ========= TOOL DIALOG ========= -->
+<div class="tool-dialog" id="tool-dialog">
+  <div class="td-head"><span class="td-title" id="td-title"></span>
+    <button class="td-close" id="td-close" aria-label="Close">
+      <svg viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="td-body" id="td-body"></div>
+  <div class="td-actions">
+    <button class="btn" id="td-cancel">Cancel</button>
+    <button class="btn primary" id="td-ok">OK</button>
+  </div>
+</div>
+
 <!-- ========= PROJECTS MODAL ========= -->
 <div class="modal-backdrop" id="projects-modal">
   <div class="modal">
@@ -1527,7 +1756,9 @@
 {
   "imports": {
     "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "three-mesh-bvh": "https://unpkg.com/three-mesh-bvh@0.7.0/build/index.module.js",
+    "three-bvh-csg": "https://unpkg.com/three-bvh-csg@0.0.17/build/index.module.js"
   }
 }
 </script>
@@ -1537,6 +1768,9 @@ import * as THREE from 'three';
 import { OrbitControls }     from 'three/addons/controls/OrbitControls.js';
 import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { STLExporter }       from 'three/addons/exporters/STLExporter.js';
+import { FontLoader }        from 'three/addons/loaders/FontLoader.js';
+import { TextGeometry }      from 'three/addons/geometries/TextGeometry.js';
+import { Brush, Evaluator, ADDITION, SUBTRACTION, INTERSECTION } from 'three-bvh-csg';
 
 /* ============================================================
    Renderer
@@ -2013,7 +2247,14 @@ function makeMaterial(color, hole) {
 }
 
 function addShape(kind, opts = {}) {
-  const geo = makeGeometry(kind);
+  let geo;
+  if (opts.customGeo) {
+    geo = opts.customGeo;
+  } else if (opts.geoData) {
+    geo = deserializeGeometry(opts.geoData);
+  } else {
+    geo = makeGeometry(kind);
+  }
   geo.computeBoundingBox();
   const ymin = geo.boundingBox.min.y;
   const color = opts.color ?? TINKERCAD_COLORS[Math.floor(Math.random() * TINKERCAD_COLORS.length)];
@@ -2035,11 +2276,39 @@ function addShape(kind, opts = {}) {
   if (opts.rotation) mesh.rotation.copy(opts.rotation);
 
   mesh.userData = { id: nextId++, kind, color, hole };
+  if (opts.text) mesh.userData.text = opts.text;
+  if (opts.customGeo || opts.geoData) mesh.userData.custom = true;
 
   scene.add(mesh);
   shapes.push(mesh);
+  if (typeof sectionOn !== 'undefined' && sectionOn) {
+    mesh.material.clippingPlanes = [sectionPlane];
+    mesh.material.clipShadows = true;
+  }
   updateCount();
   return mesh;
+}
+
+/* ============================================================
+   Custom geometry serialization (for CSG / text)
+   ============================================================ */
+function serializeGeometry(geo) {
+  const posAttr = geo.getAttribute('position');
+  const normAttr = geo.getAttribute('normal');
+  const idx = geo.getIndex();
+  return {
+    positions: Array.from(posAttr.array),
+    normals:   normAttr ? Array.from(normAttr.array) : null,
+    indices:   idx ? Array.from(idx.array) : null,
+  };
+}
+function deserializeGeometry(data) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(data.positions, 3));
+  if (data.normals) g.setAttribute('normal', new THREE.Float32BufferAttribute(data.normals, 3));
+  if (data.indices) g.setIndex(data.indices);
+  if (!data.normals) g.computeVertexNormals();
+  return g;
 }
 
 function deleteShape(mesh) {
@@ -2427,6 +2696,10 @@ function setMode(mode) {
     m.userData.hole = hole;
     m.material.dispose();
     m.material = makeMaterial(m.userData.color, hole);
+    if (typeof sectionOn !== 'undefined' && sectionOn) {
+      m.material.clippingPlanes = [sectionPlane];
+      m.material.clipShadows = true;
+    }
   }
   syncInspector();
   updateOutline();
@@ -2553,15 +2826,21 @@ const redoStack = [];
 
 function snapshot() {
   return JSON.stringify({
-    shapes: shapes.map(m => ({
-      kind: m.userData.kind,
-      color: m.userData.color,
-      hole: m.userData.hole,
-      position: m.position.toArray(),
-      scale: m.scale.toArray(),
-      rotation: [m.rotation.x, m.rotation.y, m.rotation.z],
-      id: m.userData.id,
-    })),
+    shapes: shapes.map(m => {
+      const s = {
+        kind: m.userData.kind,
+        color: m.userData.color,
+        hole: m.userData.hole,
+        position: m.position.toArray(),
+        scale: m.scale.toArray(),
+        rotation: [m.rotation.x, m.rotation.y, m.rotation.z],
+        id: m.userData.id,
+        visible: m.visible,
+      };
+      if (m.userData.custom) s.geoData = serializeGeometry(m.geometry);
+      if (m.userData.text) s.text = m.userData.text;
+      return s;
+    }),
     selection: selectionList().map(m => m.userData.id),
   });
 }
@@ -2582,8 +2861,11 @@ function restoreSnapshot(str) {
       size: new THREE.Vector3().fromArray(s.scale),
       position: new THREE.Vector3().fromArray(s.position),
       rotation: new THREE.Euler().fromArray(s.rotation),
+      geoData: s.geoData,
+      text: s.text,
     });
     m.userData.id = s.id;
+    if (s.visible === false) m.visible = false;
     byId.set(s.id, m);
   }
   selection.clear();
@@ -2663,14 +2945,20 @@ function newId() {
 function serialize() {
   return {
     title: titleInput.value,
-    shapes: shapes.map(m => ({
-      kind: m.userData.kind,
-      color: m.userData.color,
-      hole: m.userData.hole,
-      position: m.position.toArray(),
-      scale: m.scale.toArray(),
-      rotation: [m.rotation.x, m.rotation.y, m.rotation.z],
-    })),
+    shapes: shapes.map(m => {
+      const s = {
+        kind: m.userData.kind,
+        color: m.userData.color,
+        hole: m.userData.hole,
+        position: m.position.toArray(),
+        scale: m.scale.toArray(),
+        rotation: [m.rotation.x, m.rotation.y, m.rotation.z],
+        visible: m.visible,
+      };
+      if (m.userData.custom) s.geoData = serializeGeometry(m.geometry);
+      if (m.userData.text) s.text = m.userData.text;
+      return s;
+    }),
   };
 }
 
@@ -2680,12 +2968,15 @@ function loadDoc(doc) {
   titleInput.value = doc.title || 'Untitled design';
   syncStudioTab();
   for (const s of doc.shapes || []) {
-    addShape(s.kind, {
+    const m = addShape(s.kind, {
       color: s.color, hole: s.hole,
       position: new THREE.Vector3().fromArray(s.position),
       size: new THREE.Vector3().fromArray(s.scale),
       rotation: new THREE.Euler().fromArray(s.rotation),
+      geoData: s.geoData,
+      text: s.text,
     });
+    if (s.visible === false) m.visible = false;
   }
   refreshSelection();
   undoStack.length = 0;
@@ -3030,6 +3321,454 @@ function showToast(msg) {
 }
 
 /* ============================================================
+   Tool dialog
+   ============================================================ */
+const tdEl = document.getElementById('tool-dialog');
+const tdTitle = document.getElementById('td-title');
+const tdBody = document.getElementById('td-body');
+let tdConfirm = null;
+
+function openToolDialog(title, html, onConfirm) {
+  tdTitle.textContent = title;
+  tdBody.innerHTML = html;
+  tdConfirm = onConfirm;
+  tdEl.classList.add('show');
+}
+function closeToolDialog() {
+  tdEl.classList.remove('show');
+  tdConfirm = null;
+}
+document.getElementById('td-close').addEventListener('click', closeToolDialog);
+document.getElementById('td-cancel').addEventListener('click', closeToolDialog);
+document.getElementById('td-ok').addEventListener('click', () => {
+  if (tdConfirm) tdConfirm();
+  closeToolDialog();
+});
+
+/* Helper: bind .axis-btn group to a radio-style selection */
+function bindAxisGroup(container, defaultAxis = 'x') {
+  let current = defaultAxis;
+  const btns = container.querySelectorAll('.axis-btn');
+  const sync = () => btns.forEach(b => b.classList.toggle('active', b.dataset.axis === current && b.classList.contains(current)));
+  btns.forEach(b => b.addEventListener('click', () => {
+    current = b.dataset.axis;
+    btns.forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+  }));
+  sync();
+  return () => current;
+}
+
+/* ============================================================
+   Boolean operations (real CSG via three-bvh-csg)
+   ============================================================ */
+const csgEvaluator = new Evaluator();
+csgEvaluator.useGroups = false;
+
+function meshToBrush(mesh) {
+  // Apply mesh transform to a cloned geometry so the brush has identity transforms.
+  const g = mesh.geometry.clone();
+  mesh.updateMatrixWorld();
+  g.applyMatrix4(mesh.matrixWorld);
+  const brush = new Brush(g);
+  brush.updateMatrixWorld();
+  return brush;
+}
+
+function applyBoolean(op, opName) {
+  const sel = selectionList();
+  if (sel.length < 2) { showToast('Select two or more shapes'); return; }
+
+  pushHistory();
+  try {
+    let result = meshToBrush(sel[0]);
+    for (let i = 1; i < sel.length; i++) {
+      result = csgEvaluator.evaluate(result, meshToBrush(sel[i]), op);
+    }
+    const geo = result.geometry;
+    geo.computeVertexNormals();
+    geo.computeBoundingBox();
+    const center = geo.boundingBox.getCenter(new THREE.Vector3());
+    geo.translate(-center.x, -center.y, -center.z);
+
+    const color = sel[0].userData.color;
+    const mesh = addShape('csg', { customGeo: geo, color, hole: false,
+      position: center,
+      size: new THREE.Vector3(1, 1, 1),
+    });
+    mesh.userData.custom = true;
+    // remove originals
+    for (const m of sel) deleteShape(m);
+    setSelection([mesh]);
+    showToast(`${opName}: ${sel.length} → 1 part`);
+  } catch (err) {
+    showToast('Boolean failed (geometry not closed?)');
+    console.error(err);
+  }
+}
+
+document.getElementById('tool-union').addEventListener('click',     () => applyBoolean(ADDITION, 'Union'));
+document.getElementById('tool-subtract').addEventListener('click',  () => applyBoolean(SUBTRACTION, 'Subtract'));
+document.getElementById('tool-intersect').addEventListener('click', () => applyBoolean(INTERSECTION, 'Intersect'));
+
+/* ============================================================
+   Mirror
+   ============================================================ */
+document.getElementById('tool-mirror').addEventListener('click', () => {
+  if (!selection.size) { showToast('Select a shape to mirror'); return; }
+  openToolDialog('Mirror', `
+    <div class="td-help">Mirrors the selection across the chosen plane through the origin. A copy is created.</div>
+    <div class="td-row">
+      <label>Mirror plane (axis)</label>
+      <div class="axis-row" id="mirror-axes">
+        <button class="axis-btn x active" data-axis="x">X</button>
+        <button class="axis-btn y"        data-axis="y">Y</button>
+        <button class="axis-btn z"        data-axis="z">Z</button>
+      </div>
+    </div>
+    <div class="td-row">
+      <label><input type="checkbox" id="mirror-keep" checked> Keep original</label>
+    </div>
+  `, () => {
+    const axis = document.querySelector('#mirror-axes .axis-btn.active').dataset.axis;
+    const keep = document.getElementById('mirror-keep').checked;
+    doMirror(axis, keep);
+  });
+
+  // wire axis buttons
+  document.querySelectorAll('#mirror-axes .axis-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#mirror-axes .axis-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+    });
+  });
+});
+
+function doMirror(axis, keep) {
+  if (!selection.size) return;
+  pushHistory();
+  const toMirror = selectionList();
+  const newSel = keep ? [...toMirror] : [];
+  for (const m of toMirror) {
+    const opts = {
+      color: m.userData.color, hole: m.userData.hole,
+      position: m.position.clone(),
+      size: m.scale.clone(),
+      rotation: m.rotation.clone(),
+    };
+    if (m.userData.custom) opts.geoData = serializeGeometry(m.geometry);
+    if (m.userData.text)   opts.text    = m.userData.text;
+
+    if (axis === 'x') {
+      opts.position.x = -opts.position.x;
+      opts.rotation = new THREE.Euler(opts.rotation.x, -opts.rotation.y, -opts.rotation.z);
+    } else if (axis === 'y') {
+      opts.position.y = -opts.position.y;
+      opts.rotation = new THREE.Euler(-opts.rotation.x, opts.rotation.y, -opts.rotation.z);
+    } else {
+      opts.position.z = -opts.position.z;
+      opts.rotation = new THREE.Euler(-opts.rotation.x, -opts.rotation.y, opts.rotation.z);
+    }
+    // For asymmetric shapes (text, arrow, etc.) flip the geometry on that axis too
+    if (m.userData.custom || ['arrow', 'heart', 'wedge', 'star', 'gear'].includes(m.userData.kind)) {
+      const baseGeo = m.userData.custom ? deserializeGeometry(serializeGeometry(m.geometry)) : makeGeometry(m.userData.kind);
+      const sx = axis === 'x' ? -1 : 1;
+      const sy = axis === 'y' ? -1 : 1;
+      const sz = axis === 'z' ? -1 : 1;
+      baseGeo.scale(sx, sy, sz);
+      // flipping reverses winding — fix face index order to restore correct normals
+      const idx = baseGeo.getIndex();
+      if (idx) {
+        const a = idx.array;
+        for (let i = 0; i < a.length; i += 3) { const t = a[i]; a[i] = a[i+1]; a[i+1] = t; }
+        idx.needsUpdate = true;
+      }
+      baseGeo.computeVertexNormals();
+      opts.customGeo = baseGeo;
+      opts.kind = m.userData.kind === 'csg' ? 'csg' : m.userData.kind;
+    }
+
+    const copy = addShape(opts.kind || m.userData.kind, opts);
+    newSel.push(copy);
+    if (!keep) deleteShape(m);
+  }
+  setSelection(newSel.filter(x => shapes.includes(x)));
+  showToast(`Mirrored on ${axis.toUpperCase()}`);
+}
+
+/* ============================================================
+   Pattern (Linear / Circular)
+   ============================================================ */
+document.getElementById('tool-pattern').addEventListener('click', () => {
+  if (!selection.size) { showToast('Select a shape first'); return; }
+  openToolDialog('Pattern', `
+    <div class="td-row">
+      <label>Type</label>
+      <select id="pat-type">
+        <option value="linear">Linear (along axis)</option>
+        <option value="circular">Circular (around axis)</option>
+      </select>
+    </div>
+    <div class="td-row">
+      <label>Axis</label>
+      <div class="axis-row" id="pat-axes">
+        <button class="axis-btn x active" data-axis="x">X</button>
+        <button class="axis-btn y"        data-axis="y">Y</button>
+        <button class="axis-btn z"        data-axis="z">Z</button>
+      </div>
+    </div>
+    <div class="td-row">
+      <label>Count</label>
+      <input type="number" id="pat-count" value="5" min="2" max="100" step="1" />
+    </div>
+    <div class="td-row" id="pat-spacing-row">
+      <label>Spacing (units)</label>
+      <input type="number" id="pat-spacing" value="10" step="0.5" />
+    </div>
+    <div class="td-row" id="pat-angle-row" style="display:none;">
+      <label>Total angle (degrees)</label>
+      <input type="number" id="pat-angle" value="360" step="15" />
+    </div>
+  `, () => {
+    const type    = document.getElementById('pat-type').value;
+    const axis    = document.querySelector('#pat-axes .axis-btn.active').dataset.axis;
+    const count   = Math.max(2, parseInt(document.getElementById('pat-count').value) || 2);
+    if (type === 'linear') {
+      const spacing = parseFloat(document.getElementById('pat-spacing').value) || 1;
+      doLinearPattern(axis, count, spacing);
+    } else {
+      const angle = parseFloat(document.getElementById('pat-angle').value) || 360;
+      doCircularPattern(axis, count, angle);
+    }
+  });
+
+  // Wire type switch
+  document.getElementById('pat-type').addEventListener('change', e => {
+    document.getElementById('pat-spacing-row').style.display = e.target.value === 'linear' ? '' : 'none';
+    document.getElementById('pat-angle-row').style.display   = e.target.value === 'circular' ? '' : 'none';
+  });
+  document.querySelectorAll('#pat-axes .axis-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('#pat-axes .axis-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+    });
+  });
+});
+
+function doLinearPattern(axis, count, spacing) {
+  pushHistory();
+  const src = selectionList();
+  const newSel = [...src];
+  const ax = axis === 'x' ? 'x' : axis === 'y' ? 'y' : 'z';
+  for (const m of src) {
+    for (let i = 1; i < count; i++) {
+      const opts = {
+        color: m.userData.color, hole: m.userData.hole,
+        size: m.scale.clone(),
+        position: m.position.clone(),
+        rotation: m.rotation.clone(),
+      };
+      opts.position[ax] += spacing * i;
+      if (m.userData.custom) opts.geoData = serializeGeometry(m.geometry);
+      if (m.userData.text)   opts.text    = m.userData.text;
+      newSel.push(addShape(m.userData.kind, opts));
+    }
+  }
+  setSelection(newSel);
+  showToast(`Linear pattern · ${count}× on ${ax.toUpperCase()}`);
+}
+
+function doCircularPattern(axis, count, totalAngleDeg) {
+  pushHistory();
+  const src = selectionList();
+  const newSel = [...src];
+  const step = THREE.MathUtils.degToRad(totalAngleDeg) / count;
+  const isFull = Math.abs(totalAngleDeg - 360) < 0.1;
+  const N = isFull ? count : count;
+  const axisVec = axis === 'x' ? new THREE.Vector3(1,0,0)
+              :  axis === 'y' ? new THREE.Vector3(0,1,0)
+              :                 new THREE.Vector3(0,0,1);
+  for (const m of src) {
+    for (let i = 1; i < N; i++) {
+      const ang = step * i;
+      const opts = {
+        color: m.userData.color, hole: m.userData.hole,
+        size: m.scale.clone(),
+        rotation: m.rotation.clone(),
+      };
+      const pos = m.position.clone();
+      pos.applyAxisAngle(axisVec, ang);
+      opts.position = pos;
+      // also rotate the shape itself
+      const q = new THREE.Quaternion().setFromAxisAngle(axisVec, ang);
+      const me = new THREE.Euler().setFromQuaternion(q.multiply(new THREE.Quaternion().setFromEuler(m.rotation)));
+      opts.rotation = me;
+      if (m.userData.custom) opts.geoData = serializeGeometry(m.geometry);
+      if (m.userData.text)   opts.text    = m.userData.text;
+      newSel.push(addShape(m.userData.kind, opts));
+    }
+  }
+  setSelection(newSel);
+  showToast(`Circular pattern · ${count}× around ${axis.toUpperCase()}`);
+}
+
+/* ============================================================
+   Align (multi-axis)
+   ============================================================ */
+document.querySelectorAll('.align-btn').forEach(b => {
+  b.addEventListener('click', () => alignSelection(b.dataset.align));
+});
+
+function alignSelection(mode) {
+  if (selection.size < 2) { showToast('Select 2+ shapes to align'); return; }
+  pushHistory();
+  const [axis, side] = mode.split('-');
+  const sel = selectionList();
+  // Compute bbox per mesh (world)
+  const data = sel.map(m => {
+    m.geometry.computeBoundingBox();
+    const half = m.geometry.boundingBox.getSize(new THREE.Vector3()).multiply(m.scale).multiplyScalar(0.5);
+    return { mesh: m, min: m.position[axis] - half[axis], max: m.position[axis] + half[axis], half: half[axis] };
+  });
+  const overallMin = Math.min(...data.map(d => d.min));
+  const overallMax = Math.max(...data.map(d => d.max));
+  const center = (overallMin + overallMax) / 2;
+  for (const d of data) {
+    if (side === 'min')         d.mesh.position[axis] = overallMin + d.half;
+    else if (side === 'max')    d.mesh.position[axis] = overallMax - d.half;
+    else /* center */            d.mesh.position[axis] = center;
+  }
+  syncInspector();
+  updateOutline();
+  showToast(`Aligned · ${axis.toUpperCase()} ${side}`);
+}
+
+/* ============================================================
+   3D Text (FontLoader + TextGeometry)
+   ============================================================ */
+let cachedFont = null;
+function loadFont() {
+  if (cachedFont) return Promise.resolve(cachedFont);
+  return new Promise((resolve, reject) => {
+    const loader = new FontLoader();
+    loader.load(
+      'https://unpkg.com/three@0.160.0/examples/fonts/helvetiker_regular.typeface.json',
+      f => { cachedFont = f; resolve(f); },
+      undefined,
+      err => reject(err),
+    );
+  });
+}
+
+document.getElementById('tool-text').addEventListener('click', () => {
+  openToolDialog('Insert 3D Text', `
+    <div class="td-row">
+      <label>Text</label>
+      <input type="text" id="text-input" value="Hello" maxlength="40" />
+    </div>
+    <div class="td-row">
+      <label>Height (units)</label>
+      <input type="number" id="text-size" value="6" min="1" step="0.5" />
+    </div>
+    <div class="td-row">
+      <label>Depth (extrude)</label>
+      <input type="number" id="text-depth" value="2" min="0.2" step="0.5" />
+    </div>
+  `, async () => {
+    const txt   = (document.getElementById('text-input').value || 'Text').slice(0, 40);
+    const size  = Math.max(1, parseFloat(document.getElementById('text-size').value) || 6);
+    const depth = Math.max(0.2, parseFloat(document.getElementById('text-depth').value) || 2);
+    try {
+      const font = await loadFont();
+      pushHistory();
+      const geo = new TextGeometry(txt, { font, size: 1, depth: depth / size, curveSegments: 6, bevelEnabled: false });
+      geo.computeBoundingBox();
+      const bb = geo.boundingBox;
+      geo.translate(-(bb.min.x + bb.max.x) / 2, 0, -(bb.min.z + bb.max.z) / 2);
+      const color = TINKERCAD_COLORS[Math.floor(Math.random() * TINKERCAD_COLORS.length)];
+      const mesh = addShape('text', {
+        customGeo: geo,
+        color,
+        size: new THREE.Vector3(size, size, size),
+        text: txt,
+      });
+      mesh.userData.text = txt;
+      mesh.userData.custom = true;
+      setSelection([mesh]);
+      showToast(`Added text: "${txt}"`);
+    } catch (err) {
+      showToast('Failed to load font');
+      console.error(err);
+    }
+  });
+});
+
+/* ============================================================
+   Always-visible edges overlay (toggle)
+   ============================================================ */
+let edgesOn = false;
+const edgeOverlays = new Map();   // mesh.id → LineSegments
+
+function rebuildAllEdges() {
+  for (const ls of edgeOverlays.values()) {
+    ls.geometry.dispose();
+    scene.remove(ls);
+  }
+  edgeOverlays.clear();
+  if (!edgesOn) return;
+  for (const m of shapes) addEdgeOverlay(m);
+}
+
+function addEdgeOverlay(m) {
+  const eg = new THREE.EdgesGeometry(m.geometry, 20);
+  const mat = new THREE.LineBasicMaterial({ color: 0x142233, transparent: true, opacity: 0.55, depthTest: true });
+  const ls = new THREE.LineSegments(eg, mat);
+  ls.position.copy(m.position);
+  ls.rotation.copy(m.rotation);
+  ls.scale.copy(m.scale);
+  ls.userData.bind = m;
+  scene.add(ls);
+  edgeOverlays.set(m.userData.id, ls);
+}
+
+document.getElementById('tool-edges').addEventListener('click', () => {
+  edgesOn = !edgesOn;
+  document.getElementById('tool-edges').classList.toggle('active', edgesOn);
+  rebuildAllEdges();
+});
+
+/* ============================================================
+   Section view (clipping plane)
+   ============================================================ */
+let sectionOn = false;
+const sectionPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 14);
+renderer.localClippingEnabled = true;
+
+function applySectionToMaterials() {
+  for (const m of shapes) {
+    m.material.clippingPlanes = sectionOn ? [sectionPlane] : null;
+    m.material.clipShadows = sectionOn;
+    m.material.needsUpdate = true;
+  }
+}
+
+document.getElementById('tool-section').addEventListener('click', () => {
+  sectionOn = !sectionOn;
+  document.getElementById('tool-section').classList.toggle('active', sectionOn);
+  applySectionToMaterials();
+  orbit.enableZoom = !sectionOn;
+  showToast(sectionOn ? 'Section view ON · scroll-wheel slices · pinch still zooms' : 'Section view OFF');
+});
+
+// Scroll wheel adjusts section height while section view is on
+canvas.addEventListener('wheel', e => {
+  if (!sectionOn || e.ctrlKey || e.shiftKey || Math.abs(e.deltaX) > 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  sectionPlane.constant = THREE.MathUtils.clamp(sectionPlane.constant + e.deltaY * -0.02, -2, 60);
+}, { passive: false, capture: true });
+
+/* ============================================================
    Initial project boot
    ============================================================ */
 (function bootProject() {
@@ -3078,6 +3817,25 @@ function tick() {
   const t = performance.now() * 0.001;
   ring.material.opacity = 0.5 + Math.sin(t * 1.3) * 0.18;
   updateViewCube();
+  // Keep edge overlays in sync with their shapes
+  if (edgesOn) {
+    for (const [id, ls] of edgeOverlays) {
+      const m = ls.userData.bind;
+      if (!shapes.includes(m)) {
+        scene.remove(ls);
+        ls.geometry.dispose();
+        edgeOverlays.delete(id);
+        continue;
+      }
+      ls.position.copy(m.position);
+      ls.rotation.copy(m.rotation);
+      ls.scale.copy(m.scale);
+      ls.visible = m.visible;
+    }
+    for (const m of shapes) {
+      if (!edgeOverlays.has(m.userData.id)) addEdgeOverlay(m);
+    }
+  }
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
