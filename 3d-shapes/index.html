@@ -3880,15 +3880,25 @@ document.getElementById('tool-text').addEventListener('click', () => {
     try {
       const font = await loadFont();
       pushHistory();
-      const geo = new TextGeometry(txt, { font, size: 1, depth: depth / size, curveSegments: 6, bevelEnabled: false });
+      // Use the real letter-height + extrude depth so the geometry has the
+      // exact dimensions the user asked for. Mesh stays at unit scale.
+      const geo = new TextGeometry(txt, {
+        font,
+        size,
+        depth,
+        curveSegments: 8,
+        bevelEnabled: false,
+      });
       geo.computeBoundingBox();
       const bb = geo.boundingBox;
+      // Center X and Z; baseline at y=0 so addShape sits it on the workplane.
       geo.translate(-(bb.min.x + bb.max.x) / 2, 0, -(bb.min.z + bb.max.z) / 2);
+      geo.computeBoundingBox();
       const color = TINKERCAD_COLORS[Math.floor(Math.random() * TINKERCAD_COLORS.length)];
       const mesh = addShape('text', {
         customGeo: geo,
         color,
-        size: new THREE.Vector3(size, size, size),
+        size: new THREE.Vector3(1, 1, 1),
         text: txt,
       });
       mesh.userData.text = txt;
