@@ -119,6 +119,7 @@
     .card--tennis  { --accent: #d4ed31; --accent-glow: rgba(212,237,49,0.5); }
     .card--pong    { --accent: #ff5577; --accent-glow: rgba(255,85,119,0.5); }
     .card--shapes  { --accent: #a855f7; --accent-glow: rgba(168,85,247,0.5); }
+    .card--ency    { --accent: #1c6ea4; --accent-glow: rgba(28,110,164,0.5); }
 
     .card-body { padding: 20px 22px 24px; }
 
@@ -206,6 +207,82 @@
   </header>
 
   <div class="games">
+
+    <a href="/encyclopedia/" class="card card--ency">
+      <div class="play-btn">&#9654; OPEN</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="encyBg" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#1a2740"/>
+              <stop offset="100%" stop-color="#070b14"/>
+            </linearGradient>
+            <linearGradient id="encyPage" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#fbf8f0"/>
+              <stop offset="100%" stop-color="#e9e2d2"/>
+            </linearGradient>
+            <linearGradient id="encySpine" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#7a1f2b"/>
+              <stop offset="100%" stop-color="#a8323f"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#encyBg)"/>
+          <!-- Glow -->
+          <circle cx="200" cy="100" r="95" fill="rgba(28,110,164,0.15)"/>
+          <!-- Sparkle stars -->
+          <g fill="#cdd8ec" opacity="0.8">
+            <circle cx="40"  cy="30" r="1.5"/>
+            <circle cx="360" cy="36" r="1.5"/>
+            <circle cx="320" cy="20" r="1"/>
+            <circle cx="70"  cy="22" r="1"/>
+          </g>
+          <!-- Open book -->
+          <g transform="translate(200,104)">
+            <!-- shadow -->
+            <ellipse cx="0" cy="58" rx="150" ry="14" fill="rgba(0,0,0,0.35)"/>
+            <!-- left page -->
+            <path d="M-6,-58 C-60,-72 -120,-64 -150,-50 L-150,46 C-120,32 -60,40 -6,54 Z" fill="url(#encyPage)" stroke="#cbbfa6" stroke-width="1.5"/>
+            <!-- right page -->
+            <path d="M6,-58 C60,-72 120,-64 150,-50 L150,46 C120,32 60,40 6,54 Z" fill="url(#encyPage)" stroke="#cbbfa6" stroke-width="1.5"/>
+            <!-- spine -->
+            <path d="M-6,-58 L6,-58 L6,54 L-6,54 Z" fill="url(#encySpine)"/>
+            <!-- left text lines -->
+            <g stroke="#9a8f76" stroke-width="2" stroke-linecap="round" opacity="0.7">
+              <line x1="-138" y1="-38" x2="-30" y2="-30"/>
+              <line x1="-138" y1="-26" x2="-30" y2="-18"/>
+              <line x1="-138" y1="-14" x2="-30" y2="-6"/>
+              <line x1="-138" y1="-2"  x2="-30" y2="6"/>
+              <line x1="-138" y1="10"  x2="-60" y2="16"/>
+            </g>
+            <!-- right page: serif initial E + lines -->
+            <text x="30" y="-18" font-family="Georgia, 'Times New Roman', serif" font-size="56" font-weight="700" fill="#14315a">E</text>
+            <g stroke="#9a8f76" stroke-width="2" stroke-linecap="round" opacity="0.7">
+              <line x1="92" y1="-30" x2="138" y2="-26"/>
+              <line x1="92" y1="-16" x2="138" y2="-12"/>
+              <line x1="30" y1="14"  x2="138" y2="20"/>
+              <line x1="30" y1="26"  x2="138" y2="32"/>
+            </g>
+          </g>
+          <!-- Thistle emblem -->
+          <g transform="translate(200,40)">
+            <ellipse cx="0" cy="0" rx="9" ry="11" fill="#7c5da3"/>
+            <path d="M0,-12c-2 3-2 6 0 9c2-3 2-6 0-9z" fill="#a98fce"/>
+            <path d="M-8,10c2 6 14 6 16 0" stroke="#7fa86b" stroke-width="2" fill="none" stroke-linecap="round"/>
+          </g>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag" style="color:#1c6ea4">Reference</div>
+        <div class="card-title">Encyclopædia</div>
+        <p class="card-desc">A free online encyclopedia in the classic Britannica style. Search millions of articles, browse by subject, and read with a table of contents and Fast Facts — powered live by Wikipedia.</p>
+        <div class="card-tags">
+          <span class="tag">Reference</span>
+          <span class="tag">Wikipedia</span>
+          <span class="tag">Knowledge</span>
+          <span class="tag">Search</span>
+        </div>
+      </div>
+    </a>
 
     <a href="/3d-shapes/" class="card card--shapes">
       <div class="play-btn">&#9654; OPEN</div>

@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARTGEOrge Encyclopædia</title>
+  <meta name="description" content="A free online encyclopedia in the classic Britannica style — search millions of articles and read them in a clean, scholarly interface. Powered by Wikipedia." />
+  <link rel="preconnect" href="https://en.wikipedia.org" />
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --ink:    #1a1a1a;        /* body text */
+      --paper:  #ffffff;        /* reading surface */
+      --bg:     #e7e3da;        /* page behind paper */
+      --masthead:#0e1620;       /* dark editorial bar */
+      --navy:   #14315a;        /* headings */
+      --blue:   #1c6ea4;        /* links / accents */
+      --blue-d: #134e77;
+      --rule:   #d9d3c6;        /* hairlines */
+      --muted:  #6a6256;
+      --muted2: #8a8270;
+      --serif:  Georgia, 'Times New Roman', 'Iowan Old Style', serif;
+      --sans:   'Helvetica Neue', Arial, system-ui, sans-serif;
+    }
+
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--ink);
+      font-family: var(--serif);
+      font-size: 18px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { color: var(--blue-d); text-decoration: underline; }
+
+    /* ---------------- Masthead ---------------- */
+    .masthead {
+      background: var(--masthead);
+      color: #fff;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+    }
+    .masthead-inner {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 26px;
+      display: flex;
+      align-items: center;
+      gap: 22px;
+      height: 70px;
+    }
+    .home-link {
+      color: #8b93a3;
+      font-family: var(--sans);
+      font-size: 11px;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .home-link:hover { color: #fff; text-decoration: none; }
+
+    .wordmark {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      flex: 1;
+      min-width: 0;
+    }
+    .thistle { flex: 0 0 auto; }
+    .wordmark .titles { line-height: 1.05; min-width: 0; }
+    .wordmark .t1 {
+      font-family: var(--serif);
+      font-size: clamp(15px, 2.4vw, 21px);
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .wordmark .t2 {
+      font-family: var(--sans);
+      font-size: 9.5px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: #9aa2b2;
+      margin-top: 3px;
+    }
+
+    .mast-search {
+      position: relative;
+      flex: 0 1 320px;
+      display: none;
+    }
+    .mast-search.show { display: block; }
+    .mast-search input {
+      width: 100%;
+      background: #1c2733;
+      border: 1px solid #2c3a48;
+      border-radius: 4px;
+      color: #fff;
+      font-family: var(--sans);
+      font-size: 14px;
+      padding: 9px 12px;
+      outline: none;
+    }
+    .mast-search input::placeholder { color: #6a7585; }
+    .mast-search input:focus { border-color: var(--blue); }
+
+    /* ---------------- Layout ---------------- */
+    .page {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 0 26px 80px;
+    }
+
+    /* ---------------- Hero / home ---------------- */
+    .hero {
+      text-align: center;
+      padding: 64px 0 46px;
+    }
+    .hero h1 {
+      font-family: var(--serif);
+      font-weight: 400;
+      font-size: clamp(34px, 6vw, 60px);
+      color: var(--navy);
+      line-height: 1.08;
+      letter-spacing: 0.3px;
+    }
+    .hero .lede {
+      font-family: var(--serif);
+      font-style: italic;
+      font-size: clamp(16px, 2.4vw, 21px);
+      color: var(--muted);
+      margin-top: 16px;
+    }
+    .hero .rule {
+      width: 80px; height: 3px;
+      background: var(--blue);
+      margin: 22px auto 0;
+    }
+
+    .bigsearch {
+      max-width: 620px;
+      margin: 34px auto 0;
+      display: flex;
+      box-shadow: 0 8px 26px -12px rgba(20,49,90,0.4);
+      border-radius: 6px;
+      overflow: hidden;
+      position: relative;
+    }
+    .bigsearch input {
+      flex: 1;
+      border: 1px solid var(--rule);
+      border-right: none;
+      background: #fff;
+      font-family: var(--serif);
+      font-size: 18px;
+      padding: 16px 20px;
+      outline: none;
+      color: var(--ink);
+    }
+    .bigsearch input:focus { border-color: var(--blue); }
+    .bigsearch button {
+      border: none;
+      background: var(--blue);
+      color: #fff;
+      font-family: var(--sans);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 0 28px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .bigsearch button:hover { background: var(--blue-d); }
+
+    /* autocomplete */
+    .ac {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0; right: 0;
+      background: #fff;
+      border: 1px solid var(--rule);
+      border-radius: 6px;
+      overflow: hidden;
+      z-index: 40;
+      box-shadow: 0 16px 40px -12px rgba(0,0,0,0.3);
+      display: none;
+      text-align: left;
+    }
+    .ac.open { display: block; }
+    .ac-item {
+      padding: 11px 18px;
+      cursor: pointer;
+      border-bottom: 1px solid #f0ece3;
+      font-family: var(--sans);
+      font-size: 14px;
+    }
+    .ac-item:last-child { border-bottom: none; }
+    .ac-item:hover, .ac-item.sel { background: #f3f0e8; }
+    .ac-item .ac-title { color: var(--navy); font-weight: 600; }
+    .ac-item .ac-desc { color: var(--muted2); }
+
+    .quicklinks {
+      margin-top: 22px;
+      font-family: var(--sans);
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .quicklinks a, .quicklinks span.lnk {
+      color: var(--blue); cursor: pointer; margin: 0 4px;
+    }
+    .quicklinks span.lnk:hover { text-decoration: underline; }
+
+    /* ---------------- Section heading ---------------- */
+    .sec-title {
+      font-family: var(--sans);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--blue);
+      border-bottom: 2px solid var(--navy);
+      padding-bottom: 8px;
+      margin: 46px 0 22px;
+    }
+
+    /* ---------------- Browse grid ---------------- */
+    .browse {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1px;
+      background: var(--rule);
+      border: 1px solid var(--rule);
+    }
+    .cat {
+      background: var(--paper);
+      padding: 20px 22px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .cat:hover { background: #faf8f3; }
+    .cat .ic { font-size: 22px; }
+    .cat .nm { font-family: var(--serif); font-size: 20px; color: var(--navy); margin-top: 8px; }
+    .cat .ex { font-family: var(--sans); font-size: 12.5px; color: var(--muted2); margin-top: 4px; }
+
+    /* ---------------- Featured cards ---------------- */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 24px;
+    }
+    .feature {
+      background: var(--paper);
+      border: 1px solid var(--rule);
+      cursor: pointer;
+      transition: box-shadow 0.18s, transform 0.18s;
+      overflow: hidden;
+    }
+    .feature:hover { box-shadow: 0 12px 30px -14px rgba(0,0,0,0.35); transform: translateY(-3px); }
+    .feature .ph {
+      height: 130px; background: #d9e2ea center/cover no-repeat;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 42px; color: #8aa0b4;
+    }
+    .feature .fb { padding: 14px 16px 18px; }
+    .feature .fb h4 { font-family: var(--serif); font-size: 19px; color: var(--navy); font-weight: 600; }
+    .feature .fb p { font-family: var(--sans); font-size: 13px; color: var(--muted); margin-top: 6px; line-height: 1.5; }
+
+    /* ---------------- Search results ---------------- */
+    .results { background: var(--paper); border: 1px solid var(--rule); padding: 8px 30px; }
+    .result {
+      padding: 22px 0;
+      border-bottom: 1px solid var(--rule);
+      cursor: pointer;
+    }
+    .result:last-child { border-bottom: none; }
+    .result h3 { font-family: var(--serif); font-size: 23px; color: var(--blue); font-weight: 600; }
+    .result:hover h3 { text-decoration: underline; }
+    .result p { font-family: var(--sans); font-size: 14.5px; color: var(--muted); margin-top: 6px; }
+    .result p em { color: var(--ink); font-style: normal; font-weight: 600; }
+
+    /* ---------------- Article ---------------- */
+    .crumbs { font-family: var(--sans); font-size: 13px; color: var(--muted2); padding: 22px 0 0; }
+    .crumbs .lnk { color: var(--blue); cursor: pointer; }
+    .crumbs .lnk:hover { text-decoration: underline; }
+
+    .article-wrap {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 40px;
+      align-items: start;
+      margin-top: 16px;
+    }
+    .article {
+      background: var(--paper);
+      border: 1px solid var(--rule);
+      padding: 44px 52px 54px;
+    }
+    .article h2.title {
+      font-family: var(--serif);
+      font-weight: 400;
+      font-size: clamp(32px, 5vw, 46px);
+      color: var(--navy);
+      line-height: 1.1;
+    }
+    .article .subtitle {
+      font-family: var(--sans);
+      font-size: 14px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: var(--blue);
+      margin-top: 10px;
+    }
+    .article .byline {
+      font-family: var(--sans);
+      font-size: 12.5px;
+      color: var(--muted2);
+      margin-top: 14px;
+      padding-bottom: 18px;
+      border-bottom: 2px solid var(--navy);
+    }
+
+    .lead-img {
+      float: right;
+      width: 280px;
+      max-width: 45%;
+      margin: 6px 0 20px 28px;
+      border: 1px solid var(--rule);
+      background: #fff;
+    }
+    .lead-img img { width: 100%; display: block; }
+    .lead-img .cap { font-family: var(--sans); font-size: 11.5px; color: var(--muted); padding: 8px 10px; line-height: 1.4; }
+
+    .article-body { margin-top: 26px; }
+    .article-body p { margin: 0 0 18px; }
+    .article-body .lead-para:first-letter {
+      float: left;
+      font-family: var(--serif);
+      font-size: 64px;
+      line-height: 52px;
+      padding: 4px 10px 0 0;
+      color: var(--navy);
+    }
+    .article-body h2, .article-body h3, .article-body h4 {
+      font-family: var(--serif);
+      color: var(--navy);
+      font-weight: 600;
+      line-height: 1.2;
+      margin: 34px 0 12px;
+      scroll-margin-top: 86px;
+    }
+    .article-body h2 { font-size: 27px; border-bottom: 1px solid var(--rule); padding-bottom: 7px; }
+    .article-body h3 { font-size: 22px; }
+    .article-body h4 { font-size: 18px; }
+    .article-body ul, .article-body ol { margin: 0 0 18px 24px; }
+    .article-body li { margin-bottom: 7px; }
+    .article-body img { max-width: 100%; height: auto; }
+    .article-body figure { margin: 18px 0; }
+    .article-body figcaption { font-family: var(--sans); font-size: 12px; color: var(--muted); margin-top: 4px; }
+    .article-body table { display: none; }
+    .article-body sup { display: none; }
+    .article-body blockquote {
+      border-left: 3px solid var(--blue);
+      padding-left: 18px; margin: 0 0 18px;
+      font-style: italic; color: var(--muted);
+    }
+
+    .article-foot {
+      margin-top: 40px; padding-top: 20px;
+      border-top: 1px solid var(--rule);
+      font-family: var(--sans); font-size: 13px; color: var(--muted2);
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px;
+    }
+
+    /* ---- Right rail ---- */
+    .rail { position: sticky; top: 90px; font-family: var(--sans); }
+    .rail .box {
+      background: var(--paper);
+      border: 1px solid var(--rule);
+      margin-bottom: 22px;
+    }
+    .rail .box h5 {
+      background: var(--navy); color: #fff;
+      font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase;
+      padding: 11px 16px; font-weight: 700;
+    }
+    .toc { list-style: none; padding: 8px 0; }
+    .toc li a { display: block; padding: 7px 18px; font-size: 14px; color: var(--ink); border-left: 3px solid transparent; }
+    .toc li a:hover { background: #f3f0e8; color: var(--blue); text-decoration: none; border-left-color: var(--blue); }
+    .toc li.sub a { padding-left: 32px; font-size: 13px; color: var(--muted); }
+
+    .facts { padding: 6px 0 12px; }
+    .facts .row { padding: 9px 16px; border-bottom: 1px solid #f0ece3; font-size: 13.5px; }
+    .facts .row:last-child { border-bottom: none; }
+    .facts .k { color: var(--muted2); text-transform: uppercase; font-size: 10.5px; letter-spacing: 1px; }
+    .facts .v { color: var(--ink); margin-top: 2px; }
+    .facts img { width: 100%; display: block; border-bottom: 1px solid var(--rule); }
+
+    .back {
+      font-family: var(--sans); font-size: 13px; color: var(--blue);
+      background: none; border: none; cursor: pointer; padding: 0;
+    }
+    .back:hover { text-decoration: underline; }
+
+    /* ---- states ---- */
+    .loader {
+      width: 32px; height: 32px;
+      border: 3px solid var(--rule); border-top-color: var(--blue);
+      border-radius: 50%; animation: spin 0.8s linear infinite;
+      margin: 70px auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .errbox { background: var(--paper); border: 1px solid var(--rule); padding: 40px; text-align: center; font-family: var(--sans); color: #a3402f; margin-top: 26px; }
+
+    footer {
+      text-align: center; padding: 30px 0 0;
+      font-family: var(--sans); font-size: 12px; color: var(--muted2); line-height: 1.7;
+    }
+    footer a { color: var(--blue); }
+
+    @media (max-width: 880px) {
+      .article-wrap { grid-template-columns: 1fr; }
+      .rail { position: static; }
+      .article { padding: 30px 24px 38px; }
+    }
+    @media (max-width: 560px) {
+      .lead-img { float: none; width: 100%; max-width: 100%; margin: 8px 0 18px; }
+      body { font-size: 17px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===================== Masthead ===================== -->
+<header class="masthead">
+  <div class="masthead-inner">
+    <a href="/" class="home-link">&#8592; Arcade</a>
+    <div class="wordmark" id="wordmark" title="Home">
+      <svg class="thistle" width="30" height="30" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M16 2c-2 3-2 5-1 7" stroke="#7fa86b" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M16 9c-3-1-5 0-7-2M16 9c3-1 5 0 7-2" stroke="#7fa86b" stroke-width="1.5" stroke-linecap="round"/>
+        <path d="M11 13c-1-2-3-2-5-1m9 1c-1-3-4-3-6-4m8 4c1-2 3-2 5-1m-7 1c1-3 4-3 6-4" stroke="#9a7bbf" stroke-width="1.4" stroke-linecap="round"/>
+        <ellipse cx="16" cy="15" rx="5" ry="6" fill="#7c5da3"/>
+        <path d="M16 9c-1.5 1.5-1.5 3.5 0 5 1.5-1.5 1.5-3.5 0-5z" fill="#a98fce"/>
+        <path d="M13 21c1 4 5 4 6 0" stroke="#7fa86b" stroke-width="1.5" stroke-linecap="round" fill="none"/>
+        <path d="M16 21v9" stroke="#7fa86b" stroke-width="1.6" stroke-linecap="round"/>
+      </svg>
+      <div class="titles">
+        <div class="t1">ARTGEOrge</div>
+        <div class="t2">Encyclopædia · Est. 2026</div>
+      </div>
+    </div>
+    <div class="mast-search" id="mastSearch">
+      <input id="mq" type="text" placeholder="Search…" autocomplete="off" spellcheck="false" />
+      <div class="ac" id="macAc"></div>
+    </div>
+  </div>
+</header>
+
+<div class="page" id="page">
+  <div id="view"></div>
+
+  <footer>
+    <p>Article text &amp; images are drawn live from <a href="https://www.wikipedia.org" target="_blank" rel="noopener">Wikipedia</a>, the free encyclopedia, under <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener">CC BY-SA</a>.</p>
+    <p>A Britannica-style reader built by <a href="https://github.com/ARTGEOrge">ARTGEOrge</a>. Not affiliated with Encyclopædia Britannica, Inc.</p>
+  </footer>
+</div>
+
+<script>
+/* =================== Wikipedia API =================== */
+const API = 'https://en.wikipedia.org/w/api.php';
+const REST = 'https://en.wikipedia.org/api/rest_v1';
+
+async function jget(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+function apiUrl(params) {
+  return API + '?' + new URLSearchParams({ format: 'json', origin: '*', ...params });
+}
+async function search(query, limit = 20) {
+  const d = await jget(apiUrl({ action: 'query', list: 'search', srsearch: query, srlimit: limit, srprop: 'snippet' }));
+  return d.query.search;
+}
+async function suggest(query) {
+  const d = await jget(apiUrl({ action: 'opensearch', search: query, limit: 8, namespace: 0 }));
+  return d[1].map((title, i) => ({ title, desc: d[2][i] || '' }));
+}
+async function summary(title) {
+  return jget(`${REST}/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`);
+}
+async function fullHtml(title) {
+  const d = await jget(apiUrl({ action: 'parse', page: title, prop: 'text', redirects: 1, disableeditsection: 1, disabletoc: 1 }));
+  return d.parse ? d.parse.text['*'] : '';
+}
+async function randomTitle() {
+  const d = await jget(apiUrl({ action: 'query', list: 'random', rnnamespace: 0, rnlimit: 1 }));
+  return d.query.random[0].title;
+}
+async function onThisDay() {
+  const n = new Date();
+  const mm = String(n.getMonth() + 1).padStart(2, '0'), dd = String(n.getDate()).padStart(2, '0');
+  const d = await jget(`${REST}/feed/onthisday/events/${mm}/${dd}`);
+  return d.events || [];
+}
+
+/* =================== State / helpers =================== */
+const view = document.getElementById('view');
+const mq = document.getElementById('mq');
+const macAc = document.getElementById('macAc');
+const mastSearch = document.getElementById('mastSearch');
+document.getElementById('wordmark').addEventListener('click', renderHome);
+
+function esc(s){ return (s||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function loading(){ view.innerHTML = '<div class="loader"></div>'; }
+function showError(m){ view.innerHTML = `<div class="errbox">${esc(m)}</div>`; }
+function showMastSearch(on){ mastSearch.classList.toggle('show', on); }
+
+/* =================== Home =================== */
+const CATS = [
+  { ic:'🦁', nm:'Animals & Nature', ex:'biology, ecology, wildlife', q:'Lion' },
+  { ic:'🏛️', nm:'World History', ex:'civilizations & events', q:'Ancient Rome' },
+  { ic:'🔬', nm:'Science & Technology', ex:'physics, chemistry, tech', q:'Quantum mechanics' },
+  { ic:'🎨', nm:'Arts & Culture', ex:'painting, music, literature', q:'Renaissance' },
+  { ic:'🌍', nm:'Geography', ex:'countries, mountains, oceans', q:'Mount Everest' },
+  { ic:'⚖️', nm:'Philosophy & Religion', ex:'ideas & belief', q:'Philosophy' },
+  { ic:'🩺', nm:'Health & Medicine', ex:'the human body', q:'Human brain' },
+  { ic:'🚀', nm:'Space & Astronomy', ex:'planets, stars, missions', q:'Solar System' },
+];
+const FEATURED = [
+  { t:'Leonardo da Vinci', ic:'🎨', d:'Italian polymath of the High Renaissance.' },
+  { t:'Black hole', ic:'🕳️', d:'A region of spacetime where gravity is inescapable.' },
+  { t:'Roman Empire', ic:'🏛️', d:'The post-Republican period of ancient Rome.' },
+  { t:'Photosynthesis', ic:'🌿', d:'How plants convert light into chemical energy.' },
+];
+
+function renderHome(){
+  setHash('');
+  showMastSearch(false);
+  view.innerHTML = `
+    <section class="hero">
+      <h1>The Free Encyclopædia</h1>
+      <p class="lede">Trusted knowledge on every subject — from antiquity to the present day.</p>
+      <div class="rule"></div>
+      <div class="bigsearch">
+        <input id="q" type="text" placeholder="Search articles, people, places…" autocomplete="off" spellcheck="false" />
+        <button id="go">Search</button>
+        <div class="ac" id="ac"></div>
+      </div>
+      <div class="quicklinks">
+        <span class="lnk" data-act="random">🎲 Random article</span> ·
+        <span class="lnk" data-act="today">📅 On this day</span>
+      </div>
+    </section>
+
+    <div class="sec-title">Featured articles</div>
+    <div class="feature-grid">
+      ${FEATURED.map(f=>`
+        <div class="feature" data-title="${esc(f.t)}">
+          <div class="ph">${f.ic}</div>
+          <div class="fb"><h4>${esc(f.t)}</h4><p>${esc(f.d)}</p></div>
+        </div>`).join('')}
+    </div>
+
+    <div class="sec-title">Browse by subject</div>
+    <div class="browse">
+      ${CATS.map(c=>`
+        <div class="cat" data-title="${esc(c.q)}">
+          <div class="ic">${c.ic}</div>
+          <div class="nm">${esc(c.nm)}</div>
+          <div class="ex">${esc(c.ex)}</div>
+        </div>`).join('')}
+    </div>`;
+
+  view.querySelectorAll('[data-title]').forEach(el =>
+    el.addEventListener('click', () => openArticle(el.dataset.title)));
+  view.querySelectorAll('.quicklinks .lnk').forEach(el =>
+    el.addEventListener('click', () => el.dataset.act === 'random' ? showRandom() : showOnThisDay()));
+
+  wireSearchBox(document.getElementById('q'), document.getElementById('go'), document.getElementById('ac'));
+  document.getElementById('q').focus();
+}
+
+/* =================== Search results =================== */
+async function runSearch(query){
+  if(!query.trim()){ renderHome(); return; }
+  setHash('search/' + encodeURIComponent(query));
+  showMastSearch(true);
+  loading();
+  try{
+    const res = await search(query);
+    if(!res.length){
+      view.innerHTML = `<div class="errbox">No articles found for “${esc(query)}”. Try different keywords.</div>`;
+      return;
+    }
+    view.innerHTML = `
+      <div class="crumbs"><span class="lnk" id="cb-home">Home</span> › Search</div>
+      <div class="sec-title">${res.length} results for “${esc(query)}”</div>
+      <div class="results">
+        ${res.map(r=>`
+          <div class="result" data-title="${esc(r.title)}">
+            <h3>${esc(r.title)}</h3>
+            <p>${r.snippet}…</p>
+          </div>`).join('')}
+      </div>`;
+    document.getElementById('cb-home').addEventListener('click', renderHome);
+    view.querySelectorAll('.result').forEach(el =>
+      el.addEventListener('click', () => openArticle(el.dataset.title)));
+  }catch(e){ showError('Could not reach Wikipedia. Check your connection and try again.'); }
+}
+
+/* =================== Article =================== */
+async function openArticle(title){
+  setHash('article/' + encodeURIComponent(title));
+  showMastSearch(true);
+  loading();
+  macAc.classList.remove('open');
+  try{
+    const [sum, html] = await Promise.all([
+      summary(title).catch(()=>null),
+      fullHtml(title).catch(()=> '')
+    ]);
+    if(!sum && !html){ throw new Error('not found'); }
+
+    const realTitle = (sum && sum.title) || title;
+    const desc = sum && sum.description ? sum.description : '';
+    const lead = sum && sum.thumbnail ? (sum.originalimage ? sum.originalimage.source : sum.thumbnail.source) : '';
+
+    // build body
+    const bodyHtml = html ? sanitizeArticle(html) : `<p>${esc(sum && sum.extract || '')}</p>`;
+
+    view.innerHTML = `
+      <div class="crumbs"><span class="lnk" id="cb-home">Home</span> › <span id="cb-back" class="lnk">Back</span> › ${esc(realTitle)}</div>
+      <div class="article-wrap">
+        <article class="article">
+          <h2 class="title">${esc(realTitle)}</h2>
+          ${desc ? `<div class="subtitle">${esc(desc)}</div>` : ''}
+          <div class="byline">ARTGEOrge Encyclopædia · Article text from Wikipedia</div>
+          ${lead ? `<figure class="lead-img"><img src="${esc(lead)}" alt="${esc(realTitle)}" loading="lazy"><figcaption class="cap">${esc(realTitle)}</figcaption></figure>` : ''}
+          <div class="article-body" id="abody">${bodyHtml}</div>
+          <div class="article-foot">
+            <span>Last reviewed against Wikipedia’s live edition.</span>
+            <a href="https://en.wikipedia.org/wiki/${encodeURIComponent(realTitle.replace(/ /g,'_'))}" target="_blank" rel="noopener">View source article ↗</a>
+          </div>
+        </article>
+        <aside class="rail" id="rail"></aside>
+      </div>`;
+
+    document.getElementById('cb-home').addEventListener('click', renderHome);
+    document.getElementById('cb-back').addEventListener('click', () => history.back());
+
+    const body = document.getElementById('abody');
+    // drop-cap on first real paragraph
+    const firstP = body.querySelector('p');
+    if (firstP && firstP.textContent.trim().length > 60) firstP.classList.add('lead-para');
+    wireInternalLinks(body);
+    buildRail(body, sum, lead, realTitle);
+    window.scrollTo({ top: 0 });
+  }catch(e){
+    showError(`Couldn’t open “${title}”. It may not be an exact article title — try searching for it instead.`);
+  }
+}
+
+function sanitizeArticle(html){
+  const t = document.createElement('div');
+  t.innerHTML = html;
+  t.querySelectorAll('.mw-editsection, .reference, .reflist, .navbox, .mbox-small, .hatnote, .metadata, .noprint, .mw-empty-elt, style, .infobox, .ambox, .sistersitebox, .portal, #References, .references, .gallery, .thumb.tright table')
+    .forEach(n => n.remove());
+  // strip empty paragraphs
+  t.querySelectorAll('p').forEach(p => { if(!p.textContent.trim()) p.remove(); });
+  return t.innerHTML;
+}
+
+function wireInternalLinks(container){
+  container.querySelectorAll('a').forEach(a => {
+    const href = a.getAttribute('href') || '';
+    if (href.startsWith('/wiki/') && !href.includes(':')) {
+      const t = decodeURIComponent(href.slice(6)).replace(/_/g,' ').split('#')[0];
+      a.addEventListener('click', e => { e.preventDefault(); openArticle(t); });
+      a.removeAttribute('href'); a.style.cursor = 'pointer';
+    } else if (href.startsWith('http')) {
+      a.target = '_blank'; a.rel = 'noopener';
+    } else {
+      a.removeAttribute('href');
+    }
+  });
+}
+
+function buildRail(body, sum, lead, title){
+  const rail = document.getElementById('rail');
+  let html = '';
+
+  // Table of contents from h2/h3
+  const heads = [...body.querySelectorAll('h2, h3')].filter(h => h.textContent.trim());
+  if (heads.length > 2) {
+    let items = '';
+    heads.slice(0, 20).forEach((h, i) => {
+      const id = 'sec-' + i;
+      h.id = id;
+      const sub = h.tagName === 'H3' ? ' class="sub"' : '';
+      items += `<li${sub}><a href="#${id}">${esc(h.textContent.trim())}</a></li>`;
+    });
+    html += `<div class="box"><h5>Table of Contents</h5><ul class="toc">${items}</ul></div>`;
+  }
+
+  // Fast facts
+  let facts = '';
+  if (lead) facts += `<img src="${esc(lead)}" alt="${esc(title)}" loading="lazy">`;
+  facts += `<div class="row"><div class="k">Title</div><div class="v">${esc(title)}</div></div>`;
+  if (sum && sum.description) facts += `<div class="row"><div class="k">In brief</div><div class="v">${esc(sum.description)}</div></div>`;
+  if (sum && sum.coordinates) facts += `<div class="row"><div class="k">Coordinates</div><div class="v">${sum.coordinates.lat.toFixed(3)}, ${sum.coordinates.lon.toFixed(3)}</div></div>`;
+  if (sum && sum.lang) facts += `<div class="row"><div class="k">Language</div><div class="v">${esc(sum.lang.toUpperCase())}</div></div>`;
+  html += `<div class="box"><h5>Fast Facts</h5><div class="facts">${facts}</div></div>`;
+
+  rail.innerHTML = html;
+
+  // smooth-scroll TOC
+  rail.querySelectorAll('.toc a').forEach(a => a.addEventListener('click', e => {
+    e.preventDefault();
+    const el = document.getElementById(a.getAttribute('href').slice(1));
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
+}
+
+/* =================== Random / On this day =================== */
+async function showRandom(){
+  loading();
+  try { openArticle(await randomTitle()); }
+  catch(e){ showError('Could not fetch a random article.'); }
+}
+async function showOnThisDay(){
+  setHash('onthisday'); showMastSearch(true); loading();
+  try{
+    const events = await onThisDay();
+    const today = new Date().toLocaleDateString(undefined, { month:'long', day:'numeric' });
+    const top = events.sort((a,b)=>(b.year||0)-(a.year||0)).slice(0,30);
+    view.innerHTML = `
+      <div class="crumbs"><span class="lnk" id="cb-home">Home</span> › On this day</div>
+      <div class="sec-title">📅 On this day — ${esc(today)}</div>
+      <div class="results">
+        ${top.map(ev=>{
+          const page = (ev.pages && ev.pages[0]) ? ev.pages[0].titles.normalized : null;
+          return `<div class="result" ${page?`data-title="${esc(page)}"`:''}>
+            <h3>${ev.year||''}</h3><p>${esc(ev.text)}</p></div>`;
+        }).join('')}
+      </div>`;
+    document.getElementById('cb-home').addEventListener('click', renderHome);
+    view.querySelectorAll('.result[data-title]').forEach(el =>
+      el.addEventListener('click', () => openArticle(el.dataset.title)));
+  }catch(e){ showError('Could not load “On this day”.'); }
+}
+
+/* =================== Search box wiring (shared) =================== */
+function wireSearchBox(input, button, dropdown){
+  if (!input) return;
+  let items = [], sel = -1, timer = null;
+
+  if (button) button.addEventListener('click', () => { dropdown.classList.remove('open'); runSearch(input.value); });
+
+  input.addEventListener('input', () => {
+    const v = input.value.trim();
+    clearTimeout(timer);
+    if (v.length < 2) { dropdown.classList.remove('open'); return; }
+    timer = setTimeout(async () => {
+      try {
+        items = await suggest(v);
+        if (!items.length) { dropdown.classList.remove('open'); return; }
+        sel = -1;
+        dropdown.innerHTML = items.map((it,i)=>`
+          <div class="ac-item" data-i="${i}">
+            <span class="ac-title">${esc(it.title)}</span>
+            ${it.desc?` <span class="ac-desc">— ${esc(it.desc)}</span>`:''}
+          </div>`).join('');
+        dropdown.classList.add('open');
+        dropdown.querySelectorAll('.ac-item').forEach(el =>
+          el.addEventListener('click', () => { dropdown.classList.remove('open'); openArticle(items[+el.dataset.i].title); }));
+      } catch(e){ dropdown.classList.remove('open'); }
+    }, 180);
+  });
+
+  input.addEventListener('keydown', e => {
+    const open = dropdown.classList.contains('open');
+    if (e.key === 'ArrowDown' && open) { e.preventDefault(); sel = Math.min(sel+1, items.length-1); paint(); }
+    else if (e.key === 'ArrowUp' && open) { e.preventDefault(); sel = Math.max(sel-1, 0); paint(); }
+    else if (e.key === 'Enter') {
+      if (open && sel >= 0) { dropdown.classList.remove('open'); openArticle(items[sel].title); }
+      else { dropdown.classList.remove('open'); runSearch(input.value); }
+    } else if (e.key === 'Escape') dropdown.classList.remove('open');
+  });
+
+  function paint(){ dropdown.querySelectorAll('.ac-item').forEach((el,i)=>el.classList.toggle('sel', i===sel)); }
+}
+wireSearchBox(mq, null, macAc);
+document.addEventListener('click', e => { if (!e.target.closest('.mast-search') && !e.target.closest('.bigsearch')) { macAc.classList.remove('open'); } });
+
+/* =================== Routing =================== */
+function setHash(h){ if (('#'+h) !== location.hash) history.pushState(null,'','#'+h); }
+function route(){
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (h.startsWith('article/')) openArticle(decodeURIComponent(h.slice(8)));
+  else if (h.startsWith('search/')) { const q = decodeURIComponent(h.slice(7)); mq.value = q; runSearch(q); }
+  else if (h === 'onthisday') showOnThisDay();
+  else renderHome();
+}
+window.addEventListener('popstate', route);
+if (location.hash.length > 1) route(); else renderHome();
+</script>
+</body>
+</html>
