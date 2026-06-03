@@ -190,7 +190,7 @@
     #model-select:hover { border-color: var(--hawks-green); box-shadow: 0 0 0 3px rgba(105, 190, 40, 0.18); }
     #model-select:focus { border-color: var(--hawks-green-bright); box-shadow: 0 0 0 3px rgba(105, 190, 40, 0.3); }
 
-    #reset-btn {
+    .btn {
       background: rgba(105, 190, 40, 0.12);
       border: 1px solid var(--border-strong);
       color: var(--hawks-green-bright);
@@ -203,14 +203,14 @@
       transition: all 0.2s;
       letter-spacing: 0.2px;
     }
-    #reset-btn:hover {
+    .btn:hover:not(:disabled) {
       background: var(--hawks-green);
       color: var(--hawks-navy);
       border-color: transparent;
       box-shadow: 0 0 24px rgba(105, 190, 40, 0.6);
       transform: translateY(-1px);
     }
-    #reset-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
 
     #progress-bar {
       width: 100%; height: 3px;
@@ -294,12 +294,13 @@
     .message.assistant .avatar { background: var(--asst-grad); border: 1px solid var(--hawks-green); }
     .message.system .avatar { background: linear-gradient(135deg, var(--hawks-navy), var(--hawks-green)); }
 
+    .col { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
     .bubble {
       padding: 13px 17px;
       border-radius: 18px;
       line-height: 1.62;
       font-size: 0.96rem;
-      white-space: pre-wrap;
       word-break: break-word;
       position: relative;
     }
@@ -308,6 +309,7 @@
       color: white;
       border-bottom-right-radius: 6px;
       box-shadow: 0 8px 30px -10px rgba(105, 190, 40, 0.65), 0 0 0 1px rgba(255,255,255,0.06) inset;
+      white-space: pre-wrap;
     }
     .message.assistant .bubble {
       background: rgba(0, 22, 44, 0.7);
@@ -331,6 +333,73 @@
       font-size: 0.86rem;
     }
 
+    /* Markdown rendering inside assistant bubbles */
+    .bubble p { margin: 0 0 0.7em; }
+    .bubble p:last-child { margin-bottom: 0; }
+    .bubble h1, .bubble h2, .bubble h3 {
+      font-family: 'Space Grotesk', system-ui;
+      margin: 0.6em 0 0.4em;
+      line-height: 1.25;
+    }
+    .bubble h1 { font-size: 1.3rem; }
+    .bubble h2 { font-size: 1.15rem; }
+    .bubble h3 { font-size: 1.02rem; }
+    .bubble ul, .bubble ol { margin: 0.3em 0 0.7em; padding-left: 1.4em; }
+    .bubble li { margin: 0.2em 0; }
+    .bubble a { color: var(--hawks-green-bright); text-decoration: underline; }
+    .bubble strong { color: #fff; font-weight: 600; }
+    .bubble code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.86em;
+      background: rgba(105, 190, 40, 0.14);
+      border: 1px solid rgba(105, 190, 40, 0.2);
+      padding: 0.08em 0.4em;
+      border-radius: 6px;
+    }
+    .bubble pre {
+      background: rgba(0, 8, 18, 0.85);
+      border: 1px solid rgba(105, 190, 40, 0.28);
+      border-radius: 12px;
+      padding: 13px 15px;
+      overflow-x: auto;
+      margin: 0.5em 0 0.8em;
+      position: relative;
+    }
+    .bubble pre code {
+      background: none; border: none; padding: 0;
+      font-size: 0.85rem; line-height: 1.55; color: #d9f5c4;
+    }
+    .bubble pre .copy-code {
+      position: absolute; top: 7px; right: 7px;
+      font-size: 0.66rem; padding: 3px 8px;
+      background: rgba(105, 190, 40, 0.15);
+      border: 1px solid var(--border);
+      color: var(--hawks-green-bright);
+      border-radius: 7px; cursor: pointer; opacity: 0; transition: opacity 0.2s;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .bubble pre:hover .copy-code { opacity: 1; }
+    .bubble blockquote {
+      border-left: 3px solid var(--hawks-green);
+      margin: 0.5em 0; padding: 0.2em 0 0.2em 0.9em;
+      color: var(--text-secondary);
+    }
+    .bubble hr { border: none; border-top: 1px solid var(--border); margin: 0.8em 0; }
+    .bubble table { border-collapse: collapse; margin: 0.5em 0; font-size: 0.88rem; }
+    .bubble th, .bubble td { border: 1px solid var(--border); padding: 5px 10px; }
+    .bubble th { background: rgba(105, 190, 40, 0.12); }
+
+    .msg-actions { display: flex; gap: 8px; align-items: center; padding-left: 4px; }
+    .message.user .msg-actions { justify-content: flex-end; }
+    .msg-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--text-tertiary); font-size: 0.72rem;
+      font-family: 'JetBrains Mono', monospace;
+      padding: 2px 4px; transition: color 0.15s;
+    }
+    .msg-btn:hover { color: var(--hawks-green-bright); }
+    .msg-time { font-size: 0.68rem; color: var(--text-tertiary); font-family: 'JetBrains Mono', monospace; }
+
     .typing-indicator { display: flex; gap: 5px; align-items: center; padding: 4px 0; }
     .typing-indicator span {
       display: inline-block;
@@ -344,6 +413,22 @@
     @keyframes typingBounce {
       0%, 65%, 100% { transform: translateY(0) scale(0.85); opacity: 0.5; }
       30%           { transform: translateY(-9px) scale(1); opacity: 1; }
+    }
+
+    .suggestions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 18px; }
+    .chip {
+      background: rgba(105, 190, 40, 0.1);
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      padding: 8px 14px; border-radius: 999px;
+      font-size: 0.82rem; cursor: pointer;
+      transition: all 0.2s; font-family: inherit;
+    }
+    .chip:hover {
+      border-color: var(--hawks-green);
+      color: var(--hawks-green-bright);
+      box-shadow: 0 0 18px -6px rgba(105, 190, 40, 0.6);
+      transform: translateY(-1px);
     }
 
     #input-area {
@@ -414,13 +499,18 @@
     }
     #send-btn svg { width: 22px; height: 22px; fill: white; transition: transform 0.2s; }
     #send-btn:hover:not(:disabled) svg { transform: translate(3px, -3px); }
+    #send-btn.stop { background: #7f1d1d; animation: none; }
+    #send-btn.stop svg { fill: #fecaca; }
+    .stop-icon { display: none; }
+    #send-btn.stop .send-icon { display: none; }
+    #send-btn.stop .stop-icon { display: block; }
 
     .welcome {
       text-align: center;
       color: var(--text-tertiary);
       margin: auto;
       padding: 24px 28px;
-      max-width: 620px;
+      max-width: 640px;
     }
     .welcome h2 {
       font-family: 'Space Grotesk', system-ui;
@@ -455,29 +545,35 @@
 <div class="scanlines"></div>
 <div id="app">
   <header>
-    <h1>Chat Bot AI <span style="font-size:0.6em;color:#a5acaf;font-weight:500;font-family:'JetBrains Mono',monospace;">v13 · hawks</span></h1>
+    <h1>Chat Bot AI <span style="font-size:0.6em;color:#a5acaf;font-weight:500;font-family:'JetBrains Mono',monospace;">v15 · encyclopædia</span></h1>
     <div class="meta">
       <select id="model-select" title="Choose model">
-        <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (fastest)</option>
-        <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen 2.5 1.5B (fast)</option>
-        <option value="gemma-2-2b-it-q4f16_1-MLC">Gemma 2 2B</option>
+        <option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B (smart, default)</option>
+        <option value="Qwen2.5-3B-Instruct-q4f16_1-MLC">Qwen 2.5 3B (great coder)</option>
+        <option value="Hermes-3-Llama-3.2-3B-q4f16_1-MLC">Hermes 3 (3B)</option>
         <option value="Phi-3.5-mini-instruct-q4f16_1-MLC">Phi 3.5 Mini</option>
-        <option value="Llama-3.2-3B-Instruct-q4f16_1-MLC">Llama 3.2 3B (smarter, slower)</option>
-        <option value="Hermes-3-Llama-3.2-3B-q4f16_1-MLC">Hermes 3 (3B, slower)</option>
+        <option value="gemma-2-2b-it-q4f16_1-MLC">Gemma 2 2B</option>
+        <option value="Qwen2.5-1.5B-Instruct-q4f16_1-MLC">Qwen 2.5 1.5B (fast)</option>
+        <option value="Llama-3.2-1B-Instruct-q4f16_1-MLC">Llama 3.2 1B (fastest)</option>
       </select>
       <span id="status-label">initializing…</span>
     </div>
-    <button id="reset-btn" disabled>New Chat</button>
+    <button id="reset-btn" class="btn" disabled>New Chat</button>
   </header>
 
   <div id="progress-bar"><div id="progress-fill"></div></div>
 
   <div id="chat-window">
     <div class="welcome" id="welcome-msg">
-      <h2>Modern AI, running in your browser</h2>
-      <p>This page loads an open-source LLM directly into your browser using WebGPU — no server, no API key, your messages never leave your device.</p>
-      <p class="hint">The first message will trigger a one-time model download (a few hundred MB). It's cached after that.</p>
-      <p class="hint">Live headlines from WSJ, FT, BBC, and CNN + a Wikipedia lookup are pulled in for every question — so it can answer about specific people, events, and elections, not just recent news.</p>
+      <h2>Powered by your Encyclopædia</h2>
+      <p>A full open-source language model loads directly into your browser with WebGPU — no server, no API key, and your messages never leave your device. It writes Markdown and code and remembers your conversation between visits. For any factual question it answers <strong>only from your <a href="/encyclopedia/" style="color:var(--hawks-green-bright)">ARTGEOrge Encyclopædia</a></strong> — the same free, Wikipedia-backed source — and links the exact article it used.</p>
+      <p class="hint">The first message triggers a one-time model download (a few hundred MB), cached afterwards.</p>
+      <div class="suggestions" id="suggestions">
+        <button class="chip">Tell me about the Roman Empire</button>
+        <button class="chip">Write a Python function to reverse a linked list</button>
+        <button class="chip">Who is the current US president?</button>
+        <button class="chip">How does photosynthesis work?</button>
+      </div>
     </div>
   </div>
 
@@ -489,7 +585,8 @@
       disabled
     ></textarea>
     <button id="send-btn" disabled title="Send">
-      <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+      <svg class="send-icon" viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+      <svg class="stop-icon" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
     </button>
   </div>
 </div>
@@ -508,10 +605,14 @@
 
   let engine = null;
   let isGenerating = false;
+  let abortGeneration = false;
+
+  // ---- Persistence -------------------------------------------------------
+  const HISTORY_KEY = 'chatbot-ai-history-v1';
+  const MODEL_KEY = 'chatbot-ai-model-v1';
 
   function buildSystemPrompt() {
     const now = new Date();
-    const iso = now.toISOString().slice(0, 16).replace('T', ' ');
     const dateStr = now.toLocaleDateString('en-US', {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
     });
@@ -522,28 +623,46 @@
 
     return [
       `Today: ${dateStr} (year ${year}, ${timeStr} ${tz}). Browser language: ${lang}.`,
-      'You are Chat Bot AI on artgeorge.github.io (WebLLM + WebGPU). Messages never leave the device.',
+      'You are the ARTGEOrge Encyclopædia Assistant on artgeorge.github.io. You run fully in the browser via WebLLM + WebGPU, so messages never leave the device.',
+      '',
+      'YOUR SINGLE SOURCE OF TRUTH:',
+      'All factual information you provide MUST come from the ARTGEOrge Encyclopædia. When entries are relevant, they are supplied below the conversation under "ENCYCLOPÆDIA ENTRIES". Treat them as authoritative — above your own training memory.',
       '',
       'RULES:',
-      '1. Answer with multiple full sentences. NEVER reply with just a label like "Wikipedia: <topic>" — that is wrong.',
-      '2. NEVER refuse with "I can\'t provide" / "I don\'t have access". Always give a best-effort answer.',
-      '3. Defer to provided Wikipedia/news content over your stale training memory.',
+      '1. Base every factual claim (people, places, events, science, history, definitions, etc.) on the ENCYCLOPÆDIA ENTRIES provided. Synthesize and explain in your own words — never just echo a title.',
+      '2. If no entry is provided for a factual question, reply that the encyclopedia has no article on that topic yet and suggest a related search. Do NOT invent facts from memory.',
+      '3. You may still freely help with coding, math, writing, translation, and reasoning tasks that do not depend on outside facts.',
+      '4. When you used an entry, cite it at the end as a Markdown link, e.g. "Source: [Title](/encyclopedia/#article/Title)".',
+      '5. Answer in well-structured Markdown (headings, bullet lists, **bold**, fenced code blocks). Never refuse with "I can\'t" — give a best-effort answer within these rules.',
       '',
-      'EXAMPLE — User: "Who is Elon Musk?"',
-      'Bad: "Wikipedia — Elon Musk"',
-      'Good: "Elon Musk is a South African-born entrepreneur (b. 1971), co-founder of PayPal, founder of SpaceX, CEO of Tesla, and owner of X (formerly Twitter) and xAI — one of the wealthiest people in the world."',
-      '',
-      'VERIFIED FACTS (override conflicting memory):',
-      '- Donald Trump (R) won the 2024 US presidential election, defeating Kamala Harris (D). Inaugurated 47th President on Jan 20, 2025. VP: JD Vance.',
-      '',
-      'Style: friendly, accurate, thorough. Markdown OK. Match user language.'
+      'Style: friendly, accurate, concise but complete. Match the user\'s language.'
     ].join('\n');
   }
 
-  let history = [
-    { role: 'system', content: buildSystemPrompt() }
-  ];
+  // history holds the running conversation (system message rebuilt each send)
+  let history = loadHistory();
 
+  function loadHistory() {
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (Array.isArray(saved) && saved.length) {
+          return [{ role: 'system', content: buildSystemPrompt() }, ...saved.filter(m => m.role !== 'system')];
+        }
+      }
+    } catch {}
+    return [{ role: 'system', content: buildSystemPrompt() }];
+  }
+
+  function saveHistory() {
+    try {
+      const turns = history.filter(m => m.role !== 'system');
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(turns.slice(-40)));
+    } catch {}
+  }
+
+  // ---- Minimal, safe Markdown renderer -----------------------------------
   function escapeHtml(text) {
     return text
       .replace(/&/g, '&amp;')
@@ -552,9 +671,87 @@
       .replace(/"/g, '&quot;');
   }
 
+  function renderMarkdown(src) {
+    const codeBlocks = [];
+    // Fenced code blocks
+    src = src.replace(/```(\w*)\n?([\s\S]*?)```/g, (m, lang, code) => {
+      const i = codeBlocks.length;
+      codeBlocks.push(`<pre><button class="copy-code">copy</button><code>${escapeHtml(code.replace(/\n$/, ''))}</code></pre>`);
+      return `CODE${i}`;
+    });
+
+    let html = escapeHtml(src);
+
+    // Inline code
+    const inlineCodes = [];
+    html = html.replace(/`([^`\n]+)`/g, (m, c) => {
+      const i = inlineCodes.length;
+      inlineCodes.push(`<code>${c}</code>`);
+      return `IC${i}`;
+    });
+
+    // Headings
+    html = html.replace(/^######\s+(.*)$/gm, '<h3>$1</h3>')
+               .replace(/^#####\s+(.*)$/gm, '<h3>$1</h3>')
+               .replace(/^####\s+(.*)$/gm, '<h3>$1</h3>')
+               .replace(/^###\s+(.*)$/gm, '<h3>$1</h3>')
+               .replace(/^##\s+(.*)$/gm, '<h2>$1</h2>')
+               .replace(/^#\s+(.*)$/gm, '<h1>$1</h1>');
+
+    // Blockquotes
+    html = html.replace(/^&gt;\s?(.*)$/gm, '<blockquote>$1</blockquote>');
+    // Horizontal rule
+    html = html.replace(/^\s*(?:---|\*\*\*|___)\s*$/gm, '<hr>');
+
+    // Bold / italic / strikethrough / links
+    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+               .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<em>$2</em>')
+               .replace(/~~([^~]+)~~/g, '<del>$1</del>')
+               .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+
+    // Lists (group consecutive bullet / numbered lines)
+    const lines = html.split('\n');
+    const out = [];
+    let listType = null;
+    const flush = () => { if (listType) { out.push(`</${listType}>`); listType = null; } };
+    for (const line of lines) {
+      const ul = line.match(/^\s*[-*+]\s+(.*)$/);
+      const ol = line.match(/^\s*\d+\.\s+(.*)$/);
+      if (ul) {
+        if (listType !== 'ul') { flush(); out.push('<ul>'); listType = 'ul'; }
+        out.push(`<li>${ul[1]}</li>`);
+      } else if (ol) {
+        if (listType !== 'ol') { flush(); out.push('<ol>'); listType = 'ol'; }
+        out.push(`<li>${ol[1]}</li>`);
+      } else {
+        flush();
+        out.push(line);
+      }
+    }
+    flush();
+    html = out.join('\n');
+
+    // Paragraphs from blank-line separated blocks (skip block-level tags)
+    html = html.split(/\n{2,}/).map(block => {
+      const t = block.trim();
+      if (!t) return '';
+      if (/^<(h\d|ul|ol|li|pre|blockquote|hr|table)/.test(t) || t.startsWith('CODE')) return t;
+      return `<p>${t.replace(/\n/g, '<br>')}</p>`;
+    }).join('\n');
+
+    // Restore code
+    html = html.replace(/IC(\d+)/g, (m, i) => inlineCodes[+i]);
+    html = html.replace(/CODE(\d+)/g, (m, i) => codeBlocks[+i]);
+    return html;
+  }
+
   function clearWelcome() {
     const w = document.getElementById('welcome-msg');
     if (w) w.remove();
+  }
+
+  function timeNow() {
+    return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
   }
 
   function appendMessage(role, content, opts = {}) {
@@ -563,13 +760,53 @@
     div.className = `message ${role}`;
     const avatar = role === 'user' ? '🧑' : (role === 'system' ? 'ℹ️' : '✨');
     const bubbleClass = opts.error ? 'error' : (role === 'system' ? 'info' : '');
-    div.innerHTML = `
-      <div class="avatar">${avatar}</div>
-      <div class="bubble ${bubbleClass}">${escapeHtml(content)}</div>
-    `;
+
+    const col = document.createElement('div');
+    col.className = 'col';
+    const bubble = document.createElement('div');
+    bubble.className = `bubble ${bubbleClass}`;
+    if (role === 'assistant' && !opts.error) bubble.innerHTML = renderMarkdown(content);
+    else bubble.textContent = content;
+    col.appendChild(bubble);
+
+    if (role !== 'system') {
+      const actions = document.createElement('div');
+      actions.className = 'msg-actions';
+      const time = document.createElement('span');
+      time.className = 'msg-time';
+      time.textContent = timeNow();
+      const copyBtn = document.createElement('button');
+      copyBtn.className = 'msg-btn';
+      copyBtn.textContent = 'copy';
+      copyBtn.addEventListener('click', () => {
+        navigator.clipboard.writeText(bubble._raw ?? bubble.textContent);
+        copyBtn.textContent = 'copied!';
+        setTimeout(() => copyBtn.textContent = 'copy', 1200);
+      });
+      actions.append(time, copyBtn);
+      col.appendChild(actions);
+    }
+
+    const av = document.createElement('div');
+    av.className = 'avatar';
+    av.textContent = avatar;
+    div.append(av, col);
     chatWindow.appendChild(div);
     chatWindow.scrollTop = chatWindow.scrollHeight;
-    return div.querySelector('.bubble');
+    bindCopyButtons(bubble);
+    bubble._raw = content;
+    return bubble;
+  }
+
+  function bindCopyButtons(scope) {
+    scope.querySelectorAll('.copy-code').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const code = btn.parentElement.querySelector('code');
+        navigator.clipboard.writeText(code.textContent);
+        btn.textContent = 'copied!';
+        setTimeout(() => btn.textContent = 'copy', 1200);
+      });
+    });
   }
 
   function showTyping() {
@@ -592,256 +829,146 @@
     if (t) t.remove();
   }
 
-  // === Live news (WSJ + FT + BBC + CNN RSS via CORS proxy) ===
-  const NEWS_FEEDS = [
-    // Wall Street Journal
-    { name: 'World', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSWorldNews.xml' },
-    { name: 'US Business', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/WSJcomUSBusiness.xml' },
-    { name: 'Markets', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml' },
-    { name: 'Tech', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSWSJD.xml' },
-    { name: 'Opinion', publisher: 'WSJ', url: 'https://feeds.a.dj.com/rss/RSSOpinion.xml' },
-    // Financial Times
-    { name: 'Home', publisher: 'FT', url: 'https://www.ft.com/?format=rss' },
-    { name: 'World', publisher: 'FT', url: 'https://www.ft.com/world?format=rss' },
-    { name: 'Companies', publisher: 'FT', url: 'https://www.ft.com/companies?format=rss' },
-    { name: 'Markets', publisher: 'FT', url: 'https://www.ft.com/markets?format=rss' },
-    // BBC
-    { name: 'Top', publisher: 'BBC', url: 'https://feeds.bbci.co.uk/news/rss.xml' },
-    { name: 'World', publisher: 'BBC', url: 'https://feeds.bbci.co.uk/news/world/rss.xml' },
-    { name: 'Business', publisher: 'BBC', url: 'https://feeds.bbci.co.uk/news/business/rss.xml' },
-    { name: 'Politics', publisher: 'BBC', url: 'https://feeds.bbci.co.uk/news/politics/rss.xml' },
-    { name: 'Tech', publisher: 'BBC', url: 'https://feeds.bbci.co.uk/news/technology/rss.xml' },
-    // CNN
-    { name: 'Top', publisher: 'CNN', url: 'http://rss.cnn.com/rss/cnn_topstories.rss' },
-    { name: 'World', publisher: 'CNN', url: 'http://rss.cnn.com/rss/edition_world.rss' },
-    { name: 'US', publisher: 'CNN', url: 'http://rss.cnn.com/rss/edition_us.rss' },
-    { name: 'Tech', publisher: 'CNN', url: 'http://rss.cnn.com/rss/edition_technology.rss' },
-    { name: 'Business', publisher: 'CNN', url: 'http://rss.cnn.com/rss/money_news_international.rss' }
-  ];
-  const NEWS_CACHE_KEY = 'news-headlines-v2';
-  const NEWS_CACHE_TTL_MS = 10 * 60 * 1000;
-  const CORS_PROXIES = [
-    u => `https://corsproxy.io/?${encodeURIComponent(u)}`,
-    u => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
-    u => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`
-  ];
-  let wsjHeadlines = [];
-
+  // ---- Status line -------------------------------------------------------
   let modelStatusText = 'initializing…';
-  let newsState = 'idle';
+  let encyState = 'idle';
 
-  function setStatus(text) {
-    modelStatusText = text;
-    renderStatus();
-  }
-
-  function setNewsState(state) {
-    newsState = state;
-    renderStatus();
-  }
+  function setStatus(text) { modelStatusText = text; renderStatus(); }
+  function setEncyState(state) { encyState = state; renderStatus(); }
 
   function renderStatus() {
     const parts = [modelStatusText];
-    if (newsState === 'loading') parts.push('loading news…');
-    else if (newsState === 'ok') parts.push(`news ✓ (${wsjHeadlines.length})`);
-    else if (newsState === 'error') parts.push('news ✕');
+    if (encyState === 'looking') parts.push('searching encyclopædia…');
     statusLabel.textContent = parts.join(' · ');
   }
 
-  async function fetchViaProxy(url) {
-    let lastErr;
-    for (const wrap of CORS_PROXIES) {
-      try {
-        const res = await fetch(wrap(url));
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const text = await res.text();
-        if (text.length < 200) throw new Error('response too short');
-        return text;
-      } catch (err) {
-        lastErr = err;
-      }
-    }
-    throw lastErr;
+  // === ARTGEOrge Encyclopædia lookup =====================================
+  // The chat bot draws ALL of its factual knowledge from the encyclopedia at
+  // /encyclopedia/ — the same free, CORS-enabled Wikipedia-backed source the
+  // reader uses. Retrieved entries are injected as the model's source of truth.
+  const ENCY_API = 'https://en.wikipedia.org';
+  const ENCY_LINK = (title) => `/encyclopedia/#article/${encodeURIComponent(title)}`;
+
+  const TRIVIAL_QUERY = /^(hi|hey|hello|yo|sup|thanks|thank\s*you|ok|okay|cool|nice|wow|lol|haha|yes|no|nope|yep|yeah|good|great|bad|sure|maybe|please|continue|more|go on)[\s.!?]*$/i;
+
+  const LEAD_FILLER = /^(who|what|whats|when|where|why|how|which|whose|is|are|am|was|were|be|been|do|does|did|can|could|will|would|should|shall|may|might|the|a|an|of|to|in|on|for|about|please|explain|define|describe|tell|me|give|list|show|find|look|up|search|i|want|need|know|you)\b[\s,]*/i;
+  const TRAIL_FILLER = /[\s,]*\b(work|works|working|happen|happens|happened|mean|means|about|exactly|really|actually|today|now)$/i;
+
+  // Reduce a natural-language question to its core topic phrase.
+  function extractQuery(message) {
+    let s = message.replace(/[?.!,;:]+$/g, '').trim();
+    let prev;
+    do { prev = s; s = s.replace(LEAD_FILLER, ''); } while (s !== prev && s.length);
+    return s.trim().slice(0, 200);
+  }
+  function stripTrailing(s) {
+    let prev;
+    do { prev = s; s = s.replace(TRAIL_FILLER, '').trim(); } while (s !== prev && s.length);
+    return s;
   }
 
-  function parseRSS(xml, feed) {
-    try {
-      const doc = new DOMParser().parseFromString(xml, 'text/xml');
-      if (doc.querySelector('parsererror')) return [];
-      return Array.from(doc.querySelectorAll('item')).map(item => ({
-        title: (item.querySelector('title')?.textContent || '').trim(),
-        summary: (item.querySelector('description')?.textContent || '').replace(/<[^>]+>/g, '').trim(),
-        pubDate: item.querySelector('pubDate')?.textContent || '',
-        link: item.querySelector('link')?.textContent || '',
-        category: feed.name,
-        publisher: feed.publisher
-      })).filter(i => i.title);
-    } catch (err) {
-      return [];
-    }
-  }
-
-  function loadCachedNews() {
-    try {
-      const raw = localStorage.getItem(NEWS_CACHE_KEY);
-      if (!raw) return null;
-      const { ts, headlines } = JSON.parse(raw);
-      if (!headlines || !headlines.length) return null;
-      if (Date.now() - ts > NEWS_CACHE_TTL_MS) return null;
-      return headlines;
-    } catch { return null; }
-  }
-
-  function saveCachedNews(headlines) {
-    try {
-      localStorage.setItem(NEWS_CACHE_KEY, JSON.stringify({ ts: Date.now(), headlines }));
-    } catch {}
-  }
-
-  async function loadNews(force = false) {
-    if (!force) {
-      const cached = loadCachedNews();
-      if (cached) {
-        wsjHeadlines = cached;
-        setNewsState('ok');
-        return;
-      }
-    }
-    setNewsState('loading');
-    try {
-      const results = await Promise.allSettled(
-        NEWS_FEEDS.map(async f => parseRSS(await fetchViaProxy(f.url), f))
-      );
-      const all = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
-      if (!all.length) throw new Error('all feeds failed');
-      wsjHeadlines = all.sort((a, b) =>
-        new Date(b.pubDate || 0) - new Date(a.pubDate || 0)
-      );
-      saveCachedNews(wsjHeadlines);
-      setNewsState('ok');
-    } catch (err) {
-      console.warn('news fetch failed', err);
-      setNewsState('error');
-    }
-  }
-
-  const STOPWORDS = new Set(['the','and','for','what','where','when','how','about','tell','give','from','this','that','with','are','will','would','could','should','have','has','was','were','any','more','than','some','news','latest','article','say','said','today','yesterday','please','can','you','your','their','they','his','her','its','our','out','was','off','also','just','only','very','here','there']);
-
-  function findRelevantHeadlines(query, limit = 10) {
-    if (!wsjHeadlines.length) return [];
-    const words = (query.toLowerCase().match(/[a-z][a-z0-9]{2,}/g) || []).filter(w => !STOPWORDS.has(w));
-    if (!words.length) return wsjHeadlines.slice(0, 8);
-    const scored = wsjHeadlines.map(h => {
-      const title = h.title.toLowerCase();
-      const text = title + ' ' + h.summary.toLowerCase();
-      let score = 0;
-      for (const w of words) {
-        if (title.includes(w)) score += 2;
-        else if (text.includes(w)) score += 1;
-      }
-      return { h, score };
-    });
-    const matches = scored.filter(s => s.score > 0).sort((a, b) => b.score - a.score).map(s => s.h);
-    if (matches.length >= limit) return matches.slice(0, limit);
-    const seen = new Set(matches.map(m => m.link));
-    for (const recent of wsjHeadlines) {
-      if (matches.length >= limit) break;
-      if (!seen.has(recent.link)) matches.push(recent);
-    }
-    return matches.slice(0, limit);
-  }
-
-  const PUBLISHER_LONG = { WSJ: 'Wall Street Journal', FT: 'Financial Times', BBC: 'BBC', CNN: 'CNN' };
-
-  // === Wikipedia lookup (free, CORS-enabled, no auth) ===
-  function extractWikiQuery(message) {
-    return message
-      .replace(/^(who|what|when|where|why|how|did|does|do|was|were|is|are|can|could|will|would|should|please|tell\s+me\s+about|tell\s+me|give\s+me|find|look\s+up|search\s+for|i\s+want\s+to\s+know|do\s+you\s+know)\s+/gi, '')
-      .replace(/[?.!,;:]+$/g, '')
-      .trim()
-      .slice(0, 200);
-  }
-
-  function generateWikiQueries(message) {
+  function generateQueries(message) {
     const queries = [];
-    const cleaned = extractWikiQuery(message);
+    const cleaned = extractQuery(message);
     if (cleaned) queries.push(cleaned);
+    const core = stripTrailing(cleaned);
+    if (core && core.toLowerCase() !== cleaned.toLowerCase()) queries.push(core);
     const yearMatch = cleaned.match(/\b(19|20)\d{2}\b/);
     if (yearMatch) {
       const year = yearMatch[0];
       const withoutYear = cleaned.replace(new RegExp(`\\b${year}\\b`, 'g'), '').replace(/\s+/g, ' ').trim();
-      if (withoutYear) {
-        queries.push(`${year} ${withoutYear}`);
-        queries.push(withoutYear);
-      }
+      if (withoutYear) { queries.push(`${year} ${withoutYear}`); queries.push(withoutYear); }
     }
     const seen = new Set();
     return queries.filter(q => q && q.length >= 3 && !seen.has(q.toLowerCase()) && seen.add(q.toLowerCase()));
   }
 
-  async function fetchWikipediaArticle(query) {
-    if (!query || query.length < 3) return null;
+  // Pull a rich plain-text lead section for an article title.
+  async function fetchExtract(title) {
     try {
-      const searchUrl = `https://en.wikipedia.org/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=5&namespace=0&format=json&origin=*`;
-      const sres = await fetch(searchUrl);
-      if (!sres.ok) return null;
-      const data = await sres.json();
-      const titles = data[1] || [];
-      for (const title of titles) {
-        try {
-          const summaryUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`;
-          const res = await fetch(summaryUrl);
-          if (!res.ok) continue;
-          const summary = await res.json();
-          if (summary.type === 'disambiguation') continue;
-          if (!summary.extract || summary.extract.length < 50) continue;
-          return {
-            title: summary.title,
-            extract: summary.extract,
-            url: summary.content_urls?.desktop?.page || ''
-          };
-        } catch {}
+      const url = `${ENCY_API}/w/api.php?action=query&prop=extracts&explaintext=1&exintro=1&redirects=1&format=json&origin=*&titles=${encodeURIComponent(title)}`;
+      const res = await fetch(url);
+      if (!res.ok) return '';
+      const data = await res.json();
+      const page = Object.values(data?.query?.pages || {})[0];
+      return (page && page.extract) ? page.extract.trim() : '';
+    } catch { return ''; }
+  }
+
+  // Two ways to find articles: 'open' = title-prefix match (great for topic
+  // names), 'full' = full-text relevance (great for natural-language questions).
+  async function searchTitles(query, mode) {
+    try {
+      if (mode === 'full') {
+        const url = `${ENCY_API}/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=5&format=json&origin=*`;
+        const r = await fetch(url);
+        if (!r.ok) return [];
+        const d = await r.json();
+        return (d?.query?.search || []).map(s => s.title);
       }
-      return null;
-    } catch (err) {
-      return null;
+      const url = `${ENCY_API}/w/api.php?action=opensearch&search=${encodeURIComponent(query)}&limit=5&namespace=0&format=json&origin=*`;
+      const r = await fetch(url);
+      if (!r.ok) return [];
+      const d = await r.json();
+      return d[1] || [];
+    } catch { return []; }
+  }
+
+  // Resolve a title to a usable entry (skips disambiguation pages and stubs).
+  async function resolveEntry(title) {
+    try {
+      const r = await fetch(`${ENCY_API}/api/rest_v1/page/summary/${encodeURIComponent(title.replace(/ /g, '_'))}`);
+      if (!r.ok) return null;
+      const s = await r.json();
+      if (s.type === 'disambiguation') return null;
+      // Prefer the fuller lead-section extract; fall back to the short summary.
+      let extract = await fetchExtract(s.title);
+      if (!extract || extract.length < 60) extract = s.extract || '';
+      if (!extract || extract.length < 50) return null;
+      return { title: s.title, description: s.description || '', extract };
+    } catch { return null; }
+  }
+
+  // Build the grounding block the model must answer from (up to 2 entries).
+  async function buildEncyclopediaContext(userQuery) {
+    if (!userQuery || userQuery.length < 5) return '';
+    if (TRIVIAL_QUERY.test(userQuery)) return '';
+    setEncyState('looking');
+    try {
+      const found = [];
+      const seen = new Set();
+      const consider = async (titles) => {
+        for (const t of titles.slice(0, 3)) {
+          if (found.length >= 2) return;
+          if (seen.has(t)) continue;
+          const e = await resolveEntry(t);
+          if (e && !seen.has(e.title)) { seen.add(t); seen.add(e.title); found.push(e); }
+        }
+      };
+      // 1) title-prefix search over the cleaned topic candidates
+      for (const q of generateQueries(userQuery)) {
+        if (found.length >= 2) break;
+        await consider(await searchTitles(q, 'open'));
+      }
+      // 2) fall back to full-text search on the whole question
+      if (!found.length) {
+        await consider(await searchTitles(userQuery, 'full'));
+      }
+      if (!found.length) return '';
+      const blocks = found.map(e => {
+        const body = e.extract.slice(0, 1600);
+        const desc = e.description ? ` (${e.description})` : '';
+        return `### ${e.title}${desc}\n${body}${e.extract.length > 1600 ? '…' : ''}\nLink: ${ENCY_LINK(e.title)}`;
+      });
+      return `ENCYCLOPÆDIA ENTRIES (your source of truth — answer from these and cite the link):\n\n${blocks.join('\n\n')}`;
+    } finally {
+      setEncyState('idle');
     }
   }
 
-  const TRIVIAL_QUERY = /^(hi|hey|hello|yo|sup|thanks|thank\s*you|ok|okay|cool|nice|wow|lol|haha|yes|no|nope|yep|yeah|good|great|bad|sure|maybe|please|continue|more|go on)[\s.!?]*$/i;
-
-  async function buildWikiContext(userQuery) {
-    if (!userQuery || userQuery.length < 8) return '';
-    if (TRIVIAL_QUERY.test(userQuery)) return '';
-    const queries = generateWikiQueries(userQuery);
-    for (const q of queries) {
-      const article = await fetchWikipediaArticle(q);
-      if (article) {
-        const extract = article.extract.slice(0, 1200);
-        return `Reference from Wikipedia about ${article.title} — use this to inform your answer, do not echo the title:\n\n${extract}${article.extract.length > 1200 ? '…' : ''}\n${article.url}`;
-      }
-    }
-    return '';
-  }
-
-  function buildNewsContext(userQuery) {
-    if (!wsjHeadlines.length) return '';
-    if (TRIVIAL_QUERY.test(userQuery)) return '';
-    const items = findRelevantHeadlines(userQuery, 4);
-    if (!items.length) return '';
-    const lines = items.map((h, i) => {
-      const date = h.pubDate ? new Date(h.pubDate).toLocaleString('en-US', { month: 'short', day: 'numeric' }) : '';
-      const summary = h.summary ? ` — ${h.summary.slice(0, 120)}${h.summary.length > 120 ? '…' : ''}` : '';
-      return `${i+1}. [${h.publisher}] ${h.title}${date ? ' (' + date + ')' : ''}${summary}`;
-    }).join('\n');
-    return `Recent headlines (WSJ/FT/BBC/CNN live RSS):\n${lines}`;
-  }
-
+  // ---- Model lifecycle ---------------------------------------------------
   function setProgress(p) {
-    if (p == null) {
-      progressBar.classList.remove('active');
-      return;
-    }
+    if (p == null) { progressBar.classList.remove('active'); return; }
     progressBar.classList.add('active');
     progressFill.style.width = `${Math.round(p * 100)}%`;
   }
@@ -851,7 +978,7 @@
     sendBtn.disabled = false;
     resetBtn.disabled = false;
     modelSelect.disabled = false;
-    input.placeholder = 'Message AI…';
+    input.placeholder = 'Message the AI…  (Shift+Enter for a new line)';
     input.focus();
   }
 
@@ -860,6 +987,10 @@
     sendBtn.disabled = true;
     resetBtn.disabled = true;
     modelSelect.disabled = true;
+  }
+
+  function shortName(id) {
+    return id.replace(/-q4f16_1-MLC$/, '').replace(/-Instruct$/, '');
   }
 
   function checkWebGPU() {
@@ -877,18 +1008,17 @@
     disableUI();
     setStatus('downloading model…');
     setProgress(0);
-
     try {
       engine = await webllm.CreateMLCEngine(modelId, {
         initProgressCallback: (report) => {
           setStatus(report.text || 'loading…');
-          if (typeof report.progress === 'number') {
-            setProgress(report.progress);
-          }
+          if (typeof report.progress === 'number') setProgress(report.progress);
         }
       });
       setProgress(null);
       setStatus(`ready · ${shortName(modelId)}`);
+      try { localStorage.setItem(MODEL_KEY, modelId); } catch {}
+      replayHistory();
       enableUI();
     } catch (err) {
       console.error(err);
@@ -901,132 +1031,151 @@
     }
   }
 
-  function shortName(id) {
-    return id.replace(/-q4f16_1-MLC$/, '').replace(/-Instruct$/, '');
+  function replayHistory() {
+    const turns = history.filter(m => m.role !== 'system');
+    if (!turns.length) return;
+    clearWelcome();
+    for (const m of turns) appendMessage(m.role, m.content);
+  }
+
+  // ---- Generation --------------------------------------------------------
+  function setGenerating(on) {
+    isGenerating = on;
+    sendBtn.classList.toggle('stop', on);
+    sendBtn.title = on ? 'Stop' : 'Send';
+    input.disabled = on;
+    resetBtn.disabled = on;
+    modelSelect.disabled = on;
+    if (!on) { input.disabled = false; sendBtn.disabled = false; }
   }
 
   async function sendMessage() {
-    if (isGenerating || !engine) return;
+    if (isGenerating) { abortGeneration = true; return; }
+    if (!engine) return;
     const message = input.value.trim();
     if (!message) return;
 
     input.value = '';
     input.style.height = 'auto';
-    isGenerating = true;
-    sendBtn.disabled = true;
-    input.disabled = true;
-    resetBtn.disabled = true;
+    abortGeneration = false;
+    setGenerating(true);
 
     appendMessage('user', message);
     history[0] = { role: 'system', content: buildSystemPrompt() };
     history.push({ role: 'user', content: message });
+    saveHistory();
     showTyping();
 
-    const newsBlock = buildNewsContext(message);
-    const wikiBlock = await Promise.race([
-      buildWikiContext(message),
-      new Promise(resolve => setTimeout(() => resolve(''), 1800))
+    const encyBlock = await Promise.race([
+      buildEncyclopediaContext(message),
+      new Promise(resolve => setTimeout(() => resolve(''), 6000))
     ]);
-    const extras = [wikiBlock, newsBlock].filter(Boolean).join('\n\n---\n\n');
-    const messagesToSend = extras
-      ? [
-          { role: 'system', content: history[0].content + '\n\n---\n\n' + extras },
-          ...history.slice(1)
-        ]
-      : history;
+    // Keep the model's context lean: system + last ~16 turns
+    const recent = history.slice(1).slice(-16);
+    const messagesToSend = [
+      { role: 'system', content: history[0].content + (encyBlock ? '\n\n---\n\n' + encyBlock : '') },
+      ...recent
+    ];
 
+    const t0 = performance.now();
+    let tokenCount = 0;
     try {
       const stream = await engine.chat.completions.create({
         messages: messagesToSend,
         stream: true,
         temperature: 0.7,
-        max_tokens: 600
+        max_tokens: 800
       });
 
       let bubble = null;
       let full = '';
-      let pending = '';
+      let lastRender = 0;
 
       for await (const chunk of stream) {
+        if (abortGeneration) break;
         const delta = chunk.choices[0]?.delta?.content || '';
         if (!delta) continue;
-        if (!bubble) {
-          removeTyping();
-          bubble = appendMessage('assistant', '');
-        }
+        if (!bubble) { removeTyping(); bubble = appendMessage('assistant', ''); }
         full += delta;
-        pending += delta;
-        if (pending.includes('\n') || /[.!?]\s/.test(pending) || pending.length >= 100) {
-          bubble.textContent = full;
+        tokenCount++;
+        const now = performance.now();
+        if (now - lastRender > 60) {
+          bubble.innerHTML = renderMarkdown(full);
+          bindCopyButtons(bubble);
           chatWindow.scrollTop = chatWindow.scrollHeight;
-          pending = '';
+          lastRender = now;
         }
       }
 
-      if (!bubble) {
-        removeTyping();
-        bubble = appendMessage('assistant', '(empty response)');
-      } else if (full !== bubble.textContent) {
-        bubble.textContent = full;
-        chatWindow.scrollTop = chatWindow.scrollHeight;
-      }
+      if (!bubble) { removeTyping(); bubble = appendMessage('assistant', '(empty response)'); }
+      bubble.innerHTML = renderMarkdown(full + (abortGeneration ? ' …(stopped)' : ''));
+      bubble._raw = full;
+      bindCopyButtons(bubble);
+      chatWindow.scrollTop = chatWindow.scrollHeight;
+
       history.push({ role: 'assistant', content: full });
+      saveHistory();
+
+      const secs = (performance.now() - t0) / 1000;
+      if (tokenCount > 0) setStatus(`ready · ${shortName(modelSelect.value)} · ${(tokenCount / secs).toFixed(1)} tok/s`);
     } catch (err) {
       console.error(err);
       removeTyping();
       appendMessage('assistant', `Error: ${err.message || err}`, { error: true });
     }
 
-    isGenerating = false;
-    sendBtn.disabled = false;
-    input.disabled = false;
-    resetBtn.disabled = false;
+    setGenerating(false);
     input.focus();
   }
 
   function resetChat() {
     if (isGenerating) return;
     history = [{ role: 'system', content: buildSystemPrompt() }];
+    try { localStorage.removeItem(HISTORY_KEY); } catch {}
     chatWindow.innerHTML = `
       <div class="welcome" id="welcome-msg">
         <h2>Fresh chat</h2>
-        <p>Conversation cleared. Ask me anything.</p>
+        <p>Conversation cleared. Ask me anything — every fact I give comes straight from the ARTGEOrge Encyclopædia.</p>
       </div>
     `;
-    loadNews();
     input.focus();
   }
 
+  // ---- Events ------------------------------------------------------------
   input.addEventListener('input', () => {
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 150) + 'px';
   });
 
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   });
 
   sendBtn.addEventListener('click', sendMessage);
   resetBtn.addEventListener('click', resetChat);
 
+  chatWindow.addEventListener('click', (e) => {
+    if (e.target.classList.contains('chip')) {
+      input.value = e.target.textContent;
+      sendMessage();
+    }
+  });
+
   modelSelect.addEventListener('change', async () => {
     if (isGenerating) return;
-    history = [{ role: 'system', content: buildSystemPrompt() }];
-    chatWindow.innerHTML = `
-      <div class="welcome" id="welcome-msg">
-        <h2>Switching model…</h2>
-        <p>Loading ${shortName(modelSelect.value)}. First time may take a minute.</p>
-      </div>
-    `;
     await loadModel(modelSelect.value);
   });
 
+  // Restore previously selected model
+  try {
+    const savedModel = localStorage.getItem(MODEL_KEY);
+    if (savedModel && [...modelSelect.options].some(o => o.value === savedModel)) {
+      modelSelect.value = savedModel;
+    }
+  } catch {}
+
   if (checkWebGPU()) {
     loadModel(modelSelect.value);
-    loadNews();
   }
 </script>
 </body>
