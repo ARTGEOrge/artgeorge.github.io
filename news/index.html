@@ -33,7 +33,12 @@
     .topics a:hover { background: #241d33; }
 
     .feed { padding: 22px 0 70px; }
-    .nart { padding: 16px 0; border-bottom: 1px solid #241d33; }
+    .nart { display: flex; gap: 14px; align-items: flex-start;
+            padding: 16px 0; border-bottom: 1px solid #241d33; }
+    .nthumb { width: 54px; height: 54px; border-radius: 12px; flex-shrink: 0;
+              background: #241d33; object-fit: contain; padding: 9px;
+              border: 1px solid #2c2440; }
+    .nbody { flex: 1; min-width: 0; }
     .nart .nsrc { color: #9b8cff; font-size: 12px; margin-bottom: 4px; }
     .nart .nt { font-size: 18px; color: #e8eaed; line-height: 1.35; }
     .nart .nt:hover { text-decoration: underline; }
@@ -96,9 +101,13 @@
         let title = (it.querySelector('title')?.textContent || '').trim();
         const link = (it.querySelector('link')?.textContent || '').trim();
         const pub = it.querySelector('pubDate')?.textContent || '';
-        const source = (it.querySelector('source')?.textContent || '').trim();
+        const srcEl = it.querySelector('source');
+        const source = (srcEl?.textContent || '').trim();
+        const srcUrl = (srcEl?.getAttribute('url') || '').trim();
         if (source && title.endsWith(' - ' + source)) title = title.slice(0, -(source.length + 3)).trim();
-        return { title, link, source, time: relTime(pub) };
+        let domain = '';
+        try { if (srcUrl) domain = new URL(srcUrl).hostname; } catch (e) { }
+        return { title, link, source, domain, time: relTime(pub) };
       }).filter(a => a.title && a.link);
     }
 
@@ -157,8 +166,11 @@
         if (!articles.length) { feed.innerHTML = `<div class="msg">No news found.</div>`; return; }
         feed.innerHTML = articles.map(a => {
           const meta = [esc(a.source), esc(a.time)].filter(Boolean).join(' · ');
-          return `<div class="nart"><div class="nsrc">${meta}</div>
-            <a class="nt" href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.title)}</a></div>`;
+          const thumb = a.domain
+            ? `<img class="nthumb" loading="lazy" alt="" src="https://www.google.com/s2/favicons?domain=${encodeURIComponent(a.domain)}&sz=64" onerror="this.style.visibility='hidden'">`
+            : `<div class="nthumb"></div>`;
+          return `<div class="nart">${thumb}<div class="nbody"><div class="nsrc">${meta}</div>
+            <a class="nt" href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.title)}</a></div></div>`;
         }).join('');
       } catch (e) {
         const g = 'https://news.google.com/' + (query ? 'search?q=' + encodeURIComponent(query) : '');
