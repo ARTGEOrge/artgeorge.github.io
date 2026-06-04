@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARTGEOrge News</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body { min-height: 100vh; background: #16131f; color: #e8eaed;
+           font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: inherit; text-decoration: none; }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 0 20px; }
+
+    .top { position: sticky; top: 0; z-index: 10; background: #16131f;
+           border-bottom: 1px solid #271f38; padding: 18px 0 12px; }
+    .row { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+    .logo { font-weight: 800; letter-spacing: -1px; font-size: 26px; white-space: nowrap; }
+    .logo .a { background: linear-gradient(90deg,#a78bfa,#7c5cff);
+               -webkit-background-clip: text; background-clip: text; color: transparent; }
+    form { display: flex; gap: 8px; flex: 1; min-width: 220px; }
+    input { flex: 1; background: #241d33; border: 1px solid #34294d; color: #fff;
+            border-radius: 22px; padding: 11px 18px; font-size: 15px; outline: none; }
+    input:focus { border-color: #8b6cff; background: #2a2240; }
+    button { background: linear-gradient(90deg,#7c5cff,#a78bfa); color: #fff; border: none;
+             border-radius: 22px; padding: 0 20px; font-weight: 600; cursor: pointer; }
+    button:hover { filter: brightness(1.08); }
+
+    .topics { display: flex; gap: 4px; margin-top: 12px; overflow-x: auto;
+              border-top: 1px solid #271f38; padding-top: 10px; }
+    .topics a { font-size: 14px; color: #b9b4c4; padding: 7px 14px; border-radius: 8px;
+                white-space: nowrap; cursor: pointer; }
+    .topics a.active { color: #cdbcff; box-shadow: inset 0 -2px 0 #8b6cff; border-radius: 0; }
+    .topics a:hover { background: #241d33; }
+
+    .feed { padding: 22px 0 70px; }
+    .nart { padding: 16px 0; border-bottom: 1px solid #241d33; }
+    .nart .nsrc { color: #9b8cff; font-size: 12px; margin-bottom: 4px; }
+    .nart .nt { font-size: 18px; color: #e8eaed; line-height: 1.35; }
+    .nart .nt:hover { text-decoration: underline; }
+    .msg { padding: 60px 0; text-align: center; color: #8b8595; }
+    .msg a { color: #9b8cff; text-decoration: underline; }
+    .heading { color: #8b8595; font-size: 13px; text-transform: uppercase;
+               letter-spacing: 2px; margin: 4px 0 14px; }
+  </style>
+</head>
+<body>
+  <div class="top"><div class="wrap">
+    <div class="row">
+      <a href="/" class="logo"><span class="a">ARTGEOrge</span> News</a>
+      <form id="searchForm">
+        <input id="q" type="text" placeholder="Search news" autocomplete="off" />
+        <button type="submit">Search</button>
+      </form>
+    </div>
+    <div class="topics" id="topics"></div>
+  </div></div>
+
+  <div class="wrap">
+    <div class="heading" id="heading">Top stories</div>
+    <div class="feed" id="feed"><div class="msg">Loading news…</div></div>
+  </div>
+
+  <script>
+    const TOPICS = [
+      { key: 'top',      label: 'Top',      spec: null },
+      { key: 'politics', label: 'Politics', spec: 'SEARCH:politics' },
+      { key: 'us',       label: 'U.S.',     spec: 'NATION' },
+      { key: 'world',    label: 'World',    spec: 'WORLD' },
+      { key: 'tech',     label: 'Tech',     spec: 'TECHNOLOGY' },
+      { key: 'sports',   label: 'Sports',   spec: 'SPORTS' },
+    ];
+    const COMMON = 'hl=en-US&gl=US&ceid=US:en';
+
+    function feedUrl(query, topic) {
+      if (query) return `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&${COMMON}`;
+      const t = TOPICS.find(x => x.key === topic);
+      const spec = t && t.spec;
+      if (spec && spec.startsWith('SEARCH:'))
+        return `https://news.google.com/rss/search?q=${encodeURIComponent(spec.slice(7))}&${COMMON}`;
+      if (spec) return `https://news.google.com/rss/headlines/section/topic/${spec}?${COMMON}`;
+      return `https://news.google.com/rss?${COMMON}`;
+    }
+
+    function relTime(pub) {
+      const dt = new Date(pub); if (isNaN(dt)) return '';
+      let s = (Date.now() - dt.getTime()) / 1000;
+      if (s < 90) return 'just now';
+      for (const [u, n] of [['d', 86400], ['h', 3600], ['m', 60]])
+        if (s >= n) return Math.floor(s / n) + u + ' ago';
+      return 'just now';
+    }
+
+    function parseRSS(xml) {
+      const doc = new DOMParser().parseFromString(xml, 'text/xml');
+      return [...doc.querySelectorAll('item')].slice(0, 30).map(it => {
+        let title = (it.querySelector('title')?.textContent || '').trim();
+        const link = (it.querySelector('link')?.textContent || '').trim();
+        const pub = it.querySelector('pubDate')?.textContent || '';
+        const source = (it.querySelector('source')?.textContent || '').trim();
+        if (source && title.endsWith(' - ' + source)) title = title.slice(0, -(source.length + 3)).trim();
+        return { title, link, source, time: relTime(pub) };
+      }).filter(a => a.title && a.link);
+    }
+
+    const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    function tfetch(url, ms) {
+      const c = new AbortController();
+      const id = setTimeout(() => c.abort(), ms || 8000);
+      return fetch(url, { signal: c.signal }).finally(() => clearTimeout(id));
+    }
+
+    // Ways to fetch the feed cross-origin (browser CORS), tried in order.
+    const LOADERS = [
+      // corsproxy.io — returns the raw RSS XML with permissive CORS
+      async (url) => {
+        const r = await tfetch('https://corsproxy.io/?url=' + encodeURIComponent(url));
+        if (!r.ok) throw 0;
+        return parseRSS(await r.text());
+      },
+      // allorigins /get — returns { contents: rawXML }
+      async (url) => {
+        const r = await tfetch('https://api.allorigins.win/get?url=' + encodeURIComponent(url));
+        if (!r.ok) throw 0;
+        const j = await r.json();
+        return parseRSS(j.contents || '');
+      },
+    ];
+
+    async function fetchArticles(url) {
+      for (const loader of LOADERS) {
+        try { const a = await loader(url); if (a && a.length) return a; } catch (e) { /* next */ }
+      }
+      throw new Error('all loaders failed');
+    }
+
+    function renderTopics(active, searching) {
+      document.getElementById('topics').innerHTML = TOPICS.map(t => {
+        const cls = (!searching && t.key === active) ? 'active' : '';
+        return `<a class="${cls}" data-topic="${t.key}">${t.label}</a>`;
+      }).join('');
+      document.querySelectorAll('#topics a').forEach(a =>
+        a.addEventListener('click', () => go({ topic: a.dataset.topic })));
+    }
+
+    async function load(query, topic) {
+      const feed = document.getElementById('feed');
+      const heading = document.getElementById('heading');
+      const t = TOPICS.find(x => x.key === topic);
+      heading.textContent = query ? `Results for “${query}”`
+        : (topic !== 'top' && t ? t.label : 'Top stories');
+      renderTopics(topic, !!query);
+      document.getElementById('q').value = query || '';
+      feed.innerHTML = '<div class="msg">Loading news…</div>';
+      try {
+        const articles = await fetchArticles(feedUrl(query, topic));
+        if (!articles.length) { feed.innerHTML = `<div class="msg">No news found.</div>`; return; }
+        feed.innerHTML = articles.map(a => {
+          const meta = [esc(a.source), esc(a.time)].filter(Boolean).join(' · ');
+          return `<div class="nart"><div class="nsrc">${meta}</div>
+            <a class="nt" href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.title)}</a></div>`;
+        }).join('');
+      } catch (e) {
+        const g = 'https://news.google.com/' + (query ? 'search?q=' + encodeURIComponent(query) : '');
+        feed.innerHTML = `<div class="msg">Couldn't load the news right now.<br>
+          <a href="${g}" target="_blank" rel="noopener">Open Google News</a></div>`;
+      }
+    }
+
+    function go(state) {
+      const params = new URLSearchParams();
+      if (state.q) params.set('q', state.q);
+      else if (state.topic && state.topic !== 'top') params.set('topic', state.topic);
+      history.replaceState(null, '', params.toString() ? '?' + params : location.pathname);
+      load(state.q || '', state.topic || 'top');
+    }
+
+    document.getElementById('searchForm').addEventListener('submit', e => {
+      e.preventDefault();
+      go({ q: document.getElementById('q').value.trim() });
+    });
+
+    (function init() {
+      const p = new URLSearchParams(location.search);
+      const q = p.get('q') || '';
+      const topic = p.get('topic') || 'top';
+      load(q, topic);
+    })();
+  </script>
+</body>
+</html>
