@@ -62,12 +62,18 @@
     /* editor */
     .editor { flex: 1; display: flex; flex-direction: column; align-items: center;
               justify-content: center; padding: 24px; overflow: auto; }
-    .slide { width: min(900px, 92%); aspect-ratio: 16/9; border-radius: 10px;
+    .slide { width: min(900px, 92%); aspect-ratio: 16/9; border-radius: 10px; overflow: hidden;
              box-shadow: 0 20px 60px rgba(0,0,0,.55); display: flex; flex-direction: column;
              padding: 8% 9%; position: relative; }
     .slide .title { font-size: clamp(22px, 4.2vw, 46px); font-weight: 800; outline: none; line-height: 1.1; }
     .slide .body { margin-top: 4%; font-size: clamp(14px, 2.1vw, 24px); line-height: 1.45; outline: none; flex: 1; }
     [contenteditable]:empty::before { content: attr(data-ph); opacity: .5; }
+    /* positioned image layer (behind the text) */
+    .imglayer { position: absolute; inset: 0; overflow: hidden; z-index: 0; }
+    .imglayer img { position: absolute; object-fit: fill; }
+    .slide .title, .slide .body, .pslide .title, .pslide .body { position: relative; z-index: 1; }
+    .tcanvas { position: relative; }
+    .tcanvas .tt, .tcanvas .tb2 { position: relative; z-index: 1; }
 
     .statusbar { display: flex; gap: 16px; padding: 7px 18px; background: #1c1726;
                  border-top: 1px solid #2b2238; color: #8b8595; font-size: 12px; flex-shrink: 0; }
@@ -129,6 +135,7 @@
     <div class="rail" id="rail"></div>
     <div class="editor">
       <div class="slide" id="slide">
+        <div class="imglayer" id="imgLayer"></div>
         <div class="title" id="slideTitle" contenteditable="true" data-ph="Title"></div>
         <div class="body" id="slideBody" contenteditable="true" data-ph="Click to add text"></div>
       </div>
@@ -141,7 +148,8 @@
   </div>
 
   <div class="present" id="present">
-    <div class="pslide" id="pslide">
+    <div class="pslide" id="pslide" style="position:relative">
+      <div class="imglayer" id="pImgLayer"></div>
       <div class="title" id="pTitle"></div>
       <div class="body" id="pBody"></div>
     </div>
@@ -167,7 +175,16 @@
   var titleEl = document.getElementById("slideTitle");
   var bodyEl = document.getElementById("slideBody");
 
-  function blank() { return { title: "", body: "", bg: "#ffffff", fg: "#1a1622", image: "", imageFit: "cover" }; }
+  function blank() { return { title: "", body: "", bg: "#ffffff", fg: "#1a1622", images: [] }; }
+  // positioned images rendered as a layer behind the text (x/y/w/h are
+  // fractions of the slide, taken from the original ODP frame geometry).
+  function imagesHtml(s) {
+    if (!s.images || !s.images.length) return "";
+    return s.images.map(function (im) {
+      return "<img src='" + im.url + "' style='left:" + (im.x * 100) + "%;top:" + (im.y * 100) +
+        "%;width:" + (im.w * 100) + "%;height:" + (im.h * 100) + "%'>";
+    }).join("");
+  }
 
   // ---- persistence ----
   function save() { try { localStorage.setItem(KEY, JSON.stringify({ slides: slides, cur: cur })); } catch (e) {} }
@@ -193,22 +210,10 @@
   });
 
   // ---- editor binding ----
-  function applyBg(el, s) {
-    el.style.backgroundColor = s.bg || "#ffffff";
-    el.style.backgroundImage = s.image ? 'url("' + s.image + '")' : "none";
-    el.style.backgroundSize = s.imageFit === "contain" ? "contain" : "cover";
-    el.style.backgroundPosition = "center";
-    el.style.backgroundRepeat = "no-repeat";
-  }
-  function bgStyleStr(s) {
-    var css = "background-color:" + (s.bg || "#ffffff");
-    if (s.image) css += ";background-image:url(\"" + s.image + "\");background-size:" +
-      (s.imageFit === "contain" ? "contain" : "cover") + ";background-position:center;background-repeat:no-repeat";
-    return css;
-  }
   function applySlide() {
     var s = slides[cur];
-    applyBg(slideEl, s); slideEl.style.color = s.fg;
+    slideEl.style.backgroundColor = s.bg || "#ffffff"; slideEl.style.color = s.fg;
+    document.getElementById("imgLayer").innerHTML = imagesHtml(s);
     titleEl.innerHTML = s.title; bodyEl.innerHTML = s.body;
     document.getElementById("textColor").value = "#ffffff";
     document.getElementById("slideInfo").textContent = "Slide " + (cur + 1) + " of " + slides.length;
@@ -227,7 +232,8 @@
       th.innerHTML =
         "<span class='num'>" + (i + 1) + "</span>" +
         (slides.length > 1 ? "<span class='del' title='Delete'>×</span>" : "") +
-        "<div class='tcanvas' style='" + bgStyleStr(s) + ";color:" + s.fg + "'>" +
+        "<div class='tcanvas' style='background-color:" + s.bg + ";color:" + s.fg + "'>" +
+          "<div class='imglayer'>" + imagesHtml(s) + "</div>" +
           "<div class='tt'>" + (stripEmpty(s.title) || "Untitled") + "</div>" +
           "<div class='tb2'>" + stripEmpty(s.body) + "</div>" +
         "</div>";
@@ -284,7 +290,8 @@
     pIdx = i;
     var s = slides[i];
     var ps = document.getElementById("pslide");
-    applyBg(ps, s); ps.style.color = s.fg;
+    ps.style.backgroundColor = s.bg || "#ffffff"; ps.style.color = s.fg;
+    document.getElementById("pImgLayer").innerHTML = imagesHtml(s);
     document.getElementById("pTitle").innerHTML = s.title || "";
     document.getElementById("pBody").innerHTML = s.body || "";
     document.getElementById("pCount").textContent = (i + 1) + " / " + slides.length;
@@ -436,9 +443,12 @@
       var bodyP = (bodyLines.length ? bodyLines : [""]).map(function (l) {
         return "<text:p text:style-name='Pb" + n + "'>" + xesc(l) + "</text:p>";
       }).join("");
-      var imgFrame = (slideImg && slideImg[i]) ?
-        "<draw:frame draw:layer='layout' svg:x='0cm' svg:y='0cm' svg:width='25.4cm' svg:height='14.288cm'>" +
-          "<draw:image xlink:href='" + slideImg[i] + "' xlink:type='simple' xlink:show='embed' xlink:actuate='onLoad'/></draw:frame>" : "";
+      var PW = 25.4, PH = 14.288;
+      var imgFrame = (slideImg && slideImg[i] ? slideImg[i] : []).map(function (im) {
+        return "<draw:frame draw:layer='layout' svg:x='" + (im.x * PW).toFixed(3) + "cm' svg:y='" + (im.y * PH).toFixed(3) +
+          "cm' svg:width='" + (im.w * PW).toFixed(3) + "cm' svg:height='" + (im.h * PH).toFixed(3) + "cm'>" +
+          "<draw:image xlink:href='" + im.path + "' xlink:type='simple' xlink:show='embed' xlink:actuate='onLoad'/></draw:frame>";
+      }).join("");
       pages +=
         "<draw:page draw:name='page" + n + "' draw:style-name='dp" + n + "' draw:master-page-name='Default'>" +
           imgFrame +
@@ -492,13 +502,14 @@
     pull();
     var media = [], slideImg = [];
     slides.forEach(function (s, i) {
-      slideImg[i] = null;
-      if (!s.image) return;
-      var d = dataUrlToBytesAndMime(s.image); if (!d) return;
-      var ext = (d.mime.split("/")[1] || "png").replace("jpeg", "jpg");
-      var path = "Pictures/img" + (media.length + 1) + "." + ext;
-      media.push({ path: path, bytes: d.bytes, mime: d.mime });
-      slideImg[i] = path;
+      slideImg[i] = [];
+      (s.images || []).forEach(function (im) {
+        var d = dataUrlToBytesAndMime(im.url); if (!d) return;
+        var ext = (d.mime.split("/")[1] || "png").replace("jpeg", "jpg");
+        var path = "Pictures/img" + (media.length + 1) + "." + ext;
+        media.push({ path: path, bytes: d.bytes, mime: d.mime });
+        slideImg[i].push({ path: path, x: im.x, y: im.y, w: im.w, h: im.h });
+      });
     });
     var files = [
       { name: "mimetype", data: "application/vnd.oasis.opendocument.presentation" }, // must be first, stored
@@ -604,26 +615,46 @@
       var pr = st.getElementsByTagNameNS(ODF.draw, "drawing-page-properties")[0] || st.getElementsByTagNameNS(ODF.style, "drawing-page-properties")[0];
       if (pr) { var fc = attrLocal(pr, "fill-color"); if (fc) fill[attrLocal(st, "name")] = fc; }
     }
-    // largest page-layout area, for the image-fit heuristic
-    var pageArea = 0, pls = (sdoc || doc).getElementsByTagNameNS(ODF.style, "page-layout-properties");
-    for (i = 0; i < pls.length; i++) { var pa = unitToCm(attrLocal(pls[i], "page-width")) * unitToCm(attrLocal(pls[i], "page-height")); if (pa > pageArea) pageArea = pa; }
+    // Slide page dimensions (cm), so image frame geometry can be expressed as
+    // fractions of the slide. Prefer the page-layout of the first slide's master
+    // page; fall back to the largest-area page-layout in the file.
+    function plDims(name) {
+      var pls = (sdoc || doc).getElementsByTagNameNS(ODF.style, "page-layout");
+      for (var j = 0; j < pls.length; j++) if (attrLocal(pls[j], "name") === name) {
+        var pr = pls[j].getElementsByTagNameNS(ODF.style, "page-layout-properties")[0];
+        if (pr) return { w: unitToCm(attrLocal(pr, "page-width")), h: unitToCm(attrLocal(pr, "page-height")) };
+      }
+      return null;
+    }
+    var pages = doc.getElementsByTagNameNS(ODF.draw, "page");
+    var pageW = 0, pageH = 0, firstMaster = pages.length ? attrLocal(pages[0], "master-page-name") : null;
+    if (firstMaster && sdoc) {
+      var mps = sdoc.getElementsByTagNameNS(ODF.style, "master-page");
+      for (i = 0; i < mps.length; i++) if (attrLocal(mps[i], "name") === firstMaster) { var dd = plDims(attrLocal(mps[i], "page-layout-name")); if (dd) { pageW = dd.w; pageH = dd.h; } break; }
+    }
+    if (!pageW || !pageH) {
+      var best = 0, pls2 = (sdoc || doc).getElementsByTagNameNS(ODF.style, "page-layout-properties");
+      for (i = 0; i < pls2.length; i++) { var w2 = unitToCm(attrLocal(pls2[i], "page-width")), h2 = unitToCm(attrLocal(pls2[i], "page-height")); if (w2 * h2 > best) { best = w2 * h2; pageW = w2; pageH = h2; } }
+    }
+    if (!pageW || !pageH) { pageW = 25.4; pageH = 14.288; }
 
-    var pages = doc.getElementsByTagNameNS(ODF.draw, "page"), out = [];
+    var out = [];
     for (var pi = 0; pi < pages.length; pi++) {
       var page = pages[pi], bg = fill[attrLocal(page, "style-name")] || "#ffffff";
-      var titleHtml = "", bodyHtml = "", img = null, imgArea = -1;
+      var titleHtml = "", bodyHtml = "", images = [];
       var frames = page.getElementsByTagNameNS(ODF.draw, "frame");
       for (var f = 0; f < frames.length; f++) {
         var fr = frames[f];
         var imageEl = fr.getElementsByTagNameNS(ODF.draw, "image")[0];
         if (imageEl) {
-          var ar = unitToCm(attrLocal(fr, "width")) * unitToCm(attrLocal(fr, "height"));
-          if (ar > imgArea) {
-            var href = attrLocal(imageEl, "href");
-            if (href) {
-              var ib = await readZipBytes(zip, href.replace(/^\//, ""));
-              if (ib) { img = { url: bytesToDataUrl(ib, mimeForExt(href)), area: ar }; imgArea = ar; }
-            }
+          var href = attrLocal(imageEl, "href");
+          if (href) {
+            var ib = await readZipBytes(zip, href.replace(/^\//, ""));
+            if (ib) images.push({
+              url: bytesToDataUrl(ib, mimeForExt(href)),
+              x: unitToCm(attrLocal(fr, "x")) / pageW, y: unitToCm(attrLocal(fr, "y")) / pageH,
+              w: unitToCm(attrLocal(fr, "width")) / pageW, h: unitToCm(attrLocal(fr, "height")) / pageH
+            });
           }
           continue;
         }
@@ -633,8 +664,7 @@
         if (!html) continue;
         if (cls === "title" && !titleHtml) titleHtml = html; else bodyHtml += html;
       }
-      var fit = (img && pageArea && (img.area / pageArea) < 0.6) ? "contain" : "cover";
-      out.push({ title: titleHtml, body: bodyHtml, bg: bg, fg: fgFor(bg), image: img ? img.url : "", imageFit: fit });
+      out.push({ title: titleHtml, body: bodyHtml, bg: bg, fg: fgFor(bg), images: images });
     }
     if (!out.length) throw "No slides found in this ODP";
     return out;
@@ -702,11 +732,6 @@
     return new Promise(function (res, rej) {
       var im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { rej(new Error("img")); }; im.src = url;
     });
-  }
-  function drawImageFit(ctx, im, W, H, fit) {
-    var scale = fit === "contain" ? Math.min(W / im.width, H / im.height) : Math.max(W / im.width, H / im.height);
-    var dw = im.width * scale, dh = im.height * scale;
-    ctx.drawImage(im, (W - dw) / 2, (H - dh) / 2, dw, dh);
   }
   function dataUrlToBytes(u) {
     var bin = atob(u.split(",")[1]), a = new Uint8Array(bin.length);
@@ -777,7 +802,10 @@
     var c = document.createElement("canvas"); c.width = W; c.height = H;
     var ctx = c.getContext("2d");
     ctx.fillStyle = s.bg || "#ffffff"; ctx.fillRect(0, 0, W, H);
-    if (s.image) { try { drawImageFit(ctx, await loadImage(s.image), W, H, s.imageFit); } catch (e) {} }
+    if (s.images) for (var i = 0; i < s.images.length; i++) {
+      var im = s.images[i];
+      try { ctx.drawImage(await loadImage(im.url), im.x * W, im.y * H, im.w * W, im.h * H); } catch (e) {}
+    }
     try { ctx.drawImage(await renderTextOverlay(s, W, H), 0, 0, W, H); }
     catch (e) { drawTextFallback(ctx, s, W, H); }
     return c;
