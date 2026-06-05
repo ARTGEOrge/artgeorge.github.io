@@ -602,33 +602,67 @@
     return out;
   }
 
-  function exportPDF() {
+  // Render a slide via an SVG <foreignObject> so bold/italic/underline,
+  // bullet lists and text colors are preserved. The SVG is loaded as a
+  // DATA URI: Chromium taints the canvas (blocking toDataURL/toBlob) when a
+  // foreignObject SVG is drawn from a blob/HTTP URL, but NOT from a data URI.
+  function xhtmlOf(htmlStr) {
+    var tmp = document.createElement("div");
+    tmp.innerHTML = htmlStr || "";
+    return new XMLSerializer().serializeToString(tmp); // well-formed XHTML
+  }
+  function renderSlideSVG(s, W, H) {
+    return new Promise(function (resolve, reject) {
+      var content =
+        "<div xmlns='http://www.w3.org/1999/xhtml' style='box-sizing:border-box;width:" + W + "px;height:" + H +
+        "px;padding:" + (H * 0.10) + "px " + (W * 0.09) + "px;background:" + (s.bg || "#ffffff") + ";color:" + (s.fg || "#1a1622") +
+        ";font-family:\"Segoe UI\",system-ui,sans-serif;overflow:hidden;display:flex;flex-direction:column'>" +
+          "<div style='font-size:" + Math.round(H * 0.085) + "px;font-weight:800;line-height:1.12'>" + xhtmlOf(s.title) + "</div>" +
+          "<div style='font-size:" + Math.round(H * 0.05) + "px;line-height:1.45;margin-top:" + Math.round(H * 0.04) + "px'>" + xhtmlOf(s.body) + "</div>" +
+        "</div>";
+      var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='" + W + "' height='" + H + "'>" +
+        "<foreignObject x='0' y='0' width='" + W + "' height='" + H + "'>" + content + "</foreignObject></svg>";
+      var img = new Image();
+      img.onload = function () {
+        var c = document.createElement("canvas"); c.width = W; c.height = H;
+        var ctx = c.getContext("2d");
+        ctx.fillStyle = s.bg || "#ffffff"; ctx.fillRect(0, 0, W, H);
+        ctx.drawImage(img, 0, 0, W, H);
+        resolve(c);
+      };
+      img.onerror = function () { reject(new Error("svg render failed")); };
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    });
+  }
+  // SVG path preserves formatting; the plain-text renderer is a safe fallback.
+  function renderSlide(s, W, H) {
+    return renderSlideSVG(s, W, H).catch(function () { return renderCanvas(s, W, H); });
+  }
+
+  async function exportPDF() {
     pull();
     var W = 1280, H = 720, imgs = [];
-    slides.forEach(function (s) {
-      var c = renderCanvas(s, W, H);
+    for (var i = 0; i < slides.length; i++) {
+      var c = await renderSlide(slides[i], W, H);
       imgs.push({ bytes: dataUrlToBytes(c.toDataURL("image/jpeg", 0.92)), w: W, h: H });
-    });
+    }
     download(new Blob([buildPDF(imgs)], { type: "application/pdf" }), deckName() + ".pdf");
   }
-  function exportPNG() {
+  async function exportPNG() {
     pull();
-    var W = 1920, H = 1080, name = deckName();
-    var single = slides.length === 1;
-    slides.forEach(function (s, i) {
-      setTimeout(function () {
-        renderCanvas(s, W, H).toBlob(function (blob) {
-          download(blob, single ? name + ".png" : name + "-" + (i + 1) + ".png");
-        }, "image/png");
-      }, i * 250);
-    });
+    var W = 1920, H = 1080, name = deckName(), single = slides.length === 1;
+    for (var i = 0; i < slides.length; i++) {
+      var c = await renderSlide(slides[i], W, H);
+      var blob = await new Promise(function (res) { c.toBlob(res, "image/png"); });
+      download(blob, single ? name + ".png" : name + "-" + (i + 1) + ".png");
+    }
   }
 
   document.getElementById("pdfBtn").addEventListener("click", function () {
-    try { exportPDF(); } catch (e) { alert("PDF export failed: " + e); }
+    exportPDF().catch(function (e) { alert("PDF export failed: " + e); });
   });
   document.getElementById("pngBtn").addEventListener("click", function () {
-    try { exportPNG(); } catch (e) { alert("PNG export failed: " + e); }
+    exportPNG().catch(function (e) { alert("PNG export failed: " + e); });
   });
 
   // ---- init ----
