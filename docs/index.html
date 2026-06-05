@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARTGEOrge Docs</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body { min-height: 100vh; display: flex; flex-direction: column;
+           background: #16131f; color: #e8eaed;
+           font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: inherit; text-decoration: none; }
+
+    .logo { font-weight: 800; letter-spacing: -1px; font-size: 22px; }
+    .logo .a { background: linear-gradient(90deg,#a78bfa,#7c5cff);
+               -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+    header { display: flex; align-items: center; gap: 12px; padding: 12px 18px;
+             background: #1c1726; border-bottom: 1px solid #2b2238; flex-shrink: 0; }
+    header .tag { color: #8b8595; font-size: 13px; }
+    .titlein { background: #241d33; border: 1px solid #34294d; color: #fff; border-radius: 8px;
+               padding: 7px 12px; font-size: 14px; outline: none; width: 220px; }
+    .titlein:focus { border-color: #8b6cff; background: #2a2240; }
+    .spacer { flex: 1; }
+    .toolbtn { background: #241d33; border: 1px solid #34294d; color: #d8d2e6;
+               border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+    .toolbtn:hover { background: #2a2240; border-color: #8b6cff; color: #cdbcff; }
+
+    /* formatting toolbar */
+    .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 8px 18px;
+               background: #1a1524; border-bottom: 1px solid #2b2238; flex-shrink: 0; }
+    .toolbar .grp { display: flex; gap: 2px; align-items: center; padding: 0 6px;
+                    border-right: 1px solid #2b2238; }
+    .toolbar .grp:last-child { border-right: none; }
+    .tb { min-width: 32px; height: 32px; padding: 0 8px; background: transparent; color: #cfc7e0;
+          border: 1px solid transparent; border-radius: 6px; cursor: pointer; font-size: 14px;
+          display: inline-flex; align-items: center; justify-content: center; }
+    .tb:hover { background: #2a2240; }
+    .tb.on { background: #34294d; color: #cdbcff; border-color: #5a4785; }
+    .tb b, .tb i, .tb u, .tb s { pointer-events: none; }
+    select.tb, input.tb { height: 32px; }
+    select.tb { background: #241d33; border-color: #34294d; }
+    input[type=color].tb { padding: 2px; width: 38px; cursor: pointer; }
+
+    /* page */
+    .stage { flex: 1; overflow: auto; padding: 28px 16px; display: flex; justify-content: center; }
+    .page { width: 100%; max-width: 820px; min-height: 1040px; background: #faf9fd; color: #1a1622;
+            border-radius: 4px; box-shadow: 0 18px 50px rgba(0,0,0,0.5);
+            padding: 72px 80px; outline: none; font-size: 16px; line-height: 1.6; height: fit-content; }
+    .page:focus { box-shadow: 0 18px 50px rgba(0,0,0,0.5), 0 0 0 2px #8b6cff; }
+    .page h1 { font-size: 30px; margin: 0 0 10px; }
+    .page h2 { font-size: 23px; margin: 18px 0 8px; }
+    .page h3 { font-size: 19px; margin: 14px 0 6px; }
+    .page p { margin: 0 0 10px; }
+    .page ul, .page ol { margin: 0 0 10px 28px; }
+    .page a { color: #2b50d8; text-decoration: underline; }
+    .page:empty::before { content: attr(data-ph); color: #9a93a8; }
+
+    .statusbar { display: flex; gap: 16px; padding: 7px 18px; background: #1c1726;
+                 border-top: 1px solid #2b2238; color: #8b8595; font-size: 12px; flex-shrink: 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/" class="logo"><span class="a">ARTGE</span>Orge <span style="font-weight:600;color:#cdbcff">Docs</span></a>
+    <input class="titlein" id="docTitle" placeholder="Untitled document" />
+    <span class="spacer"></span>
+    <button class="toolbtn" id="printBtn">Print / PDF</button>
+    <button class="toolbtn" id="exportBtn">Export .html</button>
+    <button class="toolbtn" id="newBtn">New</button>
+  </header>
+
+  <div class="toolbar" id="toolbar">
+    <div class="grp">
+      <button class="tb" data-cmd="undo" title="Undo">↶</button>
+      <button class="tb" data-cmd="redo" title="Redo">↷</button>
+    </div>
+    <div class="grp">
+      <select class="tb" id="blockStyle" title="Paragraph style">
+        <option value="p">Normal</option>
+        <option value="h1">Heading 1</option>
+        <option value="h2">Heading 2</option>
+        <option value="h3">Heading 3</option>
+      </select>
+      <select class="tb" id="fontSize" title="Font size">
+        <option value="2">Small</option>
+        <option value="3" selected>Normal</option>
+        <option value="5">Large</option>
+        <option value="6">Huge</option>
+      </select>
+    </div>
+    <div class="grp">
+      <button class="tb" data-cmd="bold" title="Bold"><b>B</b></button>
+      <button class="tb" data-cmd="italic" title="Italic"><i>I</i></button>
+      <button class="tb" data-cmd="underline" title="Underline"><u>U</u></button>
+      <button class="tb" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+      <input type="color" class="tb" id="foreColor" value="#1a1622" title="Text color" />
+      <input type="color" class="tb" id="hiliteColor" value="#fff7a8" title="Highlight" />
+    </div>
+    <div class="grp">
+      <button class="tb" data-cmd="justifyLeft" title="Align left">⬅</button>
+      <button class="tb" data-cmd="justifyCenter" title="Center">⬌</button>
+      <button class="tb" data-cmd="justifyRight" title="Align right">➡</button>
+    </div>
+    <div class="grp">
+      <button class="tb" data-cmd="insertUnorderedList" title="Bullet list">•≡</button>
+      <button class="tb" data-cmd="insertOrderedList" title="Numbered list">1≡</button>
+      <button class="tb" id="linkBtn" title="Insert link">🔗</button>
+      <button class="tb" data-cmd="removeFormat" title="Clear formatting">⌫</button>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="page" id="page" contenteditable="true" data-ph="Start writing your document…"></div>
+  </div>
+
+  <div class="statusbar">
+    <span id="wordCount">0 words</span>
+    <span id="charCount">0 characters</span>
+    <span id="savedAt">All changes saved locally</span>
+  </div>
+
+<script>
+(function () {
+  var page = document.getElementById("page");
+  var titleIn = document.getElementById("docTitle");
+  var KEY = "artgeorge-docs";
+
+  // ---- exec helper ----
+  function exec(cmd, val) { document.execCommand(cmd, false, val || null); page.focus(); save(); updateToolbar(); }
+
+  document.getElementById("toolbar").addEventListener("click", function (e) {
+    var btn = e.target.closest("button[data-cmd]");
+    if (btn) { e.preventDefault(); exec(btn.dataset.cmd); }
+  });
+  // keep selection when clicking toolbar
+  document.getElementById("toolbar").addEventListener("mousedown", function (e) {
+    if (e.target.closest(".tb")) e.preventDefault();
+  });
+
+  document.getElementById("blockStyle").addEventListener("change", function () {
+    exec("formatBlock", this.value === "p" ? "P" : this.value.toUpperCase());
+  });
+  document.getElementById("fontSize").addEventListener("change", function () { exec("fontSize", this.value); });
+  document.getElementById("foreColor").addEventListener("input", function () { exec("foreColor", this.value); });
+  document.getElementById("hiliteColor").addEventListener("input", function () {
+    if (!document.execCommand("hiliteColor", false, this.value)) document.execCommand("backColor", false, this.value);
+    page.focus(); save();
+  });
+  document.getElementById("linkBtn").addEventListener("click", function (e) {
+    e.preventDefault();
+    var url = prompt("Link URL:", "https://");
+    if (url) exec("createLink", url);
+  });
+
+  // ---- active-state highlight ----
+  var stateCmds = ["bold", "italic", "underline", "strikeThrough",
+                   "justifyLeft", "justifyCenter", "justifyRight",
+                   "insertUnorderedList", "insertOrderedList"];
+  function updateToolbar() {
+    stateCmds.forEach(function (cmd) {
+      var btn = document.querySelector('.tb[data-cmd="' + cmd + '"]');
+      if (!btn) return;
+      var on = false; try { on = document.queryCommandState(cmd); } catch (e) {}
+      btn.classList.toggle("on", on);
+    });
+    try {
+      var bs = document.queryCommandValue("formatBlock").toLowerCase();
+      var sel = document.getElementById("blockStyle");
+      sel.value = (bs === "h1" || bs === "h2" || bs === "h3") ? bs : "p";
+    } catch (e) {}
+  }
+  document.addEventListener("selectionchange", function () {
+    if (document.activeElement === page) updateToolbar();
+  });
+
+  // ---- word/char count ----
+  function counts() {
+    var text = page.innerText.replace(/ /g, " ").trim();
+    var words = text ? text.split(/\s+/).length : 0;
+    document.getElementById("wordCount").textContent = words + (words === 1 ? " word" : " words");
+    document.getElementById("charCount").textContent = text.length + " characters";
+  }
+
+  // ---- persistence ----
+  var saveTimer;
+  function save() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(function () {
+      try {
+        localStorage.setItem(KEY, JSON.stringify({ title: titleIn.value, body: page.innerHTML }));
+        document.getElementById("savedAt").textContent = "Saved locally";
+      } catch (e) {}
+    }, 250);
+    counts();
+  }
+  function load() {
+    try {
+      var d = JSON.parse(localStorage.getItem(KEY) || "{}");
+      if (d.title) titleIn.value = d.title;
+      if (d.body) page.innerHTML = d.body;
+    } catch (e) {}
+    counts();
+  }
+
+  page.addEventListener("input", save);
+  page.addEventListener("keyup", updateToolbar);
+  page.addEventListener("mouseup", updateToolbar);
+  titleIn.addEventListener("input", function () { save(); document.title = (titleIn.value || "ARTGEOrge Docs"); });
+
+  // ---- export / print / new ----
+  document.getElementById("printBtn").addEventListener("click", function () { window.print(); });
+  document.getElementById("exportBtn").addEventListener("click", function () {
+    var title = titleIn.value || "Untitled document";
+    var html = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>" + escapeHtml(title) +
+      "</title></head><body style=\"font-family:Segoe UI,system-ui,sans-serif;max-width:780px;margin:40px auto;line-height:1.6;padding:0 20px\"><h1>" +
+      escapeHtml(title) + "</h1>" + page.innerHTML + "</body></html>";
+    var blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    var url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = title + ".html";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  });
+  document.getElementById("newBtn").addEventListener("click", function () {
+    if (confirm("Start a new document? Your current one will be cleared from local storage.")) {
+      titleIn.value = ""; page.innerHTML = ""; save(); page.focus();
+    }
+  });
+  function escapeHtml(s) { return s.replace(/[&<>"]/g, function (c) { return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]; }); }
+
+  // paste as plain-ish text to avoid messy markup
+  page.addEventListener("paste", function (e) {
+    e.preventDefault();
+    var text = (e.clipboardData || window.clipboardData).getData("text/plain");
+    document.execCommand("insertText", false, text);
+  });
+
+  load();
+  page.focus();
+})();
+</script>
+</body>
+</html>
