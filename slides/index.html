@@ -167,7 +167,7 @@
   var titleEl = document.getElementById("slideTitle");
   var bodyEl = document.getElementById("slideBody");
 
-  function blank() { return { title: "", body: "", bg: "#ffffff", fg: "#1a1622" }; }
+  function blank() { return { title: "", body: "", bg: "#ffffff", fg: "#1a1622", image: "", imageFit: "cover" }; }
 
   // ---- persistence ----
   function save() { try { localStorage.setItem(KEY, JSON.stringify({ slides: slides, cur: cur })); } catch (e) {} }
@@ -193,9 +193,22 @@
   });
 
   // ---- editor binding ----
+  function applyBg(el, s) {
+    el.style.backgroundColor = s.bg || "#ffffff";
+    el.style.backgroundImage = s.image ? 'url("' + s.image + '")' : "none";
+    el.style.backgroundSize = s.imageFit === "contain" ? "contain" : "cover";
+    el.style.backgroundPosition = "center";
+    el.style.backgroundRepeat = "no-repeat";
+  }
+  function bgStyleStr(s) {
+    var css = "background-color:" + (s.bg || "#ffffff");
+    if (s.image) css += ";background-image:url(\"" + s.image + "\");background-size:" +
+      (s.imageFit === "contain" ? "contain" : "cover") + ";background-position:center;background-repeat:no-repeat";
+    return css;
+  }
   function applySlide() {
     var s = slides[cur];
-    slideEl.style.background = s.bg; slideEl.style.color = s.fg;
+    applyBg(slideEl, s); slideEl.style.color = s.fg;
     titleEl.innerHTML = s.title; bodyEl.innerHTML = s.body;
     document.getElementById("textColor").value = "#ffffff";
     document.getElementById("slideInfo").textContent = "Slide " + (cur + 1) + " of " + slides.length;
@@ -214,7 +227,7 @@
       th.innerHTML =
         "<span class='num'>" + (i + 1) + "</span>" +
         (slides.length > 1 ? "<span class='del' title='Delete'>×</span>" : "") +
-        "<div class='tcanvas' style='background:" + s.bg + ";color:" + s.fg + "'>" +
+        "<div class='tcanvas' style='" + bgStyleStr(s) + ";color:" + s.fg + "'>" +
           "<div class='tt'>" + (stripEmpty(s.title) || "Untitled") + "</div>" +
           "<div class='tb2'>" + stripEmpty(s.body) + "</div>" +
         "</div>";
@@ -271,7 +284,7 @@
     pIdx = i;
     var s = slides[i];
     var ps = document.getElementById("pslide");
-    ps.style.background = s.bg; ps.style.color = s.fg;
+    applyBg(ps, s); ps.style.color = s.fg;
     document.getElementById("pTitle").innerHTML = s.title || "";
     document.getElementById("pBody").innerHTML = s.body || "";
     document.getElementById("pCount").textContent = (i + 1) + " / " + slides.length;
@@ -380,9 +393,9 @@
     var buf = await new Response(new Blob([slice]).stream().pipeThrough(ds)).arrayBuffer();
     return new Uint8Array(buf);
   }
-  async function readZipEntry(b, wanted) {
+  async function readZipBytes(b, wanted) {
     var eo = findEOCD(b); if (eo < 0) throw "Not a valid ODP/ZIP file";
-    var count = rd16(b, eo + 10), cd = rd32(b, eo + 16), p = cd;
+    var count = rd16(b, eo + 10), p = rd32(b, eo + 16);
     for (var i = 0; i < count; i++) {
       if (rd32(b, p) !== 0x02014b50) break;
       var method = rd16(b, p + 10), compSize = rd32(b, p + 20);
@@ -390,20 +403,24 @@
       var lho = rd32(b, p + 42);
       var name = new TextDecoder().decode(b.subarray(p + 46, p + 46 + nameLen));
       if (name === wanted) {
-        var lExtra = rd16(b, lho + 28), dataStart = lho + 30 + rd16(b, lho + 26) + lExtra;
+        var dataStart = lho + 30 + rd16(b, lho + 26) + rd16(b, lho + 28);
         var slice = b.subarray(dataStart, dataStart + compSize);
-        var raw = method === 8 ? await inflateRaw(slice) : slice;
-        return new TextDecoder("utf-8").decode(raw);
+        return method === 8 ? await inflateRaw(slice) : slice;
       }
       p += 46 + nameLen + extraLen + cmtLen;
     }
-    throw "content.xml not found in ODP";
+    return null;
+  }
+  async function readZipText(b, wanted) {
+    var raw = await readZipBytes(b, wanted);
+    if (!raw) throw wanted + " not found in ODP";
+    return new TextDecoder("utf-8").decode(raw);
   }
 
   // ---- build the .odp ----
-  function buildContentXml() {
+  function buildContentXml(slideImg) {
     pull();
-    var W = "25.4cm", autostyles = "", pages = "";
+    var autostyles = "", pages = "";
     slides.forEach(function (s, i) {
       var n = i + 1, fg = s.fg || "#1a1622";
       autostyles +=
@@ -419,8 +436,12 @@
       var bodyP = (bodyLines.length ? bodyLines : [""]).map(function (l) {
         return "<text:p text:style-name='Pb" + n + "'>" + xesc(l) + "</text:p>";
       }).join("");
+      var imgFrame = (slideImg && slideImg[i]) ?
+        "<draw:frame draw:layer='layout' svg:x='0cm' svg:y='0cm' svg:width='25.4cm' svg:height='14.288cm'>" +
+          "<draw:image xlink:href='" + slideImg[i] + "' xlink:type='simple' xlink:show='embed' xlink:actuate='onLoad'/></draw:frame>" : "";
       pages +=
         "<draw:page draw:name='page" + n + "' draw:style-name='dp" + n + "' draw:master-page-name='Default'>" +
+          imgFrame +
           "<draw:frame presentation:class='title' draw:layer='layout' svg:x='1.5cm' svg:y='1cm' svg:width='22.4cm' svg:height='3cm'>" +
             "<draw:text-box>" + titleP + "</draw:text-box></draw:frame>" +
           "<draw:frame presentation:class='outline' draw:layer='layout' svg:x='1.5cm' svg:y='4.6cm' svg:width='22.4cm' svg:height='8.5cm'>" +
@@ -429,7 +450,8 @@
     });
     return "<?xml version='1.0' encoding='UTF-8'?>\n" +
       "<office:document-content xmlns:office='" + ODF.office + "' xmlns:style='" + ODF.style + "' xmlns:text='" + ODF.text +
-      "' xmlns:draw='" + ODF.draw + "' xmlns:presentation='" + ODF.pres + "' xmlns:svg='" + ODF.svg + "' xmlns:fo='" + ODF.fo + "' office:version='1.2'>" +
+      "' xmlns:draw='" + ODF.draw + "' xmlns:presentation='" + ODF.pres + "' xmlns:svg='" + ODF.svg + "' xmlns:fo='" + ODF.fo +
+      "' xmlns:xlink='http://www.w3.org/1999/xlink' office:version='1.2'>" +
       "<office:automatic-styles>" + autostyles + "</office:automatic-styles>" +
       "<office:body><office:presentation>" + pages + "</office:presentation></office:body></office:document-content>";
   }
@@ -442,14 +464,17 @@
       "</office:automatic-styles><office:master-styles>" +
       "<style:master-page style:name='Default' style:page-layout-name='PL0'/></office:master-styles></office:document-styles>";
   }
-  function buildManifest() {
-    return "<?xml version='1.0' encoding='UTF-8'?>\n" +
-      "<manifest:manifest xmlns:manifest='" + ODF.manifest + "' manifest:version='1.2'>" +
+  function buildManifest(media) {
+    var entries =
       "<manifest:file-entry manifest:full-path='/' manifest:media-type='application/vnd.oasis.opendocument.presentation'/>" +
       "<manifest:file-entry manifest:full-path='content.xml' manifest:media-type='text/xml'/>" +
       "<manifest:file-entry manifest:full-path='styles.xml' manifest:media-type='text/xml'/>" +
-      "<manifest:file-entry manifest:full-path='meta.xml' manifest:media-type='text/xml'/>" +
-      "</manifest:manifest>";
+      "<manifest:file-entry manifest:full-path='meta.xml' manifest:media-type='text/xml'/>";
+    (media || []).forEach(function (m) {
+      entries += "<manifest:file-entry manifest:full-path='" + m.path + "' manifest:media-type='" + m.mime + "'/>";
+    });
+    return "<?xml version='1.0' encoding='UTF-8'?>\n" +
+      "<manifest:manifest xmlns:manifest='" + ODF.manifest + "' manifest:version='1.2'>" + entries + "</manifest:manifest>";
   }
   function buildMeta() {
     return "<?xml version='1.0' encoding='UTF-8'?>\n" +
@@ -457,14 +482,32 @@
       "<office:meta><meta:generator>ARTGEOrge Slides</meta:generator></office:meta></office:document-meta>";
   }
 
+  function dataUrlToBytesAndMime(u) {
+    var m = /^data:([^;]+);base64,(.*)$/.exec(u || ""); if (!m) return null;
+    var bin = atob(m[2]), a = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+    return { bytes: a, mime: m[1] };
+  }
   function exportODP() {
+    pull();
+    var media = [], slideImg = [];
+    slides.forEach(function (s, i) {
+      slideImg[i] = null;
+      if (!s.image) return;
+      var d = dataUrlToBytesAndMime(s.image); if (!d) return;
+      var ext = (d.mime.split("/")[1] || "png").replace("jpeg", "jpg");
+      var path = "Pictures/img" + (media.length + 1) + "." + ext;
+      media.push({ path: path, bytes: d.bytes, mime: d.mime });
+      slideImg[i] = path;
+    });
     var files = [
       { name: "mimetype", data: "application/vnd.oasis.opendocument.presentation" }, // must be first, stored
-      { name: "META-INF/manifest.xml", data: buildManifest() },
-      { name: "content.xml", data: buildContentXml() },
+      { name: "META-INF/manifest.xml", data: buildManifest(media) },
+      { name: "content.xml", data: buildContentXml(slideImg) },
       { name: "styles.xml", data: buildStylesXml() },
       { name: "meta.xml", data: buildMeta() }
     ];
+    media.forEach(function (m) { files.push({ name: m.path, data: m.bytes }); });
     var zip = buildZip(files);
     var blob = new Blob([zip], { type: "application/vnd.oasis.opendocument.presentation" });
     var url = URL.createObjectURL(blob), a = document.createElement("a");
@@ -477,33 +520,121 @@
     for (var i = 0; i < el.attributes.length; i++) { var a = el.attributes[i]; if (a.localName === local) return a.value; }
     return null;
   }
-  function parseODP(xml) {
-    var doc = new DOMParser().parseFromString(xml, "application/xml");
-    if (doc.getElementsByTagName("parsererror").length) throw "Could not parse content.xml";
-    // map drawing-page style name -> fill color
-    var fill = {};
-    var styleEls = doc.getElementsByTagNameNS(ODF.style, "style");
-    for (var i = 0; i < styleEls.length; i++) {
-      var st = styleEls[i];
-      if (attrLocal(st, "family") !== "drawing-page") continue;
-      var props = st.getElementsByTagNameNS(ODF.draw, "drawing-page-properties")[0] ||
-                  st.getElementsByTagNameNS(ODF.style, "drawing-page-properties")[0];
-      if (props) { var fc = attrLocal(props, "fill-color"); if (fc) fill[attrLocal(st, "name")] = fc; }
+  function unitToCm(s) {
+    if (!s) return 0;
+    var m = /(-?[0-9.]+)(cm|mm|in|pt|px)?/.exec(s); if (!m) return 0;
+    return parseFloat(m[1]) * ({ cm: 1, mm: 0.1, in: 2.54, pt: 2.54 / 72, px: 2.54 / 96 })[m[2] || "cm"];
+  }
+  // Build a style lookup (name -> {parent,color,align,bold,italic}) from one or
+  // more ODF docs so inherited text color / alignment can be resolved.
+  function buildStyleMap(docs) {
+    var map = {};
+    docs.forEach(function (doc) {
+      if (!doc) return;
+      var els = doc.getElementsByTagNameNS(ODF.style, "style");
+      for (var i = 0; i < els.length; i++) {
+        var st = els[i], name = attrLocal(st, "name"); if (!name) continue;
+        var d = { parent: attrLocal(st, "parent-style-name"), color: null, align: null, bold: null, italic: null };
+        for (var c = 0; c < st.childNodes.length; c++) {
+          var pr = st.childNodes[c]; if (pr.nodeType !== 1) continue;
+          var col = attrLocal(pr, "color"); if (col) d.color = col;
+          var al = attrLocal(pr, "text-align"); if (al) d.align = al;
+          var fw = attrLocal(pr, "font-weight"); if (fw) d.bold = (fw === "bold");
+          var fs = attrLocal(pr, "font-style"); if (fs) d.italic = (fs === "italic" || fs === "oblique");
+        }
+        map[name] = d;
+      }
+    });
+    return map;
+  }
+  function resolveStyle(map, name, key) {
+    var seen = {};
+    while (name && map[name] && !seen[name]) { seen[name] = 1; var v = map[name][key]; if (v !== null && v !== undefined) return v; name = map[name].parent; }
+    return null;
+  }
+  var ALIGN = { start: "left", left: "left", center: "center", end: "right", right: "right", justify: "justify" };
+
+  // One ODF paragraph (text:p) -> HTML, honoring <text:s>/<text:tab>/
+  // <text:line-break> and per-span color/bold/italic.
+  function paraToHtml(map, p) {
+    function inline(node) {
+      var out = "";
+      for (var i = 0; i < node.childNodes.length; i++) {
+        var n = node.childNodes[i];
+        if (n.nodeType === 3) { out += xesc(n.nodeValue); continue; }
+        if (n.nodeType !== 1) continue;
+        var ln = n.localName;
+        if (ln === "s") { out += " ".repeat(parseInt(attrLocal(n, "c") || "1", 10)); }
+        else if (ln === "tab") { out += "    "; }
+        else if (ln === "line-break") { out += "<br>"; }
+        else if (ln === "span") {
+          var sn = attrLocal(n, "style-name"), seg = inline(n);
+          var col = resolveStyle(map, sn, "color"), bold = resolveStyle(map, sn, "bold"), ital = resolveStyle(map, sn, "italic");
+          if (col && col.toLowerCase() !== "#000000") seg = "<span style='color:" + col + "'>" + seg + "</span>";
+          if (bold) seg = "<b>" + seg + "</b>";
+          if (ital) seg = "<i>" + seg + "</i>";
+          out += seg;
+        } else { out += inline(n); }
+      }
+      return out;
     }
+    var align = ALIGN[resolveStyle(map, attrLocal(p, "style-name"), "align")] || "left";
+    var inner = inline(p);
+    return "<div" + (align !== "left" ? " style='text-align:" + align + "'" : "") + ">" + (inner.trim() === "" ? "<br>" : inner) + "</div>";
+  }
+  function mimeForExt(name) {
+    var e = (name.split(".").pop() || "").toLowerCase();
+    return e === "png" ? "image/png" : e === "gif" ? "image/gif" : (e === "jpg" || e === "jpeg") ? "image/jpeg" : "image/" + e;
+  }
+  function bytesToDataUrl(b, mime) {
+    var s = "", CH = 0x8000;
+    for (var i = 0; i < b.length; i += CH) s += String.fromCharCode.apply(null, b.subarray(i, i + CH));
+    return "data:" + mime + ";base64," + btoa(s);
+  }
+
+  async function parseODP(contentXml, stylesXml, zip) {
+    var doc = new DOMParser().parseFromString(contentXml, "application/xml");
+    if (doc.getElementsByTagName("parsererror").length) throw "Could not parse content.xml";
+    var sdoc = stylesXml ? new DOMParser().parseFromString(stylesXml, "application/xml") : null;
+    var map = buildStyleMap([sdoc, doc]);
+    // drawing-page fill colors
+    var fill = {}, styleEls = doc.getElementsByTagNameNS(ODF.style, "style");
+    for (var i = 0; i < styleEls.length; i++) {
+      var st = styleEls[i]; if (attrLocal(st, "family") !== "drawing-page") continue;
+      var pr = st.getElementsByTagNameNS(ODF.draw, "drawing-page-properties")[0] || st.getElementsByTagNameNS(ODF.style, "drawing-page-properties")[0];
+      if (pr) { var fc = attrLocal(pr, "fill-color"); if (fc) fill[attrLocal(st, "name")] = fc; }
+    }
+    // largest page-layout area, for the image-fit heuristic
+    var pageArea = 0, pls = (sdoc || doc).getElementsByTagNameNS(ODF.style, "page-layout-properties");
+    for (i = 0; i < pls.length; i++) { var pa = unitToCm(attrLocal(pls[i], "page-width")) * unitToCm(attrLocal(pls[i], "page-height")); if (pa > pageArea) pageArea = pa; }
+
     var pages = doc.getElementsByTagNameNS(ODF.draw, "page"), out = [];
-    for (var p = 0; p < pages.length; p++) {
-      var page = pages[p];
-      var bg = fill[attrLocal(page, "style-name")] || "#ffffff";
-      var title = "", bodyParts = [];
+    for (var pi = 0; pi < pages.length; pi++) {
+      var page = pages[pi], bg = fill[attrLocal(page, "style-name")] || "#ffffff";
+      var titleHtml = "", bodyHtml = "", img = null, imgArea = -1;
       var frames = page.getElementsByTagNameNS(ODF.draw, "frame");
       for (var f = 0; f < frames.length; f++) {
-        var fr = frames[f], cls = attrLocal(fr, "class");
-        var ps = fr.getElementsByTagNameNS(ODF.text, "p"), lines = [];
-        for (var k = 0; k < ps.length; k++) { var t = ps[k].textContent.replace(/\s+$/, ""); if (t.trim() !== "") lines.push(t); }
-        if (cls === "title" || (!title && cls === "subtitle")) title = lines.join(" ");
-        else bodyParts = bodyParts.concat(lines);
+        var fr = frames[f];
+        var imageEl = fr.getElementsByTagNameNS(ODF.draw, "image")[0];
+        if (imageEl) {
+          var ar = unitToCm(attrLocal(fr, "width")) * unitToCm(attrLocal(fr, "height"));
+          if (ar > imgArea) {
+            var href = attrLocal(imageEl, "href");
+            if (href) {
+              var ib = await readZipBytes(zip, href.replace(/^\//, ""));
+              if (ib) { img = { url: bytesToDataUrl(ib, mimeForExt(href)), area: ar }; imgArea = ar; }
+            }
+          }
+          continue;
+        }
+        var cls = attrLocal(fr, "class");
+        var ps = fr.getElementsByTagNameNS(ODF.text, "p"), html = "";
+        for (var k = 0; k < ps.length; k++) html += paraToHtml(map, ps[k]);
+        if (!html) continue;
+        if (cls === "title" && !titleHtml) titleHtml = html; else bodyHtml += html;
       }
-      out.push({ title: xesc(title), body: bodyParts.map(xesc).join("<br>"), bg: bg, fg: fgFor(bg) });
+      var fit = (img && pageArea && (img.area / pageArea) < 0.6) ? "contain" : "cover";
+      out.push({ title: titleHtml, body: bodyHtml, bg: bg, fg: fgFor(bg), image: img ? img.url : "", imageFit: fit });
     }
     if (!out.length) throw "No slides found in this ODP";
     return out;
@@ -518,9 +649,10 @@
     var reader = new FileReader();
     reader.onload = async function () {
       try {
-        var bytes = new Uint8Array(reader.result);
-        var xml = await readZipEntry(bytes, "content.xml");
-        var imported = parseODP(xml);
+        var zb = new Uint8Array(reader.result);
+        var contentXml = await readZipText(zb, "content.xml");
+        var stylesXml = await readZipText(zb, "styles.xml").catch(function () { return ""; });
+        var imported = await parseODP(contentXml, stylesXml, zb);
         if (!confirm("Import " + imported.length + " slide(s)? This replaces your current presentation.")) return;
         slides = imported; cur = 0; applySlide(); renderRail(); save();
       } catch (err) { alert("Could not import this .odp file.\n\n" + err); }
@@ -553,10 +685,9 @@
     if (line) { ctx.fillText(line, x, y); y += lh; }
     return y;
   }
-  function renderCanvas(s, W, H) {
-    var c = document.createElement("canvas"); c.width = W; c.height = H;
-    var ctx = c.getContext("2d");
-    ctx.fillStyle = s.bg || "#ffffff"; ctx.fillRect(0, 0, W, H);
+  // Plain-text fallback: draws title/body onto an existing context (over the
+  // already-painted background + image), used only if the SVG overlay fails.
+  function drawTextFallback(ctx, s, W, H) {
     ctx.fillStyle = s.fg || "#1a1622"; ctx.textBaseline = "top";
     var padX = W * 0.09, maxW = W - padX * 2, y = H * 0.10;
     ctx.font = '700 ' + Math.round(H * 0.085) + 'px "Segoe UI", system-ui, sans-serif';
@@ -566,7 +697,16 @@
     htmlToLines(s.body).forEach(function (line) {
       y = wrapText(ctx, line, padX, y, maxW, Math.round(H * 0.072));
     });
-    return c;
+  }
+  function loadImage(url) {
+    return new Promise(function (res, rej) {
+      var im = new Image(); im.onload = function () { res(im); }; im.onerror = function () { rej(new Error("img")); }; im.src = url;
+    });
+  }
+  function drawImageFit(ctx, im, W, H, fit) {
+    var scale = fit === "contain" ? Math.min(W / im.width, H / im.height) : Math.max(W / im.width, H / im.height);
+    var dw = im.width * scale, dh = im.height * scale;
+    ctx.drawImage(im, (W - dw) / 2, (H - dh) / 2, dw, dh);
   }
   function dataUrlToBytes(u) {
     var bin = atob(u.split(",")[1]), a = new Uint8Array(bin.length);
@@ -611,11 +751,13 @@
     tmp.innerHTML = htmlStr || "";
     return new XMLSerializer().serializeToString(tmp); // well-formed XHTML
   }
-  function renderSlideSVG(s, W, H) {
+  // Build a TRANSPARENT-background text overlay (title + body) as an Image,
+  // so it can be drawn on top of the slide's background photo.
+  function renderTextOverlay(s, W, H) {
     return new Promise(function (resolve, reject) {
       var content =
         "<div xmlns='http://www.w3.org/1999/xhtml' style='box-sizing:border-box;width:" + W + "px;height:" + H +
-        "px;padding:" + (H * 0.10) + "px " + (W * 0.09) + "px;background:" + (s.bg || "#ffffff") + ";color:" + (s.fg || "#1a1622") +
+        "px;padding:" + (H * 0.10) + "px " + (W * 0.09) + "px;color:" + (s.fg || "#1a1622") +
         ";font-family:\"Segoe UI\",system-ui,sans-serif;overflow:hidden;display:flex;flex-direction:column'>" +
           "<div style='font-size:" + Math.round(H * 0.085) + "px;font-weight:800;line-height:1.12'>" + xhtmlOf(s.title) + "</div>" +
           "<div style='font-size:" + Math.round(H * 0.05) + "px;line-height:1.45;margin-top:" + Math.round(H * 0.04) + "px'>" + xhtmlOf(s.body) + "</div>" +
@@ -623,20 +765,22 @@
       var svg = "<svg xmlns='http://www.w3.org/2000/svg' width='" + W + "' height='" + H + "'>" +
         "<foreignObject x='0' y='0' width='" + W + "' height='" + H + "'>" + content + "</foreignObject></svg>";
       var img = new Image();
-      img.onload = function () {
-        var c = document.createElement("canvas"); c.width = W; c.height = H;
-        var ctx = c.getContext("2d");
-        ctx.fillStyle = s.bg || "#ffffff"; ctx.fillRect(0, 0, W, H);
-        ctx.drawImage(img, 0, 0, W, H);
-        resolve(c);
-      };
+      img.onload = function () { resolve(img); };
       img.onerror = function () { reject(new Error("svg render failed")); };
       img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
     });
   }
-  // SVG path preserves formatting; the plain-text renderer is a safe fallback.
-  function renderSlide(s, W, H) {
-    return renderSlideSVG(s, W, H).catch(function () { return renderCanvas(s, W, H); });
+  // Compose a slide canvas: background color, then background image (data URLs
+  // don't taint the canvas), then the formatted text overlay (SVG foreignObject
+  // loaded as a data URI — also non-tainting). Falls back to plain-text drawing.
+  async function renderSlide(s, W, H) {
+    var c = document.createElement("canvas"); c.width = W; c.height = H;
+    var ctx = c.getContext("2d");
+    ctx.fillStyle = s.bg || "#ffffff"; ctx.fillRect(0, 0, W, H);
+    if (s.image) { try { drawImageFit(ctx, await loadImage(s.image), W, H, s.imageFit); } catch (e) {} }
+    try { ctx.drawImage(await renderTextOverlay(s, W, H), 0, 0, W, H); }
+    catch (e) { drawTextFallback(ctx, s, W, H); }
+    return c;
   }
 
   async function exportPDF() {
