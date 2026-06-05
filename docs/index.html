@@ -66,8 +66,11 @@
     <input class="titlein" id="docTitle" placeholder="Untitled document" />
     <span class="spacer"></span>
     <button class="toolbtn" id="printBtn">Print / PDF</button>
+    <button class="toolbtn" id="odtBtn">Export .odt</button>
+    <button class="toolbtn" id="importBtn">Import .odt</button>
     <button class="toolbtn" id="exportBtn">Export .html</button>
     <button class="toolbtn" id="newBtn">New</button>
+    <input type="file" id="fileInput" accept=".odt,application/vnd.oasis.opendocument.text" style="display:none" />
   </header>
 
   <div class="toolbar" id="toolbar">
@@ -232,6 +235,345 @@
     e.preventDefault();
     var text = (e.clipboardData || window.clipboardData).getData("text/plain");
     document.execCommand("insertText", false, text);
+  });
+
+  // =====================================================================
+  //  ODT (OpenDocument Text) export / import — pure JS, no libraries.
+  //  An .odt is a ZIP of XML. We write stored (uncompressed) entries and
+  //  read stored + deflate entries (via DecompressionStream). Round-trips
+  //  with LibreOffice Writer / Word: headings, bold/italic/underline,
+  //  colors, alignment, lists, links and embedded images.
+  // =====================================================================
+  var ODF = {
+    office: "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
+    style: "urn:oasis:names:tc:opendocument:xmlns:style:1.0",
+    text: "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
+    draw: "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0",
+    svg: "urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0",
+    fo: "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0",
+    manifest: "urn:oasis:names:tc:opendocument:xmlns:manifest:1.0",
+    meta: "urn:oasis:names:tc:opendocument:xmlns:meta:1.0",
+    xlink: "http://www.w3.org/1999/xlink"
+  };
+  function xesc(s) { return String(s).replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); }
+  function xattr(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  // ---- ZIP writer (store / no compression) ----
+  var CRC_TABLE = (function () {
+    var t = []; for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; } return t;
+  })();
+  function crc32(b) { var c = 0xFFFFFFFF; for (var i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+  function u16(n) { return [n & 255, (n >> 8) & 255]; }
+  function u32(n) { return [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255]; }
+  function buildZip(files) {
+    var enc = new TextEncoder(), chunks = [], central = [], offset = 0;
+    files.forEach(function (f) {
+      var data = typeof f.data === "string" ? enc.encode(f.data) : f.data;
+      var name = enc.encode(f.name), crc = crc32(data);
+      var lh = [].concat(u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0));
+      var lhb = new Uint8Array(lh.length + name.length); lhb.set(lh, 0); lhb.set(name, lh.length);
+      chunks.push(lhb, data);
+      var ch = [].concat(u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0), u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset));
+      var chb = new Uint8Array(ch.length + name.length); chb.set(ch, 0); chb.set(name, ch.length);
+      central.push(chb); offset += lhb.length + data.length;
+    });
+    var cdSize = central.reduce(function (a, c) { return a + c.length; }, 0);
+    var eocd = new Uint8Array([].concat(u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length), u32(cdSize), u32(offset), u16(0)));
+    var all = chunks.concat(central, [eocd]);
+    var total = all.reduce(function (a, c) { return a + c.length; }, 0), out = new Uint8Array(total), p = 0;
+    all.forEach(function (c) { out.set(c, p); p += c.length; });
+    return out;
+  }
+  // ---- ZIP reader (store + deflate) ----
+  function rd16(b, o) { return b[o] | (b[o + 1] << 8); }
+  function rd32(b, o) { return (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0; }
+  function findEOCD(b) { for (var i = b.length - 22; i >= 0; i--) if (rd32(b, i) === 0x06054b50) return i; return -1; }
+  async function inflateRaw(slice) {
+    var ds = new DecompressionStream("deflate-raw");
+    var buf = await new Response(new Blob([slice]).stream().pipeThrough(ds)).arrayBuffer();
+    return new Uint8Array(buf);
+  }
+  async function readZipBytes(b, wanted) {
+    var eo = findEOCD(b); if (eo < 0) throw "Not a valid ODT/ZIP file";
+    var count = rd16(b, eo + 10), p = rd32(b, eo + 16);
+    for (var i = 0; i < count; i++) {
+      if (rd32(b, p) !== 0x02014b50) break;
+      var method = rd16(b, p + 10), compSize = rd32(b, p + 20);
+      var nameLen = rd16(b, p + 28), extraLen = rd16(b, p + 30), cmtLen = rd16(b, p + 32), lho = rd32(b, p + 42);
+      var name = new TextDecoder().decode(b.subarray(p + 46, p + 46 + nameLen));
+      if (name === wanted) {
+        var dataStart = lho + 30 + rd16(b, lho + 26) + rd16(b, lho + 28);
+        var slice = b.subarray(dataStart, dataStart + compSize);
+        return method === 8 ? await inflateRaw(slice) : slice;
+      }
+      p += 46 + nameLen + extraLen + cmtLen;
+    }
+    return null;
+  }
+  async function readZipText(b, wanted) { var raw = await readZipBytes(b, wanted); if (!raw) throw wanted + " not found"; return new TextDecoder("utf-8").decode(raw); }
+
+  function mimeForExt(name) {
+    var e = (name.split(".").pop() || "").toLowerCase();
+    return e === "png" ? "image/png" : e === "gif" ? "image/gif" : (e === "jpg" || e === "jpeg") ? "image/jpeg" : e === "svg" ? "image/svg+xml" : "image/" + e;
+  }
+  function bytesToDataUrl(b, mime) {
+    var s = "", CH = 0x8000;
+    for (var i = 0; i < b.length; i += CH) s += String.fromCharCode.apply(null, b.subarray(i, i + CH));
+    return "data:" + mime + ";base64," + btoa(s);
+  }
+  function dataUrlToBytesAndMime(u) {
+    var m = /^data:([^;]+);base64,(.*)$/.exec(u || ""); if (!m) return null;
+    var bin = atob(m[2]), a = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+    return { bytes: a, mime: m[1] };
+  }
+
+  // =====================  HTML  ->  ODT  =====================
+  function exportODT() {
+    var styles = {}, styleSeq = 0;      // signature -> name
+    function styleName(family, props) {
+      var sig = family + "|" + props;
+      if (!styles[sig]) styles[sig] = { name: (family === "paragraph" ? "P" : "T") + (++styleSeq), family: family, props: props };
+      return styles[sig].name;
+    }
+    var media = [], body = "";
+
+    function textProps(el) {
+      var p = "", st = el.style || {};
+      var tag = el.tagName;
+      if (tag === "B" || tag === "STRONG" || /(^|;)\s*font-weight\s*:\s*(bold|[6-9]00)/i.test(st.cssText || "")) p += " fo:font-weight='bold'";
+      if (tag === "I" || tag === "EM" || /(^|;)\s*font-style\s*:\s*italic/i.test(st.cssText || "")) p += " fo:font-style='italic'";
+      var deco = "";
+      if (tag === "U" || /text-decoration[^;]*underline/i.test(st.cssText || "")) deco += "underline";
+      if (tag === "S" || tag === "STRIKE" || tag === "DEL" || /line-through/i.test(st.cssText || "")) deco += "strike";
+      if (deco.indexOf("underline") >= 0) p += " style:text-underline-style='solid' style:text-underline-width='auto' style:text-underline-color='font-color'";
+      if (deco.indexOf("strike") >= 0) p += " style:text-line-through-style='solid'";
+      if (st.color) p += " fo:color='" + cssColorToHex(st.color) + "'";
+      if (st.backgroundColor) p += " fo:background-color='" + cssColorToHex(st.backgroundColor) + "'";
+      var fc = el.getAttribute && el.getAttribute("color");
+      if (fc) p += " fo:color='" + cssColorToHex(fc) + "'";
+      return p;
+    }
+    // emit inline content of a block into ODF text:span runs
+    function inlineOf(node) {
+      var out = "";
+      node.childNodes.forEach(function (n) {
+        if (n.nodeType === 3) { out += odfText(n.nodeValue); return; }
+        if (n.nodeType !== 1) return;
+        var tag = n.tagName;
+        if (tag === "BR") { out += "<text:line-break/>"; return; }
+        if (tag === "IMG") { out += imageFrame(n.getAttribute("src")); return; }
+        if (tag === "A") {
+          var href = n.getAttribute("href") || "";
+          out += "<text:a xlink:type='simple' xlink:href='" + xattr(href) + "'>" + inlineOf(n) + "</text:a>";
+          return;
+        }
+        var props = textProps(n), inner = inlineOf(n);
+        if (props) out += "<text:span text:style-name='" + styleName("text", props) + "'>" + inner + "</text:span>";
+        else out += inner;
+      });
+      return out;
+    }
+    function odfText(t) {
+      // preserve runs of >=2 spaces with <text:s c="..">
+      return xesc(t).replace(/ {2,}/g, function (m) { return " <text:s text:c='" + (m.length - 1) + "'/>"; });
+    }
+    function imageFrame(src) {
+      var d = dataUrlToBytesAndMime(src); if (!d) return "";
+      var ext = (d.mime.split("/")[1] || "png").replace("jpeg", "jpg").replace("svg+xml", "svg");
+      var path = "Pictures/img" + (media.length + 1) + "." + ext;
+      media.push({ path: path, bytes: d.bytes, mime: d.mime });
+      return "<draw:frame text:anchor-type='as-char' svg:width='12cm' svg:height='8cm'>" +
+        "<draw:image xlink:href='" + path + "' xlink:type='simple' xlink:show='embed' xlink:actuate='onLoad'/></draw:frame>";
+    }
+    function paraProps(el) {
+      var p = "", al = el.style && el.style.textAlign;
+      if (al) p += " fo:text-align='" + ({ left: "start", center: "center", right: "end", justify: "justify" }[al] || "start") + "'";
+      return p;
+    }
+    function block(el, tag) {
+      var pp = paraProps(el), psn = styleName("paragraph", pp || " "), inner = inlineOf(el);
+      var h = /^H([1-6])$/.exec(tag);
+      if (h) return "<text:h text:style-name='" + psn + "' text:outline-level='" + h[1] + "'>" + (inner || "") + "</text:h>";
+      return "<text:p text:style-name='" + psn + "'>" + inner + "</text:p>";
+    }
+    function listOf(el) {
+      var out = "<text:list>";
+      el.childNodes.forEach(function (li) {
+        if (li.nodeType === 1 && li.tagName === "LI") out += "<text:list-item><text:p text:style-name='" + styleName("paragraph", " ") + "'>" + inlineOf(li) + "</text:p></text:list-item>";
+      });
+      return out + "</text:list>";
+    }
+    function walkBlocks(root) {
+      var out = "";
+      root.childNodes.forEach(function (n) {
+        if (n.nodeType === 3) { if (n.nodeValue.trim()) out += "<text:p text:style-name='" + styleName("paragraph", " ") + "'>" + odfText(n.nodeValue) + "</text:p>"; return; }
+        if (n.nodeType !== 1) return;
+        var tag = n.tagName;
+        if (/^H[1-6]$/.test(tag) || tag === "P" || tag === "DIV") out += block(n, tag);
+        else if (tag === "UL" || tag === "OL") out += listOf(n);
+        else if (tag === "IMG") out += "<text:p text:style-name='" + styleName("paragraph", " ") + "'>" + imageFrame(n.getAttribute("src")) + "</text:p>";
+        else out += "<text:p text:style-name='" + styleName("paragraph", " ") + "'>" + inlineOf(n) + "</text:p>";
+      });
+      return out;
+    }
+
+    var title = titleIn.value || "Untitled document";
+    body = (title ? "<text:h text:style-name='" + styleName("paragraph", " ") + "' text:outline-level='1'>" + xesc(title) + "</text:h>" : "") + walkBlocks(page);
+
+    var auto = "";
+    Object.keys(styles).forEach(function (k) {
+      var s = styles[k];
+      auto += "<style:style style:name='" + s.name + "' style:family='" + s.family + "'>" +
+        (s.family === "paragraph" ? "<style:paragraph-properties" + s.props + "/>" : "<style:text-properties" + s.props + "/>") +
+        "</style:style>";
+    });
+    var contentXml = "<?xml version='1.0' encoding='UTF-8'?>\n" +
+      "<office:document-content xmlns:office='" + ODF.office + "' xmlns:style='" + ODF.style + "' xmlns:text='" + ODF.text +
+      "' xmlns:draw='" + ODF.draw + "' xmlns:svg='" + ODF.svg + "' xmlns:fo='" + ODF.fo + "' xmlns:xlink='" + ODF.xlink + "' office:version='1.2'>" +
+      "<office:automatic-styles>" + auto + "</office:automatic-styles>" +
+      "<office:body><office:text>" + body + "</office:text></office:body></office:document-content>";
+
+    var manifest = "<?xml version='1.0' encoding='UTF-8'?>\n<manifest:manifest xmlns:manifest='" + ODF.manifest + "' manifest:version='1.2'>" +
+      "<manifest:file-entry manifest:full-path='/' manifest:media-type='application/vnd.oasis.opendocument.text'/>" +
+      "<manifest:file-entry manifest:full-path='content.xml' manifest:media-type='text/xml'/>" +
+      "<manifest:file-entry manifest:full-path='styles.xml' manifest:media-type='text/xml'/>" +
+      "<manifest:file-entry manifest:full-path='meta.xml' manifest:media-type='text/xml'/>" +
+      media.map(function (m) { return "<manifest:file-entry manifest:full-path='" + m.path + "' manifest:media-type='" + m.mime + "'/>"; }).join("") +
+      "</manifest:manifest>";
+    var stylesXml = "<?xml version='1.0' encoding='UTF-8'?>\n<office:document-styles xmlns:office='" + ODF.office + "' xmlns:style='" + ODF.style +
+      "' xmlns:fo='" + ODF.fo + "' office:version='1.2'><office:styles/></office:document-styles>";
+    var metaXml = "<?xml version='1.0' encoding='UTF-8'?>\n<office:document-meta xmlns:office='" + ODF.office + "' xmlns:meta='" + ODF.meta +
+      "' office:version='1.2'><office:meta><meta:generator>ARTGEOrge Docs</meta:generator></office:meta></office:document-meta>";
+
+    var files = [
+      { name: "mimetype", data: "application/vnd.oasis.opendocument.text" },
+      { name: "META-INF/manifest.xml", data: manifest },
+      { name: "content.xml", data: contentXml },
+      { name: "styles.xml", data: stylesXml },
+      { name: "meta.xml", data: metaXml }
+    ];
+    media.forEach(function (m) { files.push({ name: m.path, data: m.bytes }); });
+    var blob = new Blob([buildZip(files)], { type: "application/vnd.oasis.opendocument.text" });
+    var url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = title.replace(/[\\/:*?"<>|]/g, "") + ".odt";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+  function cssColorToHex(c) {
+    if (!c) return "#000000";
+    if (c[0] === "#") return c.length === 4 ? "#" + c[1] + c[1] + c[2] + c[2] + c[3] + c[3] : c;
+    var m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/i.exec(c);
+    if (m) return "#" + [m[1], m[2], m[3]].map(function (n) { return ("0" + (+n).toString(16)).slice(-2); }).join("");
+    return c;
+  }
+
+  // =====================  ODT  ->  HTML  =====================
+  function attrLocal(el, local) { for (var i = 0; i < el.attributes.length; i++) if (el.attributes[i].localName === local) return el.attributes[i].value; return null; }
+  function buildStyleMap(docs) {
+    var map = {};
+    docs.forEach(function (doc) {
+      if (!doc) return;
+      var els = doc.getElementsByTagNameNS(ODF.style, "style");
+      for (var i = 0; i < els.length; i++) {
+        var st = els[i], name = attrLocal(st, "name"); if (!name) continue;
+        var d = { parent: attrLocal(st, "parent-style-name"), color: null, bg: null, align: null, bold: null, italic: null, underline: null, strike: null };
+        for (var c = 0; c < st.childNodes.length; c++) {
+          var pr = st.childNodes[c]; if (pr.nodeType !== 1) continue;
+          var col = attrLocal(pr, "color"); if (col) d.color = col;
+          var bgc = attrLocal(pr, "background-color"); if (bgc && bgc !== "transparent") d.bg = bgc;
+          var al = attrLocal(pr, "text-align"); if (al) d.align = al;
+          var fw = attrLocal(pr, "font-weight"); if (fw) d.bold = (fw === "bold" || parseInt(fw, 10) >= 600);
+          var fs = attrLocal(pr, "font-style"); if (fs) d.italic = (fs === "italic" || fs === "oblique");
+          var us = attrLocal(pr, "text-underline-style"); if (us) d.underline = (us !== "none");
+          var ls = attrLocal(pr, "text-line-through-style"); if (ls) d.strike = (ls !== "none");
+        }
+        map[name] = d;
+      }
+    });
+    return map;
+  }
+  function resolveStyle(map, name, key) { var seen = {}; while (name && map[name] && !seen[name]) { seen[name] = 1; var v = map[name][key]; if (v !== null && v !== undefined) return v; name = map[name].parent; } return null; }
+  var ALIGN = { start: "left", left: "left", center: "center", end: "right", right: "right", justify: "justify" };
+
+  async function importODT(zb) {
+    var contentXml = await readZipText(zb, "content.xml");
+    var stylesXml = await readZipText(zb, "styles.xml").catch(function () { return ""; });
+    var doc = new DOMParser().parseFromString(contentXml, "application/xml");
+    if (doc.getElementsByTagName("parsererror").length) throw "Could not parse content.xml";
+    var sdoc = stylesXml ? new DOMParser().parseFromString(stylesXml, "application/xml") : null;
+    var map = buildStyleMap([sdoc, doc]);
+    var imageCache = {};
+    async function imgDataUrl(href) {
+      href = href.replace(/^\//, "");
+      if (imageCache[href]) return imageCache[href];
+      var b = await readZipBytes(zb, href); if (!b) return null;
+      return (imageCache[href] = bytesToDataUrl(b, mimeForExt(href)));
+    }
+    async function inlineHtml(node) {
+      var out = "";
+      for (var i = 0; i < node.childNodes.length; i++) {
+        var n = node.childNodes[i];
+        if (n.nodeType === 3) { out += xesc(n.nodeValue); continue; }
+        if (n.nodeType !== 1) continue;
+        var ln = n.localName;
+        if (ln === "s") { out += " ".repeat(parseInt(attrLocal(n, "c") || "1", 10)); }
+        else if (ln === "tab") { out += "    "; }
+        else if (ln === "line-break") { out += "<br>"; }
+        else if (ln === "a") { out += "<a href='" + xattr(attrLocal(n, "href") || "#") + "'>" + (await inlineHtml(n)) + "</a>"; }
+        else if (ln === "image") { var u = await imgDataUrl(attrLocal(n, "href") || ""); if (u) out += "<img src='" + u + "' style='max-width:100%'>"; }
+        else if (ln === "frame") { out += await inlineHtml(n); }
+        else if (ln === "span") {
+          var sn = attrLocal(n, "style-name"), seg = await inlineHtml(n), css = "";
+          var col = resolveStyle(map, sn, "color"); if (col && col.toLowerCase() !== "#000000") css += "color:" + col + ";";
+          var bg = resolveStyle(map, sn, "bg"); if (bg) css += "background-color:" + bg + ";";
+          if (resolveStyle(map, sn, "bold")) seg = "<b>" + seg + "</b>";
+          if (resolveStyle(map, sn, "italic")) seg = "<i>" + seg + "</i>";
+          if (resolveStyle(map, sn, "underline")) seg = "<u>" + seg + "</u>";
+          if (resolveStyle(map, sn, "strike")) seg = "<s>" + seg + "</s>";
+          out += css ? "<span style='" + css + "'>" + seg + "</span>" : seg;
+        } else { out += await inlineHtml(n); }
+      }
+      return out;
+    }
+    function alignStyle(p) { var a = ALIGN[resolveStyle(map, attrLocal(p, "style-name"), "align")]; return (a && a !== "left") ? " style='text-align:" + a + "'" : ""; }
+    async function blockHtml(el) {
+      var ln = el.localName;
+      if (ln === "h") { var lvl = Math.min(3, Math.max(1, parseInt(attrLocal(el, "outline-level") || "1", 10))); return "<h" + lvl + alignStyle(el) + ">" + (await inlineHtml(el)) + "</h" + lvl + ">"; }
+      if (ln === "p") { var inner = await inlineHtml(el); return "<p" + alignStyle(el) + ">" + (inner.trim() === "" ? "<br>" : inner) + "</p>"; }
+      if (ln === "list") {
+        var items = "";
+        for (var i = 0; i < el.childNodes.length; i++) { var it = el.childNodes[i]; if (it.nodeType === 1 && it.localName === "list-item") items += "<li>" + (await inlineHtml(it)).replace(/<\/?p[^>]*>/g, "") + "</li>"; }
+        return "<ul>" + items + "</ul>";
+      }
+      return "";
+    }
+    var text = doc.getElementsByTagNameNS(ODF.office, "text")[0];
+    if (!text) throw "No document body found";
+    var html = "";
+    for (var i = 0; i < text.childNodes.length; i++) {
+      var n = text.childNodes[i];
+      if (n.nodeType === 1 && (n.localName === "p" || n.localName === "h" || n.localName === "list")) html += await blockHtml(n);
+    }
+    return html;
+  }
+
+  // ---- wire ODT buttons ----
+  document.getElementById("odtBtn").addEventListener("click", function () {
+    try { exportODT(); } catch (e) { alert("ODT export failed: " + e); }
+  });
+  document.getElementById("importBtn").addEventListener("click", function () { document.getElementById("fileInput").click(); });
+  document.getElementById("fileInput").addEventListener("change", function (e) {
+    var file = e.target.files[0]; e.target.value = ""; if (!file) return;
+    var reader = new FileReader();
+    reader.onload = async function () {
+      try {
+        var html = await importODT(new Uint8Array(reader.result));
+        if (!confirm("Import this document? It replaces your current document.")) return;
+        var name = file.name.replace(/\.odt$/i, "");
+        titleIn.value = name; document.title = name;
+        page.innerHTML = html; save(); page.focus();
+      } catch (err) { alert("Could not import this .odt file.\n\n" + err); }
+    };
+    reader.readAsArrayBuffer(file);
   });
 
   load();
