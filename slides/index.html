@@ -94,7 +94,10 @@
     <span class="spacer"></span>
     <button class="toolbtn" id="addBtn">+ Slide</button>
     <button class="toolbtn" id="dupBtn">Duplicate</button>
+    <button class="toolbtn" id="exportBtn">Export .odp</button>
+    <button class="toolbtn" id="importBtn">Import .odp</button>
     <button class="toolbtn play" id="playBtn">▶ Present</button>
+    <input type="file" id="fileInput" accept=".odp,application/vnd.oasis.opendocument.presentation" style="display:none" />
   </header>
 
   <div class="toolbar" id="toolbar">
@@ -295,6 +298,232 @@
   });
   document.addEventListener("fullscreenchange", function () {
     if (!document.fullscreenElement) present.classList.remove("show");
+  });
+
+  // =====================================================================
+  //  ODP (OpenDocument Presentation) export / import — pure JS, no libs.
+  //  An .odp is a ZIP of XML. We write stored (uncompressed) ZIP entries
+  //  and read both stored + deflate entries (via DecompressionStream).
+  // =====================================================================
+  var ODF = {
+    office: "urn:oasis:names:tc:opendocument:xmlns:office:1.0",
+    style: "urn:oasis:names:tc:opendocument:xmlns:style:1.0",
+    text: "urn:oasis:names:tc:opendocument:xmlns:text:1.0",
+    draw: "urn:oasis:names:tc:opendocument:xmlns:drawing:1.0",
+    pres: "urn:oasis:names:tc:opendocument:xmlns:presentation:1.0",
+    svg: "urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0",
+    fo: "urn:oasis:names:tc:opendocument:xmlns:xsl-fo-compatible:1.0",
+    manifest: "urn:oasis:names:tc:opendocument:xmlns:manifest:1.0",
+    meta: "urn:oasis:names:tc:opendocument:xmlns:meta:1.0"
+  };
+
+  function xesc(s) { return String(s).replace(/[&<>]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]; }); }
+
+  // contenteditable HTML -> array of plain-text lines
+  function htmlToLines(h) {
+    if (!h) return [];
+    var s = h.replace(/<\s*br\s*\/?>/gi, "\n")
+             .replace(/<\/(div|p|h[1-6])>/gi, "\n")
+             .replace(/<li[^>]*>/gi, "• ")
+             .replace(/<\/li>/gi, "\n")
+             .replace(/<[^>]+>/g, "")
+             .replace(/&nbsp;/gi, " ");
+    var ta = document.createElement("textarea"); ta.innerHTML = s; s = ta.value;
+    return s.split("\n").map(function (x) { return x.replace(/\s+$/, ""); }).filter(function (x) { return x.trim() !== ""; });
+  }
+  function fgFor(bg) {
+    var m = /^#?([0-9a-f]{6})$/i.exec(bg || ""); if (!m) return "#1a1622";
+    var n = parseInt(m[1], 16), r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+    return (0.299 * r + 0.587 * g + 0.114 * b) < 140 ? "#ffffff" : "#1a1622";
+  }
+
+  // ---- ZIP writer (store / no compression) ----
+  var CRC_TABLE = (function () {
+    var t = []; for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); t[n] = c >>> 0; } return t;
+  })();
+  function crc32(b) { var c = 0xFFFFFFFF; for (var i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+  function u16(n) { return [n & 255, (n >> 8) & 255]; }
+  function u32(n) { return [n & 255, (n >> 8) & 255, (n >> 16) & 255, (n >>> 24) & 255]; }
+  function bytes(arr) { return new Uint8Array(arr); }
+  function buildZip(files) {
+    var enc = new TextEncoder(), chunks = [], central = [], offset = 0;
+    files.forEach(function (f) {
+      var data = typeof f.data === "string" ? enc.encode(f.data) : f.data;
+      var name = enc.encode(f.name), crc = crc32(data);
+      var lh = [].concat(u32(0x04034b50), u16(20), u16(0), u16(0), u16(0), u16(0),
+        u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0));
+      var lhb = new Uint8Array(lh.length + name.length); lhb.set(lh, 0); lhb.set(name, lh.length);
+      chunks.push(lhb, data);
+      var ch = [].concat(u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(0), u16(0),
+        u32(crc), u32(data.length), u32(data.length), u16(name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset));
+      var chb = new Uint8Array(ch.length + name.length); chb.set(ch, 0); chb.set(name, ch.length);
+      central.push(chb);
+      offset += lhb.length + data.length;
+    });
+    var cdSize = central.reduce(function (a, c) { return a + c.length; }, 0);
+    var eocd = bytes([].concat(u32(0x06054b50), u16(0), u16(0), u16(files.length), u16(files.length), u32(cdSize), u32(offset), u16(0)));
+    var all = chunks.concat(central, [eocd]);
+    var total = all.reduce(function (a, c) { return a + c.length; }, 0);
+    var out = new Uint8Array(total), p = 0;
+    all.forEach(function (c) { out.set(c, p); p += c.length; });
+    return out;
+  }
+
+  // ---- ZIP reader (store + deflate) ----
+  function rd16(b, o) { return b[o] | (b[o + 1] << 8); }
+  function rd32(b, o) { return (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0; }
+  function findEOCD(b) { for (var i = b.length - 22; i >= 0; i--) if (rd32(b, i) === 0x06054b50) return i; return -1; }
+  async function inflateRaw(slice) {
+    var ds = new DecompressionStream("deflate-raw");
+    var buf = await new Response(new Blob([slice]).stream().pipeThrough(ds)).arrayBuffer();
+    return new Uint8Array(buf);
+  }
+  async function readZipEntry(b, wanted) {
+    var eo = findEOCD(b); if (eo < 0) throw "Not a valid ODP/ZIP file";
+    var count = rd16(b, eo + 10), cd = rd32(b, eo + 16), p = cd;
+    for (var i = 0; i < count; i++) {
+      if (rd32(b, p) !== 0x02014b50) break;
+      var method = rd16(b, p + 10), compSize = rd32(b, p + 20);
+      var nameLen = rd16(b, p + 28), extraLen = rd16(b, p + 30), cmtLen = rd16(b, p + 32);
+      var lho = rd32(b, p + 42);
+      var name = new TextDecoder().decode(b.subarray(p + 46, p + 46 + nameLen));
+      if (name === wanted) {
+        var lExtra = rd16(b, lho + 28), dataStart = lho + 30 + rd16(b, lho + 26) + lExtra;
+        var slice = b.subarray(dataStart, dataStart + compSize);
+        var raw = method === 8 ? await inflateRaw(slice) : slice;
+        return new TextDecoder("utf-8").decode(raw);
+      }
+      p += 46 + nameLen + extraLen + cmtLen;
+    }
+    throw "content.xml not found in ODP";
+  }
+
+  // ---- build the .odp ----
+  function buildContentXml() {
+    pull();
+    var W = "25.4cm", autostyles = "", pages = "";
+    slides.forEach(function (s, i) {
+      var n = i + 1, fg = s.fg || "#1a1622";
+      autostyles +=
+        "<style:style style:name='dp" + n + "' style:family='drawing-page'>" +
+          "<style:drawing-page-properties draw:fill='solid' draw:fill-color='" + xesc(s.bg || "#ffffff") + "'/>" +
+        "</style:style>" +
+        "<style:style style:name='Pt" + n + "' style:family='paragraph'>" +
+          "<style:text-properties fo:color='" + xesc(fg) + "' fo:font-size='32pt' fo:font-weight='bold'/></style:style>" +
+        "<style:style style:name='Pb" + n + "' style:family='paragraph'>" +
+          "<style:text-properties fo:color='" + xesc(fg) + "' fo:font-size='20pt'/></style:style>";
+      var titleP = "<text:p text:style-name='Pt" + n + "'>" + xesc(htmlToLines(s.title).join(" ")) + "</text:p>";
+      var bodyLines = htmlToLines(s.body);
+      var bodyP = (bodyLines.length ? bodyLines : [""]).map(function (l) {
+        return "<text:p text:style-name='Pb" + n + "'>" + xesc(l) + "</text:p>";
+      }).join("");
+      pages +=
+        "<draw:page draw:name='page" + n + "' draw:style-name='dp" + n + "' draw:master-page-name='Default'>" +
+          "<draw:frame presentation:class='title' draw:layer='layout' svg:x='1.5cm' svg:y='1cm' svg:width='22.4cm' svg:height='3cm'>" +
+            "<draw:text-box>" + titleP + "</draw:text-box></draw:frame>" +
+          "<draw:frame presentation:class='outline' draw:layer='layout' svg:x='1.5cm' svg:y='4.6cm' svg:width='22.4cm' svg:height='8.5cm'>" +
+            "<draw:text-box>" + bodyP + "</draw:text-box></draw:frame>" +
+        "</draw:page>";
+    });
+    return "<?xml version='1.0' encoding='UTF-8'?>\n" +
+      "<office:document-content xmlns:office='" + ODF.office + "' xmlns:style='" + ODF.style + "' xmlns:text='" + ODF.text +
+      "' xmlns:draw='" + ODF.draw + "' xmlns:presentation='" + ODF.pres + "' xmlns:svg='" + ODF.svg + "' xmlns:fo='" + ODF.fo + "' office:version='1.2'>" +
+      "<office:automatic-styles>" + autostyles + "</office:automatic-styles>" +
+      "<office:body><office:presentation>" + pages + "</office:presentation></office:body></office:document-content>";
+  }
+  function buildStylesXml() {
+    return "<?xml version='1.0' encoding='UTF-8'?>\n" +
+      "<office:document-styles xmlns:office='" + ODF.office + "' xmlns:style='" + ODF.style + "' xmlns:fo='" + ODF.fo +
+      "' xmlns:draw='" + ODF.draw + "' office:version='1.2'>" +
+      "<office:styles/><office:automatic-styles>" +
+      "<style:page-layout style:name='PL0'><style:page-layout-properties fo:page-width='25.4cm' fo:page-height='14.288cm' style:print-orientation='landscape'/></style:page-layout>" +
+      "</office:automatic-styles><office:master-styles>" +
+      "<style:master-page style:name='Default' style:page-layout-name='PL0'/></office:master-styles></office:document-styles>";
+  }
+  function buildManifest() {
+    return "<?xml version='1.0' encoding='UTF-8'?>\n" +
+      "<manifest:manifest xmlns:manifest='" + ODF.manifest + "' manifest:version='1.2'>" +
+      "<manifest:file-entry manifest:full-path='/' manifest:media-type='application/vnd.oasis.opendocument.presentation'/>" +
+      "<manifest:file-entry manifest:full-path='content.xml' manifest:media-type='text/xml'/>" +
+      "<manifest:file-entry manifest:full-path='styles.xml' manifest:media-type='text/xml'/>" +
+      "<manifest:file-entry manifest:full-path='meta.xml' manifest:media-type='text/xml'/>" +
+      "</manifest:manifest>";
+  }
+  function buildMeta() {
+    return "<?xml version='1.0' encoding='UTF-8'?>\n" +
+      "<office:document-meta xmlns:office='" + ODF.office + "' xmlns:meta='" + ODF.meta + "' office:version='1.2'>" +
+      "<office:meta><meta:generator>ARTGEOrge Slides</meta:generator></office:meta></office:document-meta>";
+  }
+
+  function exportODP() {
+    var files = [
+      { name: "mimetype", data: "application/vnd.oasis.opendocument.presentation" }, // must be first, stored
+      { name: "META-INF/manifest.xml", data: buildManifest() },
+      { name: "content.xml", data: buildContentXml() },
+      { name: "styles.xml", data: buildStylesXml() },
+      { name: "meta.xml", data: buildMeta() }
+    ];
+    var zip = buildZip(files);
+    var blob = new Blob([zip], { type: "application/vnd.oasis.opendocument.presentation" });
+    var url = URL.createObjectURL(blob), a = document.createElement("a");
+    var name = (htmlToLines(slides[0] && slides[0].title).join(" ") || "presentation").replace(/[\\/:*?"<>|]/g, "");
+    a.href = url; a.download = name + ".odp";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+
+  function attrLocal(el, local) {
+    for (var i = 0; i < el.attributes.length; i++) { var a = el.attributes[i]; if (a.localName === local) return a.value; }
+    return null;
+  }
+  function parseODP(xml) {
+    var doc = new DOMParser().parseFromString(xml, "application/xml");
+    if (doc.getElementsByTagName("parsererror").length) throw "Could not parse content.xml";
+    // map drawing-page style name -> fill color
+    var fill = {};
+    var styleEls = doc.getElementsByTagNameNS(ODF.style, "style");
+    for (var i = 0; i < styleEls.length; i++) {
+      var st = styleEls[i];
+      if (attrLocal(st, "family") !== "drawing-page") continue;
+      var props = st.getElementsByTagNameNS(ODF.draw, "drawing-page-properties")[0] ||
+                  st.getElementsByTagNameNS(ODF.style, "drawing-page-properties")[0];
+      if (props) { var fc = attrLocal(props, "fill-color"); if (fc) fill[attrLocal(st, "name")] = fc; }
+    }
+    var pages = doc.getElementsByTagNameNS(ODF.draw, "page"), out = [];
+    for (var p = 0; p < pages.length; p++) {
+      var page = pages[p];
+      var bg = fill[attrLocal(page, "style-name")] || "#ffffff";
+      var title = "", bodyParts = [];
+      var frames = page.getElementsByTagNameNS(ODF.draw, "frame");
+      for (var f = 0; f < frames.length; f++) {
+        var fr = frames[f], cls = attrLocal(fr, "class");
+        var ps = fr.getElementsByTagNameNS(ODF.text, "p"), lines = [];
+        for (var k = 0; k < ps.length; k++) { var t = ps[k].textContent.replace(/\s+$/, ""); if (t.trim() !== "") lines.push(t); }
+        if (cls === "title" || (!title && cls === "subtitle")) title = lines.join(" ");
+        else bodyParts = bodyParts.concat(lines);
+      }
+      out.push({ title: xesc(title), body: bodyParts.map(xesc).join("<br>"), bg: bg, fg: fgFor(bg) });
+    }
+    if (!out.length) throw "No slides found in this ODP";
+    return out;
+  }
+
+  document.getElementById("exportBtn").addEventListener("click", function () {
+    try { exportODP(); } catch (e) { alert("Export failed: " + e); }
+  });
+  document.getElementById("importBtn").addEventListener("click", function () { document.getElementById("fileInput").click(); });
+  document.getElementById("fileInput").addEventListener("change", function (e) {
+    var file = e.target.files[0]; e.target.value = ""; if (!file) return;
+    var reader = new FileReader();
+    reader.onload = async function () {
+      try {
+        var bytes = new Uint8Array(reader.result);
+        var xml = await readZipEntry(bytes, "content.xml");
+        var imported = parseODP(xml);
+        if (!confirm("Import " + imported.length + " slide(s)? This replaces your current presentation.")) return;
+        slides = imported; cur = 0; applySlide(); renderRail(); save();
+      } catch (err) { alert("Could not import this .odp file.\n\n" + err); }
+    };
+    reader.readAsArrayBuffer(file);
   });
 
   // ---- init ----
