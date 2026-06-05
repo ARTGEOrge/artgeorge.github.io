@@ -96,6 +96,8 @@
     <button class="toolbtn" id="dupBtn">Duplicate</button>
     <button class="toolbtn" id="exportBtn">Export .odp</button>
     <button class="toolbtn" id="importBtn">Import .odp</button>
+    <button class="toolbtn" id="pdfBtn">Export PDF</button>
+    <button class="toolbtn" id="pngBtn">Export PNG</button>
     <button class="toolbtn play" id="playBtn">▶ Present</button>
     <input type="file" id="fileInput" accept=".odp,application/vnd.oasis.opendocument.presentation" style="display:none" />
   </header>
@@ -524,6 +526,109 @@
       } catch (err) { alert("Could not import this .odp file.\n\n" + err); }
     };
     reader.readAsArrayBuffer(file);
+  });
+
+  // =====================================================================
+  //  PDF / PNG export — render each slide to a canvas, then build a real
+  //  multi-page PDF (one image per page) with a dependency-free writer.
+  // =====================================================================
+  function deckName() {
+    var t = htmlToLines(slides[0] && slides[0].title).join(" ") || "presentation";
+    return t.replace(/[\\/:*?"<>|]/g, "").slice(0, 60) || "presentation";
+  }
+  function download(blob, name) {
+    var url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = name; document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+  }
+
+  function wrapText(ctx, text, x, y, maxW, lh) {
+    if (!text) return y;
+    var words = text.split(/\s+/), line = "";
+    for (var i = 0; i < words.length; i++) {
+      var test = line ? line + " " + words[i] : words[i];
+      if (ctx.measureText(test).width > maxW && line) { ctx.fillText(line, x, y); y += lh; line = words[i]; }
+      else line = test;
+    }
+    if (line) { ctx.fillText(line, x, y); y += lh; }
+    return y;
+  }
+  function renderCanvas(s, W, H) {
+    var c = document.createElement("canvas"); c.width = W; c.height = H;
+    var ctx = c.getContext("2d");
+    ctx.fillStyle = s.bg || "#ffffff"; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = s.fg || "#1a1622"; ctx.textBaseline = "top";
+    var padX = W * 0.09, maxW = W - padX * 2, y = H * 0.10;
+    ctx.font = '700 ' + Math.round(H * 0.085) + 'px "Segoe UI", system-ui, sans-serif';
+    y = wrapText(ctx, htmlToLines(s.title).join(" "), padX, y, maxW, Math.round(H * 0.10));
+    y += H * 0.04;
+    ctx.font = '400 ' + Math.round(H * 0.05) + 'px "Segoe UI", system-ui, sans-serif';
+    htmlToLines(s.body).forEach(function (line) {
+      y = wrapText(ctx, line, padX, y, maxW, Math.round(H * 0.072));
+    });
+    return c;
+  }
+  function dataUrlToBytes(u) {
+    var bin = atob(u.split(",")[1]), a = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+    return a;
+  }
+
+  function buildPDF(imgs) {
+    var enc = new TextEncoder(), parts = [], pos = 0, off = [];
+    function w(s) { var b = typeof s === "string" ? enc.encode(s) : s; parts.push(b); pos += b.length; }
+    var N = imgs.length, total = 2 + 3 * N;
+    w("%PDF-1.4\n");
+    off[1] = pos; w("1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+    var kids = []; for (var i = 0; i < N; i++) kids.push((3 + i * 3) + " 0 R");
+    off[2] = pos; w("2 0 obj\n<< /Type /Pages /Kids [" + kids.join(" ") + "] /Count " + N + " >>\nendobj\n");
+    for (i = 0; i < N; i++) {
+      var P = 3 + i * 3, C = P + 1, X = P + 2, im = imgs[i];
+      var content = "q " + im.w + " 0 0 " + im.h + " 0 0 cm /Im0 Do Q\n";
+      off[P] = pos; w(P + " 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + im.w + " " + im.h +
+        "] /Resources << /XObject << /Im0 " + X + " 0 R >> >> /Contents " + C + " 0 R >>\nendobj\n");
+      off[C] = pos; w(C + " 0 obj\n<< /Length " + content.length + " >>\nstream\n" + content + "endstream\nendobj\n");
+      off[X] = pos; w(X + " 0 obj\n<< /Type /XObject /Subtype /Image /Width " + im.w + " /Height " + im.h +
+        " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length " + im.bytes.length + " >>\nstream\n");
+      w(im.bytes); w("\nendstream\nendobj\n");
+    }
+    var xrefPos = pos;
+    var xref = "xref\n0 " + (total + 1) + "\n0000000000 65535 f \n";
+    for (var n = 1; n <= total; n++) xref += String(off[n]).padStart(10, "0") + " 00000 n \n";
+    w(xref);
+    w("trailer\n<< /Size " + (total + 1) + " /Root 1 0 R >>\nstartxref\n" + xrefPos + "\n%%EOF\n");
+    var size = parts.reduce(function (a, b) { return a + b.length; }, 0), out = new Uint8Array(size), p = 0;
+    parts.forEach(function (b) { out.set(b, p); p += b.length; });
+    return out;
+  }
+
+  function exportPDF() {
+    pull();
+    var W = 1280, H = 720, imgs = [];
+    slides.forEach(function (s) {
+      var c = renderCanvas(s, W, H);
+      imgs.push({ bytes: dataUrlToBytes(c.toDataURL("image/jpeg", 0.92)), w: W, h: H });
+    });
+    download(new Blob([buildPDF(imgs)], { type: "application/pdf" }), deckName() + ".pdf");
+  }
+  function exportPNG() {
+    pull();
+    var W = 1920, H = 1080, name = deckName();
+    var single = slides.length === 1;
+    slides.forEach(function (s, i) {
+      setTimeout(function () {
+        renderCanvas(s, W, H).toBlob(function (blob) {
+          download(blob, single ? name + ".png" : name + "-" + (i + 1) + ".png");
+        }, "image/png");
+      }, i * 250);
+    });
+  }
+
+  document.getElementById("pdfBtn").addEventListener("click", function () {
+    try { exportPDF(); } catch (e) { alert("PDF export failed: " + e); }
+  });
+  document.getElementById("pngBtn").addEventListener("click", function () {
+    try { exportPNG(); } catch (e) { alert("PNG export failed: " + e); }
   });
 
   // ---- init ----
