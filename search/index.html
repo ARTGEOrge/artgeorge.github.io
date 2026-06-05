@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ARTGEOrge Search</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body { min-height: 100vh; background: #16131f; color: #e8eaed;
+           font-family: 'Segoe UI', system-ui, sans-serif; }
+    a { color: inherit; text-decoration: none; }
+    .wrap { max-width: 720px; margin: 0 auto; padding: 0 20px; }
+
+    .logo { font-weight: 800; letter-spacing: -1px; }
+    .logo .a { background: linear-gradient(90deg,#a78bfa,#7c5cff);
+               -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+    form { display: flex; gap: 8px; }
+    input { flex: 1; background: #241d33; border: 1px solid #34294d; color: #fff;
+            border-radius: 24px; padding: 13px 20px; font-size: 16px; outline: none; }
+    input:focus { border-color: #8b6cff; background: #2a2240; }
+    button { background: linear-gradient(90deg,#7c5cff,#a78bfa); color: #fff; border: none;
+             border-radius: 24px; padding: 0 22px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    button:hover { filter: brightness(1.08); }
+
+    /* home */
+    .home { min-height: 100vh; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; }
+    .home .logo { font-size: 60px; margin-bottom: 26px; }
+    .home form { width: min(560px, 90vw); }
+    .home .tag { margin-top: 22px; color: #8b8595; font-size: 13px; }
+
+    /* results */
+    .top { position: sticky; top: 0; z-index: 10; background: #16131f;
+           border-bottom: 1px solid #271f38; padding: 16px 0 12px; }
+    .row { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+    .top .logo { font-size: 24px; white-space: nowrap; }
+    .scope { display: flex; gap: 8px; margin-top: 12px; }
+    .scope a { font-size: 13px; color: #b9b4c4; padding: 6px 14px; border-radius: 14px; cursor: pointer; }
+    .scope a.active { background: #2a2240; color: #cdbcff; }
+    .scope a:hover { background: #241d33; }
+
+    .res { padding: 22px 0 70px; }
+    .r { margin-bottom: 26px; }
+    .r .u { color: #9b8cff; font-size: 13px; word-break: break-all; }
+    .r .t { font-size: 19px; color: #cdbcff; margin: 3px 0; }
+    .r .t:hover { text-decoration: underline; }
+    .r .sn { color: #b9b4c4; font-size: 14px; line-height: 1.5; }
+    .msg { padding: 60px 0; text-align: center; color: #8b8595; }
+    .msg a { color: #9b8cff; text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <script>
+    function tfetch(url, ms) {
+      const c = new AbortController();
+      const id = setTimeout(() => c.abort(), ms || 12000);
+      return fetch(url, { signal: c.signal }).finally(() => clearTimeout(id));
+    }
+
+    // DuckDuckGo blocks most proxies; allorigins works. Try the html endpoint
+    // (rich snippets) first, then the lite endpoint as a fallback.
+    async function fetchResults(query) {
+      const q = encodeURIComponent(query);
+      try {
+        const r = await tfetch('https://api.allorigins.win/get?url=' +
+          encodeURIComponent('https://html.duckduckgo.com/html/?q=' + q));
+        if (r.ok) { const j = await r.json(); const res = parseResults(j.contents || ''); if (res.length) return res; }
+      } catch (e) { /* fall through */ }
+      try {
+        const r = await tfetch('https://api.allorigins.win/raw?url=' +
+          encodeURIComponent('https://lite.duckduckgo.com/lite/?q=' + q));
+        if (r.ok) { const res = parseLite(await r.text()); if (res.length) return res; }
+      } catch (e) { /* fall through */ }
+      throw new Error('no results');
+    }
+
+    const esc = s => (s || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    function decodeDDG(href) {
+      if (href.startsWith('//')) href = 'https:' + href;
+      try {
+        const u = new URL(href);
+        if (u.hostname.indexOf('duckduckgo.com') >= 0 && u.pathname.indexOf('/l/') === 0) {
+          const uddg = u.searchParams.get('uddg');
+          if (uddg) return decodeURIComponent(uddg);
+        }
+      } catch (e) { }
+      return href;
+    }
+
+    function parseResults(html) {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const out = [];
+      doc.querySelectorAll('a.result__a').forEach(a => {
+        const url = decodeDDG(a.getAttribute('href') || '');
+        const title = a.textContent.trim();
+        if (!title || url.indexOf('http') !== 0) return;
+        let host = '';
+        try { host = new URL(url).hostname.toLowerCase(); } catch (e) { return; }
+        if (host.endsWith('duckduckgo.com') || url.indexOf('/y.js') >= 0 || url.indexOf('ad_provider=') >= 0) return;
+        const block = a.closest('.result');
+        const sn = block ? block.querySelector('.result__snippet') : null;
+        out.push({ title, url, snippet: sn ? sn.textContent.trim() : '' });
+      });
+      return out.slice(0, 20);
+    }
+
+    function parseLite(html) {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const out = [];
+      doc.querySelectorAll('a.result-link').forEach(a => {
+        const url = decodeDDG(a.getAttribute('href') || '');
+        const title = a.textContent.trim();
+        if (!title || url.indexOf('http') !== 0) return;
+        let host = ''; try { host = new URL(url).hostname.toLowerCase(); } catch (e) { return; }
+        if (host.endsWith('duckduckgo.com')) return;
+        const row = a.closest('tr');
+        const next = row ? row.nextElementSibling : null;
+        const sn = next ? next.querySelector('.result-snippet') : null;
+        out.push({ title, url, snippet: sn ? sn.textContent.trim() : '' });
+      });
+      return out.slice(0, 20);
+    }
+
+    function logo() { return "<span class='logo'><span class='a'>ARTGEOrge</span> Search</span>"; }
+    function searchForm(value) {
+      return `<form id="f"><input id="q" type="text" value="${esc(value)}" placeholder="Search the web" autocomplete="off" autofocus>
+              <button type="submit">Search</button></form>`;
+    }
+    function scope(query) {
+      const q = encodeURIComponent(query || '');
+      const yt = query ? 'https://www.youtube.com/results?search_query=' + q : 'https://www.youtube.com';
+      const news = query ? '/news/?q=' + q : '/news/';
+      return `<div class="scope"><a class="active">Web</a>
+        <a href="${yt}">YouTube</a><a href="${news}">News</a></div>`;
+    }
+
+    function go(query) {
+      const params = query ? '?q=' + encodeURIComponent(query) : location.pathname;
+      history.replaceState(null, '', params);
+      render(query);
+    }
+
+    async function render(query) {
+      const app = document.getElementById('app');
+      query = (query || '').trim();
+      if (!query) {
+        app.innerHTML = `<div class="home">${logo()}${searchForm('')}
+          <div class="tag">Your own search engine</div></div>`;
+        wireForm();
+        return;
+      }
+      app.innerHTML = `<div class="top"><div class="wrap"><div class="row">
+          <a href="/search/">${logo()}</a>${searchForm(query)}</div>${scope(query)}</div></div>
+        <div class="wrap res" id="res"><div class="msg">Searching…</div></div>`;
+      wireForm();
+      const res = document.getElementById('res');
+      try {
+        const results = await fetchResults(query);
+        if (!results.length) { res.innerHTML = `<div class="msg">No results for <b>${esc(query)}</b>.</div>`; return; }
+        res.innerHTML = results.map(r =>
+          `<div class="r"><div class="u">${esc(r.url)}</div>
+            <a class="t" href="${esc(r.url)}">${esc(r.title)}</a>
+            <div class="sn">${esc(r.snippet)}</div></div>`).join('');
+      } catch (e) {
+        const ddg = 'https://duckduckgo.com/?q=' + encodeURIComponent(query);
+        res.innerHTML = `<div class="msg">Couldn't reach the web index right now.<br>
+          <a href="${ddg}">Try this search on DuckDuckGo</a></div>`;
+      }
+    }
+
+    function wireForm() {
+      const f = document.getElementById('f');
+      if (f) f.addEventListener('submit', e => { e.preventDefault(); go(document.getElementById('q').value.trim()); });
+    }
+
+    render(new URLSearchParams(location.search).get('q') || '');
+  </script>
+</body>
+</html>
