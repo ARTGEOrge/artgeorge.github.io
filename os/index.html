@@ -144,7 +144,7 @@
   const APPS = {
     "math":     {icon:"🧮", name:"Math Solver", kind:"iframe", url:"../math-solver/"},
     "resup":    {icon:"⬆️", name:"ResUp",       kind:"iframe", url:"../resup/"},
-    "nova":     {icon:"🌐", name:"Nova Browser",kind:"native", target:"nova"},
+    "nova":     {icon:"🌐", name:"Nova Browser",kind:"nova",   url:"http://127.0.0.1:5098/"},
     "files":    {icon:"📁", name:"Files",       kind:"files"},
     "terminal": {icon:"🖥️", name:"Terminal",    kind:"terminal"},
     "notepad":  {icon:"📝", name:"Notepad",     kind:"notepad"},
@@ -276,7 +276,27 @@
     else if(app.kind==="calc")     buildCalc(body);
     else if(app.kind==="settings") buildSettings(body);
     else if(app.kind==="about")    buildAbout(body);
+    else if(app.kind==="nova")     buildNova(body, app);
     else if(app.kind==="native")   buildNative(body, app);
+  }
+
+  // --- Nova Browser: embed Nova's own search server (runs inside ArtOS desktop)
+  function buildNova(body, app){
+    let tries = 0;
+    (function load(){
+      if(window.__artosDesktop){
+        body.innerHTML = `<iframe src="${app.url}" allow="clipboard-write"></iframe>`;
+      } else if(tries++ < 14){
+        body.innerHTML = `<div class="launch"><div style="font-size:48px">${app.icon}</div>
+          <div style="opacity:.8">Starting ${app.name}…</div></div>`;
+        setTimeout(load, 150);
+      } else {
+        body.innerHTML = `<div class="launch"><div style="font-size:54px">${app.icon}</div>
+          <div style="font-size:20px;font-weight:700">${app.name}</div>
+          <p style="opacity:.8;max-width:380px">Nova Browser runs inside the <b>ArtOS desktop app</b>.
+          Launch ArtOS Desktop (start.bat) to browse with Nova right here in a window.</p></div>`;
+      }
+    })();
   }
 
   // --- Native app launcher (e.g. Nova Browser) — works in the ArtOS desktop app
