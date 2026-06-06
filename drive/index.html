@@ -166,6 +166,9 @@
   .userchip { display: flex; align-items: center; gap: 10px; }
   .userchip .uemail { font-size: 13px; color: #cdbcff; max-width: 200px; overflow: hidden;
                       text-overflow: ellipsis; white-space: nowrap; }
+  .verifyinfo { text-align: center; color: #b8b2c6; font-size: 13px; margin-bottom: 14px; line-height: 1.5; }
+  .codeinput { text-align: center; letter-spacing: 10px; font-size: 26px; font-weight: 700; padding: 14px !important; }
+  .codeinput::placeholder { letter-spacing: 8px; color: #4f4a63; }
 </style>
 </head>
 <body>
@@ -173,17 +176,32 @@
 <div class="auth" id="auth">
   <div class="authcard">
     <div class="authlogo"><span class="a">ARTGEOrge</span> Drive</div>
-    <div class="authsub" id="authSub">Sign in to your Drive</div>
-    <div class="autherr" id="authErr"></div>
-    <input id="authEmail" type="email" placeholder="Email" autocomplete="username" />
-    <input id="authPw" type="password" placeholder="Password" autocomplete="current-password" />
-    <input id="authPw2" type="password" placeholder="Confirm password" autocomplete="new-password" style="display:none" />
-    <button class="btn primary authbtn" id="authSubmit">Sign in</button>
-    <div class="authswitch">
-      <span id="authToggleText">New here?</span>
-      <a id="authToggle">Create an account</a>
+
+    <div id="authStep1">
+      <div class="authsub" id="authSub">Sign in to your Drive</div>
+      <div class="autherr" id="authErr"></div>
+      <input id="authEmail" type="email" placeholder="Email" autocomplete="username" />
+      <input id="authPw" type="password" placeholder="Password" autocomplete="current-password" />
+      <input id="authPw2" type="password" placeholder="Confirm password" autocomplete="new-password" style="display:none" />
+      <button class="btn primary authbtn" id="authSubmit">Sign in</button>
+      <div class="authswitch">
+        <span id="authToggleText">New here?</span>
+        <a id="authToggle">Create an account</a>
+      </div>
     </div>
-    <div class="authnote">Accounts are stored privately in this browser only.<br>There is no server — keep your password safe; it can't be recovered.</div>
+
+    <div id="authStep2" style="display:none">
+      <div class="authsub">Check your email</div>
+      <div class="verifyinfo" id="verifyInfo">We emailed a 6-digit code.</div>
+      <div class="autherr" id="verifyErr"></div>
+      <input id="verifyCode" class="codeinput" inputmode="numeric" maxlength="6" placeholder="------" autocomplete="one-time-code" />
+      <button class="btn primary authbtn" id="verifySubmit">Verify &amp; continue</button>
+      <div class="authswitch">
+        <a id="verifyResend">Resend code</a> &nbsp;·&nbsp; <a id="verifyBack">Use a different account</a>
+      </div>
+    </div>
+
+    <div class="authnote">Accounts are stored privately in this browser. A 6-digit code is emailed to confirm each sign-in.</div>
   </div>
 </div>
 
@@ -241,6 +259,8 @@
 
 <div class="modal" id="modal"></div>
 
+<!-- EmailJS SDK: sends the verification code straight from the browser -->
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script>
 (function () {
   "use strict";
@@ -567,6 +587,87 @@
   // ---------- accounts / auth ----------
   var ACCOUNTS_KEY = "artgeorge-drive-accounts", SESSION_KEY = "artgeorge-drive-session";
   var authMode = "signin"; // or "signup"
+  var pendingVerify = null;
+
+  // ============================================================
+  //  EmailJS — fill these 3 values in from your EmailJS dashboard
+  //  (https://dashboard.emailjs.com).  Until then, the verification
+  //  code is shown on screen instead of being emailed.
+  // ============================================================
+  var EMAILJS = {
+    publicKey:  "YOUR_PUBLIC_KEY",
+    serviceId:  "YOUR_SERVICE_ID",
+    templateId: "YOUR_TEMPLATE_ID"
+  };
+  var emailjsReady = false;
+  function emailjsConfigured() {
+    return typeof emailjs !== "undefined" &&
+      EMAILJS.publicKey.indexOf("YOUR_") !== 0 &&
+      EMAILJS.serviceId.indexOf("YOUR_") !== 0 &&
+      EMAILJS.templateId.indexOf("YOUR_") !== 0;
+  }
+  function initEmailjs() {
+    if (!emailjsReady && emailjsConfigured()) {
+      try { emailjs.init({ publicKey: EMAILJS.publicKey }); emailjsReady = true; } catch (e) {}
+    }
+  }
+  function genCode() {
+    var b = new Uint8Array(4);
+    if (crypto.getRandomValues) crypto.getRandomValues(b); else for (var i = 0; i < 4; i++) b[i] = Math.floor(Math.random() * 256);
+    var n = ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0;
+    return ("00000" + (n % 1000000)).slice(-6);
+  }
+  function showStep(step2) {
+    document.getElementById("authStep1").style.display = step2 ? "none" : "block";
+    document.getElementById("authStep2").style.display = step2 ? "block" : "none";
+  }
+  function verifyError(m) { var e = document.getElementById("verifyErr"); e.textContent = m; e.classList.add("show"); }
+  function clearVerifyError() { document.getElementById("verifyErr").classList.remove("show"); }
+  function setVerifyInfo(m) { document.getElementById("verifyInfo").innerHTML = m; }
+  function sendCode(email, code) {
+    initEmailjs();
+    // Pass several common param names so it works with whatever the EmailJS template uses.
+    return emailjs.send(EMAILJS.serviceId, EMAILJS.templateId, {
+      email: email, to_email: email, user_email: email,
+      passcode: code, code: code, otp: code,
+      app_name: "ARTGEOrge Drive", expiry: "10 minutes"
+    });
+  }
+  async function startVerification(email, mode, newAccount) {
+    var code = genCode();
+    pendingVerify = { email: email, code: code, expires: Date.now() + 10 * 60 * 1000, mode: mode, newAccount: newAccount };
+    clearVerifyError();
+    document.getElementById("verifyCode").value = "";
+    showStep(true);
+    document.getElementById("verifyCode").focus();
+    if (!emailjsConfigured()) {
+      setVerifyInfo("⚠️ Email delivery isn't set up yet, so nothing was sent.<br>For testing, your code is " +
+        "<b style='color:#cdbcff;letter-spacing:2px;font-size:16px'>" + code + "</b>");
+      return;
+    }
+    setVerifyInfo("Sending a code to <b>" + email + "</b>…");
+    try {
+      await sendCode(email, code);
+      setVerifyInfo("We emailed a 6-digit code to <b>" + email + "</b>.<br>It expires in 10 minutes.");
+    } catch (e) {
+      var msg = e && e.text ? e.text : (e && e.message ? e.message : ("" + e));
+      verifyError("Couldn't send the email (" + msg + "). Tap Resend to try again.");
+      setVerifyInfo("Trouble sending to <b>" + email + "</b>.");
+    }
+  }
+  function doVerify() {
+    if (!pendingVerify) { showStep(false); return; }
+    clearVerifyError();
+    if (Date.now() > pendingVerify.expires) { verifyError("That code expired. Tap Resend for a new one."); return; }
+    var entered = (document.getElementById("verifyCode").value || "").replace(/\D/g, "");
+    if (entered.length !== 6) { verifyError("Enter the 6-digit code."); return; }
+    if (entered !== pendingVerify.code) { verifyError("Incorrect code. Check your email and try again."); return; }
+    if (pendingVerify.mode === "signup" && pendingVerify.newAccount) {
+      var a = loadAccounts(); a[pendingVerify.email] = pendingVerify.newAccount; saveAccounts(a);
+    }
+    var email = pendingVerify.email; pendingVerify = null;
+    enterApp(email);
+  }
 
   function loadAccounts() { try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "{}"); } catch (e) { return {}; } }
   function saveAccounts(a) { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(a)); }
@@ -614,15 +715,15 @@
       if (pw !== pw2) return authError("Passwords don't match.");
       if (accounts[email]) return authError("An account with that email already exists.");
       var salt = randomSalt();
-      accounts[email] = { salt: salt, hash: await hashPassword(pw, salt), created: Date.now() };
-      saveAccounts(accounts);
-      enterApp(email);
+      var hash = await hashPassword(pw, salt);
+      // Account is saved only after the emailed code is confirmed.
+      startVerification(email, "signup", { salt: salt, hash: hash, created: Date.now() });
     } else {
       var acc = accounts[email];
       if (!acc) return authError("No account found for that email.");
       var h = await hashPassword(pw, acc.salt);
       if (h !== acc.hash) return authError("Incorrect password.");
-      enterApp(email);
+      startVerification(email, "signin", null);
     }
   }
 
@@ -640,11 +741,12 @@
   }
 
   function signOut() {
-    currentUser = null;
+    currentUser = null; pendingVerify = null;
     try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
     document.getElementById("userChip").style.display = "none";
     document.getElementById("authEmail").value = "";
     document.getElementById("authPw").value = "";
+    showStep(false);
     setAuthMode("signin");
     document.getElementById("auth").classList.remove("hide");
     document.getElementById("authEmail").focus();
@@ -656,12 +758,19 @@
   ["authEmail", "authPw", "authPw2"].forEach(function (id) {
     document.getElementById(id).addEventListener("keydown", function (e) { if (e.key === "Enter") doAuth(); });
   });
+  document.getElementById("verifySubmit").onclick = doVerify;
+  document.getElementById("verifyResend").onclick = function () {
+    if (pendingVerify) startVerification(pendingVerify.email, pendingVerify.mode, pendingVerify.newAccount);
+  };
+  document.getElementById("verifyBack").onclick = function () { pendingVerify = null; showStep(false); };
+  document.getElementById("verifyCode").addEventListener("keydown", function (e) { if (e.key === "Enter") doVerify(); });
 
   // ---------- boot ----------
+  initEmailjs();
   openDB().then(function () {
     var saved = null; try { saved = localStorage.getItem(SESSION_KEY); } catch (e) {}
     if (saved && loadAccounts()[saved]) enterApp(saved);
-    else { setAuthMode("signin"); document.getElementById("authEmail").focus(); }
+    else { showStep(false); setAuthMode("signin"); document.getElementById("authEmail").focus(); }
   }).catch(function (err) {
     document.getElementById("auth").classList.add("hide");
     document.getElementById("empty").style.display = "block";
