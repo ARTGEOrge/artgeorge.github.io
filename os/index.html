@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArtOS</title>
+<style>
+  :root{
+    --accent:#2d7dd2; --accent2:#19c3b1;
+    --glass:rgba(20,26,40,0.72); --glassb:rgba(255,255,255,0.14);
+    --text:#f2f5fa;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;color:var(--text);user-select:none;}
+  #desktop{position:fixed;inset:0;background-size:cover;background-position:center;transition:background .4s;}
+  /* ---------- boot ---------- */
+  #boot{position:fixed;inset:0;background:#0a0e16;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity .6s;}
+  #boot.gone{opacity:0;pointer-events:none;}
+  .logo{font-size:64px;font-weight:800;letter-spacing:2px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .spin{margin-top:30px;width:34px;height:34px;border:3px solid rgba(255,255,255,0.15);border-top-color:var(--accent2);border-radius:50%;animation:sp 1s linear infinite;}
+  .bootmsg{margin-top:18px;font-size:13px;opacity:.6;font-family:Consolas,monospace;min-height:18px;}
+  @keyframes sp{to{transform:rotate(360deg);}}
+  /* ---------- desktop icons ---------- */
+  #icons{position:absolute;top:18px;left:18px;display:flex;flex-direction:column;flex-wrap:wrap;gap:6px;max-height:calc(100% - 70px);}
+  .dicon{width:92px;height:92px;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;text-align:center;padding:8px;}
+  .dicon:hover{background:rgba(255,255,255,0.12);}
+  .dicon .em{font-size:34px;}
+  .dicon .nm{font-size:12px;line-height:1.1;text-shadow:0 1px 4px rgba(0,0,0,.6);}
+  /* ---------- windows ---------- */
+  .win{position:absolute;min-width:240px;min-height:160px;background:var(--glass);backdrop-filter:blur(14px);
+    border:1px solid var(--glassb);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.5);display:flex;flex-direction:column;overflow:hidden;}
+  .win.max{border-radius:0;}
+  .titlebar{height:38px;display:flex;align-items:center;gap:8px;padding:0 8px 0 12px;cursor:move;
+    background:rgba(255,255,255,0.06);border-bottom:1px solid var(--glassb);}
+  .titlebar .tt{flex:1;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .titlebar .em{font-size:15px;}
+  .wbtn{width:26px;height:26px;border:none;border-radius:7px;background:transparent;color:var(--text);cursor:pointer;font-size:14px;display:grid;place-items:center;}
+  .wbtn:hover{background:rgba(255,255,255,0.16);}
+  .wbtn.close:hover{background:#e54848;}
+  .wbody{flex:1;overflow:auto;position:relative;}
+  .wbody iframe{width:100%;height:100%;border:none;background:#fff;}
+  .rsz{position:absolute;width:16px;height:16px;right:0;bottom:0;cursor:nwse-resize;}
+  /* ---------- taskbar ---------- */
+  #taskbar{position:fixed;left:0;right:0;bottom:0;height:54px;display:flex;align-items:center;gap:6px;padding:0 10px;
+    background:var(--glass);backdrop-filter:blur(16px);border-top:1px solid var(--glassb);z-index:5000;}
+  #startbtn{display:flex;align-items:center;gap:8px;padding:8px 14px;border-radius:9px;cursor:pointer;font-weight:600;}
+  #startbtn:hover,#startbtn.open{background:rgba(255,255,255,0.16);}
+  .qsep{width:1px;height:28px;background:var(--glassb);margin:0 4px;}
+  .tbtn{display:flex;align-items:center;gap:6px;height:38px;padding:0 12px;border-radius:8px;cursor:pointer;font-size:13px;max-width:180px;}
+  .tbtn .em{font-size:16px;}
+  .tbtn .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tbtn:hover{background:rgba(255,255,255,0.12);}
+  .tbtn.active{background:rgba(255,255,255,0.2);}
+  #tray{margin-left:auto;display:flex;align-items:center;gap:14px;padding-right:6px;font-size:13px;}
+  #clock{text-align:right;line-height:1.15;cursor:default;}
+  #clock .t{font-weight:600;} #clock .d{font-size:11px;opacity:.7;}
+  /* ---------- start menu ---------- */
+  #startmenu{position:fixed;left:10px;bottom:62px;width:380px;max-width:calc(100% - 20px);
+    background:var(--glass);backdrop-filter:blur(18px);border:1px solid var(--glassb);border-radius:14px;
+    box-shadow:0 24px 70px rgba(0,0,0,.55);z-index:6000;padding:16px;display:none;}
+  #startmenu.open{display:block;animation:rise .15s ease;}
+  @keyframes rise{from{transform:translateY(8px);opacity:0;}to{transform:none;opacity:1;}}
+  #startmenu h3{margin:0 0 12px;font-size:13px;opacity:.7;font-weight:600;}
+  .smgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+  .smapp{display:flex;flex-direction:column;align-items:center;gap:6px;padding:12px 6px;border-radius:10px;cursor:pointer;text-align:center;font-size:12px;}
+  .smapp:hover{background:rgba(255,255,255,0.14);}
+  .smapp .em{font-size:30px;}
+  .smfoot{display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:12px;border-top:1px solid var(--glassb);font-size:13px;}
+  .smfoot button{background:transparent;border:none;color:var(--text);cursor:pointer;display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:7px;}
+  .smfoot button:hover{background:rgba(255,255,255,0.14);}
+  /* ---------- app internals ---------- */
+  .term{font-family:Consolas,monospace;font-size:13px;background:#0c1018;height:100%;padding:10px;overflow:auto;color:#d7e2f0;}
+  .term .line{white-space:pre-wrap;word-break:break-word;}
+  .term .prompt{color:#19c3b1;}
+  .term input{background:transparent;border:none;color:#d7e2f0;font-family:inherit;font-size:inherit;outline:none;width:70%;}
+  .note{display:flex;flex-direction:column;height:100%;}
+  .note textarea{flex:1;border:none;resize:none;padding:12px;font-family:Consolas,monospace;font-size:14px;background:#0e1320;color:#eaf0fa;outline:none;}
+  .note .bar{display:flex;gap:6px;padding:6px;background:rgba(255,255,255,0.05);border-bottom:1px solid var(--glassb);}
+  .note .bar button,.calc button,.settings button,.files .bar button{background:rgba(255,255,255,0.1);border:1px solid var(--glassb);color:var(--text);border-radius:7px;padding:5px 10px;cursor:pointer;font-size:12px;}
+  .files{height:100%;display:flex;flex-direction:column;}
+  .files .bar{display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid var(--glassb);font-size:13px;}
+  .files .grid{flex:1;display:grid;grid-template-columns:repeat(auto-fill,84px);gap:10px;padding:14px;align-content:start;overflow:auto;}
+  .fitem{display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px;border-radius:9px;cursor:pointer;text-align:center;font-size:12px;}
+  .fitem:hover{background:rgba(255,255,255,0.12);}
+  .fitem .em{font-size:32px;}
+  .calc{display:flex;flex-direction:column;height:100%;background:#0e1320;padding:12px;gap:10px;}
+  .calc .disp{background:#0b0f18;border-radius:10px;padding:14px;font-size:26px;text-align:right;min-height:54px;font-family:Consolas,monospace;overflow:hidden;}
+  .calc .pad{flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
+  .calc .pad button{font-size:18px;border-radius:10px;border:1px solid var(--glassb);background:rgba(255,255,255,0.07);color:var(--text);cursor:pointer;}
+  .calc .pad button.op{background:rgba(45,125,210,0.4);} .calc .pad button.eq{background:linear-gradient(135deg,var(--accent),var(--accent2));}
+  .settings{padding:18px;height:100%;overflow:auto;font-size:14px;}
+  .settings h2{margin:0 0 6px;} .settings .sec{margin:18px 0;}
+  .settings .swatches{display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;}
+  .swatch{width:54px;height:38px;border-radius:8px;cursor:pointer;border:2px solid transparent;}
+  .swatch.sel{border-color:#fff;}
+  .accents{display:flex;gap:10px;margin-top:8px;}
+  .acc{width:30px;height:30px;border-radius:50%;cursor:pointer;border:2px solid transparent;}
+  .acc.sel{border-color:#fff;}
+  .about{padding:22px;height:100%;overflow:auto;}
+  .about .big{font-size:42px;font-weight:800;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;background-clip:text;color:transparent;}
+  .about table{margin-top:14px;font-size:13px;} .about td{padding:3px 14px 3px 0;opacity:.9;}
+  .launch{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:14px;text-align:center;padding:24px;}
+  .launch a{padding:12px 22px;border-radius:10px;text-decoration:none;color:#fff;font-weight:600;background:linear-gradient(135deg,var(--accent),var(--accent2));}
+</style>
+</head>
+<body>
+
+<div id="desktop">
+  <div id="icons"></div>
+</div>
+
+<div id="startmenu">
+  <h3>ALL APPS</h3>
+  <div class="smgrid" id="smgrid"></div>
+  <div class="smfoot">
+    <span style="opacity:.7">👤 You</span>
+    <div>
+      <button onclick="ArtOS.app('settings')">⚙ Settings</button>
+      <button onclick="ArtOS.reboot()">⏻ Reboot</button>
+    </div>
+  </div>
+</div>
+
+<div id="taskbar">
+  <div id="startbtn"><span style="font-size:18px">≡</span> Start</div>
+  <div class="qsep"></div>
+  <div id="quick"></div>
+  <div id="tray">
+    <span id="netbatt">📶 🔋</span>
+    <div id="clock"><div class="t">--:--</div><div class="d">---</div></div>
+  </div>
+</div>
+
+<div id="boot">
+  <div class="logo">ArtOS</div>
+  <div class="spin"></div>
+  <div class="bootmsg" id="bootmsg"></div>
+</div>
+
+<script>
+(function(){
+  // ---------------------------------------------------------------- app registry
+  const APPS = {
+    "math":     {icon:"🧮", name:"Math Solver", kind:"iframe", url:"../math-solver/"},
+    "resup":    {icon:"⬆️", name:"ResUp",       kind:"iframe", url:"../resup/"},
+    "files":    {icon:"📁", name:"Files",       kind:"files"},
+    "terminal": {icon:"🖥️", name:"Terminal",    kind:"terminal"},
+    "notepad":  {icon:"📝", name:"Notepad",     kind:"notepad"},
+    "calc":     {icon:"🧠", name:"Calculator",  kind:"calc"},
+    "settings": {icon:"⚙️", name:"Settings",    kind:"settings"},
+    "about":    {icon:"💠", name:"About ArtOS", kind:"about"},
+  };
+  const DESKTOP = ["math","resup","files","terminal","notepad","calc","settings","about"];
+  const QUICK   = ["math","files","terminal","notepad"];
+
+  const WALLPAPERS = [
+    "linear-gradient(135deg,#141e30,#243b55)",
+    "linear-gradient(135deg,#0f2027,#203a43,#2c5364)",
+    "linear-gradient(135deg,#42275a,#734b6d)",
+    "linear-gradient(135deg,#1a2a6c,#b21f1f,#fdbb2d)",
+    "linear-gradient(135deg,#0b486b,#f56217)",
+    "radial-gradient(circle at 30% 20%,#3a1c71,#d76d77,#ffaf7b)",
+  ];
+  const ACCENTS = [["#2d7dd2","#19c3b1"],["#7b2ff7","#f107a3"],["#ff512f","#dd2476"],
+                   ["#11998e","#38ef7d"],["#fc5c7d","#6a82fb"],["#f7971e","#ffd200"]];
+
+  const $ = s => document.querySelector(s);
+  const store = {
+    get:(k,d)=>{try{return JSON.parse(localStorage.getItem("artos:"+k))??d;}catch(e){return d;}},
+    set:(k,v)=>localStorage.setItem("artos:"+k,JSON.stringify(v)),
+  };
+
+  let zTop = 10, winCount = 0;
+  const windows = {};   // id -> {el, app, taskbtn, min, prev}
+
+  // ---------------------------------------------------------------- window manager
+  function makeWindow(appId){
+    const app = APPS[appId];
+    // focus existing single-instance window
+    for(const id in windows){ if(windows[id].app===appId){ focus(id); unmin(id); return; } }
+
+    const id = "w"+(++winCount);
+    const el = document.createElement("div");
+    el.className = "win";
+    const w = Math.min(720, innerWidth-80), h = Math.min(520, innerHeight-120);
+    el.style.width = w+"px"; el.style.height = h+"px";
+    el.style.left = (40 + (winCount%6)*26)+"px";
+    el.style.top  = (40 + (winCount%6)*22)+"px";
+    el.style.zIndex = ++zTop;
+    el.innerHTML =
+      `<div class="titlebar"><span class="em">${app.icon}</span><span class="tt">${app.name}</span>`+
+      `<button class="wbtn min" title="Minimize">─</button>`+
+      `<button class="wbtn maxb" title="Maximize">▢</button>`+
+      `<button class="wbtn close" title="Close">✕</button></div>`+
+      `<div class="wbody"></div><div class="rsz"></div>`;
+    $("#desktop").appendChild(el);
+
+    const body = el.querySelector(".wbody");
+    buildApp(appId, body);
+
+    el.addEventListener("mousedown", ()=>focus(id));
+    dragify(el.querySelector(".titlebar"), el, id);
+    resizify(el.querySelector(".rsz"), el);
+    el.querySelector(".close").onclick = e=>{e.stopPropagation();closeWin(id);};
+    el.querySelector(".min").onclick   = e=>{e.stopPropagation();minimize(id);};
+    el.querySelector(".maxb").onclick  = e=>{e.stopPropagation();toggleMax(id);};
+    el.querySelector(".titlebar").ondblclick = ()=>toggleMax(id);
+
+    // taskbar button
+    const tb = document.createElement("div");
+    tb.className = "tbtn active";
+    tb.innerHTML = `<span class="em">${app.icon}</span><span class="lbl">${app.name}</span>`;
+    tb.onclick = ()=>{ const W=windows[id];
+      if(W.min){ unmin(id); focus(id); }
+      else if(el.style.zIndex==zTop){ minimize(id); }
+      else focus(id);
+    };
+    $("#quick").appendChild(tb);
+
+    windows[id] = {el, app:appId, taskbtn:tb, min:false, prev:null};
+    focus(id);
+    return id;
+  }
+
+  function focus(id){
+    const W = windows[id]; if(!W) return;
+    W.el.style.zIndex = ++zTop;
+    for(const k in windows) windows[k].taskbtn.classList.toggle("active", k===id && !windows[k].min);
+  }
+  function minimize(id){ const W=windows[id]; W.min=true; W.el.style.display="none"; W.taskbtn.classList.remove("active"); }
+  function unmin(id){ const W=windows[id]; W.min=false; W.el.style.display="flex"; }
+  function closeWin(id){ const W=windows[id]; if(!W)return; W.el.remove(); W.taskbtn.remove(); delete windows[id]; }
+  function toggleMax(id){
+    const W=windows[id], el=W.el;
+    if(el.classList.contains("max")){
+      el.classList.remove("max"); Object.assign(el.style, W.prev);
+    } else {
+      W.prev={left:el.style.left,top:el.style.top,width:el.style.width,height:el.style.height};
+      el.classList.add("max");
+      Object.assign(el.style,{left:"0px",top:"0px",width:"100%",height:(innerHeight-54)+"px"});
+    }
+  }
+  function dragify(handle, el, id){
+    handle.addEventListener("mousedown", e=>{
+      if(e.target.classList.contains("wbtn")) return;
+      if(el.classList.contains("max")) return;
+      focus(id);
+      const sx=e.clientX, sy=e.clientY, ox=el.offsetLeft, oy=el.offsetTop;
+      const mv=ev=>{ el.style.left=Math.max(0,Math.min(innerWidth-60,ox+ev.clientX-sx))+"px";
+                     el.style.top =Math.max(0,Math.min(innerHeight-90,oy+ev.clientY-sy))+"px"; };
+      const up=()=>{document.removeEventListener("mousemove",mv);document.removeEventListener("mouseup",up);};
+      document.addEventListener("mousemove",mv); document.addEventListener("mouseup",up);
+    });
+  }
+  function resizify(handle, el){
+    handle.addEventListener("mousedown", e=>{
+      e.stopPropagation();
+      const sx=e.clientX, sy=e.clientY, ow=el.offsetWidth, oh=el.offsetHeight;
+      const mv=ev=>{ el.style.width=Math.max(240,ow+ev.clientX-sx)+"px";
+                     el.style.height=Math.max(160,oh+ev.clientY-sy)+"px"; };
+      const up=()=>{document.removeEventListener("mousemove",mv);document.removeEventListener("mouseup",up);};
+      document.addEventListener("mousemove",mv); document.addEventListener("mouseup",up);
+    });
+  }
+
+  // ---------------------------------------------------------------- app builders
+  function buildApp(appId, body){
+    const app = APPS[appId];
+    if(app.kind==="iframe"){
+      body.innerHTML = `<iframe src="${app.url}" allow="clipboard-write"></iframe>`;
+    } else if(app.kind==="terminal") buildTerminal(body);
+    else if(app.kind==="notepad")  buildNotepad(body);
+    else if(app.kind==="files")    buildFiles(body);
+    else if(app.kind==="calc")     buildCalc(body);
+    else if(app.kind==="settings") buildSettings(body);
+    else if(app.kind==="about")    buildAbout(body);
+  }
+
+  // --- Terminal
+  function buildTerminal(body){
+    body.innerHTML = `<div class="term" id="termOut"></div>`;
+    const out = body.querySelector(".term");
+    const print = (t, cls)=>{ const d=document.createElement("div"); d.className="line"+(cls?" "+cls:""); d.textContent=t; out.appendChild(d); out.scrollTop=out.scrollHeight; };
+    print("ArtOS Terminal — type 'help'.");
+    function newPrompt(){
+      const line=document.createElement("div"); line.className="line";
+      line.innerHTML=`<span class="prompt">you@artos</span>:~$ <input autofocus>`;
+      out.appendChild(line); const inp=line.querySelector("input"); inp.focus(); out.scrollTop=out.scrollHeight;
+      inp.addEventListener("keydown", e=>{ if(e.key==="Enter"){ const v=inp.value; inp.outerHTML=" "+escapeHtml(v); runCmd(v,print); newPrompt(); }});
+    }
+    newPrompt();
+    out.addEventListener("click", ()=>{ const i=out.querySelector("input"); if(i)i.focus(); });
+  }
+  function runCmd(raw, print){
+    const [cmd,...args]=raw.trim().split(/\s+/); const rest=args.join(" ");
+    switch((cmd||"").toLowerCase()){
+      case "": break;
+      case "help": print("Commands: help, echo, clear, date, whoami, ls, open <app>, calc <expr>, neofetch, about, reboot"); break;
+      case "echo": print(rest); break;
+      case "clear": $("#termOut").innerHTML=""; break;
+      case "date": print(new Date().toString()); break;
+      case "whoami": print("you"); break;
+      case "ls": print("Documents  Pictures  Music  readme.txt"); break;
+      case "open": if(APPS[rest]){AprtOpen(rest);print("Opening "+APPS[rest].name+"…");}else print("No such app: "+rest); break;
+      case "calc": try{print(String(calcEval(rest)));}catch(e){print("calc: bad expression");} break;
+      case "about": AprtOpen("about"); break;
+      case "reboot": ArtOS.reboot(); break;
+      case "neofetch": neofetch(print); break;
+      default: print(cmd+": command not found");
+    }
+  }
+  function neofetch(print){
+    ["       _______        ","      / ArtOS  \\      OS: ArtOS 1.0 (web)",
+     "     |  ^   ^  |     Shell: artsh","     |    <    |     WM: GlassWM",
+     "     |  \\___/  |     Apps: "+Object.keys(APPS).length,
+     "      \\_______/      Host: "+location.host].forEach(l=>print(l));
+  }
+
+  // --- Notepad
+  function buildNotepad(body){
+    body.innerHTML = `<div class="note"><div class="bar">
+      <button data-a="new">New</button><button data-a="save">Save</button>
+      <button data-a="open">Open</button><span style="opacity:.6;font-size:12px;align-self:center" id="npname">untitled</span>
+      </div><textarea spellcheck="false" placeholder="Start typing…"></textarea></div>`;
+    const ta=body.querySelector("textarea"), nm=body.querySelector("#npname");
+    body.querySelector('[data-a="new"]').onclick=()=>{ta.value="";nm.textContent="untitled";};
+    body.querySelector('[data-a="save"]').onclick=()=>{
+      const name=prompt("Save as:", nm.textContent==="untitled"?"note1":nm.textContent); if(!name)return;
+      const docs=store.get("docs",{}); docs[name]=ta.value; store.set("docs",docs); nm.textContent=name;
+    };
+    body.querySelector('[data-a="open"]').onclick=()=>{
+      const docs=store.get("docs",{}); const keys=Object.keys(docs);
+      if(!keys.length){alert("No saved notes yet.");return;}
+      const name=prompt("Open which? "+keys.join(", "), keys[0]);
+      if(name&&docs[name]!=null){ta.value=docs[name];nm.textContent=name;}
+    };
+  }
+
+  // --- Files (in-memory)
+  const FS = {Documents:{"readme.txt":"Welcome to ArtOS!\nThis is a web-based desktop OS.","todo.txt":"• try the Terminal\n• change wallpaper in Settings"},
+              Pictures:{"wallpaper.png":"🖼️ (image)","cat.png":"🐱 (image)"},
+              Music:{"song.mp3":"🎵 (audio)"}, Apps:"__apps__"};
+  function buildFiles(body){
+    body.innerHTML=`<div class="files"><div class="bar"><button data-a="up">⬅ Up</button><span id="fpath">This PC</span></div><div class="grid" id="fgrid"></div></div>`;
+    let path=[];
+    const grid=body.querySelector("#fgrid"), pl=body.querySelector("#fpath");
+    function node(){ let n=FS; for(const p of path) n=n[p]; return n; }
+    function render(){
+      pl.textContent="This PC"+(path.length?" › "+path.join(" › "):"");
+      grid.innerHTML="";
+      let n=node();
+      if(n==="__apps__"){ DESKTOP.forEach(a=>addItem(APPS[a].icon, APPS[a].name, ()=>AprtOpen(a))); return; }
+      for(const k in n){
+        const v=n[k]; const isDir=(typeof v==="object")|| v==="__apps__";
+        addItem(isDir?"📁":"📄", k, ()=> isDir? (path.push(k),render()) : openFile(k,v));
+      }
+    }
+    function addItem(em,label,onOpen){ const d=document.createElement("div"); d.className="fitem";
+      d.innerHTML=`<span class="em">${em}</span><span>${escapeHtml(label)}</span>`; d.ondblclick=onOpen; grid.appendChild(d); }
+    function openFile(name,content){ if(name.endsWith(".txt")){ const id=AprtOpen("notepad");
+        setTimeout(()=>{const W=windows[id]; if(W){W.el.querySelector("textarea").value=content; W.el.querySelector("#npname").textContent=name;}},60);
+      } else alert(name+"\n\n"+content); }
+    body.querySelector('[data-a="up"]').onclick=()=>{ if(path.length){path.pop();render();} };
+    render();
+  }
+
+  // --- Calculator
+  function buildCalc(body){
+    body.innerHTML=`<div class="calc"><div class="disp" id="cd">0</div><div class="pad" id="cpad"></div></div>`;
+    const disp=body.querySelector("#cd"); let expr="";
+    const keys=["7","8","9","/","4","5","6","*","1","2","3","-","0",".","=","+","C","(",")","⌫"];
+    const pad=body.querySelector("#cpad");
+    keys.forEach(k=>{ const b=document.createElement("button");
+      b.textContent=k; if("+-*/".includes(k))b.className="op"; if(k==="=")b.className="eq";
+      b.onclick=()=>{ if(k==="C"){expr="";} else if(k==="⌫"){expr=expr.slice(0,-1);}
+        else if(k==="="){ try{expr=String(calcEval(expr));}catch(e){expr="Error";} }
+        else expr+=k; disp.textContent=expr||"0"; };
+      pad.appendChild(b); });
+  }
+
+  // --- Settings
+  function buildSettings(body){
+    body.innerHTML=`<div class="settings">
+      <h2>Settings</h2>
+      <div class="sec"><b>Wallpaper</b><div class="swatches" id="walls"></div></div>
+      <div class="sec"><b>Accent color</b><div class="accents" id="accs"></div></div>
+      <div class="sec"><b>System</b><div style="margin-top:8px"><button onclick="ArtOS.reboot()">⏻ Reboot ArtOS</button>
+        <button onclick="ArtOS.app('about')">About</button></div></div>
+      <div class="sec" style="opacity:.6;font-size:12px">ArtOS 1.0 — a web desktop. Settings are saved in your browser.</div>
+    </div>`;
+    const walls=body.querySelector("#walls");
+    WALLPAPERS.forEach((w,i)=>{ const s=document.createElement("div"); s.className="swatch"+(i==store.get("wall",0)?" sel":"");
+      s.style.background=w; s.onclick=()=>{ setWall(i); [...walls.children].forEach(c=>c.classList.remove("sel")); s.classList.add("sel"); };
+      walls.appendChild(s); });
+    const accs=body.querySelector("#accs");
+    ACCENTS.forEach((a,i)=>{ const s=document.createElement("div"); s.className="acc"+(i==store.get("accent",0)?" sel":"");
+      s.style.background=`linear-gradient(135deg,${a[0]},${a[1]})`; s.onclick=()=>{ setAccent(i); [...accs.children].forEach(c=>c.classList.remove("sel")); s.classList.add("sel"); };
+      accs.appendChild(s); });
+  }
+
+  // --- About
+  function buildAbout(body){
+    body.innerHTML=`<div class="about"><div class="big">ArtOS</div>
+      <div style="opacity:.8">Version 1.0 · a desktop that lives in your browser</div>
+      <table><tr><td>Kernel</td><td>JavaScript / DOM</td></tr>
+      <tr><td>Window manager</td><td>GlassWM</td></tr>
+      <tr><td>Apps installed</td><td>${Object.keys(APPS).length}</td></tr>
+      <tr><td>Display</td><td><span id="ab-res"></span></td></tr>
+      <tr><td>Host</td><td>${location.host||"local file"}</td></tr></table>
+      <p style="opacity:.7;margin-top:18px;font-size:13px">Built with ❤️ for ARTGEOrge. Everything runs locally — no servers, no tracking.</p></div>`;
+    body.querySelector("#ab-res").textContent = innerWidth+" × "+innerHeight;
+  }
+
+  // ---------------------------------------------------------------- helpers
+  function calcEval(s){
+    if(!/^[-+*/(). 0-9]+$/.test(s)) throw "bad";
+    // eslint-disable-next-line no-new-func
+    const r=Function('"use strict";return ('+s+')')(); if(typeof r!=="number"||!isFinite(r))throw "bad"; return Math.round(r*1e10)/1e10;
+  }
+  function escapeHtml(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+
+  // wallpaper / accent
+  function setWall(i){ store.set("wall",i); $("#desktop").style.background=WALLPAPERS[i]; }
+  function setAccent(i){ store.set("accent",i); const a=ACCENTS[i];
+    document.documentElement.style.setProperty("--accent",a[0]); document.documentElement.style.setProperty("--accent2",a[1]); }
+
+  // ---------------------------------------------------------------- shell glue
+  function AprtOpen(id){ return makeWindow(id); }
+
+  function buildDesktopIcons(){
+    const wrap=$("#icons");
+    DESKTOP.forEach(id=>{ const a=APPS[id]; const d=document.createElement("div"); d.className="dicon";
+      d.innerHTML=`<span class="em">${a.icon}</span><span class="nm">${a.name}</span>`;
+      d.ondblclick=()=>AprtOpen(id); wrap.appendChild(d); });
+  }
+  function buildQuick(){ const q=$("#quick"); /* quick launch added before window buttons via separate area? keep simple */ }
+  function buildStartMenu(){
+    const g=$("#smgrid");
+    Object.keys(APPS).forEach(id=>{ const a=APPS[id]; const d=document.createElement("div"); d.className="smapp";
+      d.innerHTML=`<span class="em">${a.icon}</span><span>${a.name}</span>`;
+      d.onclick=()=>{ AprtOpen(id); toggleStart(false); }; g.appendChild(d); });
+  }
+  function toggleStart(force){ const m=$("#startmenu"), b=$("#startbtn");
+    const open = force!==undefined?force:!m.classList.contains("open");
+    m.classList.toggle("open",open); b.classList.toggle("open",open); }
+
+  function clock(){ const d=new Date();
+    const t=d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+    const ds=d.toLocaleDateString([], {month:"short",day:"numeric"});
+    $("#clock").innerHTML=`<div class="t">${t}</div><div class="d">${ds}</div>`; }
+
+  function boot(){
+    const msgs=["Initializing GlassWM…","Mounting filesystem…","Loading apps…","Starting desktop…","Welcome."];
+    const bm=$("#bootmsg"); let i=0;
+    const iv=setInterval(()=>{ bm.textContent=msgs[i++]||""; if(i>msgs.length){clearInterval(iv);
+      $("#boot").classList.add("gone"); setTimeout(()=>$("#boot").remove(),700); } },420);
+  }
+
+  // ---------------------------------------------------------------- public API
+  window.ArtOS = {
+    app:(id)=>{ if(APPS[id]) AprtOpen(id); },
+    reboot:()=>{ location.reload(); },
+  };
+
+  // ---------------------------------------------------------------- init
+  setWall(store.get("wall",0)); setAccent(store.get("accent",0));
+  buildDesktopIcons(); buildStartMenu();
+  $("#startbtn").onclick=(e)=>{ e.stopPropagation(); toggleStart(); };
+  document.addEventListener("click", e=>{ if(!e.target.closest("#startmenu")&&!e.target.closest("#startbtn")) toggleStart(false); });
+  clock(); setInterval(clock,1000);
+  boot();
+})();
+</script>
+</body>
+</html>
