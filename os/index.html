@@ -144,6 +144,7 @@
   const APPS = {
     "math":     {icon:"🧮", name:"Math Solver", kind:"iframe", url:"../math-solver/"},
     "resup":    {icon:"⬆️", name:"ResUp",       kind:"iframe", url:"../resup/"},
+    "nova":     {icon:"🌐", name:"Nova Browser",kind:"native", target:"nova"},
     "files":    {icon:"📁", name:"Files",       kind:"files"},
     "terminal": {icon:"🖥️", name:"Terminal",    kind:"terminal"},
     "notepad":  {icon:"📝", name:"Notepad",     kind:"notepad"},
@@ -151,7 +152,7 @@
     "settings": {icon:"⚙️", name:"Settings",    kind:"settings"},
     "about":    {icon:"💠", name:"About ArtOS", kind:"about"},
   };
-  const DESKTOP = ["math","resup","files","terminal","notepad","calc","settings","about"];
+  const DESKTOP = ["math","resup","nova","files","terminal","notepad","calc","settings","about"];
   const QUICK   = ["math","files","terminal","notepad"];
 
   const WALLPAPERS = [
@@ -275,6 +276,23 @@
     else if(app.kind==="calc")     buildCalc(body);
     else if(app.kind==="settings") buildSettings(body);
     else if(app.kind==="about")    buildAbout(body);
+    else if(app.kind==="native")   buildNative(body, app);
+  }
+
+  // --- Native app launcher (e.g. Nova Browser) — works in the ArtOS desktop app
+  function buildNative(body, app){
+    body.innerHTML = `<div class="launch">
+      <div style="font-size:54px">${app.icon}</div>
+      <div style="font-size:20px;font-weight:700">${app.name}</div>
+      <p style="opacity:.8;max-width:360px">Opens the ${app.name} app installed on this computer.</p>
+      <a href="#" id="nvGo">Open ${app.name}</a>
+      <div id="nvMsg" style="opacity:.75;font-size:13px;min-height:18px;margin-top:4px"></div></div>`;
+    const msg = body.querySelector("#nvMsg");
+    const go = ()=>{ const ok = ArtOS.launchNative(app.target);
+      msg.textContent = ok ? `Launching ${app.name}…`
+        : `${app.name} is a native app — available when ArtOS runs as the desktop app.`; };
+    body.querySelector("#nvGo").onclick = e=>{ e.preventDefault(); go(); };
+    go();   // auto-attempt on open
   }
 
   // --- Terminal
@@ -461,6 +479,12 @@
   window.ArtOS = {
     app:(id)=>{ if(APPS[id]) AprtOpen(id); },
     reboot:()=>{ location.reload(); },
+    // Launch a native app via the ArtOS desktop HTTP bridge; false on the web.
+    launchNative:(target)=>{
+      if(!window.__artosDesktop) return false;
+      try{ fetch("http://127.0.0.1:5099/launch/"+encodeURIComponent(target),{mode:"no-cors"}); }catch(e){}
+      return true;
+    },
   };
 
   // ---------------------------------------------------------------- init
@@ -470,6 +494,22 @@
   document.addEventListener("click", e=>{ if(!e.target.closest("#startmenu")&&!e.target.closest("#startbtn")) toggleStart(false); });
   clock(); setInterval(clock,1000);
   boot();
+
+  // Detect the ArtOS desktop app via its loopback HTTP bridge. If present,
+  // mark desktop mode and add a real Shut Down button to the tray.
+  (function wireDesktop(){
+    fetch("http://127.0.0.1:5099/ping",{mode:"no-cors"}).then(()=>{
+      window.__artosDesktop = true;
+      if(document.getElementById("osPower")) return;
+      const tray=$("#tray");
+      const b=document.createElement("span");
+      b.id="osPower"; b.textContent="⏻"; b.title="Shut down ArtOS";
+      b.style.cssText="cursor:pointer;font-size:16px;";
+      b.onclick=()=>{ fetch("http://127.0.0.1:5099/shutdown",{mode:"no-cors"}); };
+      tray.insertBefore(b, tray.firstChild);
+      window.ArtOS.shutdown=()=>{ fetch("http://127.0.0.1:5099/shutdown",{mode:"no-cors"}); };
+    }).catch(()=>{});
+  })();
 })();
 </script>
 </body>
