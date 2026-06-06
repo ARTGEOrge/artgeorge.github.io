@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bambu Studio (Lite) — ArtOS</title>
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;overflow:hidden;font-family:"Segoe UI",system-ui,sans-serif;
+    background:#11151c;color:#e8eef7;user-select:none;}
+  #app{display:flex;flex-direction:column;height:100%;}
+  .top{display:flex;align-items:center;gap:8px;padding:9px 12px;background:#161b24;border-bottom:1px solid #232b38;}
+  .brand{font-weight:800;display:flex;align-items:center;gap:8px;}
+  .brand .g{color:#00c060;}
+  .sp{flex:1;}
+  .btn{background:#222a36;color:#e8eef7;border:1px solid #313c4d;border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;}
+  .btn:hover{background:#2c3645;}
+  .btn.primary{background:linear-gradient(135deg,#00ae42,#19c3b1);border:none;font-weight:600;}
+  .main{flex:1;position:relative;min-height:0;}
+  #view{position:absolute;inset:0;}
+  .drop{position:absolute;inset:0;border:3px dashed transparent;}
+  .drop.hover{border-color:#19c3b1;background:rgba(25,195,177,0.07);}
+  .hud{position:absolute;left:12px;bottom:12px;background:rgba(0,0,0,0.5);border:1px solid #2a3340;
+    border-radius:10px;padding:10px 13px;font-size:13px;line-height:1.7;backdrop-filter:blur(6px);}
+  .hud b{color:#19c3b1;}
+  .empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:10px;color:#8aa0bd;pointer-events:none;text-align:center;}
+  .empty .big{font-size:54px;}
+  .tools{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:6px;}
+  .tools .btn{width:120px;text-align:center;}
+  .row{display:flex;gap:6px;}
+  .row .btn{flex:1;width:auto;padding:7px 0;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="top">
+    <div class="brand">🖨️ Bambu Studio <span class="g">Lite</span></div>
+    <div class="sp"></div>
+    <button class="btn primary" id="open">📂 Open model</button>
+    <input type="file" id="file" accept=".stl,.obj" hidden>
+  </div>
+  <div class="main">
+    <div id="view"></div>
+    <div class="drop" id="drop"></div>
+    <div class="empty" id="empty"><div class="big">🧊</div>
+      <div style="font-size:17px;color:#cfe0f5">Open or drag an STL / OBJ onto the plate</div>
+      <div style="font-size:13px">Bambu Lab–style viewer · 256 × 256 mm bed</div></div>
+    <div class="tools">
+      <button class="btn" id="reset">⤢ Reset view</button>
+      <button class="btn" id="top">⬇ Top</button>
+      <div class="row"><button class="btn" id="sdn">– size</button><button class="btn" id="sup">+ size</button></div>
+      <div class="row"><button class="btn" id="rx">⟲X</button><button class="btn" id="ry">⟲Y</button><button class="btn" id="rz">⟲Z</button></div>
+      <button class="btn" id="center">⊕ Center on plate</button>
+    </div>
+    <div class="hud" id="hud" style="display:none">
+      <div><b id="hname">model</b></div>
+      <div>Size: <b id="hsize">–</b> mm</div>
+      <div>Triangles: <b id="htris">–</b></div>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "/bambu/three.module.js" } }
+</script>
+<script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from '/bambu/OrbitControls.js';
+  import { STLLoader } from '/bambu/STLLoader.js';
+  import { OBJLoader } from '/bambu/OBJLoader.js';
+
+  const BED = 256;                 // Bambu X1/P1 bed size (mm)
+  const view = document.getElementById('view');
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x11151c);
+
+  const camera = new THREE.PerspectiveCamera(50, 1, 0.1, 5000);
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  view.appendChild(renderer.domElement);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+
+  // lights
+  scene.add(new THREE.HemisphereLight(0xbfd4ff, 0x20262e, 1.1));
+  const dir = new THREE.DirectionalLight(0xffffff, 1.4);
+  dir.position.set(120, 240, 160); scene.add(dir);
+
+  // print bed
+  const grid = new THREE.GridHelper(BED, 32, 0x2f6f4e, 0x223040);
+  scene.add(grid);
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(BED, BED),
+    new THREE.MeshStandardMaterial({ color: 0x161c24, roughness: 1, metalness: 0 }));
+  plate.rotation.x = -Math.PI / 2; plate.position.y = -0.1; scene.add(plate);
+  // bed origin marker
+  const axis = new THREE.AxesHelper(20); axis.position.set(-BED/2, 0.1, BED/2); scene.add(axis);
+
+  let mesh = null;
+
+  function frameCamera(target = new THREE.Vector3(0, 30, 0), dist = 360) {
+    camera.position.set(dist*0.8, dist*0.7, dist*0.8);
+    controls.target.copy(target); controls.update();
+  }
+  frameCamera();
+
+  function resize() {
+    const w = view.clientWidth, h = view.clientHeight;
+    renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize); resize();
+
+  (function loop(){ requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+
+  function clearModel(){ if(mesh){ scene.remove(mesh); mesh.traverse(o=>{ if(o.geometry)o.geometry.dispose(); }); mesh=null; } }
+
+  function placeOnPlate(){
+    if(!mesh) return;
+    const box = new THREE.Box3().setFromObject(mesh);
+    const size = new THREE.Vector3(); box.getSize(size);
+    const center = new THREE.Vector3(); box.getCenter(center);
+    mesh.position.x -= center.x;
+    mesh.position.z -= center.z;
+    mesh.position.y -= box.min.y;           // sit on the plate
+    updateHud();
+  }
+
+  function updateHud(){
+    if(!mesh) return;
+    const box = new THREE.Box3().setFromObject(mesh);
+    const s = new THREE.Vector3(); box.getSize(s);
+    document.getElementById('hsize').textContent =
+      `${s.x.toFixed(1)} × ${s.z.toFixed(1)} × ${s.y.toFixed(1)}`;
+    let tris = 0;
+    mesh.traverse(o => { if (o.isMesh && o.geometry) {
+      const g=o.geometry; tris += g.index ? g.index.count/3 : g.attributes.position.count/3; } });
+    document.getElementById('htris').textContent = Math.round(tris).toLocaleString();
+    const fit = box.getSize(new THREE.Vector3()).length() || 200;
+    frameCamera(box.getCenter(new THREE.Vector3()), Math.max(180, fit*1.6));
+  }
+
+  const MAT = new THREE.MeshStandardMaterial({ color: 0x00b050, roughness: 0.55, metalness: 0.1, flatShading:false });
+
+  function loadFile(file){
+    const name = file.name, ext = name.split('.').pop().toLowerCase();
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        clearModel();
+        if (ext === 'stl') {
+          const geo = new STLLoader().parse(e.target.result);
+          geo.computeVertexNormals();
+          mesh = new THREE.Mesh(geo, MAT);
+        } else if (ext === 'obj') {
+          const obj = new OBJLoader().parse(e.target.result);
+          obj.traverse(o => { if (o.isMesh) o.material = MAT; });
+          mesh = obj;
+        } else { alert('Unsupported: ' + ext); return; }
+        scene.add(mesh);
+        placeOnPlate();
+        document.getElementById('empty').style.display = 'none';
+        document.getElementById('hud').style.display = '';
+        document.getElementById('hname').textContent = name;
+      } catch (err) { alert('Could not load ' + name + '\n' + err); }
+    };
+    if (ext === 'stl') reader.readAsArrayBuffer(file); else reader.readAsText(file);
+  }
+
+  // UI
+  const $ = id => document.getElementById(id);
+  $('open').onclick = () => $('file').click();
+  $('file').onchange = e => { if (e.target.files[0]) loadFile(e.target.files[0]); };
+  $('reset').onclick = () => updateHud();
+  $('top').onclick = () => { const t=controls.target.clone(); camera.position.set(t.x, 420, t.z+0.01); controls.update(); };
+  $('center').onclick = placeOnPlate;
+  $('sup').onclick = () => { if(mesh){ mesh.scale.multiplyScalar(1.1); placeOnPlate(); } };
+  $('sdn').onclick = () => { if(mesh){ mesh.scale.multiplyScalar(1/1.1); placeOnPlate(); } };
+  $('rx').onclick = () => { if(mesh){ mesh.rotation.x += Math.PI/2; placeOnPlate(); } };
+  $('ry').onclick = () => { if(mesh){ mesh.rotation.y += Math.PI/2; placeOnPlate(); } };
+  $('rz').onclick = () => { if(mesh){ mesh.rotation.z += Math.PI/2; placeOnPlate(); } };
+
+  const drop = $('drop');
+  ['dragover','dragenter'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('hover');}));
+  ['dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('hover');}));
+  document.addEventListener('drop', e => { if(e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+</script>
+</body>
+</html>
