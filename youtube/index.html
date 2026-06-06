@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YouTube — ArtOS</title>
+<style>
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;font-family:"Segoe UI",system-ui,sans-serif;background:#0f0f12;color:#f1f1f1;}
+  #app{display:flex;flex-direction:column;height:100%;}
+  .top{display:flex;align-items:center;gap:10px;padding:12px 16px;background:#1a1a1f;border-bottom:1px solid #2a2a31;}
+  .brand{font-weight:800;display:flex;align-items:center;gap:8px;font-size:16px;}
+  .brand .yt{color:#ff0033;font-size:22px;}
+  form{flex:1;display:flex;gap:8px;max-width:680px;}
+  input{flex:1;padding:10px 14px;border-radius:999px;border:1px solid #303038;background:#121216;color:#fff;font-size:14px;outline:none;}
+  input:focus{border-color:#3ea6ff;}
+  button{background:#272730;color:#fff;border:1px solid #3a3a44;border-radius:999px;padding:10px 16px;cursor:pointer;font-size:14px;}
+  button:hover{background:#34343f;}
+  .body{flex:1;overflow:auto;padding:16px;}
+  .player{display:none;flex-direction:column;gap:10px;height:100%;}
+  .player.show{display:flex;}
+  .pv{position:relative;width:100%;flex:1;background:#000;border-radius:12px;overflow:hidden;}
+  .pv iframe{width:100%;height:100%;border:0;}
+  .ptitle{font-size:16px;font-weight:600;}
+  .back{align-self:flex-start;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;}
+  .card{cursor:pointer;border-radius:12px;overflow:hidden;background:#17171c;transition:.12s;}
+  .card:hover{background:#20202a;transform:translateY(-2px);}
+  .thumb{position:relative;aspect-ratio:16/9;background:#000;}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .len{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,0.8);font-size:12px;padding:1px 5px;border-radius:4px;}
+  .meta{padding:9px 11px;}
+  .meta .t{font-size:14px;font-weight:600;line-height:1.25;max-height:2.6em;overflow:hidden;}
+  .meta .c{font-size:12px;opacity:.65;margin-top:4px;}
+  .msg{opacity:.7;text-align:center;margin-top:40px;font-size:14px;line-height:1.7;}
+  code{background:#26262e;padding:1px 5px;border-radius:4px;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="top">
+    <div class="brand"><span class="yt">▶</span> YouTube</div>
+    <form id="searchForm">
+      <input id="q" placeholder="Search YouTube — or paste a video link" autocomplete="off" autofocus>
+      <button type="submit">Search</button>
+    </form>
+  </div>
+
+  <div class="body">
+    <div class="player" id="player">
+      <button class="back" id="back">← Back to results</button>
+      <div class="ptitle" id="ptitle"></div>
+      <div class="pv" id="pv"></div>
+    </div>
+    <div id="results"></div>
+    <div class="msg" id="msg">Search for anything, or paste a YouTube link to watch it right here in ArtOS.</div>
+  </div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  // Same-origin when served by the ArtOS Nova server at /yt; on the hosted site
+  // this points at the local server (blocked over https -> falls back to links).
+  const SEARCH_URL = "http://127.0.0.1:5098/yt/search?q=";
+
+  function extractId(s){
+    const m = s.match(/(?:v=|youtu\.be\/|embed\/|shorts\/)([\w-]{11})/) || s.match(/^([\w-]{11})$/);
+    return m ? m[1] : null;
+  }
+
+  function play(id, title){
+    $("player").classList.add("show");
+    $("results").style.display = "none";
+    $("msg").style.display = "none";
+    $("ptitle").textContent = title || "";
+    $("pv").innerHTML = `<iframe src="https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+      allowfullscreen></iframe>`;
+  }
+  $("back").onclick = () => {
+    $("player").classList.remove("show");
+    $("pv").innerHTML = "";
+    $("results").style.display = "";
+  };
+
+  function renderResults(list){
+    const box = $("results"); box.innerHTML = "";
+    if(!list.length){ $("msg").style.display=""; $("msg").textContent="No results."; return; }
+    $("msg").style.display = "none";
+    const grid = document.createElement("div"); grid.className = "grid";
+    list.forEach(v => {
+      const c = document.createElement("div"); c.className = "card";
+      c.innerHTML = `<div class="thumb"><img loading="lazy" src="${v.thumb}">`
+        + (v.length?`<span class="len">${v.length}</span>`:``) + `</div>`
+        + `<div class="meta"><div class="t">${v.title.replace(/</g,"&lt;")}</div>`
+        + `<div class="c">${(v.channel||"").replace(/</g,"&lt;")}</div></div>`;
+      c.onclick = () => play(v.id, v.title);
+      grid.appendChild(c);
+    });
+    box.appendChild(grid);
+  }
+
+  $("searchForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const q = $("q").value.trim();
+    if(!q) return;
+    const id = extractId(q);
+    if(id){ play(id, ""); return; }   // pasted a link/ID -> just play it
+    $("msg").style.display = ""; $("msg").textContent = "Searching…"; $("results").innerHTML = "";
+    try{
+      const r = await fetch(SEARCH_URL + encodeURIComponent(q));
+      if(!r.ok) throw new Error("search unavailable");
+      renderResults(await r.json());
+    }catch(err){
+      $("msg").innerHTML = "Search needs the ArtOS desktop app running.<br>"
+        + "You can still paste a YouTube <code>link</code> above to watch any video here.";
+    }
+  });
+</script>
+</body>
+</html>
