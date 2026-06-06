@@ -231,7 +231,8 @@
     if (b < 1024) return b + " B";
     if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
     if (b < 1073741824) return (b / 1048576).toFixed(1) + " MB";
-    return (b / 1073741824).toFixed(2) + " GB";
+    if (b < 1099511627776) return (b / 1073741824).toFixed(2) + " GB";
+    return (b / 1099511627776).toFixed(2) + " TB";
   }
   function fmtDate(t) {
     var d = new Date(t);
@@ -291,10 +292,10 @@
     var nodes = await all();
     var total = nodes.reduce(function (s, n) { return s + (n.size || 0); }, 0);
     var files = nodes.filter(function (n) { return n.type === "file"; }).length;
-    var quota = 500 * 1048576; // 500 MB soft cap for the bar
+    var quota = 5 * 1099511627776; // 5 TB cap for the bar
     var pct = Math.min(100, total / quota * 100);
-    document.getElementById("usageFill").style.width = pct.toFixed(1) + "%";
-    document.getElementById("usageDetail").textContent = fmtSize(total) + " · " + files + " file" + (files === 1 ? "" : "s");
+    document.getElementById("usageFill").style.width = pct.toFixed(2) + "%";
+    document.getElementById("usageDetail").textContent = fmtSize(total) + " of 5 TB · " + files + " file" + (files === 1 ? "" : "s");
   }
 
   // ---------- main render ----------
