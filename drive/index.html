@@ -140,9 +140,52 @@
              color: #c8c2d6; cursor: pointer; font-size: 15px; }
   .iconbtn:hover { background: #2a2240; border-color: #8b6cff; color: #cdbcff; }
   .iconbtn.on { background: #2a2240; border-color: #8b6cff; color: #cdbcff; }
+
+  /* auth gate */
+  .auth { position: fixed; inset: 0; z-index: 500; padding: 24px;
+          background: radial-gradient(900px 600px at 70% -10%, rgba(124,92,255,.18), transparent 60%), #120f1a;
+          display: flex; align-items: center; justify-content: center; }
+  .auth.hide { display: none; }
+  .authcard { width: 366px; max-width: 92vw; background: #1c1726; border: 1px solid #2b2238;
+              border-radius: 18px; padding: 30px 26px; box-shadow: 0 30px 80px rgba(0,0,0,.6); }
+  .authlogo { font-size: 27px; font-weight: 800; letter-spacing: -1px; text-align: center; }
+  .authlogo .a { background: linear-gradient(90deg,#a78bfa,#7c5cff);
+                 -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .authsub { text-align: center; color: #8b8595; font-size: 14px; margin: 8px 0 20px; }
+  .authcard input { width: 100%; background: #241d33; border: 1px solid #34294d; color: #fff;
+                    border-radius: 10px; padding: 12px 14px; font-size: 14px; outline: none; margin-bottom: 12px; }
+  .authcard input:focus { border-color: #8b6cff; }
+  .authbtn { width: 100%; justify-content: center; padding: 12px; font-size: 15px; margin-top: 4px; }
+  .authswitch { text-align: center; font-size: 13px; color: #8b8595; margin-top: 16px; }
+  .authswitch a { color: #a78bfa; cursor: pointer; }
+  .authswitch a:hover { text-decoration: underline; }
+  .autherr { background: #3a1f2b; color: #ff9bb0; border-radius: 9px; padding: 9px 12px;
+             font-size: 13px; margin-bottom: 12px; display: none; }
+  .autherr.show { display: block; }
+  .authnote { text-align: center; font-size: 11px; color: #5f5972; margin-top: 14px; line-height: 1.5; }
+  .userchip { display: flex; align-items: center; gap: 10px; }
+  .userchip .uemail { font-size: 13px; color: #cdbcff; max-width: 200px; overflow: hidden;
+                      text-overflow: ellipsis; white-space: nowrap; }
 </style>
 </head>
 <body>
+
+<div class="auth" id="auth">
+  <div class="authcard">
+    <div class="authlogo"><span class="a">ARTGEOrge</span> Drive</div>
+    <div class="authsub" id="authSub">Sign in to your Drive</div>
+    <div class="autherr" id="authErr"></div>
+    <input id="authEmail" type="email" placeholder="Email" autocomplete="username" />
+    <input id="authPw" type="password" placeholder="Password" autocomplete="current-password" />
+    <input id="authPw2" type="password" placeholder="Confirm password" autocomplete="new-password" style="display:none" />
+    <button class="btn primary authbtn" id="authSubmit">Sign in</button>
+    <div class="authswitch">
+      <span id="authToggleText">New here?</span>
+      <a id="authToggle">Create an account</a>
+    </div>
+    <div class="authnote">Accounts are stored privately in this browser only.<br>There is no server — keep your password safe; it can't be recovered.</div>
+  </div>
+</div>
 
 <header>
   <a href="/" class="logo"><span class="a">ARTGEOrge</span> Drive</a>
@@ -151,6 +194,10 @@
   <div class="search">
     <span>🔎</span>
     <input id="search" type="text" placeholder="Search in Drive" />
+  </div>
+  <div class="userchip" id="userChip" style="display:none">
+    <span class="uemail" id="userEmail"></span>
+    <button class="btn" id="signOutBtn">Sign out</button>
   </div>
 </header>
 
@@ -222,7 +269,10 @@
 
   // ---------- state ----------
   var cwd = "root", view = "grid", selected = null, searchTerm = "", recentMode = false;
+  var currentUser = null;
   var seq = Date.now();
+  // only this signed-in user's nodes
+  async function myNodes() { var a = await all(); return a.filter(function (n) { return n.owner === currentUser; }); }
   function uid() { seq += 1; return "n" + seq.toString(36) + Math.floor((seq % 9973) * 31 % 9973).toString(36); }
 
   // ---------- helpers ----------
@@ -289,7 +339,7 @@
 
   // ---------- usage meter ----------
   async function renderUsage() {
-    var nodes = await all();
+    var nodes = await myNodes();
     var total = nodes.reduce(function (s, n) { return s + (n.size || 0); }, 0);
     var files = nodes.filter(function (n) { return n.type === "file"; }).length;
     var quota = 5 * 1099511627776; // 5 TB cap for the bar
@@ -303,7 +353,7 @@
     document.getElementById("navMine").classList.toggle("active", !recentMode);
     document.getElementById("navRecent").classList.toggle("active", recentMode);
     await renderCrumbs();
-    var nodes = await all();
+    var nodes = await myNodes();
     var items;
     if (searchTerm) {
       var q = searchTerm.toLowerCase();
@@ -446,7 +496,7 @@
   async function newFolder() {
     var name = await promptModal("New folder name", "Untitled folder");
     if (!name) return;
-    await put({ id: uid(), parentId: cwd, type: "folder", name: name, size: 0, created: Date.now() });
+    await put({ id: uid(), parentId: cwd, type: "folder", name: name, size: 0, created: Date.now(), owner: currentUser });
     render();
   }
   async function renameNode(n) {
@@ -459,7 +509,7 @@
     var ok = await confirmModal("Delete " + label + "?");
     if (!ok) return;
     if (n.type === "folder") {
-      var nodes = await all();
+      var nodes = await myNodes();
       var toDel = [], stack = [n.id];
       while (stack.length) { var p = stack.pop(); toDel.push(p); nodes.forEach(function (c) { if (c.parentId === p) stack.push(c.id); }); }
       for (var i = 0; i < toDel.length; i++) await del(toDel[i]);
@@ -487,7 +537,7 @@
     var dest = recentMode ? "root" : cwd;
     for (var i = 0; i < fileList.length; i++) {
       var f = fileList[i];
-      await put({ id: uid(), parentId: dest, type: "file", name: f.name, mime: f.type || "", size: f.size, created: Date.now(), blob: f });
+      await put({ id: uid(), parentId: dest, type: "file", name: f.name, mime: f.type || "", size: f.size, created: Date.now(), owner: currentUser, blob: f });
     }
     render();
   }
@@ -514,8 +564,106 @@
   content.addEventListener("dragleave", function (e) { dragDepth--; if (dragDepth <= 0) { dragDepth = 0; drop.classList.remove("show"); } });
   content.addEventListener("drop", function (e) { e.preventDefault(); dragDepth = 0; drop.classList.remove("show"); if (e.dataTransfer.files && e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); });
 
+  // ---------- accounts / auth ----------
+  var ACCOUNTS_KEY = "artgeorge-drive-accounts", SESSION_KEY = "artgeorge-drive-session";
+  var authMode = "signin"; // or "signup"
+
+  function loadAccounts() { try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "{}"); } catch (e) { return {}; } }
+  function saveAccounts(a) { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(a)); }
+  function toHex(bytes) { var s = ""; for (var i = 0; i < bytes.length; i++) s += (bytes[i] + 256).toString(16).slice(-2); return s; }
+  function fromHex(h) { var b = new Uint8Array(h.length / 2); for (var i = 0; i < b.length; i++) b[i] = parseInt(h.substr(i * 2, 2), 16); return b; }
+  function randomSalt() { var b = new Uint8Array(16); (crypto.getRandomValues ? crypto : { getRandomValues: function (a) { for (var i = 0; i < a.length; i++) a[i] = Math.floor((seq = (seq * 1103515245 + 12345) & 0x7fffffff) % 256); return a; } }).getRandomValues(b); return toHex(b); }
+  function weakHash(str) { var h = 5381; for (var i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0; return h.toString(16); }
+  async function hashPassword(pw, saltHex) {
+    if (crypto && crypto.subtle) {
+      try {
+        var enc = new TextEncoder();
+        var key = await crypto.subtle.importKey("raw", enc.encode(pw), "PBKDF2", false, ["deriveBits"]);
+        var bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: fromHex(saltHex), iterations: 120000, hash: "SHA-256" }, key, 256);
+        return "pbkdf2:" + toHex(new Uint8Array(bits));
+      } catch (e) { /* fall through */ }
+    }
+    return "weak:" + weakHash(saltHex + "|" + pw);
+  }
+  function validEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
+
+  function authError(msg) { var el = document.getElementById("authErr"); el.textContent = msg; el.classList.add("show"); }
+  function clearAuthError() { document.getElementById("authErr").classList.remove("show"); }
+
+  function setAuthMode(mode) {
+    authMode = mode;
+    var signup = mode === "signup";
+    document.getElementById("authSub").textContent = signup ? "Create your Drive account" : "Sign in to your Drive";
+    document.getElementById("authPw2").style.display = signup ? "block" : "none";
+    document.getElementById("authPw").setAttribute("autocomplete", signup ? "new-password" : "current-password");
+    document.getElementById("authSubmit").textContent = signup ? "Create account" : "Sign in";
+    document.getElementById("authToggleText").textContent = signup ? "Already have an account?" : "New here?";
+    document.getElementById("authToggle").textContent = signup ? "Sign in" : "Create an account";
+    clearAuthError();
+  }
+
+  async function doAuth() {
+    clearAuthError();
+    var email = (document.getElementById("authEmail").value || "").trim().toLowerCase();
+    var pw = document.getElementById("authPw").value || "";
+    if (!validEmail(email)) return authError("Please enter a valid email address.");
+    if (pw.length < 6) return authError("Password must be at least 6 characters.");
+    var accounts = loadAccounts();
+    if (authMode === "signup") {
+      var pw2 = document.getElementById("authPw2").value || "";
+      if (pw !== pw2) return authError("Passwords don't match.");
+      if (accounts[email]) return authError("An account with that email already exists.");
+      var salt = randomSalt();
+      accounts[email] = { salt: salt, hash: await hashPassword(pw, salt), created: Date.now() };
+      saveAccounts(accounts);
+      enterApp(email);
+    } else {
+      var acc = accounts[email];
+      if (!acc) return authError("No account found for that email.");
+      var h = await hashPassword(pw, acc.salt);
+      if (h !== acc.hash) return authError("Incorrect password.");
+      enterApp(email);
+    }
+  }
+
+  function enterApp(email) {
+    currentUser = email;
+    try { localStorage.setItem(SESSION_KEY, email); } catch (e) {}
+    document.getElementById("authPw").value = "";
+    document.getElementById("authPw2").value = "";
+    document.getElementById("auth").classList.add("hide");
+    document.getElementById("userChip").style.display = "flex";
+    document.getElementById("userEmail").textContent = email;
+    cwd = "root"; selected = null; searchTerm = ""; recentMode = false;
+    document.getElementById("search").value = "";
+    render();
+  }
+
+  function signOut() {
+    currentUser = null;
+    try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+    document.getElementById("userChip").style.display = "none";
+    document.getElementById("authEmail").value = "";
+    document.getElementById("authPw").value = "";
+    setAuthMode("signin");
+    document.getElementById("auth").classList.remove("hide");
+    document.getElementById("authEmail").focus();
+  }
+
+  document.getElementById("authSubmit").onclick = doAuth;
+  document.getElementById("authToggle").onclick = function () { setAuthMode(authMode === "signin" ? "signup" : "signin"); };
+  document.getElementById("signOutBtn").onclick = signOut;
+  ["authEmail", "authPw", "authPw2"].forEach(function (id) {
+    document.getElementById(id).addEventListener("keydown", function (e) { if (e.key === "Enter") doAuth(); });
+  });
+
   // ---------- boot ----------
-  openDB().then(render).catch(function (err) {
+  openDB().then(function () {
+    var saved = null; try { saved = localStorage.getItem(SESSION_KEY); } catch (e) {}
+    if (saved && loadAccounts()[saved]) enterApp(saved);
+    else { setAuthMode("signin"); document.getElementById("authEmail").focus(); }
+  }).catch(function (err) {
+    document.getElementById("auth").classList.add("hide");
     document.getElementById("empty").style.display = "block";
     document.getElementById("empty").innerHTML = '<div class="big">⚠️</div>Could not open local storage.<br><span class="hint">' + (err && err.message ? err.message : err) + '</span>';
   });
