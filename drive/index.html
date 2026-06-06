@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ARTGEOrge Drive</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  body { height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+         background: #16131f; color: #e8eaed;
+         font-family: 'Segoe UI', system-ui, sans-serif; }
+  a { color: inherit; text-decoration: none; }
+
+  .logo { font-weight: 800; letter-spacing: -1px; font-size: 22px; white-space: nowrap; }
+  .logo .a { background: linear-gradient(90deg,#a78bfa,#7c5cff);
+             -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+  /* top bar */
+  header { display: flex; align-items: center; gap: 14px; padding: 12px 18px;
+           background: #1c1726; border-bottom: 1px solid #2b2238; flex-shrink: 0; }
+  header .tag { color: #8b8595; font-size: 13px; }
+  .spacer { flex: 1; }
+  .search { display: flex; align-items: center; gap: 8px; background: #241d33;
+            border: 1px solid #34294d; border-radius: 9px; padding: 7px 12px; min-width: 220px; }
+  .search input { flex: 1; background: none; border: none; outline: none; color: #fff; font-size: 13px; }
+  .search input::placeholder { color: #6f6982; }
+
+  .btn { background: #241d33; border: 1px solid #34294d; color: #d8d2e6;
+         border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer;
+         display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .btn:hover { background: #2a2240; border-color: #8b6cff; color: #cdbcff; }
+  .btn.primary { background: linear-gradient(90deg,#7c5cff,#a78bfa); border: none; color: #fff; font-weight: 600; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.danger:hover { border-color: #ff6b8a; color: #ff9bb0; }
+
+  /* layout */
+  .main { flex: 1; display: flex; overflow: hidden; }
+  .side { width: 210px; flex-shrink: 0; background: #1a1524; border-right: 1px solid #2b2238;
+          padding: 16px 12px; display: flex; flex-direction: column; gap: 6px; }
+  .side .navitem { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+                   border-radius: 9px; color: #c8c2d6; font-size: 14px; cursor: pointer; }
+  .side .navitem:hover { background: #241d33; }
+  .side .navitem.active { background: #2a2240; color: #cdbcff; }
+  .side .navitem .ic { font-size: 17px; }
+  .meter { margin-top: auto; font-size: 12px; color: #8b8595; }
+  .meter .bar { height: 7px; border-radius: 4px; background: #241d33; overflow: hidden; margin: 6px 0; }
+  .meter .fill { height: 100%; background: linear-gradient(90deg,#7c5cff,#a78bfa); width: 0%; }
+
+  /* content */
+  .content { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+  .crumbs { display: flex; align-items: center; gap: 6px; padding: 12px 22px; flex-wrap: wrap;
+            border-bottom: 1px solid #2b2238; flex-shrink: 0; font-size: 14px; }
+  .crumbs .c { color: #b8b2c6; cursor: pointer; padding: 3px 6px; border-radius: 6px; }
+  .crumbs .c:hover { background: #241d33; color: #cdbcff; }
+  .crumbs .c.last { color: #fff; font-weight: 600; }
+  .crumbs .sep { color: #5a5470; }
+  .viewtoggle { margin-left: auto; display: flex; gap: 4px; }
+
+  .scroll { flex: 1; overflow: auto; padding: 18px 22px; }
+
+  /* grid view */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+  .item { background: #1c1726; border: 1px solid #2b2238; border-radius: 14px; padding: 16px 12px;
+          cursor: pointer; text-align: center; position: relative; transition: border-color .15s, background .15s; }
+  .item:hover { border-color: #8b6cff; background: #201a2d; }
+  .item.sel { border-color: #a78bfa; background: #241d33; }
+  .item .thumb { height: 64px; display: flex; align-items: center; justify-content: center;
+                 font-size: 44px; margin-bottom: 10px; }
+  .item .thumb img { max-height: 64px; max-width: 100%; border-radius: 7px; object-fit: cover; }
+  .item .nm { font-size: 13px; color: #e8eaed; word-break: break-word; line-height: 1.3;
+              display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .item .meta { font-size: 11px; color: #7a7490; margin-top: 4px; }
+  .item .dots { position: absolute; top: 8px; right: 8px; opacity: 0; width: 26px; height: 26px;
+                border-radius: 7px; background: #2a2240; color: #cdbcff; border: none; cursor: pointer; font-size: 15px; }
+  .item:hover .dots { opacity: 1; }
+
+  /* list view */
+  .list { display: none; flex-direction: column; }
+  .list.show { display: flex; }
+  .grid.hide { display: none; }
+  .row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 9px;
+         cursor: pointer; }
+  .row:hover { background: #1c1726; }
+  .row.sel { background: #241d33; }
+  .row .ric { font-size: 22px; width: 30px; text-align: center; }
+  .row .ric img { width: 26px; height: 26px; object-fit: cover; border-radius: 5px; vertical-align: middle; }
+  .row .rnm { flex: 1; font-size: 14px; }
+  .row .rmeta { font-size: 12px; color: #7a7490; width: 130px; text-align: right; }
+  .row .rsize { font-size: 12px; color: #7a7490; width: 90px; text-align: right; }
+  .row .dots { width: 28px; height: 28px; border-radius: 7px; background: transparent; color: #9b93ac;
+               border: none; cursor: pointer; font-size: 16px; opacity: 0; }
+  .row:hover .dots { opacity: 1; }
+
+  .empty { text-align: center; color: #6f6982; padding: 70px 20px; }
+  .empty .big { font-size: 54px; margin-bottom: 14px; }
+  .empty .hint { font-size: 13px; margin-top: 8px; }
+
+  /* drop overlay */
+  .drop { position: absolute; inset: 0; background: rgba(124,92,255,0.12);
+          border: 3px dashed #8b6cff; border-radius: 16px; margin: 12px;
+          display: none; align-items: center; justify-content: center;
+          font-size: 20px; color: #cdbcff; pointer-events: none; z-index: 5; }
+  .drop.show { display: flex; }
+
+  /* context menu */
+  .ctx { position: fixed; background: #221b30; border: 1px solid #34294d; border-radius: 11px;
+         padding: 6px; min-width: 170px; box-shadow: 0 18px 50px rgba(0,0,0,.6); z-index: 100; display: none; }
+  .ctx.show { display: block; }
+  .ctx button { display: flex; align-items: center; gap: 10px; width: 100%; background: none;
+                border: none; color: #d8d2e6; padding: 9px 12px; border-radius: 7px; cursor: pointer;
+                font-size: 13px; text-align: left; }
+  .ctx button:hover { background: #2a2240; color: #fff; }
+  .ctx button.danger:hover { background: #3a1f2b; color: #ff9bb0; }
+  .ctx .div { height: 1px; background: #2b2238; margin: 5px 4px; }
+
+  /* modal / preview */
+  .modal { position: fixed; inset: 0; background: rgba(8,6,14,.78); backdrop-filter: blur(3px);
+           display: none; align-items: center; justify-content: center; z-index: 200; padding: 30px; }
+  .modal.show { display: flex; }
+  .pv { background: #1c1726; border: 1px solid #2b2238; border-radius: 16px; max-width: 90vw;
+        max-height: 88vh; display: flex; flex-direction: column; overflow: hidden; }
+  .pv .pvtop { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid #2b2238; }
+  .pv .pvtop .pvname { font-size: 14px; font-weight: 600; flex: 1; }
+  .pv .pvbody { padding: 16px; overflow: auto; display: flex; align-items: center; justify-content: center; }
+  .pv .pvbody img, .pv .pvbody video { max-width: 84vw; max-height: 72vh; border-radius: 8px; }
+  .pv .pvbody pre { white-space: pre-wrap; word-break: break-word; font-family: 'Consolas', monospace;
+                    font-size: 13px; color: #d8d2e6; max-width: 80vw; max-height: 72vh; }
+  .pv .pvbody .noprev { color: #8b8595; text-align: center; padding: 40px; }
+
+  /* prompt modal */
+  .pmwrap { background: #1c1726; border: 1px solid #2b2238; border-radius: 14px; padding: 22px;
+            width: 360px; max-width: 92vw; }
+  .pmwrap h3 { font-size: 16px; margin-bottom: 14px; }
+  .pmwrap input { width: 100%; background: #241d33; border: 1px solid #34294d; color: #fff;
+                  border-radius: 9px; padding: 11px 13px; font-size: 14px; outline: none; }
+  .pmwrap input:focus { border-color: #8b6cff; }
+  .pmwrap .pmrow { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+  .iconbtn { width: 34px; height: 34px; border-radius: 8px; background: #241d33; border: 1px solid #34294d;
+             color: #c8c2d6; cursor: pointer; font-size: 15px; }
+  .iconbtn:hover { background: #2a2240; border-color: #8b6cff; color: #cdbcff; }
+  .iconbtn.on { background: #2a2240; border-color: #8b6cff; color: #cdbcff; }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/" class="logo"><span class="a">ARTGEOrge</span> Drive</a>
+  <span class="tag">☁️ your files, stored right in this browser</span>
+  <div class="spacer"></div>
+  <div class="search">
+    <span>🔎</span>
+    <input id="search" type="text" placeholder="Search in Drive" />
+  </div>
+</header>
+
+<div class="main">
+  <aside class="side">
+    <button class="btn primary" id="uploadBtn">⬆️ Upload files</button>
+    <button class="btn" id="newFolderBtn" style="margin-bottom:10px">📁 New folder</button>
+    <div class="navitem active" id="navMine"><span class="ic">💾</span> My Drive</div>
+    <div class="navitem" id="navRecent"><span class="ic">🕒</span> Recent</div>
+    <div class="meter">
+      <div id="usageText">Storage used</div>
+      <div class="bar"><div class="fill" id="usageFill"></div></div>
+      <div id="usageDetail" style="font-size:11px">—</div>
+    </div>
+  </aside>
+
+  <section class="content">
+    <div class="crumbs">
+      <div id="crumbBar" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap"></div>
+      <div class="viewtoggle">
+        <button class="iconbtn on" id="gridViewBtn" title="Grid view">▦</button>
+        <button class="iconbtn" id="listViewBtn" title="List view">☰</button>
+      </div>
+    </div>
+    <div class="scroll" id="scroll">
+      <div class="grid" id="grid"></div>
+      <div class="list" id="listView"></div>
+      <div class="empty" id="empty" style="display:none">
+        <div class="big">📂</div>
+        <div>This folder is empty</div>
+        <div class="hint">Drag files here, or use <b>Upload files</b> to get started.</div>
+      </div>
+    </div>
+    <div class="drop" id="drop">⬇️ Drop files to upload</div>
+  </section>
+</div>
+
+<input type="file" id="fileInput" multiple style="display:none" />
+
+<div class="ctx" id="ctx"></div>
+
+<div class="modal" id="modal"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---------- IndexedDB tiny wrapper ----------
+  var DB_NAME = "artgeorge-drive", STORE = "nodes", db = null;
+  function openDB() {
+    return new Promise(function (res, rej) {
+      var rq = indexedDB.open(DB_NAME, 1);
+      rq.onupgradeneeded = function (e) {
+        var d = e.target.result;
+        if (!d.objectStoreNames.contains(STORE)) {
+          var os = d.createObjectStore(STORE, { keyPath: "id" });
+          os.createIndex("parent", "parentId", { unique: false });
+        }
+      };
+      rq.onsuccess = function () { db = rq.result; res(db); };
+      rq.onerror = function () { rej(rq.error); };
+    });
+  }
+  function tx(mode) { return db.transaction(STORE, mode).objectStore(STORE); }
+  function put(node) { return new Promise(function (res, rej) { var r = tx("readwrite").put(node); r.onsuccess = function () { res(node); }; r.onerror = function () { rej(r.error); }; }); }
+  function get(id) { return new Promise(function (res, rej) { var r = tx("readonly").get(id); r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; }); }
+  function del(id) { return new Promise(function (res, rej) { var r = tx("readwrite").delete(id); r.onsuccess = function () { res(); }; r.onerror = function () { rej(r.error); }; }); }
+  function all() { return new Promise(function (res, rej) { var out = [], r = tx("readonly").openCursor(); r.onsuccess = function (e) { var c = e.target.result; if (c) { out.push(c.value); c.continue(); } else res(out); }; r.onerror = function () { rej(r.error); }; }); }
+
+  // ---------- state ----------
+  var cwd = "root", view = "grid", selected = null, searchTerm = "", recentMode = false;
+  var seq = Date.now();
+  function uid() { seq += 1; return "n" + seq.toString(36) + Math.floor((seq % 9973) * 31 % 9973).toString(36); }
+
+  // ---------- helpers ----------
+  function fmtSize(b) {
+    if (b == null) return "—";
+    if (b < 1024) return b + " B";
+    if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
+    if (b < 1073741824) return (b / 1048576).toFixed(1) + " MB";
+    return (b / 1073741824).toFixed(2) + " GB";
+  }
+  function fmtDate(t) {
+    var d = new Date(t);
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  }
+  function iconFor(node) {
+    if (node.type === "folder") return "📁";
+    var m = node.mime || "", n = (node.name || "").toLowerCase();
+    if (m.indexOf("image") === 0) return "🖼️";
+    if (m.indexOf("video") === 0) return "🎬";
+    if (m.indexOf("audio") === 0) return "🎵";
+    if (m.indexOf("pdf") >= 0 || n.endsWith(".pdf")) return "📕";
+    if (/\.(zip|rar|7z|tar|gz)$/.test(n)) return "🗜️";
+    if (/\.(doc|docx)$/.test(n)) return "📘";
+    if (/\.(xls|xlsx|csv)$/.test(n)) return "📗";
+    if (/\.(ppt|pptx)$/.test(n)) return "📙";
+    if (/\.(js|ts|py|html|css|json|c|cpp|java|go|rs|sh|md)$/.test(n)) return "📄";
+    if (m.indexOf("text") === 0) return "📃";
+    return "📄";
+  }
+  function isImage(node) { return node.mime && node.mime.indexOf("image") === 0; }
+
+  // ---------- breadcrumb / path ----------
+  async function pathTo(id) {
+    var chain = [], cur = id;
+    while (cur && cur !== "root") {
+      var n = await get(cur);
+      if (!n) break;
+      chain.unshift(n);
+      cur = n.parentId;
+    }
+    return chain;
+  }
+  async function renderCrumbs() {
+    var bar = document.getElementById("crumbBar");
+    bar.innerHTML = "";
+    function crumb(label, id, last) {
+      var s = document.createElement("span");
+      s.className = "c" + (last ? " last" : "");
+      s.textContent = label;
+      if (!last) s.onclick = function () { recentMode = false; cwd = id; render(); };
+      bar.appendChild(s);
+    }
+    if (recentMode) { crumb("🕒 Recent", null, true); return; }
+    crumb("My Drive", "root", cwd === "root");
+    if (cwd !== "root") {
+      var chain = await pathTo(cwd);
+      chain.forEach(function (n, i) {
+        var sep = document.createElement("span"); sep.className = "sep"; sep.textContent = "›"; bar.appendChild(sep);
+        crumb(n.name, n.id, i === chain.length - 1);
+      });
+    }
+  }
+
+  // ---------- usage meter ----------
+  async function renderUsage() {
+    var nodes = await all();
+    var total = nodes.reduce(function (s, n) { return s + (n.size || 0); }, 0);
+    var files = nodes.filter(function (n) { return n.type === "file"; }).length;
+    var quota = 500 * 1048576; // 500 MB soft cap for the bar
+    var pct = Math.min(100, total / quota * 100);
+    document.getElementById("usageFill").style.width = pct.toFixed(1) + "%";
+    document.getElementById("usageDetail").textContent = fmtSize(total) + " · " + files + " file" + (files === 1 ? "" : "s");
+  }
+
+  // ---------- main render ----------
+  async function render() {
+    document.getElementById("navMine").classList.toggle("active", !recentMode);
+    document.getElementById("navRecent").classList.toggle("active", recentMode);
+    await renderCrumbs();
+    var nodes = await all();
+    var items;
+    if (searchTerm) {
+      var q = searchTerm.toLowerCase();
+      items = nodes.filter(function (n) { return n.name.toLowerCase().indexOf(q) >= 0; });
+    } else if (recentMode) {
+      items = nodes.filter(function (n) { return n.type === "file"; })
+                   .sort(function (a, b) { return b.created - a.created; }).slice(0, 50);
+    } else {
+      items = nodes.filter(function (n) { return n.parentId === cwd; });
+    }
+    // folders first, then by name
+    items.sort(function (a, b) {
+      if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    var grid = document.getElementById("grid"), list = document.getElementById("listView"), empty = document.getElementById("empty");
+    grid.innerHTML = ""; list.innerHTML = "";
+    if (!items.length) { empty.style.display = "block"; } else { empty.style.display = "none"; }
+
+    items.forEach(function (n) {
+      // GRID
+      var card = document.createElement("div");
+      card.className = "item" + (selected === n.id ? " sel" : "");
+      var thumb = document.createElement("div"); thumb.className = "thumb";
+      if (isImage(n) && n.blob) { var img = document.createElement("img"); img.src = URL.createObjectURL(n.blob); thumb.appendChild(img); }
+      else thumb.textContent = iconFor(n);
+      var nm = document.createElement("div"); nm.className = "nm"; nm.textContent = n.name;
+      var meta = document.createElement("div"); meta.className = "meta";
+      meta.textContent = n.type === "folder" ? "Folder" : (fmtSize(n.size) + " · " + fmtDate(n.created));
+      var dots = document.createElement("button"); dots.className = "dots"; dots.textContent = "⋮";
+      dots.onclick = function (e) { e.stopPropagation(); openCtx(e.clientX, e.clientY, n); };
+      card.appendChild(thumb); card.appendChild(nm); card.appendChild(meta); card.appendChild(dots);
+      card.onclick = function (e) { e.stopPropagation(); selected = n.id; render(); };
+      card.ondblclick = function () { openNode(n); };
+      card.oncontextmenu = function (e) { e.preventDefault(); selected = n.id; openCtx(e.clientX, e.clientY, n); };
+      grid.appendChild(card);
+
+      // LIST
+      var row = document.createElement("div");
+      row.className = "row" + (selected === n.id ? " sel" : "");
+      var ric = document.createElement("div"); ric.className = "ric";
+      if (isImage(n) && n.blob) { var im2 = document.createElement("img"); im2.src = URL.createObjectURL(n.blob); ric.appendChild(im2); }
+      else ric.textContent = iconFor(n);
+      var rnm = document.createElement("div"); rnm.className = "rnm"; rnm.textContent = n.name;
+      var rmeta = document.createElement("div"); rmeta.className = "rmeta"; rmeta.textContent = fmtDate(n.created);
+      var rsize = document.createElement("div"); rsize.className = "rsize"; rsize.textContent = n.type === "folder" ? "—" : fmtSize(n.size);
+      var rdots = document.createElement("button"); rdots.className = "dots"; rdots.textContent = "⋮";
+      rdots.onclick = function (e) { e.stopPropagation(); openCtx(e.clientX, e.clientY, n); };
+      row.appendChild(ric); row.appendChild(rnm); row.appendChild(rmeta); row.appendChild(rsize); row.appendChild(rdots);
+      row.onclick = function (e) { e.stopPropagation(); selected = n.id; render(); };
+      row.ondblclick = function () { openNode(n); };
+      row.oncontextmenu = function (e) { e.preventDefault(); selected = n.id; openCtx(e.clientX, e.clientY, n); };
+      list.appendChild(row);
+    });
+    renderUsage();
+  }
+
+  // ---------- open node ----------
+  function openNode(n) {
+    if (n.type === "folder") { searchTerm = ""; document.getElementById("search").value = ""; recentMode = false; cwd = n.id; selected = null; render(); }
+    else preview(n);
+  }
+
+  // ---------- preview ----------
+  function preview(n) {
+    var modal = document.getElementById("modal");
+    var pv = document.createElement("div"); pv.className = "pv";
+    var top = document.createElement("div"); top.className = "pvtop";
+    var nm = document.createElement("div"); nm.className = "pvname"; nm.textContent = n.name;
+    var dl = document.createElement("button"); dl.className = "btn"; dl.textContent = "⬇️ Download"; dl.onclick = function () { download(n); };
+    var cl = document.createElement("button"); cl.className = "btn"; cl.textContent = "✕ Close"; cl.onclick = closeModal;
+    top.appendChild(nm); top.appendChild(dl); top.appendChild(cl);
+    var body = document.createElement("div"); body.className = "pvbody";
+    pv.appendChild(top); pv.appendChild(body);
+    modal.innerHTML = ""; modal.appendChild(pv); modal.classList.add("show");
+
+    var m = n.mime || "";
+    if (isImage(n) && n.blob) { var img = document.createElement("img"); img.src = URL.createObjectURL(n.blob); body.appendChild(img); }
+    else if (m.indexOf("video") === 0 && n.blob) { var v = document.createElement("video"); v.controls = true; v.src = URL.createObjectURL(n.blob); body.appendChild(v); }
+    else if (m.indexOf("audio") === 0 && n.blob) { var au = document.createElement("audio"); au.controls = true; au.src = URL.createObjectURL(n.blob); body.appendChild(au); }
+    else if ((m.indexOf("text") === 0 || /\.(txt|md|json|js|css|html|csv|log)$/i.test(n.name)) && n.blob) {
+      n.blob.text().then(function (t) { var pre = document.createElement("pre"); pre.textContent = t.slice(0, 100000); body.appendChild(pre); });
+    } else if ((m.indexOf("pdf") >= 0 || /\.pdf$/i.test(n.name)) && n.blob) {
+      var f = document.createElement("iframe"); f.src = URL.createObjectURL(n.blob); f.style.width = "80vw"; f.style.height = "72vh"; f.style.border = "none"; f.style.borderRadius = "8px"; body.appendChild(f);
+    } else {
+      var np = document.createElement("div"); np.className = "noprev"; np.innerHTML = '<div style="font-size:50px;margin-bottom:12px">' + iconFor(n) + '</div>No preview available.<br>Use Download to open this file.'; body.appendChild(np);
+    }
+  }
+  function closeModal() { document.getElementById("modal").classList.remove("show"); document.getElementById("modal").innerHTML = ""; }
+
+  // ---------- download ----------
+  function download(n) {
+    if (!n.blob) return;
+    var url = URL.createObjectURL(n.blob);
+    var a = document.createElement("a"); a.href = url; a.download = n.name; document.body.appendChild(a); a.click();
+    a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  }
+
+  // ---------- context menu ----------
+  function openCtx(x, y, n) {
+    var ctx = document.getElementById("ctx");
+    ctx.innerHTML = "";
+    function add(label, fn, danger) {
+      var b = document.createElement("button"); if (danger) b.className = "danger";
+      b.innerHTML = label; b.onclick = function () { hideCtx(); fn(); }; ctx.appendChild(b);
+    }
+    if (n.type === "folder") add("📂 Open", function () { openNode(n); });
+    else { add("👁️ Preview", function () { preview(n); }); add("⬇️ Download", function () { download(n); }); }
+    add("✏️ Rename", function () { renameNode(n); });
+    var d = document.createElement("div"); d.className = "div"; ctx.appendChild(d);
+    add("🗑️ Delete", function () { removeNode(n); }, true);
+    ctx.style.left = Math.min(x, window.innerWidth - 190) + "px";
+    ctx.style.top = Math.min(y, window.innerHeight - 200) + "px";
+    ctx.classList.add("show");
+  }
+  function hideCtx() { document.getElementById("ctx").classList.remove("show"); }
+
+  // ---------- prompt modal ----------
+  function promptModal(title, value) {
+    return new Promise(function (res) {
+      var modal = document.getElementById("modal");
+      var w = document.createElement("div"); w.className = "pmwrap";
+      w.innerHTML = "<h3>" + title + "</h3>";
+      var inp = document.createElement("input"); inp.value = value || ""; w.appendChild(inp);
+      var row = document.createElement("div"); row.className = "pmrow";
+      var cancel = document.createElement("button"); cancel.className = "btn"; cancel.textContent = "Cancel";
+      var ok = document.createElement("button"); ok.className = "btn primary"; ok.textContent = "OK";
+      row.appendChild(cancel); row.appendChild(ok); w.appendChild(row);
+      modal.innerHTML = ""; modal.appendChild(w); modal.classList.add("show");
+      inp.focus(); inp.select();
+      function done(v) { closeModal(); res(v); }
+      cancel.onclick = function () { done(null); };
+      ok.onclick = function () { done(inp.value.trim()); };
+      inp.onkeydown = function (e) { if (e.key === "Enter") ok.click(); if (e.key === "Escape") cancel.click(); };
+    });
+  }
+
+  // ---------- mutations ----------
+  async function newFolder() {
+    var name = await promptModal("New folder name", "Untitled folder");
+    if (!name) return;
+    await put({ id: uid(), parentId: cwd, type: "folder", name: name, size: 0, created: Date.now() });
+    render();
+  }
+  async function renameNode(n) {
+    var name = await promptModal("Rename", n.name);
+    if (!name) return;
+    n.name = name; await put(n); render();
+  }
+  async function removeNode(n) {
+    var label = n.type === "folder" ? 'folder "' + n.name + '" and everything inside it' : '"' + n.name + '"';
+    var ok = await confirmModal("Delete " + label + "?");
+    if (!ok) return;
+    if (n.type === "folder") {
+      var nodes = await all();
+      var toDel = [], stack = [n.id];
+      while (stack.length) { var p = stack.pop(); toDel.push(p); nodes.forEach(function (c) { if (c.parentId === p) stack.push(c.id); }); }
+      for (var i = 0; i < toDel.length; i++) await del(toDel[i]);
+    } else await del(n.id);
+    if (selected === n.id) selected = null;
+    render();
+  }
+  function confirmModal(msg) {
+    return new Promise(function (res) {
+      var modal = document.getElementById("modal");
+      var w = document.createElement("div"); w.className = "pmwrap";
+      w.innerHTML = "<h3 style='font-weight:600;line-height:1.4'>" + msg + "</h3>";
+      var row = document.createElement("div"); row.className = "pmrow";
+      var cancel = document.createElement("button"); cancel.className = "btn"; cancel.textContent = "Cancel";
+      var ok = document.createElement("button"); ok.className = "btn danger"; ok.textContent = "Delete";
+      row.appendChild(cancel); row.appendChild(ok); w.appendChild(row);
+      modal.innerHTML = ""; modal.appendChild(w); modal.classList.add("show");
+      cancel.onclick = function () { closeModal(); res(false); };
+      ok.onclick = function () { closeModal(); res(true); };
+    });
+  }
+
+  // ---------- upload ----------
+  async function uploadFiles(fileList) {
+    var dest = recentMode ? "root" : cwd;
+    for (var i = 0; i < fileList.length; i++) {
+      var f = fileList[i];
+      await put({ id: uid(), parentId: dest, type: "file", name: f.name, mime: f.type || "", size: f.size, created: Date.now(), blob: f });
+    }
+    render();
+  }
+
+  // ---------- wiring ----------
+  document.getElementById("uploadBtn").onclick = function () { document.getElementById("fileInput").click(); };
+  document.getElementById("fileInput").onchange = function (e) { if (e.target.files.length) uploadFiles(e.target.files); e.target.value = ""; };
+  document.getElementById("newFolderBtn").onclick = newFolder;
+  document.getElementById("navMine").onclick = function () { recentMode = false; searchTerm = ""; document.getElementById("search").value = ""; cwd = "root"; selected = null; render(); };
+  document.getElementById("navRecent").onclick = function () { recentMode = true; searchTerm = ""; document.getElementById("search").value = ""; selected = null; render(); };
+  document.getElementById("search").oninput = function (e) { searchTerm = e.target.value.trim(); render(); };
+
+  document.getElementById("gridViewBtn").onclick = function () { view = "grid"; document.getElementById("grid").classList.remove("hide"); document.getElementById("listView").classList.remove("show"); this.classList.add("on"); document.getElementById("listViewBtn").classList.remove("on"); };
+  document.getElementById("listViewBtn").onclick = function () { view = "list"; document.getElementById("grid").classList.add("hide"); document.getElementById("listView").classList.add("show"); this.classList.add("on"); document.getElementById("gridViewBtn").classList.remove("on"); };
+
+  document.addEventListener("click", function () { hideCtx(); });
+  document.getElementById("scroll").addEventListener("click", function () { selected = null; render(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") { hideCtx(); closeModal(); } });
+
+  // drag & drop
+  var content = document.querySelector(".content"), drop = document.getElementById("drop"), dragDepth = 0;
+  content.addEventListener("dragenter", function (e) { e.preventDefault(); dragDepth++; drop.classList.add("show"); });
+  content.addEventListener("dragover", function (e) { e.preventDefault(); });
+  content.addEventListener("dragleave", function (e) { dragDepth--; if (dragDepth <= 0) { dragDepth = 0; drop.classList.remove("show"); } });
+  content.addEventListener("drop", function (e) { e.preventDefault(); dragDepth = 0; drop.classList.remove("show"); if (e.dataTransfer.files && e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); });
+
+  // ---------- boot ----------
+  openDB().then(render).catch(function (err) {
+    document.getElementById("empty").style.display = "block";
+    document.getElementById("empty").innerHTML = '<div class="big">⚠️</div>Could not open local storage.<br><span class="hint">' + (err && err.message ? err.message : err) + '</span>';
+  });
+})();
+</script>
+</body>
+</html>
