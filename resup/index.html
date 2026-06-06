@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ResUp — Video Upscaler</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; padding: 28px; color: #fff;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: linear-gradient(135deg, #141e30, #243b55);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .card {
+    width: min(560px, 94vw); text-align: center;
+    background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 18px; padding: 36px; box-shadow: 0 18px 60px rgba(0,0,0,0.5);
+  }
+  h1 { margin: 0 0 6px; font-size: 30px; }
+  p { opacity: 0.85; line-height: 1.6; }
+  .btn {
+    display: inline-block; margin: 18px 6px 6px; padding: 14px 24px; font-size: 16px;
+    font-weight: 600; border-radius: 12px; text-decoration: none; color: #fff;
+    background: linear-gradient(135deg,#2d7dd2,#19c3b1);
+  }
+  .btn.alt { background: rgba(255,255,255,0.12); }
+  .note { margin-top: 18px; font-size: 13px; opacity: 0.7; }
+  code { background: rgba(255,255,255,0.15); padding: 1px 6px; border-radius: 5px; }
+  #status { margin-top: 16px; font-size: 14px; min-height: 20px; }
+  .ok { color: #7fffa0; } .bad { color: #ff9a9a; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>⬆️ ResUp</h1>
+    <p>Upscale any video to <b>1080p, 2K, or 4K</b> — from a YouTube link or your own
+       file — with a Fast (Lanczos) engine or true <b>AI super-resolution</b> (Real-ESRGAN).</p>
+
+    <a class="btn" href="http://127.0.0.1:5007/" id="open">Open ResUp</a>
+    <div id="status">Checking if ResUp is running…</div>
+
+    <p class="note">
+      ResUp runs <b>locally on your computer</b> (it downloads and encodes video on your
+      machine), so it isn't a hosted website. Launch it by running
+      <code>start.bat</code> in <code>C:\code\video-upscaler</code>, then click
+      <b>Open ResUp</b> above. Files save to your <b>Downloads</b> folder.
+    </p>
+  </div>
+
+<script>
+  // Try to detect the local ResUp server. Note: when this page is served over
+  // HTTPS, browsers block the http://127.0.0.1 probe as mixed content, so a
+  // failure here doesn't necessarily mean ResUp is down — keep the message neutral.
+  const status = document.getElementById('status');
+  fetch('http://127.0.0.1:5007/config', { mode: 'no-cors' })
+    .then(() => { status.innerHTML = '<span class="ok">✅ ResUp is running — click “Open ResUp”.</span>'; })
+    .catch(() => { status.innerHTML = 'Click <b>Open ResUp</b>. If nothing loads, start it with <code>start.bat</code> first.'; });
+</script>
+</body>
+</html>
