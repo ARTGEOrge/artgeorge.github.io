@@ -100,6 +100,14 @@
     box.appendChild(grid);
   }
 
+  // If opened with ?u=<youtube link/id> (e.g. a YouTube link clicked in Nova),
+  // play it straight away — keeps YouTube inside ArtOS instead of a new window.
+  (function(){
+    const p = new URLSearchParams(location.search);
+    const u = p.get("u") || p.get("v");
+    if(u){ const id = extractId(u) || (/^[\w-]{11}$/.test(u) ? u : null); if(id) play(id, ""); }
+  })();
+
   $("searchForm").addEventListener("submit", async (e) => {
     e.preventDefault();
     const q = $("q").value.trim();
