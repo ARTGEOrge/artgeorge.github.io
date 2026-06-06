@@ -52,6 +52,17 @@
   .tbtn .lbl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .tbtn:hover{background:rgba(255,255,255,0.12);}
   .tbtn.active{background:rgba(255,255,255,0.2);}
+  .tbtn{position:relative;}
+  .tbtn.running::after{content:"";position:absolute;left:50%;bottom:2px;transform:translateX(-50%);
+    width:16px;height:3px;border-radius:3px;background:var(--accent2);opacity:.9;}
+  .tbtn.active.running::after{width:22px;}
+  /* right-click context menu */
+  #ctxmenu{position:fixed;min-width:184px;background:var(--glass);backdrop-filter:blur(16px);
+    border:1px solid var(--glassb);border-radius:10px;box-shadow:0 16px 50px rgba(0,0,0,.55);
+    z-index:7000;padding:6px;display:none;}
+  #ctxmenu.open{display:block;}
+  .ctxitem{padding:9px 12px;border-radius:7px;font-size:13px;cursor:pointer;display:flex;gap:9px;align-items:center;}
+  .ctxitem:hover{background:rgba(255,255,255,0.14);}
   #tray{margin-left:auto;display:flex;align-items:center;gap:14px;padding-right:6px;font-size:13px;}
   #clock{text-align:right;line-height:1.15;cursor:default;}
   #clock .t{font-weight:600;} #clock .d{font-size:11px;opacity:.7;}
@@ -122,6 +133,8 @@
   </div>
 </div>
 
+<div id="ctxmenu"></div>
+
 <div id="taskbar">
   <div id="startbtn"><span style="font-size:18px">≡</span> Start</div>
   <div class="qsep"></div>
@@ -173,7 +186,9 @@
   };
 
   let zTop = 10, winCount = 0;
-  const windows = {};   // id -> {el, app, taskbtn, min, prev}
+  const windows = {};         // id -> {el, app, min, prev}
+  let pinned = store.get("pinned", QUICK.slice());   // pinned app ids (persisted)
+  const taskBtns = {};        // appId -> taskbar button element
 
   // ---------------------------------------------------------------- window manager
   function makeWindow(appId){
@@ -208,30 +223,80 @@
     el.querySelector(".maxb").onclick  = e=>{e.stopPropagation();toggleMax(id);};
     el.querySelector(".titlebar").ondblclick = ()=>toggleMax(id);
 
-    // taskbar button
-    const tb = document.createElement("div");
-    tb.className = "tbtn active";
-    tb.innerHTML = `<span class="em">${app.icon}</span><span class="lbl">${app.name}</span>`;
-    tb.onclick = ()=>{ const W=windows[id];
-      if(W.min){ unmin(id); focus(id); }
-      else if(el.style.zIndex==zTop){ minimize(id); }
-      else focus(id);
-    };
-    $("#quick").appendChild(tb);
-
-    windows[id] = {el, app:appId, taskbtn:tb, min:false, prev:null};
+    windows[id] = {el, app:appId, min:false, prev:null};
+    renderTaskbar();
     focus(id);
     return id;
+  }
+
+  // ---- app-centric taskbar (pinned + running) --------------------------------
+  function runningId(appId){ for(const id in windows){ if(windows[id].app===appId) return id; } return null; }
+
+  function renderTaskbar(){
+    const q = $("#quick");
+    const order = pinned.slice();
+    for(const id in windows){ const a=windows[id].app; if(!order.includes(a)) order.push(a); }
+    // drop buttons no longer pinned or running
+    for(const a in taskBtns){ if(!order.includes(a)){ taskBtns[a].remove(); delete taskBtns[a]; } }
+    order.forEach(appId=>{
+      let b = taskBtns[appId];
+      if(!b){
+        const app=APPS[appId];
+        b=document.createElement("div"); b.className="tbtn";
+        b.innerHTML=`<span class="em">${app.icon}</span><span class="lbl">${app.name}</span>`;
+        b.title=app.name;
+        b.onclick=()=>onTaskClick(appId);
+        b.oncontextmenu=(e)=>{ e.preventDefault(); showCtx(e, appId); };
+        taskBtns[appId]=b;
+      }
+      q.appendChild(b);   // re-append enforces order
+    });
+    updateTaskActive();
+  }
+  function updateTaskActive(){
+    for(const a in taskBtns){
+      const id=runningId(a), running=!!id;
+      taskBtns[a].classList.toggle("running", running);
+      taskBtns[a].classList.toggle("active", running && !windows[id].min && windows[id].el.style.zIndex==zTop);
+    }
+  }
+  function onTaskClick(appId){
+    const id=runningId(appId);
+    if(!id){ makeWindow(appId); return; }
+    const W=windows[id];
+    if(W.min){ unmin(id); focus(id); }
+    else if(W.el.style.zIndex==zTop){ minimize(id); }
+    else focus(id);
   }
 
   function focus(id){
     const W = windows[id]; if(!W) return;
     W.el.style.zIndex = ++zTop;
-    for(const k in windows) windows[k].taskbtn.classList.toggle("active", k===id && !windows[k].min);
+    updateTaskActive();
   }
-  function minimize(id){ const W=windows[id]; W.min=true; W.el.style.display="none"; W.taskbtn.classList.remove("active"); }
-  function unmin(id){ const W=windows[id]; W.min=false; W.el.style.display="flex"; }
-  function closeWin(id){ const W=windows[id]; if(!W)return; W.el.remove(); W.taskbtn.remove(); delete windows[id]; }
+  function minimize(id){ const W=windows[id]; W.min=true; W.el.style.display="none"; updateTaskActive(); }
+  function unmin(id){ const W=windows[id]; W.min=false; W.el.style.display="flex"; updateTaskActive(); }
+  function closeWin(id){ const W=windows[id]; if(!W)return; W.el.remove(); delete windows[id]; renderTaskbar(); }
+
+  // ---- pinning + context menu ------------------------------------------------
+  const isPinned = appId => pinned.includes(appId);
+  function pin(appId){ if(!isPinned(appId)){ pinned.push(appId); store.set("pinned",pinned); renderTaskbar(); } }
+  function unpin(appId){ pinned=pinned.filter(a=>a!==appId); store.set("pinned",pinned); renderTaskbar(); }
+
+  function showCtx(e, appId){
+    const m=$("#ctxmenu"); m.innerHTML="";
+    const add=(label,fn)=>{ const d=document.createElement("div"); d.className="ctxitem"; d.textContent=label;
+      d.onclick=()=>{ fn(); hideCtx(); }; m.appendChild(d); };
+    add("Open", ()=>makeWindow(appId));
+    add(isPinned(appId)?"📌 Unpin from taskbar":"📌 Pin to taskbar", ()=> isPinned(appId)?unpin(appId):pin(appId));
+    if(runningId(appId)) add("Close window", ()=>{ const id=runningId(appId); if(id) closeWin(id); });
+    m.classList.add("open");
+    const h=m.offsetHeight, w=m.offsetWidth;
+    m.style.left=Math.min(e.clientX, innerWidth-w-6)+"px";
+    let top=e.clientY-h-4; if(top<4) top=e.clientY+4;
+    m.style.top=top+"px";
+  }
+  function hideCtx(){ $("#ctxmenu").classList.remove("open"); }
   function toggleMax(id){
     const W=windows[id], el=W.el;
     if(el.classList.contains("max")){
@@ -470,14 +535,18 @@
     const wrap=$("#icons");
     DESKTOP.forEach(id=>{ const a=APPS[id]; const d=document.createElement("div"); d.className="dicon";
       d.innerHTML=`<span class="em">${a.icon}</span><span class="nm">${a.name}</span>`;
-      d.ondblclick=()=>AprtOpen(id); wrap.appendChild(d); });
+      d.ondblclick=()=>AprtOpen(id);
+      d.oncontextmenu=(e)=>{ e.preventDefault(); showCtx(e, id); };
+      wrap.appendChild(d); });
   }
   function buildQuick(){ const q=$("#quick"); /* quick launch added before window buttons via separate area? keep simple */ }
   function buildStartMenu(){
     const g=$("#smgrid");
     Object.keys(APPS).forEach(id=>{ const a=APPS[id]; const d=document.createElement("div"); d.className="smapp";
       d.innerHTML=`<span class="em">${a.icon}</span><span>${a.name}</span>`;
-      d.onclick=()=>{ AprtOpen(id); toggleStart(false); }; g.appendChild(d); });
+      d.onclick=()=>{ AprtOpen(id); toggleStart(false); };
+      d.oncontextmenu=(e)=>{ e.preventDefault(); showCtx(e, id); };
+      g.appendChild(d); });
   }
   function toggleStart(force){ const m=$("#startmenu"), b=$("#startbtn");
     const open = force!==undefined?force:!m.classList.contains("open");
@@ -509,9 +578,12 @@
 
   // ---------------------------------------------------------------- init
   setWall(store.get("wall",0)); setAccent(store.get("accent",0));
-  buildDesktopIcons(); buildStartMenu();
+  buildDesktopIcons(); buildStartMenu(); renderTaskbar();
   $("#startbtn").onclick=(e)=>{ e.stopPropagation(); toggleStart(); };
-  document.addEventListener("click", e=>{ if(!e.target.closest("#startmenu")&&!e.target.closest("#startbtn")) toggleStart(false); });
+  document.addEventListener("click", e=>{
+    if(!e.target.closest("#startmenu")&&!e.target.closest("#startbtn")) toggleStart(false);
+    if(!e.target.closest("#ctxmenu")) hideCtx();
+  });
   clock(); setInterval(clock,1000);
   boot();
 
