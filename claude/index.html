@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Code — ArtOS</title>
+<link rel="stylesheet" href="/claude/xterm.css">
+<style>
+  html,body{margin:0;height:100%;background:#0c0f16;overflow:hidden;font-family:Consolas,monospace;}
+  #term{position:absolute;inset:0;padding:8px;}
+  #msg{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;
+       gap:12px;color:#cdd6e6;font-family:"Segoe UI",sans-serif;text-align:center;padding:30px;background:#0c0f16;}
+  #msg.show{display:flex;}
+  #msg .big{font-size:46px;}
+  #msg code{background:#1c2230;padding:1px 6px;border-radius:4px;}
+  .bar{position:absolute;top:0;left:0;right:0;height:0;}
+</style>
+</head>
+<body>
+  <div id="term"></div>
+  <div id="msg">
+    <div class="big">✳️</div>
+    <div style="font-size:18px;font-weight:600">Claude Code</div>
+    <div id="msgtext" style="max-width:420px;opacity:.85;line-height:1.6">Connecting to the ArtOS terminal…</div>
+  </div>
+
+  <script src="/claude/xterm.js"></script>
+  <script src="/claude/fit.js"></script>
+  <script>
+    const term = new Terminal({
+      cursorBlink: true, fontFamily: 'Consolas, "Cascadia Mono", monospace',
+      fontSize: 14, theme: { background: '#0c0f16', foreground: '#d7e2f0', cursor: '#19c3b1' },
+      scrollback: 5000, allowProposedApi: true,
+    });
+    const fit = new FitAddon.FitAddon();
+    term.loadAddon(fit);
+    term.open(document.getElementById('term'));
+    fit.fit();
+
+    const msg = document.getElementById('msg'), msgtext = document.getElementById('msgtext');
+    function showMsg(t){ msgtext.innerHTML = t; msg.classList.add('show'); }
+
+    let ws;
+    function connect(){
+      try { ws = new WebSocket('ws://127.0.0.1:5100'); }
+      catch(e){ showMsg('Claude Code runs in the <b>ArtOS desktop app</b> only.'); return; }
+
+      ws.onopen = () => {
+        msg.classList.remove('show');
+        const send = () => ws.readyState === 1 &&
+          ws.send(JSON.stringify({ t: 'size', cols: term.cols, rows: term.rows }));
+        send();
+        term.onData(d => ws.readyState === 1 && ws.send(JSON.stringify({ t: 'in', d })));
+        term.onResize(() => send());
+        window.addEventListener('resize', () => { fit.fit(); send(); });
+        term.focus();
+      };
+      ws.onmessage = (ev) => term.write(ev.data);
+      ws.onclose = () => showMsg('Session ended. <br>Reopen Claude Code to start again.');
+      ws.onerror = () => showMsg(
+        'Couldn\'t reach the terminal server.<br>Claude Code runs in the <b>ArtOS desktop app</b> ' +
+        '(needs <code>claude</code> + Node installed).');
+    }
+    connect();
+  </script>
+</body>
+</html>
