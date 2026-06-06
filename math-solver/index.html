@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Math Solver</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: "Segoe UI", system-ui, sans-serif;
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    color: #fff;
+  }
+  body { padding: 24px; }
+  .card {
+    width: min(560px, 94vw);
+    background: rgba(0,0,0,0.35);
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 18px;
+    padding: 28px;
+    box-shadow: 0 18px 60px rgba(0,0,0,0.5);
+  }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  p.hint { margin: 0 0 18px; opacity: 0.8; font-size: 13px; }
+  input {
+    width: 100%;
+    font-size: 22px;
+    padding: 14px 16px;
+    border: none;
+    border-radius: 12px;
+    outline: none;
+  }
+  .result {
+    margin-top: 16px;
+    font-size: 30px;
+    font-weight: 600;
+    min-height: 40px;
+    word-break: break-all;
+  }
+  .result.error { color: #ff9a9a; font-size: 18px; font-weight: 400; }
+  .steps {
+    margin-top: 14px;
+    font-size: 14px;
+    line-height: 1.7;
+    font-family: "Consolas", "Courier New", monospace;
+  }
+  .steps:not(:empty) {
+    background: rgba(0,0,0,0.25);
+    border-left: 3px solid rgba(255,255,255,0.4);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .steps .stitle { font-weight: 600; opacity: 0.85; margin-bottom: 6px; }
+  .steps ol { margin: 0; padding-left: 22px; }
+  .steps li { margin: 3px 0; }
+  .graphwrap { margin-top: 16px; }
+  .graphwrap.hidden { display: none; }
+  .glabel { font-size: 12px; opacity: 0.8; margin-bottom: 6px;
+            font-family: "Consolas", monospace; }
+  #graph {
+    width: 100%;
+    height: 240px;
+    display: block;
+    background: rgba(0,0,0,0.28);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 10px;
+  }
+  .examples { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .examples button {
+    background: rgba(255,255,255,0.15);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.25);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .examples button:hover { background: rgba(255,255,255,0.3); }
+  .legend { margin-top: 16px; font-size: 12px; opacity: 0.75; line-height: 1.6; }
+  code { background: rgba(255,255,255,0.15); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>🧮 Math Solver</h1>
+    <p class="hint">Type a math problem and press Enter.</p>
+    <input id="expr" autocomplete="off" autofocus
+           placeholder="e.g.  x/23 = 20/60">
+    <div id="result" class="result"></div>
+    <div id="steps" class="steps"></div>
+
+    <div id="graphwrap" class="graphwrap hidden">
+      <div id="glabel" class="glabel"></div>
+      <canvas id="graph"></canvas>
+    </div>
+
+    <div class="examples">
+      <button data-ex="x/23 = 20/60">x/23 = 20/60</button>
+      <button data-ex="x^2 - 5*x + 6 = 0">x^2 - 5x + 6 = 0</button>
+      <button data-ex="x^3 - 6*x^2 + 11*x - 6 = 0">x^3 - 6x^2 + 11x - 6 = 0</button>
+      <button data-ex="y = x + 2">y = x + 2</button>
+      <button data-ex="y = x^2 - 4">y = x^2 - 4</button>
+      <button data-ex="pi*r^2, r=7">pi*r^2, r=7</button>
+      <button data-ex="sqrt(144)">sqrt(144)</button>
+      <button data-ex="sin(pi / 2)">sin(pi / 2)</button>
+    </div>
+
+    <div class="legend">
+      <b>Solve for x:</b> type an equation with <code>=</code> and an <code>x</code>.
+      Handles proportions / <b>linear</b> (<code>x/23 = 20/60</code>),
+      <b>quadratics</b> (<code>x^2 - 5x + 6 = 0</code>), and
+      <b>cubics</b> (<code>x^3 - 6x^2 + 11x - 6 = 0</code>) — with step-by-step working
+      and exact fractions where possible.<br>
+      <b>Or just calculate:</b> <code>+ - * / ^</code>, <code>%</code> (remainder),
+      parentheses, and functions <code>sqrt</code>, <code>sin</code>, <code>cos</code>,
+      <code>tan</code>, <code>log</code> (base 10), <code>ln</code>, <code>abs</code>,
+      <code>round</code>. Constants: <code>pi</code>, <code>e</code>.
+    </div>
+  </div>
+
+<script>
+  const input     = document.getElementById('expr');
+  const output    = document.getElementById('result');
+  const stepsBox  = document.getElementById('steps');
+  const graphWrap = document.getElementById('graphwrap');
+  const glabel    = document.getElementById('glabel');
+  const canvas    = document.getElementById('graph');
+
+  // Tokenizer + recursive-descent parser (no eval, so it's safe).
+  // Pass an x value to evaluate expressions that contain the variable x.
+  function solve(text, xValue, yValue, rValue) {
+    let pos = 0;
+    const s = text.toLowerCase();
+
+    const consts = { pi: Math.PI, e: Math.E };
+    const funcs = {
+      sqrt: Math.sqrt, sin: Math.sin, cos: Math.cos, tan: Math.tan,
+      abs: Math.abs, round: Math.round, ln: Math.log,
+      log: x => Math.log(x) / Math.LN10
+    };
+
+    function skip() { while (pos < s.length && s[pos] === ' ') pos++; }
+    function peek() { skip(); return pos < s.length ? s[pos] : '\0'; }
+
+    function parseExpr() {
+      let v = parseTerm();
+      for (;;) {
+        const c = peek();
+        if (c === '+') { pos++; v += parseTerm(); }
+        else if (c === '-') { pos++; v -= parseTerm(); }
+        else return v;
+      }
+    }
+    function parseTerm() {
+      let v = parsePow();
+      for (;;) {
+        const c = peek();
+        if (c === '*') { pos++; v *= parsePow(); }
+        else if (c === '/') { pos++; v /= parsePow(); }
+        else if (c === '%') { pos++; v %= parsePow(); }
+        // implicit multiplication: 5x, 2(x+1), 3sqrt(4), (x)(x)
+        else if (c === '(' || /[a-z0-9.]/.test(c)) { v *= parsePow(); }
+        else return v;
+      }
+    }
+    function parsePow() {
+      const base = parseFactor();
+      if (peek() === '^') { pos++; return Math.pow(base, parsePow()); }
+      return base;
+    }
+    function parseFactor() {
+      let c = peek();
+      if (c === '+') { pos++; return parsePow(); }
+      if (c === '-') { pos++; return -parsePow(); }
+      if (c === '(') {
+        pos++;
+        const v = parseExpr();
+        if (peek() !== ')') throw 'Missing )';
+        pos++;
+        return v;
+      }
+      // a name: function call or constant
+      if (/[a-z]/.test(c)) {
+        let start = pos;
+        while (pos < s.length && /[a-z]/.test(s[pos])) pos++;
+        const name = s.slice(start, pos);
+        if (peek() === '(') {
+          pos++;
+          const arg = parseExpr();
+          if (peek() !== ')') throw 'Missing )';
+          pos++;
+          if (!(name in funcs)) throw 'Unknown function: ' + name;
+          return funcs[name](arg);
+        }
+        if (name === 'x') {
+          if (xValue === undefined) throw 'Unknown name: x';
+          return xValue;
+        }
+        if (name === 'y') {
+          if (yValue === undefined) throw 'Unknown name: y';
+          return yValue;
+        }
+        if (name === 'r') {
+          if (rValue === undefined) throw 'Unknown name: r';
+          return rValue;
+        }
+        if (name in consts) return consts[name];
+        throw 'Unknown name: ' + name;
+      }
+      // a number
+      if (/[0-9.]/.test(c)) {
+        let start = pos;
+        while (pos < s.length && /[0-9.]/.test(s[pos])) pos++;
+        return parseFloat(s.slice(start, pos));
+      }
+      throw 'Unexpected character';
+    }
+
+    const result = parseExpr();
+    skip();
+    if (pos < s.length) throw 'Unexpected: ' + s.slice(pos);
+    if (!isFinite(result)) throw 'Result is not a finite number';
+    return result;
+  }
+
+  function round10(n) { return Math.round(n * 1e10) / 1e10; }
+  function tidy(n)    { return round10(n); }
+  function fmt(n)     { return String(round10(n)); }
+  // " - 3" or " + 3x"  (signed term, for building readable polynomials)
+  function signed(n, sym) {
+    return (n < 0 ? ' - ' : ' + ') + fmt(Math.abs(n)) + (sym || '');
+  }
+
+  // Find an exact fraction for x via continued fractions; null if none is clean.
+  function toFraction(x) {
+    if (!isFinite(x)) return null;
+    if (Math.abs(x - Math.round(x)) < 1e-9) return null;   // it's an integer
+    const sign = x < 0 ? -1 : 1;
+    const v = Math.abs(x);
+    let h0 = 0, h1 = 1, k0 = 1, k1 = 0, b = v;
+    for (let i = 0; i < 40; i++) {
+      const ai = Math.floor(b);
+      const h2 = ai * h1 + h0, k2 = ai * k1 + k0;
+      if (k2 > 100000) break;
+      h0 = h1; h1 = h2; k0 = k1; k1 = k2;
+      if (Math.abs(h1 / k1 - v) < 1e-10) return { n: sign * h1, d: k1 };
+      const frac = b - ai;
+      if (frac < 1e-12) return { n: sign * h1, d: k1 };
+      b = 1 / frac;
+    }
+    return null;
+  }
+
+  // Display a root as an exact fraction (with decimal approx) when possible.
+  function rootText(x) {
+    const r = round10(x);
+    const f = toFraction(x);
+    return f ? (f.n + '/' + f.d + '  (≈ ' + r + ')') : String(r);
+  }
+
+  // Solve an equation "LHS = RHS" for x (linear, quadratic, or cubic).
+  // f(x) = LHS - RHS = A*x^3 + B*x^2 + C*x + D. Sample f to recover the coefficients.
+  function solveForX(text) {
+    const sides = text.split('=');
+    if (sides.length !== 2) throw 'An equation needs exactly one =';
+    const f = x => solve(sides[0], x) - solve(sides[1], x);
+
+    const f0 = f(0), f1 = f(1), fm1 = f(-1), f2 = f(2), fm2 = f(-2);
+
+    const D = f0;
+    const B = (f1 + fm1) / 2 - D;     // x^2 coefficient
+    const Pp = (f1 - fm1) / 2;        // A + C
+    const Qp = (f2 - 4 * B - D) / 2;  // 4A + C
+    const A = (Qp - Pp) / 3;          // x^3 coefficient
+    const C = Pp - A;                 // x coefficient
+
+    // Guard: confirm degree <= 3 using a 5th point.
+    const predicted = A * -8 + B * 4 + C * -2 + D;
+    if (Math.abs(predicted - fm2) > 1e-6 * (1 + Math.abs(fm2))) {
+      throw 'This solver handles equations up to cubic (x³) in x';
+    }
+
+    if (Math.abs(A) > 1e-9) return solveCubic(A, B, C, D);
+
+    // Otherwise it's quadratic or linear (coefficients a, b, c).
+    const a = B, b = C, c = D;
+
+    if (Math.abs(a) < 1e-12) {
+      if (Math.abs(b) < 1e-12) {
+        if (Math.abs(c) < 1e-9) throw 'Any value of x works (identity)';
+        throw 'No solution';
+      }
+      const x = -c / b;
+      const steps = [
+        'This is a linear equation (no x² term).',
+        'Standard form:  ' + fmt(b) + 'x' + signed(c) + ' = 0',
+        'Move the constant across:  ' + fmt(b) + 'x = ' + fmt(-c),
+        'Divide both sides by ' + fmt(b) + ':  x = ' + fmt(-c) + ' / ' + fmt(b),
+        'x = ' + rootText(x)
+      ];
+      return { type: 'linear', roots: [round10(x)], steps };
+    }
+
+    // Quadratic case: use the quadratic formula.
+    const disc = b * b - 4 * a * c;
+    const steps = [
+      'Standard form:  ' + fmt(a) + 'x²' + signed(b, 'x') + signed(c) + ' = 0',
+      'Coefficients:  a = ' + fmt(a) + ',  b = ' + fmt(b) + ',  c = ' + fmt(c),
+      'Discriminant:  b² - 4ac = (' + fmt(b) + ')² - 4(' + fmt(a) + ')(' + fmt(c) +
+        ') = ' + fmt(disc)
+    ];
+
+    if (disc < -1e-9) {
+      const re = round10(-b / (2 * a));
+      const im = round10(Math.sqrt(-disc) / (2 * a));
+      steps.push('Discriminant is negative, so there are no real solutions.');
+      steps.push('x = (-b ± √(' + fmt(disc) + ')) / (2·' + fmt(a) + ')');
+      steps.push('x = ' + re + ' ± ' + Math.abs(im) + 'i');
+      return { type: 'complex', re, im, steps };
+    }
+
+    const sq = Math.sqrt(Math.max(disc, 0));
+    const r1 = (-b + sq) / (2 * a);
+    const r2 = (-b - sq) / (2 * a);
+
+    if (Math.abs(disc) < 1e-9) {
+      steps.push('Discriminant is 0, so there is one repeated root.');
+      steps.push('x = -b / (2a) = ' + fmt(-b) + ' / ' + fmt(2 * a));
+      steps.push('x = ' + rootText(r1));
+      return { type: 'quadratic', roots: [round10(r1)], steps };
+    }
+
+    steps.push('√(discriminant) = √' + fmt(disc) + ' = ' + fmt(sq));
+    steps.push('x = (-b ± √D) / (2a) = (' + fmt(-b) + ' ± ' + fmt(sq) +
+               ') / ' + fmt(2 * a));
+    steps.push('x = ' + rootText(r1) + '   or   x = ' + rootText(r2));
+    return { type: 'quadratic', roots: [round10(r1), round10(r2)], steps };
+  }
+
+  // Solve A*x^3 + B*x^2 + C*x + D = 0 for its real roots (Cardano's method).
+  function solveCubic(A, B, C, D) {
+    const steps = [
+      'This is a cubic equation.',
+      'Standard form:  ' + fmt(A) + 'x³' + signed(B, 'x²') + signed(C, 'x') +
+        signed(D) + ' = 0',
+      'Coefficients:  a = ' + fmt(A) + ',  b = ' + fmt(B) +
+        ',  c = ' + fmt(C) + ',  d = ' + fmt(D)
+    ];
+
+    // Depress the cubic: x = t - p/3  ->  t^3 + P t + Q = 0
+    const p = B / A, q = C / A, r = D / A;
+    const P = q - p * p / 3;
+    const Q = 2 * p * p * p / 27 - p * q / 3 + r;
+    const disc = Q * Q / 4 + P * P * P / 27;
+    const shift = p / 3;
+
+    const subst = shift < 0 ? 'x = t + ' + fmt(-shift) : 'x = t - ' + fmt(shift);
+    steps.push('Substituting ' + subst +
+               ' gives the depressed cubic  t³' + signed(P, 't') + signed(Q) + ' = 0.');
+    steps.push('Cubic discriminant = ' + fmt(disc) + '.');
+
+    let roots;
+    if (disc > 1e-9) {
+      const sd = Math.sqrt(disc);
+      const t = Math.cbrt(-Q / 2 + sd) + Math.cbrt(-Q / 2 - sd);
+      roots = [t - shift];
+      steps.push('Discriminant > 0 → one real root (the other two are complex).');
+    } else if (disc < -1e-9) {
+      const m = 2 * Math.sqrt(-P / 3);
+      let arg = (3 * Q) / (P * m);
+      arg = Math.max(-1, Math.min(1, arg));
+      const theta = Math.acos(arg) / 3;
+      roots = [0, 1, 2].map(k => m * Math.cos(theta - 2 * Math.PI * k / 3) - shift);
+      steps.push('Discriminant < 0 → three distinct real roots (trigonometric method).');
+    } else {
+      const u = Math.cbrt(-Q / 2);
+      roots = [2 * u - shift, -u - shift];
+      steps.push('Discriminant = 0 → repeated real roots.');
+    }
+
+    // Round and remove duplicates.
+    let rr = roots.map(round10);
+    rr = rr.filter((v, i) => rr.findIndex(w => Math.abs(w - v) < 1e-7) === i);
+    rr.sort((m, n) => m - n);
+    steps.push('x = ' + rr.map(rootText).join('   or   x = '));
+    return { type: 'cubic', roots: rr, steps };
+  }
+
+  function showSteps(steps) {
+    if (!steps || !steps.length) { stepsBox.innerHTML = ''; return; }
+    const items = steps.map(s =>
+      '<li>' + s.replace(/&/g, '&amp;').replace(/</g, '&lt;') + '</li>').join('');
+    stepsBox.innerHTML = '<div class="stitle">Step by step</div><ol>' + items + '</ol>';
+  }
+
+  // ---------- High-resolution graphing ----------
+  let lastPlot = null;   // remembered so we can redraw on resize
+
+  // Size the canvas backing store at 3× the device pixel ratio for crisp graphics.
+  function fitCanvas() {
+    const scale = (window.devicePixelRatio || 1) * 3;
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    canvas.width  = Math.max(1, Math.round(w * scale));
+    canvas.height = Math.max(1, Math.round(h * scale));
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);   // work in CSS pixels
+    return { ctx, w, h };
+  }
+
+  function niceStep(range) {
+    const rough = range / 8;
+    const pow = Math.pow(10, Math.floor(Math.log10(rough)));
+    const n = rough / pow;
+    return (n < 1.5 ? 1 : n < 3 ? 2 : n < 7 ? 5 : 10) * pow;
+  }
+
+  function drawGraph(fn, roots) {
+    const { ctx, w, h } = fitCanvas();
+    ctx.clearRect(0, 0, w, h);
+
+    // Show the full coordinate plane: a window centered on the origin (all four
+    // quadrants), defaulting to ±10 and widening to include any roots.
+    const real = roots.filter(r => isFinite(r));
+    let xExtent = 10;
+    if (real.length) {
+      xExtent = Math.max(10, Math.max.apply(null, real.map(Math.abs)) + 2);
+    }
+    let xMin = -xExtent, xMax = xExtent;
+
+    // Sample the function across the window, tracking finite magnitudes.
+    const N = 700, samples = [], absY = [];
+    for (let i = 0; i <= N; i++) {
+      const x = xMin + (xMax - xMin) * i / N;
+      let y; try { y = fn(x); } catch (e) { y = NaN; }
+      if (isFinite(y)) { samples.push({ x, y }); if (Math.abs(y) < 1e7) absY.push(Math.abs(y)); }
+      else samples.push(null);
+    }
+    // y-window is also centered on the origin (±10), zooming out only if the
+    // whole curve sits outside the default view.
+    let yExtent = 10;
+    if (absY.length) {
+      const minAbs = Math.min.apply(null, absY);
+      if (minAbs > yExtent) yExtent = Math.max.apply(null, absY) * 1.1;
+    }
+    let yMin = -yExtent, yMax = yExtent;
+
+    const px = x => (x - xMin) / (xMax - xMin) * w;
+    const py = y => h - (y - yMin) / (yMax - yMin) * h;
+
+    // Grid + axis labels.
+    ctx.font = '11px Consolas, monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    const xs = niceStep(xMax - xMin);
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1;
+    for (let x = Math.ceil(xMin / xs) * xs; x < xMax; x += xs) {
+      const X = px(x);
+      ctx.beginPath(); ctx.moveTo(X, 0); ctx.lineTo(X, h); ctx.stroke();
+      if (Math.abs(x) > 1e-9) {
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.fillText(String(Math.round(x * 1000) / 1000), X, py(0) + 4);
+      }
+    }
+    const ysStep = niceStep(yMax - yMin);
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    for (let y = Math.ceil(yMin / ysStep) * ysStep; y < yMax; y += ysStep) {
+      const Y = py(y);
+      ctx.beginPath(); ctx.moveTo(0, Y); ctx.lineTo(w, Y); ctx.stroke();
+      if (Math.abs(y) > 1e-9) {
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.fillText(String(Math.round(y * 1000) / 1000), px(0) + 4, Y);
+      }
+    }
+
+    // Axes.
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.5;
+    if (0 >= yMin && 0 <= yMax) { ctx.beginPath(); ctx.moveTo(0, py(0)); ctx.lineTo(w, py(0)); ctx.stroke(); }
+    if (0 >= xMin && 0 <= xMax) { ctx.beginPath(); ctx.moveTo(px(0), 0); ctx.lineTo(px(0), h); ctx.stroke(); }
+
+    // The curve (break across discontinuities / off-screen excursions).
+    const span = yMax - yMin;
+    const inView = p => p && p.y >= yMin - span && p.y <= yMax + span;
+    ctx.strokeStyle = '#7fd1ff'; ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round'; ctx.beginPath();
+    let pen = false;
+    for (const p of samples) {
+      if (inView(p)) {
+        const X = px(p.x), Y = py(p.y);
+        if (pen) ctx.lineTo(X, Y); else { ctx.moveTo(X, Y); pen = true; }
+      } else pen = false;
+    }
+    ctx.stroke();
+
+    // Root markers on the x-axis.
+    ctx.fillStyle = '#ffd479';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    for (const r of real) {
+      const X = px(r), Y = py(0);
+      ctx.beginPath(); ctx.arc(X, Y, 4.5, 0, 2 * Math.PI); ctx.fill();
+      ctx.fillText('x=' + (Math.round(r * 1000) / 1000), X, Y - 6);
+    }
+  }
+
+  function plot(fn, roots, label) {
+    lastPlot = { fn, roots, label };
+    graphWrap.classList.remove('hidden');
+    glabel.textContent = label;
+    drawGraph(fn, roots);
+  }
+  function hideGraph() { lastPlot = null; graphWrap.classList.add('hidden'); }
+
+  // A little illustration of what π is: a circle, its diameter, and the
+  // circumference unrolled to show it equals about 3.14 diameters.
+  function drawPiDiagram() {
+    const { ctx, w, h } = fitCanvas();
+    ctx.clearRect(0, 0, w, h);
+
+    const cx = 95, cy = h / 2 + 10, r = 62, d = 2 * r;
+
+    // Circle.
+    ctx.strokeStyle = '#7fd1ff'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI); ctx.stroke();
+    // Diameter.
+    ctx.strokeStyle = '#ffd479'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(cx - r, cy); ctx.lineTo(cx + r, cy); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx, cy, 3, 0, 2 * Math.PI); ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.font = '12px Consolas, monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('diameter d', cx, cy - 6);
+
+    // Unrolled circumference (length = π·d), scaled to fit the canvas width.
+    const startX = cx + r + 26, lineY = cy;
+    const total = Math.PI * d, maxLen = w - startX - 16;
+    const scale = Math.min(1, maxLen / total);
+    const segD = d * scale, endX = startX + total * scale;
+
+    ctx.strokeStyle = '#9cffb0'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(startX, lineY); ctx.lineTo(endX, lineY); ctx.stroke();
+
+    // Tick every diameter: 0, 1, 2, 3 diameters laid end to end.
+    ctx.font = '11px Consolas, monospace';
+    for (let k = 0; k <= 3; k++) {
+      const X = startX + segD * k;
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(X, lineY - 6); ctx.lineTo(X, lineY + 6); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.fillText(k + 'd', X, lineY + 8);
+    }
+    // The leftover 0.14159… of a diameter, and the end cap.
+    ctx.strokeStyle = '#ffd479'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(endX, lineY - 7); ctx.lineTo(endX, lineY + 7); ctx.stroke();
+    ctx.fillStyle = '#ffd479'; ctx.textBaseline = 'bottom';
+    ctx.fillText('π·d', endX, lineY - 9);
+
+    // Caption.
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.font = '13px Consolas, monospace';
+    ctx.fillText('C = π × d', startX, 12);
+    ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.font = '11px Consolas, monospace';
+    ctx.fillText('circumference ≈ 3.14159 diameters', startX, 30);
+  }
+
+  function showPiDiagram() {
+    lastPlot = { pi: true };
+    graphWrap.classList.remove('hidden');
+    glabel.textContent = 'π — the ratio of a circle’s circumference to its diameter';
+    drawPiDiagram();
+  }
+
+  // Detect "π multiplied by a radius": area (π r²), circumference (2 π r),
+  // or a bare product (π × r). The radius may be a number or the letter r.
+  function detectCircle(text) {
+    const s = text.replace(/\s+/g, '').toLowerCase();
+    let m;
+    if ((m = s.match(/^pi\*([0-9.]+|r)\^2$/)) || (m = s.match(/^([0-9.]+|r)\^2\*pi$/)) ||
+        (m = s.match(/^pi\*([0-9.]+|r)\*\1$/)))
+      return { mode: 'area', tok: m[1] };
+    if ((m = s.match(/^2\*pi\*([0-9.]+|r)$/)) || (m = s.match(/^2\*([0-9.]+|r)\*pi$/)) ||
+        (m = s.match(/^pi\*2\*([0-9.]+|r)$/)))
+      return { mode: 'circumference', tok: m[1] };
+    if ((m = s.match(/^pi\*([0-9.]+|r)$/)) || (m = s.match(/^([0-9.]+|r)\*pi$/)))
+      return { mode: 'product', tok: m[1] };
+    return null;
+  }
+
+  // Pull an "r = <number>" assignment out of the input, returning the core
+  // expression and the radius value (null if none was given).
+  function parseRadius(text) {
+    const parts = text.split(/[,;]/).map(s => s.trim()).filter(Boolean);
+    let rVal = null, exprParts = [];
+    for (const p of parts) {
+      const m = p.match(/^r\s*=\s*(-?[0-9]*\.?[0-9]+)$/i);
+      if (m) rVal = parseFloat(m[1]); else exprParts.push(p);
+    }
+    let core = exprParts.join(' ').trim();
+    // Also accept a trailing "... r=7" without a comma.
+    if (rVal === null) {
+      const m = core.match(/\br\s*=\s*(-?[0-9]*\.?[0-9]+)\s*$/i);
+      if (m) { rVal = parseFloat(m[1]); core = core.slice(0, m.index).trim(); }
+    }
+    return { core, rVal };
+  }
+
+  const CIRCLE_LABEL = { area: 'Area = π r²', circumference: 'C = 2 π r', product: 'π × r' };
+
+  function drawCircleDiagram(mode, r) {
+    const { ctx, w, h } = fitCanvas();
+    ctx.clearRect(0, 0, w, h);
+
+    const cx = w / 2, cy = h / 2 + 8, R = 70;
+
+    // The disc (the "pie").
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2 * Math.PI);
+    ctx.fillStyle = 'rgba(127,209,255,0.28)'; ctx.fill();
+    ctx.strokeStyle = '#7fd1ff'; ctx.lineWidth = mode === 'circumference' ? 5 : 3;
+    ctx.stroke();
+
+    // Radius line + label.
+    ctx.strokeStyle = '#ffd479'; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx, cy, 3, 0, 2 * Math.PI); ctx.fill();
+    ctx.fillStyle = '#ffd479'; ctx.font = '13px Consolas, monospace';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText('r' + (r != null ? ' = ' + tidy(r) : ''), cx + R / 2, cy - 6);
+
+    // Caption with the formula and (if numeric) the value.
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.font = '14px Consolas, monospace';
+    ctx.fillText(CIRCLE_LABEL[mode], 14, 12);
+    if (r != null) {
+      const val = mode === 'area' ? Math.PI * r * r
+                : mode === 'circumference' ? 2 * Math.PI * r
+                : Math.PI * r;
+      ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = '12px Consolas, monospace';
+      ctx.fillText('= ' + tidy(val), 14, 32);
+    }
+  }
+
+  function showCircleDiagram(mode, r) {
+    lastPlot = { circle: true, mode, r };
+    graphWrap.classList.remove('hidden');
+    glabel.textContent = 'Circle — ' + CIRCLE_LABEL[mode];
+    drawCircleDiagram(mode, r);
+  }
+
+  // Find x where fn(x) crosses 0 on [a,b], by scanning for sign changes + bisection.
+  function findRoots(fn, a, b) {
+    const N = 1000, out = [];
+    let prev = null, prevX = null;
+    for (let i = 0; i <= N; i++) {
+      const x = a + (b - a) * i / N;
+      let y; try { y = fn(x); } catch (e) { y = NaN; }
+      if (!isFinite(y)) { prev = null; continue; }
+      if (prev !== null && (prev <= 0) !== (y <= 0)) {
+        let lo = prevX, hi = x, flo = prev;
+        for (let k = 0; k < 60; k++) {
+          const mid = (lo + hi) / 2;
+          let fm; try { fm = fn(mid); } catch (e) { fm = NaN; }
+          if (!isFinite(fm)) break;
+          if ((flo <= 0) !== (fm <= 0)) hi = mid; else { lo = mid; flo = fm; }
+        }
+        const r = Math.round(((lo + hi) / 2) * 1e6) / 1e6;
+        if (!out.some(z => Math.abs(z - r) < 1e-4)) out.push(r);
+      }
+      prev = y; prevX = x;
+    }
+    return out;
+  }
+
+  // Graph "y = f(x)" style equations: solve for y at each x (linear in y), plot it.
+  function plotYequation(L, R, original) {
+    const hy = (x, yy) => solve(L, x, yy) - solve(R, x, yy);
+    // Confirm the equation is linear in y (y only to the first power).
+    const xs = 1.2345, a0 = hy(xs, 0), a1 = hy(xs, 1), a2 = hy(xs, 2);
+    const slope = a1 - a0;
+    if (Math.abs((2 * slope + a0) - a2) > 1e-6 * (1 + Math.abs(a2))) {
+      throw 'Can\'t graph: equation is nonlinear in y (only y to the first power is supported).';
+    }
+    const yfun = x => {
+      const b0 = hy(x, 0), s = hy(x, 1) - b0;
+      return Math.abs(s) < 1e-12 ? NaN : -b0 / s;
+    };
+    const roots = findRoots(yfun, -10, 10);
+    // Headline: "y = <expr>" when y is isolated, otherwise echo the equation as typed.
+    const isolated = L.trim() === 'y' ? R.trim() : (R.trim() === 'y' ? L.trim() : null);
+    const headline = isolated !== null ? 'y = ' + isolated : original.trim();
+    output.textContent = headline +
+      (roots.length ? '    (crosses y=0 at x = ' + roots.map(r => round10(r)).join(', ') + ')' : '');
+    showSteps(null);
+    plot(yfun, roots, original.trim());
+  }
+
+  function run() {
+    const text = input.value.trim();
+    if (!text) {
+      output.textContent = ''; output.className = 'result';
+      showSteps(null); hideGraph(); return;
+    }
+    try {
+      if (text.replace(/\s+/g, '').toLowerCase() === 'pi') {
+        // Special case: show what π means with a diagram.
+        output.textContent = 'π = ' + Math.PI;
+        output.className = 'result';
+        showSteps(null); showPiDiagram();
+        return;
+      }
+      const { core, rVal } = parseRadius(text);
+      // "r = 7" on its own just reports the value.
+      if (rVal !== null && core === '') {
+        output.textContent = 'r = ' + rVal;
+        output.className = 'result'; showSteps(null); hideGraph();
+        return;
+      }
+      const circle = detectCircle(core);
+      if (circle) {
+        // π multiplied by a radius → show a circle (pie) diagram.
+        // Use the literal number, or the supplied r value for the symbolic form.
+        const r = circle.tok !== 'r' ? parseFloat(circle.tok) : rVal;
+        if (r != null) {
+          const val = circle.mode === 'area' ? Math.PI * r * r
+                    : circle.mode === 'circumference' ? 2 * Math.PI * r
+                    : Math.PI * r;
+          output.textContent = CIRCLE_LABEL[circle.mode] + ' = ' + tidy(val);
+        } else {
+          output.textContent = CIRCLE_LABEL[circle.mode];
+        }
+        output.className = 'result';
+        showSteps(null); showCircleDiagram(circle.mode, r);
+        return;
+      }
+      // Any other expression in r with a supplied value: just evaluate it.
+      if (rVal !== null && /r/.test(core)) {
+        output.textContent = '= ' + tidy(solve(core, undefined, undefined, rVal));
+        output.className = 'result'; showSteps(null); hideGraph();
+        return;
+      }
+      if (text.includes('=') && /y/.test(text)) {
+        // Equation involving y, e.g. "y = x + 2": graph it as a function of x.
+        const sides = text.split('=');
+        plotYequation(sides[0], sides[1], text);
+      } else if (text.includes('=')) {
+        const sol = solveForX(text);
+        if (sol.type === 'complex') {
+          const sign = sol.im >= 0 ? '+' : '-';
+          output.textContent = 'x = ' + sol.re + ' ' + sign + ' ' + Math.abs(sol.im)
+                             + 'i   (no real solution)';
+        } else {
+          output.textContent = 'x = ' + sol.roots.map(rootText).join('   or   x = ');
+        }
+        showSteps(sol.steps);
+        const sides = text.split('=');
+        const fn = x => solve(sides[0], x) - solve(sides[1], x);
+        const roots = sol.type === 'complex' ? [] : sol.roots;
+        plot(fn, roots, 'y = (' + sides[0].trim() + ') - (' + sides[1].trim() + ')');
+      } else if (/x/.test(text)) {
+        // An expression in x with no "=": graph it (and mark any x-intercepts).
+        const fn = x => solve(text, x);
+        output.textContent = 'Tip: add "= 0" (or any right side) to solve for x.';
+        showSteps(null);
+        plot(fn, findRoots(fn, -10, 10), 'y = ' + text);
+      } else {
+        output.textContent = '= ' + tidy(solve(text));
+        showSteps(null); hideGraph();
+      }
+      output.className = 'result';
+    } catch (err) {
+      output.textContent = 'Error: ' + err;
+      output.className = 'result error';
+      showSteps(null); hideGraph();
+    }
+  }
+
+  input.addEventListener('input', run);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+  document.querySelectorAll('.examples button').forEach(b => {
+    b.addEventListener('click', () => {
+      input.value = b.dataset.ex;
+      run();
+      input.focus();
+    });
+  });
+  window.addEventListener('resize', () => {
+    if (!lastPlot) return;
+    if (lastPlot.pi) drawPiDiagram();
+    else if (lastPlot.circle) drawCircleDiagram(lastPlot.mode, lastPlot.r);
+    else drawGraph(lastPlot.fn, lastPlot.roots);
+  });
+</script>
+</body>
+</html>
