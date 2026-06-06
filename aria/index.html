@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aria — ArtOS Media Player</title>
+<style>
+  :root{ --accent:#2d7dd2; --accent2:#19c3b1; }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;font-family:"Segoe UI",system-ui,sans-serif;color:#eaf0fa;
+    background:#0b0f18;overflow:hidden;user-select:none;}
+  #app{display:flex;flex-direction:column;height:100%;}
+  /* top bar */
+  .top{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#0e1320;border-bottom:1px solid rgba(255,255,255,0.08);}
+  .top .brand{font-weight:700;font-size:15px;display:flex;align-items:center;gap:8px;}
+  .top .brand small{opacity:.55;font-weight:400;}
+  .top .sp{flex:1;}
+  .btn{background:rgba(255,255,255,0.1);color:#eaf0fa;border:1px solid rgba(255,255,255,0.16);
+    border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+  .btn:hover{background:rgba(255,255,255,0.18);}
+  /* main */
+  .main{flex:1;display:flex;min-height:0;}
+  .stage{flex:1;position:relative;background:#000;display:flex;align-items:center;justify-content:center;}
+  video{width:100%;height:100%;background:#000;}
+  /* audio / empty overlay */
+  .overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;text-align:center;padding:24px;color:#9fb0c8;pointer-events:none;}
+  .overlay.hidden{display:none;}
+  .overlay .big{font-size:64px;}
+  .overlay .nm{font-size:18px;color:#eaf0fa;max-width:80%;word-break:break-word;}
+  .overlay .hint{font-size:13px;opacity:.7;}
+  .drop{position:absolute;inset:0;border:3px dashed transparent;transition:.15s;}
+  .drop.hover{border-color:var(--accent2);background:rgba(25,195,177,0.08);}
+  /* playlist */
+  .playlist{width:300px;background:#0e1320;border-left:1px solid rgba(255,255,255,0.08);
+    display:flex;flex-direction:column;}
+  .playlist.hidden{display:none;}
+  .plhead{padding:11px 14px;font-size:13px;font-weight:600;opacity:.8;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(255,255,255,0.08);}
+  .plhead a{cursor:pointer;opacity:.7;font-size:12px;font-weight:400;}
+  .plhead a:hover{opacity:1;}
+  .pllist{flex:1;overflow:auto;}
+  .pli{display:flex;align-items:center;gap:9px;padding:9px 13px;cursor:pointer;font-size:13px;border-left:3px solid transparent;}
+  .pli:hover{background:rgba(255,255,255,0.06);}
+  .pli.active{background:rgba(45,125,210,0.22);border-left-color:var(--accent2);}
+  .pli .ic{font-size:16px;opacity:.85;}
+  .pli .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pli .x{opacity:0;font-size:14px;padding:0 4px;}
+  .pli:hover .x{opacity:.6;} .pli .x:hover{opacity:1;color:#ff8a8a;}
+  .pli.bad .t{color:#ff9a9a;}
+  /* controls */
+  .controls{background:#0e1320;border-top:1px solid rgba(255,255,255,0.08);padding:10px 16px;display:flex;flex-direction:column;gap:8px;}
+  .seekrow{display:flex;align-items:center;gap:10px;font-size:12px;color:#9fb0c8;}
+  input[type=range]{-webkit-appearance:none;appearance:none;height:5px;border-radius:5px;background:rgba(255,255,255,0.18);outline:none;cursor:pointer;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent2);}
+  #seek{flex:1;}
+  .btnrow{display:flex;align-items:center;gap:6px;}
+  .cbtn{background:transparent;border:none;color:#eaf0fa;font-size:18px;cursor:pointer;width:40px;height:40px;border-radius:10px;display:grid;place-items:center;}
+  .cbtn:hover{background:rgba(255,255,255,0.12);}
+  .cbtn.play{background:linear-gradient(135deg,var(--accent),var(--accent2));font-size:20px;}
+  .cbtn.on{color:var(--accent2);}
+  .btnrow .sp{flex:1;}
+  .vol{display:flex;align-items:center;gap:8px;width:150px;}
+  #vol{flex:1;}
+  .title{font-size:13px;opacity:.8;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="top">
+    <div class="brand">🎞️ Aria <small>ArtOS Media Player</small></div>
+    <div class="sp"></div>
+    <button class="btn" id="openFiles">📂 Open files</button>
+    <button class="btn" id="openFolder">🗂️ Open folder</button>
+    <button class="btn" id="togglePl" title="Playlist (Ctrl+P)">☰</button>
+    <input type="file" id="fileInput" accept="video/*,audio/*" multiple hidden>
+    <input type="file" id="folderInput" webkitdirectory multiple hidden>
+  </div>
+
+  <div class="main">
+    <div class="stage" id="stage">
+      <video id="video" playsinline></video>
+      <div class="overlay" id="overlay">
+        <div class="big" id="ovIcon">🎬</div>
+        <div class="nm" id="ovName">No media loaded</div>
+        <div class="hint">Open files or drag &amp; drop video / audio here</div>
+      </div>
+      <div class="drop" id="drop"></div>
+    </div>
+
+    <div class="playlist" id="playlist">
+      <div class="plhead"><span>Playlist (<span id="plCount">0</span>)</span><a id="clearPl">Clear</a></div>
+      <div class="pllist" id="pllist"></div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="seekrow">
+      <span id="cur">0:00</span>
+      <input type="range" id="seek" min="0" max="1000" value="0">
+      <span id="dur">0:00</span>
+    </div>
+    <div class="btnrow">
+      <button class="cbtn" id="prev" title="Previous">⏮</button>
+      <button class="cbtn play" id="play" title="Play/Pause (Space)">▶</button>
+      <button class="cbtn" id="next" title="Next">⏭</button>
+      <button class="cbtn" id="shuffle" title="Shuffle">🔀</button>
+      <button class="cbtn" id="repeat" title="Repeat">🔁</button>
+      <span class="title" id="nowTitle"></span>
+      <span class="sp"></span>
+      <div class="vol">
+        <button class="cbtn" id="mute" title="Mute (M)">🔊</button>
+        <input type="range" id="vol" min="0" max="100" value="100">
+      </div>
+      <button class="cbtn" id="full" title="Fullscreen (F)">⛶</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const $ = id => document.getElementById(id);
+  const video = $("video");
+  let list = [];          // {name, url, type}
+  let cur = -1;
+  let shuffle = false;
+  let repeat = "off";     // off | all | one
+
+  const AUDIO_EXT = /\.(mp3|wav|m4a|flac|aac|ogg|oga|opus|wma)$/i;
+  const isAudio = f => (f.type && f.type.startsWith("audio")) || AUDIO_EXT.test(f.name);
+
+  function fmt(t){ if(!isFinite(t)||t<0) t=0; const m=Math.floor(t/60), s=Math.floor(t%60); return m+":"+String(s).padStart(2,"0"); }
+
+  function addFiles(files){
+    const arr=[...files].filter(f=> (f.type && (f.type.startsWith("video")||f.type.startsWith("audio")))
+                                   || /\.(mp4|webm|ogv|mkv|mov|avi|wmv|m4v|mp3|wav|m4a|flac|aac|ogg|oga|opus|wma)$/i.test(f.name));
+    arr.sort((a,b)=>a.name.localeCompare(b.name));
+    const startEmpty = list.length===0;
+    arr.forEach(f=> list.push({ name:f.name, url:URL.createObjectURL(f), type:isAudio(f)?"audio":"video", bad:false }));
+    renderList();
+    if(startEmpty && list.length) play(0);
+  }
+
+  function renderList(){
+    $("plCount").textContent = list.length;
+    const box=$("pllist"); box.innerHTML="";
+    list.forEach((it,i)=>{
+      const d=document.createElement("div"); d.className="pli"+(i===cur?" active":"")+(it.bad?" bad":"");
+      d.innerHTML=`<span class="ic">${it.type==="audio"?"🎵":"🎬"}</span><span class="t">${it.name.replace(/</g,"&lt;")}</span><span class="x" title="Remove">✕</span>`;
+      d.querySelector(".t").onclick=()=>play(i);
+      d.querySelector(".ic").onclick=()=>play(i);
+      d.querySelector(".x").onclick=(e)=>{ e.stopPropagation(); removeAt(i); };
+      box.appendChild(d);
+    });
+  }
+
+  function removeAt(i){
+    URL.revokeObjectURL(list[i].url);
+    list.splice(i,1);
+    if(i===cur){ cur=-1; video.removeAttribute("src"); video.load(); setOverlay(); }
+    else if(i<cur) cur--;
+    renderList();
+  }
+
+  function play(i){
+    if(i<0||i>=list.length) return;
+    cur=i; const it=list[i];
+    video.src=it.url; video.play().catch(()=>{});
+    $("nowTitle").textContent=it.name;
+    setOverlay();
+    renderList();
+  }
+
+  function setOverlay(){
+    const it=list[cur];
+    const ov=$("overlay");
+    if(!it){ ov.classList.remove("hidden"); $("ovIcon").textContent="🎬"; $("ovName").textContent="No media loaded"; return; }
+    if(it.type==="audio"){ ov.classList.remove("hidden"); $("ovIcon").textContent="🎵"; $("ovName").textContent=it.name; }
+    else ov.classList.add("hidden");
+  }
+
+  function nextIndex(auto){
+    if(!list.length) return -1;
+    if(shuffle){ if(list.length===1) return cur; let n; do{ n=Math.floor(Math.random()*list.length);}while(n===cur); return n; }
+    if(cur+1<list.length) return cur+1;
+    return (repeat==="all"||!auto)?0:-1;
+  }
+  function prevIndex(){ if(!list.length) return -1; if(video.currentTime>3) return cur; return cur>0?cur-1:list.length-1; }
+
+  // ---- control wiring
+  $("openFiles").onclick=()=>$("fileInput").click();
+  $("openFolder").onclick=()=>$("folderInput").click();
+  $("fileInput").onchange=e=>addFiles(e.target.files);
+  $("folderInput").onchange=e=>addFiles(e.target.files);
+  $("togglePl").onclick=()=>$("playlist").classList.toggle("hidden");
+  $("clearPl").onclick=()=>{ list.forEach(it=>URL.revokeObjectURL(it.url)); list=[]; cur=-1; video.removeAttribute("src"); video.load(); renderList(); setOverlay(); $("nowTitle").textContent=""; };
+
+  $("play").onclick=()=>{ if(!list.length){ $("fileInput").click(); return; } if(video.paused) video.play(); else video.pause(); };
+  $("prev").onclick=()=>play(prevIndex());
+  $("next").onclick=()=>play(nextIndex(false));
+  $("shuffle").onclick=()=>{ shuffle=!shuffle; $("shuffle").classList.toggle("on",shuffle); };
+  $("repeat").onclick=()=>{ repeat = repeat==="off"?"all":repeat==="all"?"one":"off";
+    $("repeat").textContent = repeat==="one"?"🔂":"🔁"; $("repeat").classList.toggle("on",repeat!=="off"); };
+  $("full").onclick=()=>{ const s=$("stage"); if(document.fullscreenElement) document.exitFullscreen(); else s.requestFullscreen&&s.requestFullscreen(); };
+
+  video.onplay=()=>$("play").textContent="⏸";
+  video.onpause=()=>$("play").textContent="▶";
+  video.onended=()=>{ if(repeat==="one"){ video.currentTime=0; video.play(); return; } const n=nextIndex(true); if(n>=0) play(n); };
+  video.ontimeupdate=()=>{ if(video.duration){ $("seek").value = (video.currentTime/video.duration)*1000; $("cur").textContent=fmt(video.currentTime); } };
+  video.ondurationchange=()=>$("dur").textContent=fmt(video.duration);
+  video.onerror=()=>{ if(list[cur]){ list[cur].bad=true; renderList(); } };
+  $("seek").oninput=()=>{ if(video.duration) video.currentTime = ($("seek").value/1000)*video.duration; };
+
+  const vol=$("vol");
+  vol.oninput=()=>{ video.volume=vol.value/100; video.muted=false; $("mute").textContent = vol.value==0?"🔇":vol.value<50?"🔉":"🔊"; };
+  $("mute").onclick=()=>{ video.muted=!video.muted; $("mute").textContent=video.muted?"🔇":(vol.value<50?"🔉":"🔊"); };
+  video.ondblclick=()=>$("full").onclick();
+
+  // drag & drop
+  const drop=$("drop");
+  ["dragover","dragenter"].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("hover");}));
+  ["dragleave","drop"].forEach(ev=>document.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("hover");}));
+  document.addEventListener("drop",e=>{ if(e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
+
+  // keyboard
+  document.addEventListener("keydown",e=>{
+    if(e.target.tagName==="INPUT") return;
+    if(e.key===" "){ e.preventDefault(); $("play").onclick(); }
+    else if(e.key==="ArrowRight") video.currentTime=Math.min((video.duration||0),video.currentTime+5);
+    else if(e.key==="ArrowLeft") video.currentTime=Math.max(0,video.currentTime-5);
+    else if(e.key==="ArrowUp"){ e.preventDefault(); vol.value=Math.min(100,+vol.value+5); vol.oninput(); }
+    else if(e.key==="ArrowDown"){ e.preventDefault(); vol.value=Math.max(0,+vol.value-5); vol.oninput(); }
+    else if(e.key.toLowerCase()==="f") $("full").onclick();
+    else if(e.key.toLowerCase()==="m") $("mute").onclick();
+    else if(e.key.toLowerCase()==="n") $("next").onclick();
+    else if(e.key.toLowerCase()==="p" && e.ctrlKey){ e.preventDefault(); $("togglePl").onclick(); }
+  });
+
+  setOverlay();
+</script>
+</body>
+</html>
