@@ -5,29 +5,29 @@ site needs a tiny serverless function. This folder ships one:
 `mailer-worker.js` (a Cloudflare Worker). Until you deploy it, Drive falls
 back to showing the code on screen so you can still test the flow.
 
-## 1. Set up Brevo (no domain needed)
+## 1. Set up Resend (no phone, no domain)
 
-This Worker uses **Brevo** by default — it only needs one *verified sender
-address*, not a domain (free tier: 300 emails/day).
+This Worker uses **Resend** by default. Resend signs up with GitHub or
+email — **no phone number** — and its built-in `onboarding@resend.dev`
+sender needs **no domain**.
 
-1. Sign up at <https://www.brevo.com>.
-2. **Senders, Domains & Dedicated IPs → Senders → Add a Sender.** Enter a
-   name and an email you control (e.g. your `outlook.com` address). Brevo
-   emails you a confirmation link — click it to verify the sender.
-3. **SMTP & API → API Keys → Generate a new API key.** Copy it.
+1. Sign up at <https://resend.com/signup> (GitHub login is quickest).
+2. **API Keys → Create API Key.** Copy it (`re_...`).
 
-> Want Resend later (if you get a custom domain)? The Worker still includes
-> `sendEmail()` for Resend — set `RESEND_API_KEY` + `MAIL_FROM` and call
-> `sendEmail()` instead of `sendEmailBrevo()` in `handleSend()`.
+> Limitation without a domain: Resend only delivers to **your own**
+> Resend account email. That's fine for a personal Drive (you sign in with
+> that email). To email *other* people, add a domain later and set
+> `MAIL_FROM` to it. (Brevo is a no-domain alternative that can email anyone,
+> but its signup requires a phone number.)
 
 ## 2. Deploy the Worker
 
-1. Cloudflare account → **Workers & Pages** → **Create Worker**.
+1. Cloudflare account → **Workers & Pages** → **Create Worker**
+   (Cloudflare signup is email + password, no phone).
 2. Replace the starter code with the contents of `mailer-worker.js` → **Deploy**.
 3. Worker → **Settings → Variables and Secrets**, add (encrypt the secrets):
-   - `BREVO_API_KEY` — the API key from step 1
-   - `MAIL_FROM_EMAIL` — the sender address you verified in Brevo
-   - `MAIL_FROM_NAME` — `ARTGEOrge Drive` (optional)
+   - `RESEND_API_KEY` — the key from step 1
+   - `MAIL_FROM` — `ARTGEOrge Drive <onboarding@resend.dev>`
    - `CODE_SECRET` — any long random string (signs the codes)
    - `ALLOW_ORIGIN` — `https://artgeorge.github.io`
 4. Copy the Worker URL, e.g. `https://drive-mailer.yourname.workers.dev`.
