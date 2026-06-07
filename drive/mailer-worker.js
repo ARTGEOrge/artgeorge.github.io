@@ -9,17 +9,18 @@
  *   1. Create a Cloudflare account → Workers & Pages → Create Worker.
  *   2. Paste this file as the Worker code and Deploy.
  *   3. In the Worker's Settings → Variables, add these (Encrypt the secrets):
- *        RESEND_API_KEY  your Resend API key (re_...)
+ *        BREVO_API_KEY   your Brevo API key (Brevo → SMTP & API → API Keys)
+ *        MAIL_FROM_EMAIL a sender address you've verified in Brevo
+ *        MAIL_FROM_NAME  "ARTGEOrge Drive"   (optional)
  *        CODE_SECRET     any long random string (used to sign codes)
- *        MAIL_FROM       a verified sender, e.g. "ARTGEOrge Drive <drive@yourdomain.com>"
  *        ALLOW_ORIGIN    https://artgeorge.github.io   (use * only while testing)
  *   4. Copy the Worker URL (https://drive-mailer.YOURNAME.workers.dev)
  *      and paste it into MAILER.url in drive/index.html.
  *
- * NOTE on email providers: Resend needs a *verified domain* to email
- * arbitrary recipients (github.io can't be verified). If you don't own a
- * domain, swap sendEmail() below for Brevo or SendGrid, which allow a
- * single verified *sender address* with no domain — see sendEmailBrevo().
+ * Email provider: this Worker uses **Brevo** (sendEmailBrevo) — no domain
+ * required, just verify one sender address in Brevo (free 300 emails/day).
+ * A Resend variant (sendEmail) is also included if you later get a domain;
+ * to use it, set RESEND_API_KEY + MAIL_FROM and call sendEmail() in handleSend().
  */
 
 const TTL_MS = 10 * 60 * 1000; // codes valid for 10 minutes
@@ -95,9 +96,8 @@ async function sendEmail(env, to, code) {
   if (!r.ok) throw new Error("resend " + r.status + ": " + (await r.text()));
 }
 
-// ---- Brevo alternative (no domain; verify a single sender address) ----
-// To use: set BREVO_API_KEY + MAIL_FROM_EMAIL + MAIL_FROM_NAME and call this
-// instead of sendEmail() in handleSend().
+// ---- Brevo (DEFAULT — no domain needed; verify a single sender address) ----
+// Set BREVO_API_KEY + MAIL_FROM_EMAIL (+ optional MAIL_FROM_NAME). Used by handleSend().
 async function sendEmailBrevo(env, to, code) {
   const r = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -118,7 +118,7 @@ async function handleSend(env, origin, email) {
   const exp = Date.now() + TTL_MS;
   const sig = await hmacHex(env.CODE_SECRET, `${email}|${exp}|${code}`);
   try {
-    await sendEmail(env, email, code);
+    await sendEmailBrevo(env, email, code); // Brevo: no domain needed (verify one sender address)
   } catch (e) {
     return json({ ok: false, error: "email failed", detail: String(e.message || e) }, 502, origin);
   }

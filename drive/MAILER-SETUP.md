@@ -5,30 +5,31 @@ site needs a tiny serverless function. This folder ships one:
 `mailer-worker.js` (a Cloudflare Worker). Until you deploy it, Drive falls
 back to showing the code on screen so you can still test the flow.
 
-## 1. Pick an email provider
+## 1. Set up Brevo (no domain needed)
 
-You need an API key from a transactional-email service:
+This Worker uses **Brevo** by default — it only needs one *verified sender
+address*, not a domain (free tier: 300 emails/day).
 
-| Provider | Free tier | Domain needed? |
-|----------|-----------|----------------|
-| **Resend** (default) | 100/day, 3000/mo | **Yes** — verified domain to email anyone |
-| **Brevo** | 300/day | **No** — verify a single sender address |
-| **SendGrid** | 100/day | No — single-sender verification |
+1. Sign up at <https://www.brevo.com>.
+2. **Senders, Domains & Dedicated IPs → Senders → Add a Sender.** Enter a
+   name and an email you control (e.g. your `outlook.com` address). Brevo
+   emails you a confirmation link — click it to verify the sender.
+3. **SMTP & API → API Keys → Generate a new API key.** Copy it.
 
-`github.io` can't be domain-verified (no DNS control), so if you don't own
-a custom domain, use **Brevo**: in `mailer-worker.js` call `sendEmailBrevo()`
-instead of `sendEmail()` and set the Brevo variables below.
+> Want Resend later (if you get a custom domain)? The Worker still includes
+> `sendEmail()` for Resend — set `RESEND_API_KEY` + `MAIL_FROM` and call
+> `sendEmail()` instead of `sendEmailBrevo()` in `handleSend()`.
 
 ## 2. Deploy the Worker
 
 1. Cloudflare account → **Workers & Pages** → **Create Worker**.
 2. Replace the starter code with the contents of `mailer-worker.js` → **Deploy**.
 3. Worker → **Settings → Variables and Secrets**, add (encrypt the secrets):
+   - `BREVO_API_KEY` — the API key from step 1
+   - `MAIL_FROM_EMAIL` — the sender address you verified in Brevo
+   - `MAIL_FROM_NAME` — `ARTGEOrge Drive` (optional)
    - `CODE_SECRET` — any long random string (signs the codes)
    - `ALLOW_ORIGIN` — `https://artgeorge.github.io`
-   - **Resend:** `RESEND_API_KEY`, `MAIL_FROM` = `ARTGEOrge Drive <drive@yourdomain.com>`
-   - **Brevo (no domain):** `BREVO_API_KEY`, `MAIL_FROM_EMAIL` = your verified
-     sender, `MAIL_FROM_NAME` = `ARTGEOrge Drive`
 4. Copy the Worker URL, e.g. `https://drive-mailer.yourname.workers.dev`.
 
 ## 3. Point Drive at it
