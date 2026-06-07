@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Code Playground — ARTGEOrge</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  body { height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+         background: #16131f; color: #e8eaed; font-family: 'Segoe UI', system-ui, sans-serif; }
+  a { color: inherit; text-decoration: none; }
+  .mono { font-family: 'Consolas', 'SFMono-Regular', Menlo, monospace; }
+
+  header { display: flex; align-items: center; gap: 12px; padding: 11px 16px;
+           background: #1c1726; border-bottom: 1px solid #2b2238; flex-shrink: 0; }
+  .logo { font-weight: 800; letter-spacing: -1px; font-size: 21px; white-space: nowrap; }
+  .logo .a { background: linear-gradient(90deg,#a78bfa,#7c5cff);
+             -webkit-background-clip: text; background-clip: text; color: transparent; }
+  header .tag { color: #8b8595; font-size: 13px; }
+  .spacer { flex: 1; }
+
+  select, .btn { background: #241d33; border: 1px solid #34294d; color: #d8d2e6;
+         border-radius: 8px; padding: 8px 13px; font-size: 13px; cursor: pointer;
+         display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .btn:hover, select:hover { background: #2a2240; border-color: #8b6cff; color: #cdbcff; }
+  .btn.run { background: linear-gradient(90deg,#7c5cff,#a78bfa); border: none; color: #fff; font-weight: 700; }
+  .btn.run:hover { filter: brightness(1.08); }
+  .toggle { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: #b8b2c6; cursor: pointer; }
+  .toggle input { accent-color: #7c5cff; }
+
+  .main { flex: 1; display: flex; overflow: hidden; }
+  .left { width: 46%; min-width: 280px; display: flex; flex-direction: column; border-right: 1px solid #2b2238; }
+  .right { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .tabs { display: flex; gap: 2px; background: #1a1524; border-bottom: 1px solid #2b2238; flex-shrink: 0; padding: 0 6px; }
+  .tab { padding: 10px 16px; font-size: 13px; color: #8b8595; cursor: pointer; border-bottom: 2px solid transparent; }
+  .tab:hover { color: #cdbcff; }
+  .tab.active { color: #fff; border-bottom-color: #8b6cff; }
+  .tab .swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 7px; vertical-align: middle; }
+  .sw-html { background: #ff8e6e; } .sw-css { background: #6ec8ff; } .sw-js { background: #ffd76e; }
+
+  .edwrap { flex: 1; position: relative; }
+  textarea.ed { position: absolute; inset: 0; width: 100%; height: 100%; resize: none; border: none; outline: none;
+       background: #16131f; color: #e8eaed; padding: 14px; font-size: 13.5px; line-height: 1.55;
+       tab-size: 2; white-space: pre; overflow: auto; display: none; }
+  textarea.ed.show { display: block; }
+  textarea.ed::selection { background: rgba(124,92,255,.35); }
+
+  .previewhead { display: flex; align-items: center; gap: 10px; font-size: 12px; letter-spacing: .5px;
+                 text-transform: uppercase; color: #8b8595; padding: 9px 14px; background: #1a1524;
+                 border-bottom: 1px solid #2b2238; flex-shrink: 0; }
+  .previewhead .dot { width: 9px; height: 9px; border-radius: 50%; background: #7ee0a8; }
+  iframe#preview { flex: 1; width: 100%; border: none; background: #fff; }
+
+  .console { height: 150px; flex-shrink: 0; border-top: 1px solid #2b2238; background: #120f1a; display: flex; flex-direction: column; }
+  .console.hidden { display: none; }
+  .console .chead { display: flex; align-items: center; gap: 8px; padding: 6px 12px; font-size: 11px;
+                    text-transform: uppercase; letter-spacing: .5px; color: #8b8595; border-bottom: 1px solid #2b2238; }
+  .console .clear { margin-left: auto; cursor: pointer; color: #8b8595; }
+  .console .clear:hover { color: #fff; }
+  .console .clog { flex: 1; overflow: auto; padding: 8px 12px; font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+  .clog .l { color: #d8d2e6; border-bottom: 1px solid #1d1830; padding: 2px 0; }
+  .clog .l.error { color: #ff8da3; }
+  .clog .l.warn { color: #ffce85; }
+  .clog .muted { color: #5f5972; }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/" class="logo">💻 <span class="a">Playground</span></a>
+  <span class="tag">write HTML · CSS · JS, see it run instantly</span>
+  <div class="spacer"></div>
+  <select id="examples" title="Load an example">
+    <option value="">Examples…</option>
+    <option value="starter">Starter</option>
+    <option value="button">Button + JS</option>
+    <option value="anim">CSS animation</option>
+    <option value="canvas">Bouncing ball (canvas)</option>
+    <option value="clock">Live clock</option>
+  </select>
+  <label class="toggle"><input type="checkbox" id="autorun" checked /> Auto-run</label>
+  <button class="btn" id="consoleBtn">🖥️ Console</button>
+  <button class="btn" id="resetBtn">🧹 Reset</button>
+  <button class="btn run" id="runBtn">▶ Run <span style="opacity:.7;font-weight:400">Ctrl+Enter</span></button>
+</header>
+
+<div class="main">
+  <div class="left">
+    <div class="tabs">
+      <div class="tab active" data-pane="html"><span class="swatch sw-html"></span>HTML</div>
+      <div class="tab" data-pane="css"><span class="swatch sw-css"></span>CSS</div>
+      <div class="tab" data-pane="js"><span class="swatch sw-js"></span>JS</div>
+    </div>
+    <div class="edwrap">
+      <textarea id="ed-html" class="ed mono show" spellcheck="false"></textarea>
+      <textarea id="ed-css" class="ed mono" spellcheck="false"></textarea>
+      <textarea id="ed-js" class="ed mono" spellcheck="false"></textarea>
+    </div>
+  </div>
+  <div class="right">
+    <div class="previewhead"><span class="dot"></span> preview</div>
+    <iframe id="preview" sandbox="allow-scripts allow-modals allow-forms allow-popups"></iframe>
+    <div class="console" id="console">
+      <div class="chead"><span>console</span><span class="clear" id="clearConsole">clear</span></div>
+      <div class="clog mono" id="clog"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+(function () {
+  var KEY = "artgeorge-playground-v1";
+  var elHtml = document.getElementById("ed-html");
+  var elCss = document.getElementById("ed-css");
+  var elJs = document.getElementById("ed-js");
+  var preview = document.getElementById("preview");
+  var clog = document.getElementById("clog");
+  var consoleEl = document.getElementById("console");
+  var autorun = document.getElementById("autorun");
+
+  var DEFAULT = {
+    html: '<h1>Hello! 👋</h1>\n<p>Edit the HTML, CSS and JS — it runs as you type.</p>\n<button id="go">Click me</button>',
+    css: 'body { font-family: system-ui, sans-serif; text-align: center; padding: 40px;\n  background: #0f1020; color: #e8eaed; }\nh1 { color: #a78bfa; }\nbutton { font-size: 16px; padding: 10px 22px; border: none; border-radius: 10px;\n  background: #7c5cff; color: #fff; cursor: pointer; }\nbutton:hover { filter: brightness(1.1); }',
+    js: 'document.getElementById("go").addEventListener("click", function () {\n  console.log("Button clicked!");\n  document.querySelector("h1").textContent = "You clicked it! 🎉";\n});'
+  };
+
+  var EXAMPLES = {
+    starter: DEFAULT,
+    button: {
+      html: '<h2>Counter</h2>\n<p>Count: <b id="n">0</b></p>\n<button id="inc">+1</button>\n<button id="dec">-1</button>',
+      css: 'body{font-family:system-ui;text-align:center;padding:36px;background:#101225;color:#eee}\nbutton{font-size:18px;margin:6px;padding:8px 18px;border:0;border-radius:8px;background:#7c5cff;color:#fff;cursor:pointer}',
+      js: 'var n = 0;\nfunction draw(){ document.getElementById("n").textContent = n; }\ndocument.getElementById("inc").onclick = function(){ n++; draw(); console.log("now", n); };\ndocument.getElementById("dec").onclick = function(){ n--; draw(); };'
+    },
+    anim: {
+      html: '<div class="box"></div>',
+      css: 'body{display:grid;place-items:center;height:100vh;margin:0;background:#0f1020}\n.box{width:90px;height:90px;border-radius:18px;\n  background:linear-gradient(135deg,#a78bfa,#7c5cff);\n  animation:spin 2.5s ease-in-out infinite}\n@keyframes spin{\n  0%{transform:rotate(0) scale(1)}\n  50%{transform:rotate(180deg) scale(1.4);border-radius:50%}\n  100%{transform:rotate(360deg) scale(1)}}',
+      js: 'console.log("Pure CSS animation — no JS needed!");'
+    },
+    canvas: {
+      html: '<canvas id="c" width="320" height="240"></canvas>',
+      css: 'body{margin:0;background:#0f1020;display:grid;place-items:center;height:100vh}\ncanvas{border-radius:12px;background:#1a1530}',
+      js: 'var c = document.getElementById("c"), x = c.getContext("2d");\nvar px=40, py=40, vx=2.6, vy=2.1, r=14;\nfunction loop(){\n  x.clearRect(0,0,c.width,c.height);\n  px+=vx; py+=vy;\n  if(px<r||px>c.width-r) vx=-vx;\n  if(py<r||py>c.height-r) vy=-vy;\n  x.beginPath(); x.arc(px,py,r,0,7); x.fillStyle="#a78bfa"; x.fill();\n  requestAnimationFrame(loop);\n}\nloop();',
+    },
+    clock: {
+      html: '<div id="clock">--:--:--</div>',
+      css: 'body{margin:0;height:100vh;display:grid;place-items:center;background:#0f1020;\n  font-family:Consolas,monospace}\n#clock{font-size:46px;color:#7ee0a8;letter-spacing:3px}',
+      js: 'function tick(){\n  var d = new Date();\n  document.getElementById("clock").textContent = d.toLocaleTimeString();\n}\ntick(); setInterval(tick, 1000);'
+    }
+  };
+
+  function load() {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
+    var c = saved || DEFAULT;
+    elHtml.value = c.html || ""; elCss.value = c.css || ""; elJs.value = c.js || "";
+  }
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify({ html: elHtml.value, css: elCss.value, js: elJs.value })); } catch (e) {}
+  }
+
+  var BRIDGE =
+    '(function(){function s(t,a){var p=[].map.call(a,function(v){try{return (typeof v==="object")?JSON.stringify(v):String(v);}catch(e){return String(v);}}).join(" ");' +
+    'parent.postMessage({__pg:1,type:t,text:p},"*");}' +
+    '["log","error","warn","info"].forEach(function(m){var o=console[m];console[m]=function(){s(m==="info"?"log":m,arguments);o&&o.apply(console,arguments);};});' +
+    'window.addEventListener("error",function(e){s("error",[e.message+" (line "+e.lineno+")"]);});' +
+    'window.addEventListener("unhandledrejection",function(e){s("error",["Unhandled promise: "+(e.reason&&e.reason.message||e.reason)]);});})();';
+
+  function run() {
+    clogClear();
+    var src = "<!DOCTYPE html><html><head><meta charset='utf-8'><style>" + elCss.value + "</style></head><body>" +
+      elHtml.value +
+      "\n<script>" + BRIDGE + "<\/script>\n<script>\ntry{\n" + elJs.value + "\n}catch(e){console.error(e.message);}\n<\/script>" +
+      "</body></html>";
+    preview.srcdoc = src;
+  }
+
+  function clogClear() { clog.innerHTML = ""; }
+  function clogAdd(type, text) {
+    var empty = !clog.children.length;
+    var d = document.createElement("div");
+    d.className = "l" + (type === "error" ? " error" : type === "warn" ? " warn" : "");
+    d.textContent = text;
+    clog.appendChild(d);
+    clog.scrollTop = clog.scrollHeight;
+  }
+  window.addEventListener("message", function (e) {
+    if (e.data && e.data.__pg) clogAdd(e.data.type, e.data.text);
+  });
+
+  // debounced auto-run
+  var t = null;
+  function schedule() { save(); if (!autorun.checked) return; clearTimeout(t); t = setTimeout(run, 450); }
+  [elHtml, elCss, elJs].forEach(function (el) {
+    el.addEventListener("input", schedule);
+    el.addEventListener("keydown", function (e) {
+      if (e.key === "Tab") {
+        e.preventDefault();
+        var s = el.selectionStart, en = el.selectionEnd;
+        el.value = el.value.slice(0, s) + "  " + el.value.slice(en);
+        el.selectionStart = el.selectionEnd = s + 2;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); run(); }
+    });
+  });
+
+  // tabs
+  var tabs = document.querySelectorAll(".tab");
+  tabs.forEach(function (tab) {
+    tab.onclick = function () {
+      tabs.forEach(function (x) { x.classList.remove("active"); });
+      tab.classList.add("active");
+      [elHtml, elCss, elJs].forEach(function (el) { el.classList.remove("show"); });
+      document.getElementById("ed-" + tab.dataset.pane).classList.add("show");
+      document.getElementById("ed-" + tab.dataset.pane).focus();
+    };
+  });
+
+  document.getElementById("runBtn").onclick = run;
+  document.getElementById("resetBtn").onclick = function () {
+    if (!confirm("Reset all three editors to the starter code?")) return;
+    elHtml.value = DEFAULT.html; elCss.value = DEFAULT.css; elJs.value = DEFAULT.js; save(); run();
+  };
+  document.getElementById("clearConsole").onclick = clogClear;
+  document.getElementById("consoleBtn").onclick = function () { consoleEl.classList.toggle("hidden"); };
+  document.getElementById("examples").onchange = function (e) {
+    var ex = EXAMPLES[e.target.value];
+    if (ex) { elHtml.value = ex.html; elCss.value = ex.css; elJs.value = ex.js; save(); run(); }
+    e.target.value = "";
+  };
+
+  load();
+  run();
+})();
+</script>
+</body>
+</html>
