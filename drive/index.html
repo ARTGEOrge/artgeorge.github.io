@@ -102,6 +102,12 @@
           font-size: 20px; color: #cdbcff; pointer-events: none; z-index: 5; }
   .drop.show { display: flex; }
 
+  /* upload toast */
+  .toast { position: fixed; bottom: 20px; right: 20px; background: #221b30; border: 1px solid #34294d;
+           border-radius: 12px; padding: 12px 18px; font-size: 13px; color: #cdbcff; z-index: 300;
+           box-shadow: 0 18px 50px rgba(0,0,0,.6); display: none; }
+  .toast.show { display: block; }
+
   /* context menu */
   .ctx { position: fixed; background: #221b30; border: 1px solid #34294d; border-radius: 11px;
          padding: 6px; min-width: 170px; box-shadow: 0 18px 50px rgba(0,0,0,.6); z-index: 100; display: none; }
@@ -201,13 +207,13 @@
       </div>
     </div>
 
-    <div class="authnote">Accounts are stored privately in this browser. A 6-digit code is emailed to confirm each sign-in.</div>
+    <div class="authnote">Your account and files are stored in the cloud and follow you across devices. A 6-digit code is emailed to confirm each sign-in.</div>
   </div>
 </div>
 
 <header>
   <a href="/" class="logo"><span class="a">ARTGEOrge</span> Drive</a>
-  <span class="tag">☁️ your files, stored right in this browser</span>
+  <span class="tag">☁️ your files, synced across your devices</span>
   <div class="spacer"></div>
   <div class="search">
     <span>🔎</span>
@@ -256,51 +262,53 @@
 <input type="file" id="fileInput" multiple style="display:none" />
 
 <div class="ctx" id="ctx"></div>
-
+<div class="toast" id="toast"></div>
 <div class="modal" id="modal"></div>
 
 <script>
 (function () {
   "use strict";
 
-  // ---------- IndexedDB tiny wrapper ----------
-  var DB_NAME = "artgeorge-drive", STORE = "nodes", db = null;
-  function openDB() {
-    return new Promise(function (res, rej) {
-      var rq = indexedDB.open(DB_NAME, 1);
-      rq.onupgradeneeded = function (e) {
-        var d = e.target.result;
-        if (!d.objectStoreNames.contains(STORE)) {
-          var os = d.createObjectStore(STORE, { keyPath: "id" });
-          os.createIndex("parent", "parentId", { unique: false });
-        }
-      };
-      rq.onsuccess = function () { db = rq.result; res(db); };
-      rq.onerror = function () { rej(rq.error); };
-    });
-  }
-  function tx(mode) { return db.transaction(STORE, mode).objectStore(STORE); }
-  function put(node) { return new Promise(function (res, rej) { var r = tx("readwrite").put(node); r.onsuccess = function () { res(node); }; r.onerror = function () { rej(r.error); }; }); }
-  function get(id) { return new Promise(function (res, rej) { var r = tx("readonly").get(id); r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; }); }
-  function del(id) { return new Promise(function (res, rej) { var r = tx("readwrite").delete(id); r.onsuccess = function () { res(); }; r.onerror = function () { rej(r.error); }; }); }
-  function all() { return new Promise(function (res, rej) { var out = [], r = tx("readonly").openCursor(); r.onsuccess = function (e) { var c = e.target.result; if (c) { out.push(c.value); c.continue(); } else res(out); }; r.onerror = function () { rej(r.error); }; }); }
+  // ============================================================
+  //  Backend API — your deployed Cloudflare Worker (D1 + KV).
+  // ============================================================
+  var API = "https://drive-mailer.g2a2p14.workers.dev";
+  var TOKEN_KEY = "ag-drive-token", EMAIL_KEY = "ag-drive-email";
 
   // ---------- state ----------
-  var cwd = "root", view = "grid", selected = null, searchTerm = "", recentMode = false;
-  var currentUser = null;
-  var seq = Date.now();
-  // only this signed-in user's nodes
-  async function myNodes() { var a = await all(); return a.filter(function (n) { return n.owner === currentUser; }); }
-  function uid() { seq += 1; return "n" + seq.toString(36) + Math.floor((seq % 9973) * 31 % 9973).toString(36); }
+  var session = null, currentUser = null;
+  var cwd = "root";              // current folder id ("root" = top)
+  var pathStack = [];            // [{id,name}] breadcrumb trail below My Drive
+  var view = "grid", selected = null, searchTerm = "", recentMode = false;
+  var pendingVerify = null, authMode = "signin";
 
-  // ---------- helpers ----------
+  // ---------- API helpers ----------
+  async function apiPost(action, data) {
+    var res = await fetch(API, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(Object.assign({ action: action, session: session }, data || {}))
+    });
+    var j;
+    try { j = await res.json(); } catch (e) { throw new Error("Server error (" + res.status + ")"); }
+    if (j && j.error === "auth") { forceLogin(); throw new Error("auth"); }
+    return j;
+  }
+  function downloadUrl(id) {
+    return API + "/download?id=" + encodeURIComponent(id) + "&s=" + encodeURIComponent(session);
+  }
+  async function fetchBlob(id) {
+    var res = await fetch(downloadUrl(id));
+    if (!res.ok) throw new Error("download failed");
+    return res.blob();
+  }
+
+  // ---------- format helpers ----------
   function fmtSize(b) {
     if (b == null) return "—";
     if (b < 1024) return b + " B";
     if (b < 1048576) return (b / 1024).toFixed(1) + " KB";
     if (b < 1073741824) return (b / 1048576).toFixed(1) + " MB";
-    if (b < 1099511627776) return (b / 1073741824).toFixed(2) + " GB";
-    return (b / 1099511627776).toFixed(2) + " TB";
+    return (b / 1073741824).toFixed(2) + " GB";
   }
   function fmtDate(t) {
     var d = new Date(t);
@@ -323,81 +331,92 @@
   }
   function isImage(node) { return node.mime && node.mime.indexOf("image") === 0; }
 
-  // ---------- breadcrumb / path ----------
-  async function pathTo(id) {
-    var chain = [], cur = id;
-    while (cur && cur !== "root") {
-      var n = await get(cur);
-      if (!n) break;
-      chain.unshift(n);
-      cur = n.parentId;
-    }
-    return chain;
+  function toast(msg, ms) {
+    var t = document.getElementById("toast");
+    t.textContent = msg; t.classList.add("show");
+    clearTimeout(toast._t);
+    if (ms !== 0) toast._t = setTimeout(function () { t.classList.remove("show"); }, ms || 2500);
   }
-  async function renderCrumbs() {
+  function hideToast() { document.getElementById("toast").classList.remove("show"); }
+
+  // ---------- breadcrumbs ----------
+  function renderCrumbs() {
     var bar = document.getElementById("crumbBar");
     bar.innerHTML = "";
-    function crumb(label, id, last) {
+    function crumb(label, id, idx, last) {
       var s = document.createElement("span");
       s.className = "c" + (last ? " last" : "");
       s.textContent = label;
-      if (!last) s.onclick = function () { recentMode = false; cwd = id; render(); };
+      if (!last) s.onclick = function () {
+        recentMode = false; searchTerm = ""; document.getElementById("search").value = "";
+        if (idx < 0) { pathStack = []; cwd = "root"; }
+        else { pathStack = pathStack.slice(0, idx + 1); cwd = id; }
+        selected = null; render();
+      };
       bar.appendChild(s);
     }
-    if (recentMode) { crumb("🕒 Recent", null, true); return; }
-    crumb("My Drive", "root", cwd === "root");
-    if (cwd !== "root") {
-      var chain = await pathTo(cwd);
-      chain.forEach(function (n, i) {
-        var sep = document.createElement("span"); sep.className = "sep"; sep.textContent = "›"; bar.appendChild(sep);
-        crumb(n.name, n.id, i === chain.length - 1);
-      });
-    }
+    if (recentMode) { crumb("🕒 Recent", null, -2, true); return; }
+    if (searchTerm) { crumb('🔎 "' + searchTerm + '"', null, -2, true); return; }
+    crumb("My Drive", "root", -1, pathStack.length === 0);
+    pathStack.forEach(function (f, i) {
+      var sep = document.createElement("span"); sep.className = "sep"; sep.textContent = "›"; bar.appendChild(sep);
+      crumb(f.name, f.id, i, i === pathStack.length - 1);
+    });
   }
 
-  // ---------- usage meter ----------
+  // ---------- usage ----------
   async function renderUsage() {
-    var nodes = await myNodes();
-    var total = nodes.reduce(function (s, n) { return s + (n.size || 0); }, 0);
-    var files = nodes.filter(function (n) { return n.type === "file"; }).length;
-    var quota = 5 * 1099511627776; // 5 TB cap for the bar
-    var pct = Math.min(100, total / quota * 100);
-    document.getElementById("usageFill").style.width = pct.toFixed(2) + "%";
-    document.getElementById("usageDetail").textContent = fmtSize(total) + " of 5 TB · " + files + " file" + (files === 1 ? "" : "s");
+    try {
+      var r = await apiPost("usage", {});
+      if (!r.ok) return;
+      var quota = 1073741824; // ~1 GB (KV free tier)
+      var pct = Math.min(100, r.total / quota * 100);
+      document.getElementById("usageFill").style.width = pct.toFixed(1) + "%";
+      document.getElementById("usageDetail").textContent = fmtSize(r.total) + " of 1 GB · " + r.files + " file" + (r.files === 1 ? "" : "s");
+    } catch (e) {}
   }
 
   // ---------- main render ----------
   async function render() {
+    if (!session) return;
     document.getElementById("navMine").classList.toggle("active", !recentMode);
     document.getElementById("navRecent").classList.toggle("active", recentMode);
-    await renderCrumbs();
-    var nodes = await myNodes();
-    var items;
-    if (searchTerm) {
-      var q = searchTerm.toLowerCase();
-      items = nodes.filter(function (n) { return n.name.toLowerCase().indexOf(q) >= 0; });
-    } else if (recentMode) {
-      items = nodes.filter(function (n) { return n.type === "file"; })
-                   .sort(function (a, b) { return b.created - a.created; }).slice(0, 50);
-    } else {
-      items = nodes.filter(function (n) { return n.parentId === cwd; });
-    }
-    // folders first, then by name
-    items.sort(function (a, b) {
-      if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
+    renderCrumbs();
 
     var grid = document.getElementById("grid"), list = document.getElementById("listView"), empty = document.getElementById("empty");
+    var resp;
+    try {
+      if (searchTerm) resp = await apiPost("search", { q: searchTerm });
+      else if (recentMode) resp = await apiPost("recent", {});
+      else resp = await apiPost("list", { parentId: cwd });
+    } catch (e) {
+      if (e.message === "auth") return;
+      grid.innerHTML = ""; list.innerHTML = "";
+      empty.style.display = "block";
+      empty.innerHTML = '<div class="big">⚠️</div>Couldn\'t reach your Drive.<br><span class="hint">' + (e.message || e) + '</span>';
+      return;
+    }
+    if (!resp.ok) { return; }
+    var items = (resp.nodes || []).slice();
+    items.sort(function (a, b) {
+      if (a.type !== b.type) return a.type === "folder" ? -1 : 1;
+      return (a.name || "").localeCompare(b.name || "");
+    });
+
     grid.innerHTML = ""; list.innerHTML = "";
-    if (!items.length) { empty.style.display = "block"; } else { empty.style.display = "none"; }
+    empty.style.display = items.length ? "none" : "block";
+    if (!items.length) {
+      empty.innerHTML = '<div class="big">📂</div><div>' +
+        (searchTerm ? "No matches" : recentMode ? "Nothing recent yet" : "This folder is empty") +
+        '</div><div class="hint">Drag files here, or use <b>Upload files</b> to get started.</div>';
+    }
 
     items.forEach(function (n) {
-      // GRID
+      // GRID card
       var card = document.createElement("div");
-      card.className = "item" + (selected === n.id ? " sel" : "");
+      card.className = "item" + (selected === n.id ? " sel" : ""); card.dataset.id = n.id;
       var thumb = document.createElement("div"); thumb.className = "thumb";
-      if (isImage(n) && n.blob) { var img = document.createElement("img"); img.src = URL.createObjectURL(n.blob); thumb.appendChild(img); }
+      if (isImage(n)) { var img = document.createElement("img"); img.loading = "lazy"; img.src = downloadUrl(n.id); thumb.appendChild(img); }
       else thumb.textContent = iconFor(n);
       var nm = document.createElement("div"); nm.className = "nm"; nm.textContent = n.name;
       var meta = document.createElement("div"); meta.className = "meta";
@@ -405,16 +424,16 @@
       var dots = document.createElement("button"); dots.className = "dots"; dots.textContent = "⋮";
       dots.onclick = function (e) { e.stopPropagation(); openCtx(e.clientX, e.clientY, n); };
       card.appendChild(thumb); card.appendChild(nm); card.appendChild(meta); card.appendChild(dots);
-      card.onclick = function (e) { e.stopPropagation(); selected = n.id; render(); };
+      card.onclick = function (e) { e.stopPropagation(); selected = n.id; markSel(); };
       card.ondblclick = function () { openNode(n); };
-      card.oncontextmenu = function (e) { e.preventDefault(); selected = n.id; openCtx(e.clientX, e.clientY, n); };
+      card.oncontextmenu = function (e) { e.preventDefault(); selected = n.id; markSel(); openCtx(e.clientX, e.clientY, n); };
       grid.appendChild(card);
 
-      // LIST
+      // LIST row
       var row = document.createElement("div");
-      row.className = "row" + (selected === n.id ? " sel" : "");
+      row.className = "row" + (selected === n.id ? " sel" : ""); row.dataset.id = n.id;
       var ric = document.createElement("div"); ric.className = "ric";
-      if (isImage(n) && n.blob) { var im2 = document.createElement("img"); im2.src = URL.createObjectURL(n.blob); ric.appendChild(im2); }
+      if (isImage(n)) { var im2 = document.createElement("img"); im2.loading = "lazy"; im2.src = downloadUrl(n.id); ric.appendChild(im2); }
       else ric.textContent = iconFor(n);
       var rnm = document.createElement("div"); rnm.className = "rnm"; rnm.textContent = n.name;
       var rmeta = document.createElement("div"); rmeta.className = "rmeta"; rmeta.textContent = fmtDate(n.created);
@@ -422,22 +441,32 @@
       var rdots = document.createElement("button"); rdots.className = "dots"; rdots.textContent = "⋮";
       rdots.onclick = function (e) { e.stopPropagation(); openCtx(e.clientX, e.clientY, n); };
       row.appendChild(ric); row.appendChild(rnm); row.appendChild(rmeta); row.appendChild(rsize); row.appendChild(rdots);
-      row.onclick = function (e) { e.stopPropagation(); selected = n.id; render(); };
+      row.onclick = function (e) { e.stopPropagation(); selected = n.id; markSel(); };
       row.ondblclick = function () { openNode(n); };
-      row.oncontextmenu = function (e) { e.preventDefault(); selected = n.id; openCtx(e.clientX, e.clientY, n); };
+      row.oncontextmenu = function (e) { e.preventDefault(); selected = n.id; markSel(); openCtx(e.clientX, e.clientY, n); };
       list.appendChild(row);
     });
     renderUsage();
   }
+  function markSel() {
+    // re-highlight selection without re-fetching
+    var all = document.querySelectorAll(".item, .row");
+    Array.prototype.forEach.call(all, function (c) {
+      c.classList.toggle("sel", c.dataset.id === selected);
+    });
+  }
 
-  // ---------- open node ----------
   function openNode(n) {
-    if (n.type === "folder") { searchTerm = ""; document.getElementById("search").value = ""; recentMode = false; cwd = n.id; selected = null; render(); }
-    else preview(n);
+    if (n.type === "folder") {
+      if (searchTerm || recentMode) { pathStack = [{ id: n.id, name: n.name }]; }
+      else { pathStack.push({ id: n.id, name: n.name }); }
+      searchTerm = ""; recentMode = false; document.getElementById("search").value = "";
+      cwd = n.id; selected = null; render();
+    } else preview(n);
   }
 
   // ---------- preview ----------
-  function preview(n) {
+  async function preview(n) {
     var modal = document.getElementById("modal");
     var pv = document.createElement("div"); pv.className = "pv";
     var top = document.createElement("div"); top.className = "pvtop";
@@ -446,29 +475,38 @@
     var cl = document.createElement("button"); cl.className = "btn"; cl.textContent = "✕ Close"; cl.onclick = closeModal;
     top.appendChild(nm); top.appendChild(dl); top.appendChild(cl);
     var body = document.createElement("div"); body.className = "pvbody";
+    body.innerHTML = '<div class="noprev">Loading…</div>';
     pv.appendChild(top); pv.appendChild(body);
     modal.innerHTML = ""; modal.appendChild(pv); modal.classList.add("show");
 
-    var m = n.mime || "";
-    if (isImage(n) && n.blob) { var img = document.createElement("img"); img.src = URL.createObjectURL(n.blob); body.appendChild(img); }
-    else if (m.indexOf("video") === 0 && n.blob) { var v = document.createElement("video"); v.controls = true; v.src = URL.createObjectURL(n.blob); body.appendChild(v); }
-    else if (m.indexOf("audio") === 0 && n.blob) { var au = document.createElement("audio"); au.controls = true; au.src = URL.createObjectURL(n.blob); body.appendChild(au); }
-    else if ((m.indexOf("text") === 0 || /\.(txt|md|json|js|css|html|csv|log)$/i.test(n.name)) && n.blob) {
-      n.blob.text().then(function (t) { var pre = document.createElement("pre"); pre.textContent = t.slice(0, 100000); body.appendChild(pre); });
-    } else if ((m.indexOf("pdf") >= 0 || /\.pdf$/i.test(n.name)) && n.blob) {
-      var f = document.createElement("iframe"); f.src = URL.createObjectURL(n.blob); f.style.width = "80vw"; f.style.height = "72vh"; f.style.border = "none"; f.style.borderRadius = "8px"; body.appendChild(f);
-    } else {
-      var np = document.createElement("div"); np.className = "noprev"; np.innerHTML = '<div style="font-size:50px;margin-bottom:12px">' + iconFor(n) + '</div>No preview available.<br>Use Download to open this file.'; body.appendChild(np);
+    var m = n.mime || "", url = downloadUrl(n.id);
+    try {
+      if (isImage(n)) { body.innerHTML = ""; var img = document.createElement("img"); img.src = url; body.appendChild(img); }
+      else if (m.indexOf("video") === 0) { body.innerHTML = ""; var v = document.createElement("video"); v.controls = true; v.src = url; body.appendChild(v); }
+      else if (m.indexOf("audio") === 0) { body.innerHTML = ""; var au = document.createElement("audio"); au.controls = true; au.src = url; body.appendChild(au); }
+      else if (m.indexOf("pdf") >= 0 || /\.pdf$/i.test(n.name)) {
+        body.innerHTML = ""; var f = document.createElement("iframe"); f.src = url; f.style.width = "80vw"; f.style.height = "72vh"; f.style.border = "none"; f.style.borderRadius = "8px"; body.appendChild(f);
+      } else if (m.indexOf("text") === 0 || /\.(txt|md|json|js|css|html|csv|log)$/i.test(n.name)) {
+        var blob = await fetchBlob(n.id); var t = await blob.text();
+        body.innerHTML = ""; var pre = document.createElement("pre"); pre.textContent = t.slice(0, 100000); body.appendChild(pre);
+      } else {
+        body.innerHTML = '<div class="noprev"><div style="font-size:50px;margin-bottom:12px">' + iconFor(n) + '</div>No preview available.<br>Use Download to open this file.</div>';
+      }
+    } catch (e) {
+      body.innerHTML = '<div class="noprev">Couldn\'t load preview.<br><span style="font-size:12px">' + (e.message || e) + '</span></div>';
     }
   }
-  function closeModal() { document.getElementById("modal").classList.remove("show"); document.getElementById("modal").innerHTML = ""; }
+  function closeModal() { var m = document.getElementById("modal"); m.classList.remove("show"); m.innerHTML = ""; }
 
-  // ---------- download ----------
-  function download(n) {
-    if (!n.blob) return;
-    var url = URL.createObjectURL(n.blob);
-    var a = document.createElement("a"); a.href = url; a.download = n.name; document.body.appendChild(a); a.click();
-    a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  async function download(n) {
+    try {
+      toast("Downloading " + n.name + "…", 0);
+      var blob = await fetchBlob(n.id);
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a"); a.href = url; a.download = n.name; document.body.appendChild(a); a.click();
+      a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      hideToast();
+    } catch (e) { toast("Download failed: " + (e.message || e)); }
   }
 
   // ---------- context menu ----------
@@ -490,7 +528,7 @@
   }
   function hideCtx() { document.getElementById("ctx").classList.remove("show"); }
 
-  // ---------- prompt modal ----------
+  // ---------- prompt / confirm ----------
   function promptModal(title, value) {
     return new Promise(function (res) {
       var modal = document.getElementById("modal");
@@ -509,32 +547,6 @@
       inp.onkeydown = function (e) { if (e.key === "Enter") ok.click(); if (e.key === "Escape") cancel.click(); };
     });
   }
-
-  // ---------- mutations ----------
-  async function newFolder() {
-    var name = await promptModal("New folder name", "Untitled folder");
-    if (!name) return;
-    await put({ id: uid(), parentId: cwd, type: "folder", name: name, size: 0, created: Date.now(), owner: currentUser });
-    render();
-  }
-  async function renameNode(n) {
-    var name = await promptModal("Rename", n.name);
-    if (!name) return;
-    n.name = name; await put(n); render();
-  }
-  async function removeNode(n) {
-    var label = n.type === "folder" ? 'folder "' + n.name + '" and everything inside it' : '"' + n.name + '"';
-    var ok = await confirmModal("Delete " + label + "?");
-    if (!ok) return;
-    if (n.type === "folder") {
-      var nodes = await myNodes();
-      var toDel = [], stack = [n.id];
-      while (stack.length) { var p = stack.pop(); toDel.push(p); nodes.forEach(function (c) { if (c.parentId === p) stack.push(c.id); }); }
-      for (var i = 0; i < toDel.length; i++) await del(toDel[i]);
-    } else await del(n.id);
-    if (selected === n.id) selected = null;
-    render();
-  }
   function confirmModal(msg) {
     return new Promise(function (res) {
       var modal = document.getElementById("modal");
@@ -550,58 +562,55 @@
     });
   }
 
+  // ---------- mutations ----------
+  async function newFolder() {
+    var name = await promptModal("New folder name", "Untitled folder");
+    if (!name) return;
+    var dest = (recentMode || searchTerm) ? "root" : cwd;
+    var r = await apiPost("mkdir", { parentId: dest, name: name });
+    if (r.ok) render(); else toast("Couldn't create folder");
+  }
+  async function renameNode(n) {
+    var name = await promptModal("Rename", n.name);
+    if (!name) return;
+    var r = await apiPost("rename", { id: n.id, name: name });
+    if (r.ok) render(); else toast("Rename failed");
+  }
+  async function removeNode(n) {
+    var label = n.type === "folder" ? 'folder "' + n.name + '" and everything inside it' : '"' + n.name + '"';
+    var ok = await confirmModal("Delete " + label + "?");
+    if (!ok) return;
+    var r = await apiPost("del", { id: n.id });
+    if (r.ok) { if (selected === n.id) selected = null; render(); } else toast("Delete failed");
+  }
+
   // ---------- upload ----------
   async function uploadFiles(fileList) {
-    var dest = recentMode ? "root" : cwd;
-    for (var i = 0; i < fileList.length; i++) {
-      var f = fileList[i];
-      await put({ id: uid(), parentId: dest, type: "file", name: f.name, mime: f.type || "", size: f.size, created: Date.now(), owner: currentUser, blob: f });
+    var dest = (recentMode || searchTerm) ? "root" : cwd;
+    var files = Array.prototype.slice.call(fileList);
+    var done = 0, failed = 0;
+    for (var i = 0; i < files.length; i++) {
+      var f = files[i];
+      toast("Uploading " + (i + 1) + "/" + files.length + ": " + f.name + "…", 0);
+      if (f.size > 25 * 1048576) { failed++; continue; }
+      try {
+        var url = API + "/upload?parentId=" + encodeURIComponent(dest) +
+          "&name=" + encodeURIComponent(f.name) + "&mime=" + encodeURIComponent(f.type || "");
+        var res = await fetch(url, { method: "POST", headers: { "X-Session": session }, body: f });
+        var j = await res.json();
+        if (j && j.ok) done++; else failed++;
+      } catch (e) { failed++; }
     }
+    hideToast();
+    if (failed) toast(done + " uploaded, " + failed + " failed (max 25 MB/file)", 4000);
+    else toast(done + " file" + (done === 1 ? "" : "s") + " uploaded");
     render();
   }
 
-  // ---------- wiring ----------
-  document.getElementById("uploadBtn").onclick = function () { document.getElementById("fileInput").click(); };
-  document.getElementById("fileInput").onchange = function (e) { if (e.target.files.length) uploadFiles(e.target.files); e.target.value = ""; };
-  document.getElementById("newFolderBtn").onclick = newFolder;
-  document.getElementById("navMine").onclick = function () { recentMode = false; searchTerm = ""; document.getElementById("search").value = ""; cwd = "root"; selected = null; render(); };
-  document.getElementById("navRecent").onclick = function () { recentMode = true; searchTerm = ""; document.getElementById("search").value = ""; selected = null; render(); };
-  document.getElementById("search").oninput = function (e) { searchTerm = e.target.value.trim(); render(); };
-
-  document.getElementById("gridViewBtn").onclick = function () { view = "grid"; document.getElementById("grid").classList.remove("hide"); document.getElementById("listView").classList.remove("show"); this.classList.add("on"); document.getElementById("listViewBtn").classList.remove("on"); };
-  document.getElementById("listViewBtn").onclick = function () { view = "list"; document.getElementById("grid").classList.add("hide"); document.getElementById("listView").classList.add("show"); this.classList.add("on"); document.getElementById("gridViewBtn").classList.remove("on"); };
-
-  document.addEventListener("click", function () { hideCtx(); });
-  document.getElementById("scroll").addEventListener("click", function () { selected = null; render(); });
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape") { hideCtx(); closeModal(); } });
-
-  // drag & drop
-  var content = document.querySelector(".content"), drop = document.getElementById("drop"), dragDepth = 0;
-  content.addEventListener("dragenter", function (e) { e.preventDefault(); dragDepth++; drop.classList.add("show"); });
-  content.addEventListener("dragover", function (e) { e.preventDefault(); });
-  content.addEventListener("dragleave", function (e) { dragDepth--; if (dragDepth <= 0) { dragDepth = 0; drop.classList.remove("show"); } });
-  content.addEventListener("drop", function (e) { e.preventDefault(); dragDepth = 0; drop.classList.remove("show"); if (e.dataTransfer.files && e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); });
-
   // ---------- accounts / auth ----------
-  var ACCOUNTS_KEY = "artgeorge-drive-accounts", SESSION_KEY = "artgeorge-drive-session";
-  var authMode = "signin"; // or "signup"
-  var pendingVerify = null;
-
-  // ============================================================
-  //  Mailer — set this to your deployed serverless function URL
-  //  (the Cloudflare Worker in /drive/mailer-worker.js). The Worker
-  //  generates the code, emails it via Resend, and verifies it.
-  //  Until this is set, the code is shown on screen for testing.
-  // ============================================================
-  var MAILER = { url: "https://drive-mailer.g2a2p14.workers.dev" };
-  function mailerConfigured() { return !!MAILER.url && MAILER.url.indexOf("http") === 0; }
-
-  function genCode() {
-    var b = new Uint8Array(4);
-    if (crypto.getRandomValues) crypto.getRandomValues(b); else for (var i = 0; i < 4; i++) b[i] = Math.floor(Math.random() * 256);
-    var n = ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0;
-    return ("00000" + (n % 1000000)).slice(-6);
-  }
+  function validEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
+  function authError(msg) { var el = document.getElementById("authErr"); el.textContent = msg; el.classList.add("show"); }
+  function clearAuthError() { document.getElementById("authErr").classList.remove("show"); }
   function showStep(step2) {
     document.getElementById("authStep1").style.display = step2 ? "none" : "block";
     document.getElementById("authStep2").style.display = step2 ? "block" : "none";
@@ -609,85 +618,6 @@
   function verifyError(m) { var e = document.getElementById("verifyErr"); e.textContent = m; e.classList.add("show"); }
   function clearVerifyError() { document.getElementById("verifyErr").classList.remove("show"); }
   function setVerifyInfo(m) { document.getElementById("verifyInfo").innerHTML = m; }
-
-  async function startVerification(email, mode, newAccount) {
-    pendingVerify = { email: email, mode: mode, newAccount: newAccount };
-    clearVerifyError();
-    document.getElementById("verifyCode").value = "";
-    showStep(true);
-    document.getElementById("verifyCode").focus();
-    if (!mailerConfigured()) {
-      // Fallback for local testing before the Worker is deployed: code shown on screen.
-      var code = genCode();
-      pendingVerify.code = code;
-      pendingVerify.expires = Date.now() + 10 * 60 * 1000;
-      setVerifyInfo("⚠️ Email delivery isn't set up yet, so nothing was sent.<br>For testing, your code is " +
-        "<b style='color:#cdbcff;letter-spacing:2px;font-size:16px'>" + code + "</b>");
-      return;
-    }
-    setVerifyInfo("Sending a code to <b>" + email + "</b>…");
-    try {
-      var res = await fetch(MAILER.url, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "send", email: email })
-      });
-      var data = await res.json();
-      if (!res.ok || !data.ok) throw new Error((data && (data.detail || data.error)) || ("HTTP " + res.status));
-      pendingVerify.token = data.token; // signed token; the code itself never comes back
-      setVerifyInfo("We emailed a 6-digit code to <b>" + email + "</b>.<br>It expires in 10 minutes.");
-    } catch (e) {
-      verifyError("Couldn't send the email (" + (e.message || e) + "). Tap Resend to try again.");
-      setVerifyInfo("Trouble sending to <b>" + email + "</b>.");
-    }
-  }
-  async function doVerify() {
-    if (!pendingVerify) { showStep(false); return; }
-    clearVerifyError();
-    var entered = (document.getElementById("verifyCode").value || "").replace(/\D/g, "");
-    if (entered.length !== 6) { verifyError("Enter the 6-digit code."); return; }
-    if (pendingVerify.token) {
-      // Server-side verification (Worker recomputes the signature).
-      try {
-        var res = await fetch(MAILER.url, {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "verify", email: pendingVerify.email, code: entered, token: pendingVerify.token })
-        });
-        var data = await res.json();
-        if (!data.ok) { verifyError(data.error === "expired" ? "That code expired. Tap Resend for a new one." : "Incorrect code. Check your email and try again."); return; }
-      } catch (e) { verifyError("Couldn't verify (" + (e.message || e) + "). Try again."); return; }
-    } else {
-      // Local fallback verification.
-      if (Date.now() > pendingVerify.expires) { verifyError("That code expired. Tap Resend for a new one."); return; }
-      if (entered !== pendingVerify.code) { verifyError("Incorrect code. Check your email and try again."); return; }
-    }
-    if (pendingVerify.mode === "signup" && pendingVerify.newAccount) {
-      var a = loadAccounts(); a[pendingVerify.email] = pendingVerify.newAccount; saveAccounts(a);
-    }
-    var email = pendingVerify.email; pendingVerify = null;
-    enterApp(email);
-  }
-
-  function loadAccounts() { try { return JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "{}"); } catch (e) { return {}; } }
-  function saveAccounts(a) { localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(a)); }
-  function toHex(bytes) { var s = ""; for (var i = 0; i < bytes.length; i++) s += (bytes[i] + 256).toString(16).slice(-2); return s; }
-  function fromHex(h) { var b = new Uint8Array(h.length / 2); for (var i = 0; i < b.length; i++) b[i] = parseInt(h.substr(i * 2, 2), 16); return b; }
-  function randomSalt() { var b = new Uint8Array(16); (crypto.getRandomValues ? crypto : { getRandomValues: function (a) { for (var i = 0; i < a.length; i++) a[i] = Math.floor((seq = (seq * 1103515245 + 12345) & 0x7fffffff) % 256); return a; } }).getRandomValues(b); return toHex(b); }
-  function weakHash(str) { var h = 5381; for (var i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) >>> 0; return h.toString(16); }
-  async function hashPassword(pw, saltHex) {
-    if (crypto && crypto.subtle) {
-      try {
-        var enc = new TextEncoder();
-        var key = await crypto.subtle.importKey("raw", enc.encode(pw), "PBKDF2", false, ["deriveBits"]);
-        var bits = await crypto.subtle.deriveBits({ name: "PBKDF2", salt: fromHex(saltHex), iterations: 120000, hash: "SHA-256" }, key, 256);
-        return "pbkdf2:" + toHex(new Uint8Array(bits));
-      } catch (e) { /* fall through */ }
-    }
-    return "weak:" + weakHash(saltHex + "|" + pw);
-  }
-  function validEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
-
-  function authError(msg) { var el = document.getElementById("authErr"); el.textContent = msg; el.classList.add("show"); }
-  function clearAuthError() { document.getElementById("authErr").classList.remove("show"); }
 
   function setAuthMode(mode) {
     authMode = mode;
@@ -701,54 +631,118 @@
     clearAuthError();
   }
 
+  var AUTH_MSGS = {
+    exists: "An account with that email already exists — sign in instead.",
+    nouser: "No account found for that email.",
+    badpw: "Incorrect password.",
+    weakpw: "Password must be at least 6 characters.",
+    bademail: "Please enter a valid email address.",
+    emailfail: "Couldn't email the code. Without a custom domain, codes only send to the Drive owner's address."
+  };
+
   async function doAuth() {
     clearAuthError();
     var email = (document.getElementById("authEmail").value || "").trim().toLowerCase();
     var pw = document.getElementById("authPw").value || "";
     if (!validEmail(email)) return authError("Please enter a valid email address.");
     if (pw.length < 6) return authError("Password must be at least 6 characters.");
-    var accounts = loadAccounts();
-    if (authMode === "signup") {
-      var pw2 = document.getElementById("authPw2").value || "";
-      if (pw !== pw2) return authError("Passwords don't match.");
-      if (accounts[email]) return authError("An account with that email already exists.");
-      var salt = randomSalt();
-      var hash = await hashPassword(pw, salt);
-      // Account is saved only after the emailed code is confirmed.
-      startVerification(email, "signup", { salt: salt, hash: hash, created: Date.now() });
-    } else {
-      var acc = accounts[email];
-      if (!acc) return authError("No account found for that email.");
-      var h = await hashPassword(pw, acc.salt);
-      if (h !== acc.hash) return authError("Incorrect password.");
-      startVerification(email, "signin", null);
-    }
+    var btn = document.getElementById("authSubmit"); var old = btn.textContent; btn.textContent = "Please wait…"; btn.disabled = true;
+    try {
+      var resp;
+      if (authMode === "signup") {
+        var pw2 = document.getElementById("authPw2").value || "";
+        if (pw !== pw2) { authError("Passwords don't match."); return; }
+        resp = await apiPost("signup", { email: email, password: pw });
+      } else {
+        resp = await apiPost("signin", { email: email, password: pw });
+      }
+      if (!resp.ok) { authError(AUTH_MSGS[resp.error] || ("Something went wrong (" + (resp.error || "error") + ").")); return; }
+      pendingVerify = { email: email, token: resp.token };
+      clearVerifyError();
+      document.getElementById("verifyCode").value = "";
+      setVerifyInfo("We emailed a 6-digit code to <b>" + email + "</b>.<br>It expires in 10 minutes.");
+      showStep(true);
+      document.getElementById("verifyCode").focus();
+    } catch (e) {
+      if (e.message !== "auth") authError("Couldn't reach the server. Check your connection.");
+    } finally { btn.textContent = old; btn.disabled = false; }
   }
 
-  function enterApp(email) {
-    currentUser = email;
-    try { localStorage.setItem(SESSION_KEY, email); } catch (e) {}
+  async function doVerify() {
+    if (!pendingVerify) { showStep(false); return; }
+    clearVerifyError();
+    var entered = (document.getElementById("verifyCode").value || "").replace(/\D/g, "");
+    if (entered.length !== 6) { verifyError("Enter the 6-digit code."); return; }
+    var btn = document.getElementById("verifySubmit"); var old = btn.textContent; btn.textContent = "Verifying…"; btn.disabled = true;
+    try {
+      var resp = await apiPost("verify", { email: pendingVerify.email, code: entered, token: pendingVerify.token });
+      if (!resp.ok) {
+        verifyError(resp.error === "expired" ? "That code expired. Tap Resend for a new one." : "Incorrect code. Check your email and try again.");
+        return;
+      }
+      session = resp.session; currentUser = pendingVerify.email; pendingVerify = null;
+      try { localStorage.setItem(TOKEN_KEY, session); localStorage.setItem(EMAIL_KEY, currentUser); } catch (e) {}
+      enterApp();
+    } catch (e) {
+      if (e.message !== "auth") verifyError("Couldn't reach the server. Try again.");
+    } finally { btn.textContent = old; btn.disabled = false; }
+  }
+
+  async function resendCode() {
+    if (!pendingVerify) return;
+    setVerifyInfo("Resending…");
+    // re-run signin/signup send by asking the server for a fresh code via signin path
+    try {
+      var resp = await apiPost(authMode === "signup" ? "signup" : "signin", {
+        email: pendingVerify.email, password: document.getElementById("authPw").value || ""
+      });
+      if (resp.ok) { pendingVerify.token = resp.token; setVerifyInfo("New code sent to <b>" + pendingVerify.email + "</b>."); }
+      else setVerifyInfo("Couldn't resend (" + (resp.error || "error") + ").");
+    } catch (e) { setVerifyInfo("Couldn't resend the code."); }
+  }
+
+  function enterApp() {
     document.getElementById("authPw").value = "";
     document.getElementById("authPw2").value = "";
     document.getElementById("auth").classList.add("hide");
     document.getElementById("userChip").style.display = "flex";
-    document.getElementById("userEmail").textContent = email;
-    cwd = "root"; selected = null; searchTerm = ""; recentMode = false;
+    document.getElementById("userEmail").textContent = currentUser;
+    cwd = "root"; pathStack = []; selected = null; searchTerm = ""; recentMode = false;
     document.getElementById("search").value = "";
     render();
   }
-
-  function signOut() {
-    currentUser = null; pendingVerify = null;
-    try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+  function forceLogin() {
+    session = null; currentUser = null; pendingVerify = null;
+    try { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(EMAIL_KEY); } catch (e) {}
     document.getElementById("userChip").style.display = "none";
-    document.getElementById("authEmail").value = "";
-    document.getElementById("authPw").value = "";
-    showStep(false);
-    setAuthMode("signin");
+    showStep(false); setAuthMode("signin");
     document.getElementById("auth").classList.remove("hide");
     document.getElementById("authEmail").focus();
   }
+  function signOut() {
+    document.getElementById("authEmail").value = "";
+    document.getElementById("authPw").value = "";
+    forceLogin();
+  }
+
+  // ---------- wiring ----------
+  document.getElementById("uploadBtn").onclick = function () { document.getElementById("fileInput").click(); };
+  document.getElementById("fileInput").onchange = function (e) { if (e.target.files.length) uploadFiles(e.target.files); e.target.value = ""; };
+  document.getElementById("newFolderBtn").onclick = newFolder;
+  document.getElementById("navMine").onclick = function () { recentMode = false; searchTerm = ""; document.getElementById("search").value = ""; cwd = "root"; pathStack = []; selected = null; render(); };
+  document.getElementById("navRecent").onclick = function () { recentMode = true; searchTerm = ""; document.getElementById("search").value = ""; selected = null; render(); };
+  var searchTimer = null;
+  document.getElementById("search").oninput = function (e) {
+    searchTerm = e.target.value.trim();
+    clearTimeout(searchTimer); searchTimer = setTimeout(render, 220);
+  };
+
+  document.getElementById("gridViewBtn").onclick = function () { view = "grid"; document.getElementById("grid").classList.remove("hide"); document.getElementById("listView").classList.remove("show"); this.classList.add("on"); document.getElementById("listViewBtn").classList.remove("on"); };
+  document.getElementById("listViewBtn").onclick = function () { view = "list"; document.getElementById("grid").classList.add("hide"); document.getElementById("listView").classList.add("show"); this.classList.add("on"); document.getElementById("gridViewBtn").classList.remove("on"); };
+
+  document.addEventListener("click", function () { hideCtx(); });
+  document.getElementById("scroll").addEventListener("click", function () { selected = null; markSel(); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") { hideCtx(); closeModal(); } });
 
   document.getElementById("authSubmit").onclick = doAuth;
   document.getElementById("authToggle").onclick = function () { setAuthMode(authMode === "signin" ? "signup" : "signin"); };
@@ -757,22 +751,30 @@
     document.getElementById(id).addEventListener("keydown", function (e) { if (e.key === "Enter") doAuth(); });
   });
   document.getElementById("verifySubmit").onclick = doVerify;
-  document.getElementById("verifyResend").onclick = function () {
-    if (pendingVerify) startVerification(pendingVerify.email, pendingVerify.mode, pendingVerify.newAccount);
-  };
+  document.getElementById("verifyResend").onclick = resendCode;
   document.getElementById("verifyBack").onclick = function () { pendingVerify = null; showStep(false); };
   document.getElementById("verifyCode").addEventListener("keydown", function (e) { if (e.key === "Enter") doVerify(); });
 
+  // drag & drop
+  var content = document.querySelector(".content"), drop = document.getElementById("drop"), dragDepth = 0;
+  content.addEventListener("dragenter", function (e) { e.preventDefault(); dragDepth++; drop.classList.add("show"); });
+  content.addEventListener("dragover", function (e) { e.preventDefault(); });
+  content.addEventListener("dragleave", function (e) { dragDepth--; if (dragDepth <= 0) { dragDepth = 0; drop.classList.remove("show"); } });
+  content.addEventListener("drop", function (e) { e.preventDefault(); dragDepth = 0; drop.classList.remove("show"); if (e.dataTransfer.files && e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files); });
+
   // ---------- boot ----------
-  openDB().then(function () {
-    var saved = null; try { saved = localStorage.getItem(SESSION_KEY); } catch (e) {}
-    if (saved && loadAccounts()[saved]) enterApp(saved);
-    else { showStep(false); setAuthMode("signin"); document.getElementById("authEmail").focus(); }
-  }).catch(function (err) {
-    document.getElementById("auth").classList.add("hide");
-    document.getElementById("empty").style.display = "block";
-    document.getElementById("empty").innerHTML = '<div class="big">⚠️</div>Could not open local storage.<br><span class="hint">' + (err && err.message ? err.message : err) + '</span>';
-  });
+  try {
+    session = localStorage.getItem(TOKEN_KEY);
+    currentUser = localStorage.getItem(EMAIL_KEY);
+  } catch (e) {}
+  if (session) {
+    apiPost("usage", {}).then(function (r) {
+      if (r && r.ok) enterApp();
+      else forceLogin();
+    }).catch(function () { forceLogin(); });
+  } else {
+    showStep(false); setAuthMode("signin"); document.getElementById("authEmail").focus();
+  }
 })();
 </script>
 </body>
