@@ -83,6 +83,7 @@
     <div class="tabs">
       <div class="tab active" data-tab="pw">🔑 Password</div>
       <div class="tab" data-tab="kp">🗝️ Key pair</div>
+      <div class="tab" data-tab="sd">🔍 Smart decrypt</div>
     </div>
 
     <!-- ===================== PASSWORD MODE ===================== -->
@@ -177,6 +178,44 @@
       <div class="note">
         🗝️ <b>Public‑key encryption</b> (ECIES): ephemeral <b>ECDH P‑256</b> → <b>HKDF‑SHA‑256</b> → <b>AES‑256‑GCM</b>.
         No shared password needed — senders use your public key, only your private key decrypts. Keys never leave your device.
+      </div>
+    </div>
+
+    <!-- ===================== SMART DECRYPT ===================== -->
+    <div class="panel" id="panel-sd">
+      <div class="sectiontitle">🔍 Smart decrypt</div>
+      <div class="hint">Paste any encrypted message — Cipher detects its type and decrypts with your password or private key automatically.</div>
+
+      <label for="sdInput">Encrypted message</label>
+      <textarea id="sdInput" class="mono" placeholder="Paste an AG1 / AG2 / AGK message"></textarea>
+      <div class="strength-label" id="sdInfo" style="margin-top:8px">&nbsp;</div>
+
+      <div id="sdKeyWrap">
+        <label for="sdKey">Password</label>
+        <div class="row">
+          <input id="sdKey" type="password" placeholder="Enter the secret key" autocomplete="off" />
+          <button class="iconbtn" id="sdEye" title="Show / hide">👁️</button>
+        </div>
+      </div>
+
+      <div id="sdPrivWrap" style="display:none">
+        <label for="sdPriv">Your private key</label>
+        <textarea id="sdPriv" class="mono keybox" placeholder="Your private key (AGKEY.…) — auto‑filled if saved on this browser"></textarea>
+      </div>
+
+      <div class="btns"><button class="btn dec wide" id="sdBtn">🔓 Decrypt</button></div>
+
+      <div class="outhead">
+        <label>Result</label>
+        <div class="acts"><button class="mini" id="sdCopy">📋 Copy</button><button class="mini" id="sdClear">🧹 Clear</button></div>
+      </div>
+      <textarea id="sdOut" class="mono outbox" readonly placeholder="The decrypted message appears here"></textarea>
+      <div class="status" id="sdStatus"></div>
+
+      <div class="note">
+        🔍 Auto‑detects the format (AG1 / AG2 password, or AGK key‑pair), reports the algorithm and key‑stretching
+        strength, verifies integrity via the <b>AES‑GCM authentication tag</b>, and routes to the correct key — so
+        you never have to know which mode a message used.
       </div>
     </div>
   </div>
@@ -351,6 +390,62 @@
   $("copyKpOut").onclick = function () { copy($("kpOut").value, $("kpStatus")); };
   $("clearKp").onclick = function () { $("kpMsg").value = ""; $("kpCipher").value = ""; $("kpOut").value = ""; setStatus($("kpStatus"), ""); };
 
+  // ---------------- wire: smart decrypt ----------------
+  function inspect(tok) {
+    var s = (tok || "").trim();
+    if (!s) return null;
+    try {
+      if (s.indexOf("AGK.") === 0) { var d = b64ToBytes(s.slice(4)); return { kind: "keypair", algo: "ECDH P‑256 → HKDF‑SHA‑256 → AES‑256‑GCM", detail: "public‑key (ECIES)", bytes: d.length }; }
+      if (s.indexOf("AG2.") === 0) { var d2 = b64ToBytes(s.slice(4)); var r = readU32be(d2.slice(0, 4)); return { kind: "password", algo: "AES‑256‑GCM", detail: "password · PBKDF2 " + r.toLocaleString() + " rounds", bytes: d2.length }; }
+      if (s.indexOf("AG1.") === 0) { var d3 = b64ToBytes(s.slice(4)); return { kind: "password", algo: "AES‑256‑GCM", detail: "password · PBKDF2 150,000 rounds (legacy)", bytes: d3.length }; }
+      return { kind: "unknown" };
+    } catch (e) { return { kind: "bad" }; }
+  }
+  function updateSd() {
+    var info = inspect($("sdInput").value);
+    var infoEl = $("sdInfo");
+    if (!info) { infoEl.textContent = " "; $("sdKeyWrap").style.display = ""; $("sdPrivWrap").style.display = "none"; return; }
+    if (info.kind === "keypair") {
+      infoEl.innerHTML = "🗝️ Detected <b>" + info.detail + "</b> · " + info.algo + " · " + info.bytes + " bytes";
+      $("sdKeyWrap").style.display = "none"; $("sdPrivWrap").style.display = "";
+      try { var sv = localStorage.getItem(KP_PRIV); if (sv && !$("sdPriv").value) $("sdPriv").value = sv; } catch (e) {}
+    } else if (info.kind === "password") {
+      infoEl.innerHTML = "🔑 Detected <b>" + info.detail + "</b> · " + info.algo + " · " + info.bytes + " bytes";
+      $("sdKeyWrap").style.display = ""; $("sdPrivWrap").style.display = "none";
+    } else if (info.kind === "bad") { infoEl.textContent = "⚠️ Not valid encrypted text (bad encoding)."; }
+    else { infoEl.textContent = "⚠️ Unrecognized format — is this a Cipher message?"; }
+  }
+  $("sdInput").addEventListener("input", updateSd);
+  $("sdEye").onclick = function () { var k = $("sdKey"); k.type = k.type === "password" ? "text" : "password"; k.focus(); };
+  $("sdCopy").onclick = function () { copy($("sdOut").value, $("sdStatus")); };
+  $("sdClear").onclick = function () { $("sdInput").value = ""; $("sdOut").value = ""; setStatus($("sdStatus"), ""); updateSd(); };
+  $("sdBtn").onclick = async function () {
+    if (!secure()) { setStatus($("sdStatus"), "Needs a secure (https) page.", "err"); return; }
+    var tok = $("sdInput").value.trim();
+    var info = inspect(tok);
+    if (!info) { setStatus($("sdStatus"), "Paste an encrypted message first.", "err"); return; }
+    if (info.kind === "unknown") { setStatus($("sdStatus"), "Unrecognized format — this isn't a Cipher message.", "err"); return; }
+    if (info.kind === "bad") { setStatus($("sdStatus"), "This doesn't look like a valid encrypted message.", "err"); return; }
+    setStatus($("sdStatus"), "Decrypting…");
+    try {
+      if (info.kind === "keypair") {
+        var pk = ($("sdPriv").value || "").trim();
+        try { if (!pk) pk = localStorage.getItem(KP_PRIV) || ""; } catch (e) {}
+        if (!pk) { setStatus($("sdStatus"), "This is a key‑pair message — paste your private key.", "err"); return; }
+        $("sdOut").value = await decryptWithPrivate(tok, pk);
+        setStatus($("sdStatus"), "🔓 Decrypted (key‑pair). Integrity verified.", "ok");
+      } else {
+        if (!$("sdKey").value) { setStatus($("sdStatus"), "Enter the password for this message.", "err"); $("sdKey").focus(); return; }
+        $("sdOut").value = await decryptPassword(tok, $("sdKey").value);
+        setStatus($("sdStatus"), "🔓 Decrypted (password). Integrity verified.", "ok");
+      }
+    } catch (e) {
+      $("sdOut").value = "";
+      setStatus($("sdStatus"), info.kind === "keypair" ? "Couldn't decrypt — wrong private key or the message was altered." : "Couldn't decrypt — wrong password or the message was altered.", "err");
+    }
+  };
+  $("sdInput").addEventListener("keydown", function (e) { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); $("sdBtn").click(); } });
+
   // tabs
   document.querySelectorAll(".tab").forEach(function (tab) {
     tab.onclick = function () {
@@ -367,6 +462,7 @@
     if (sp && spv) { $("pubKey").value = sp; $("privKey").value = spv; $("saveKp").checked = true; }
   } catch (e) {}
   updateStrength();
+  updateSd();
 })();
 </script>
 </body>
