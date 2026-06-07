@@ -259,8 +259,6 @@
 
 <div class="modal" id="modal"></div>
 
-<!-- EmailJS SDK: sends the verification code straight from the browser -->
-<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
 <script>
 (function () {
   "use strict";
@@ -590,27 +588,14 @@
   var pendingVerify = null;
 
   // ============================================================
-  //  EmailJS — fill these 3 values in from your EmailJS dashboard
-  //  (https://dashboard.emailjs.com).  Until then, the verification
-  //  code is shown on screen instead of being emailed.
+  //  Mailer — set this to your deployed serverless function URL
+  //  (the Cloudflare Worker in /drive/mailer-worker.js). The Worker
+  //  generates the code, emails it via Resend, and verifies it.
+  //  Until this is set, the code is shown on screen for testing.
   // ============================================================
-  var EMAILJS = {
-    publicKey:  "YOUR_PUBLIC_KEY",
-    serviceId:  "YOUR_SERVICE_ID",
-    templateId: "YOUR_TEMPLATE_ID"
-  };
-  var emailjsReady = false;
-  function emailjsConfigured() {
-    return typeof emailjs !== "undefined" &&
-      EMAILJS.publicKey.indexOf("YOUR_") !== 0 &&
-      EMAILJS.serviceId.indexOf("YOUR_") !== 0 &&
-      EMAILJS.templateId.indexOf("YOUR_") !== 0;
-  }
-  function initEmailjs() {
-    if (!emailjsReady && emailjsConfigured()) {
-      try { emailjs.init({ publicKey: EMAILJS.publicKey }); emailjsReady = true; } catch (e) {}
-    }
-  }
+  var MAILER = { url: "" }; // e.g. "https://drive-mailer.YOURNAME.workers.dev"
+  function mailerConfigured() { return !!MAILER.url && MAILER.url.indexOf("http") === 0; }
+
   function genCode() {
     var b = new Uint8Array(4);
     if (crypto.getRandomValues) crypto.getRandomValues(b); else for (var i = 0; i < 4; i++) b[i] = Math.floor(Math.random() * 256);
@@ -624,44 +609,57 @@
   function verifyError(m) { var e = document.getElementById("verifyErr"); e.textContent = m; e.classList.add("show"); }
   function clearVerifyError() { document.getElementById("verifyErr").classList.remove("show"); }
   function setVerifyInfo(m) { document.getElementById("verifyInfo").innerHTML = m; }
-  function sendCode(email, code) {
-    initEmailjs();
-    // Pass several common param names so it works with whatever the EmailJS template uses.
-    return emailjs.send(EMAILJS.serviceId, EMAILJS.templateId, {
-      email: email, to_email: email, user_email: email,
-      passcode: code, code: code, otp: code,
-      app_name: "ARTGEOrge Drive", expiry: "10 minutes"
-    });
-  }
+
   async function startVerification(email, mode, newAccount) {
-    var code = genCode();
-    pendingVerify = { email: email, code: code, expires: Date.now() + 10 * 60 * 1000, mode: mode, newAccount: newAccount };
+    pendingVerify = { email: email, mode: mode, newAccount: newAccount };
     clearVerifyError();
     document.getElementById("verifyCode").value = "";
     showStep(true);
     document.getElementById("verifyCode").focus();
-    if (!emailjsConfigured()) {
+    if (!mailerConfigured()) {
+      // Fallback for local testing before the Worker is deployed: code shown on screen.
+      var code = genCode();
+      pendingVerify.code = code;
+      pendingVerify.expires = Date.now() + 10 * 60 * 1000;
       setVerifyInfo("⚠️ Email delivery isn't set up yet, so nothing was sent.<br>For testing, your code is " +
         "<b style='color:#cdbcff;letter-spacing:2px;font-size:16px'>" + code + "</b>");
       return;
     }
     setVerifyInfo("Sending a code to <b>" + email + "</b>…");
     try {
-      await sendCode(email, code);
+      var res = await fetch(MAILER.url, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "send", email: email })
+      });
+      var data = await res.json();
+      if (!res.ok || !data.ok) throw new Error((data && (data.detail || data.error)) || ("HTTP " + res.status));
+      pendingVerify.token = data.token; // signed token; the code itself never comes back
       setVerifyInfo("We emailed a 6-digit code to <b>" + email + "</b>.<br>It expires in 10 minutes.");
     } catch (e) {
-      var msg = e && e.text ? e.text : (e && e.message ? e.message : ("" + e));
-      verifyError("Couldn't send the email (" + msg + "). Tap Resend to try again.");
+      verifyError("Couldn't send the email (" + (e.message || e) + "). Tap Resend to try again.");
       setVerifyInfo("Trouble sending to <b>" + email + "</b>.");
     }
   }
-  function doVerify() {
+  async function doVerify() {
     if (!pendingVerify) { showStep(false); return; }
     clearVerifyError();
-    if (Date.now() > pendingVerify.expires) { verifyError("That code expired. Tap Resend for a new one."); return; }
     var entered = (document.getElementById("verifyCode").value || "").replace(/\D/g, "");
     if (entered.length !== 6) { verifyError("Enter the 6-digit code."); return; }
-    if (entered !== pendingVerify.code) { verifyError("Incorrect code. Check your email and try again."); return; }
+    if (pendingVerify.token) {
+      // Server-side verification (Worker recomputes the signature).
+      try {
+        var res = await fetch(MAILER.url, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "verify", email: pendingVerify.email, code: entered, token: pendingVerify.token })
+        });
+        var data = await res.json();
+        if (!data.ok) { verifyError(data.error === "expired" ? "That code expired. Tap Resend for a new one." : "Incorrect code. Check your email and try again."); return; }
+      } catch (e) { verifyError("Couldn't verify (" + (e.message || e) + "). Try again."); return; }
+    } else {
+      // Local fallback verification.
+      if (Date.now() > pendingVerify.expires) { verifyError("That code expired. Tap Resend for a new one."); return; }
+      if (entered !== pendingVerify.code) { verifyError("Incorrect code. Check your email and try again."); return; }
+    }
     if (pendingVerify.mode === "signup" && pendingVerify.newAccount) {
       var a = loadAccounts(); a[pendingVerify.email] = pendingVerify.newAccount; saveAccounts(a);
     }
@@ -766,7 +764,6 @@
   document.getElementById("verifyCode").addEventListener("keydown", function (e) { if (e.key === "Enter") doVerify(); });
 
   // ---------- boot ----------
-  initEmailjs();
   openDB().then(function () {
     var saved = null; try { saved = localStorage.getItem(SESSION_KEY); } catch (e) {}
     if (saved && loadAccounts()[saved]) enterApp(saved);
