@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cipher — ARTGEOrge</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  body { min-height: 100vh; background: radial-gradient(900px 600px at 75% -10%, rgba(124,92,255,.18), transparent 60%), #16131f;
+         color: #e8eaed; font-family: 'Segoe UI', system-ui, sans-serif; display: flex; flex-direction: column; }
+  a { color: inherit; text-decoration: none; }
+  .mono { font-family: 'Consolas', 'SFMono-Regular', Menlo, monospace; }
+
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; }
+  .logo { font-weight: 800; letter-spacing: -1px; font-size: 22px; }
+  .logo .a { background: linear-gradient(90deg,#a78bfa,#7c5cff); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  header .tag { color: #8b8595; font-size: 13px; }
+
+  .wrap { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: 10px 18px 50px; }
+  .card { width: 640px; max-width: 100%; background: #1c1726; border: 1px solid #2b2238;
+          border-radius: 18px; padding: 26px; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+  .title { font-size: 26px; font-weight: 800; margin-bottom: 4px; }
+  .title .lock { font-size: 24px; }
+  .sub { color: #8b8595; font-size: 13.5px; margin-bottom: 20px; }
+
+  label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: #9b93ac; margin: 16px 0 7px; }
+  .keyrow { display: flex; gap: 8px; }
+  input, textarea { width: 100%; background: #241d33; border: 1px solid #34294d; color: #fff;
+                    border-radius: 10px; padding: 12px 14px; font-size: 14px; outline: none; }
+  input:focus, textarea:focus { border-color: #8b6cff; }
+  textarea { resize: vertical; min-height: 110px; line-height: 1.5; }
+  .eye { flex-shrink: 0; width: 46px; border-radius: 10px; background: #241d33; border: 1px solid #34294d;
+         color: #c8c2d6; cursor: pointer; font-size: 17px; }
+  .eye:hover { background: #2a2240; border-color: #8b6cff; }
+
+  .btns { display: flex; gap: 10px; margin-top: 18px; }
+  .btn { flex: 1; justify-content: center; background: #241d33; border: 1px solid #34294d; color: #d8d2e6;
+         border-radius: 11px; padding: 13px; font-size: 15px; font-weight: 600; cursor: pointer;
+         display: inline-flex; align-items: center; gap: 8px; }
+  .btn:hover { background: #2a2240; border-color: #8b6cff; color: #cdbcff; }
+  .btn.enc { background: linear-gradient(90deg,#7c5cff,#a78bfa); border: none; color: #fff; }
+  .btn.dec { background: linear-gradient(90deg,#2bb673,#37d68a); border: none; color: #06231a; }
+  .btn.enc:hover, .btn.dec:hover { filter: brightness(1.08); }
+
+  .outhead { display: flex; align-items: center; margin: 18px 0 7px; }
+  .outhead label { margin: 0; }
+  .outhead .acts { margin-left: auto; display: flex; gap: 6px; }
+  .mini { background: #241d33; border: 1px solid #34294d; color: #c8c2d6; border-radius: 8px;
+          padding: 5px 10px; font-size: 12px; cursor: pointer; }
+  .mini:hover { background: #2a2240; border-color: #8b6cff; color: #cdbcff; }
+  #output { background: #16131f; min-height: 110px; word-break: break-all; }
+
+  .status { margin-top: 12px; font-size: 13px; min-height: 18px; }
+  .status.ok { color: #7ee0a8; }
+  .status.err { color: #ff8da3; }
+  .note { margin-top: 18px; font-size: 12px; color: #6f6982; line-height: 1.6; border-top: 1px solid #2b2238; padding-top: 14px; }
+  .note b { color: #9b93ac; }
+</style>
+</head>
+<body>
+
+<header>
+  <a href="/" class="logo">🔐 <span class="a">Cipher</span></a>
+  <span class="tag">lock & unlock text and numbers with a secret key</span>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <div class="title"><span class="lock">🔐</span> Secret message</div>
+    <div class="sub">Type a message or numbers, choose a secret key, and Encrypt. To read an encrypted message, paste it, enter the same key, and Decrypt.</div>
+
+    <label for="key">Secret key (password)</label>
+    <div class="keyrow">
+      <input id="key" type="password" placeholder="Choose / enter a secret key" autocomplete="off" />
+      <button class="eye" id="eye" title="Show / hide key">👁️</button>
+    </div>
+
+    <label for="input">Message / numbers</label>
+    <textarea id="input" class="mono" placeholder="Type text or numbers to encrypt — or paste an encrypted message to decrypt"></textarea>
+
+    <div class="btns">
+      <button class="btn enc" id="encBtn">🔒 Encrypt</button>
+      <button class="btn dec" id="decBtn">🔓 Decrypt</button>
+    </div>
+
+    <div class="outhead">
+      <label>Result</label>
+      <div class="acts">
+        <button class="mini" id="copyBtn">📋 Copy</button>
+        <button class="mini" id="swapBtn">↥ Use as input</button>
+        <button class="mini" id="clearBtn">🧹 Clear</button>
+      </div>
+    </div>
+    <textarea id="output" class="mono" readonly placeholder="The result appears here"></textarea>
+
+    <div class="status" id="status"></div>
+
+    <div class="note">
+      🔒 Uses real <b>AES‑256‑GCM</b> encryption with a key derived from your password (PBKDF2, 150k rounds).
+      Everything happens on your device — nothing is sent anywhere. <b>Keep your key safe:</b> without the exact
+      same key, an encrypted message can't be recovered.
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+(function () {
+  var keyEl = document.getElementById("key");
+  var inputEl = document.getElementById("input");
+  var outputEl = document.getElementById("output");
+  var statusEl = document.getElementById("status");
+  var enc = new TextEncoder();
+  var dec = new TextDecoder();
+
+  function setStatus(msg, kind) { statusEl.textContent = msg; statusEl.className = "status" + (kind ? " " + kind : ""); }
+
+  function bytesToB64(bytes) { var bin = ""; for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]); return btoa(bin); }
+  function b64ToBytes(b64) {
+    var clean = b64.replace(/\s+/g, "");
+    var bin = atob(clean);
+    var a = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
+    return a;
+  }
+
+  async function deriveKey(password, salt) {
+    var base = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+    return crypto.subtle.deriveKey(
+      { name: "PBKDF2", salt: salt, iterations: 150000, hash: "SHA-256" },
+      base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+    );
+  }
+
+  async function encryptText(text, password) {
+    var salt = crypto.getRandomValues(new Uint8Array(16));
+    var iv = crypto.getRandomValues(new Uint8Array(12));
+    var key = await deriveKey(password, salt);
+    var ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, enc.encode(text));
+    var ctb = new Uint8Array(ct);
+    var out = new Uint8Array(salt.length + iv.length + ctb.length);
+    out.set(salt, 0); out.set(iv, salt.length); out.set(ctb, salt.length + iv.length);
+    return "AG1." + bytesToB64(out);
+  }
+
+  async function decryptText(payload, password) {
+    var b64 = payload.trim();
+    if (b64.indexOf("AG1.") === 0) b64 = b64.slice(4);
+    var data = b64ToBytes(b64);
+    if (data.length < 29) throw new Error("too short");
+    var salt = data.slice(0, 16), iv = data.slice(16, 28), ct = data.slice(28);
+    var key = await deriveKey(password, salt);
+    var pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, ct);
+    return dec.decode(pt);
+  }
+
+  function guard() {
+    if (!window.crypto || !crypto.subtle) { setStatus("Encryption needs a secure (https) page — open the site over https.", "err"); return false; }
+    if (!keyEl.value) { setStatus("Enter a secret key first.", "err"); keyEl.focus(); return false; }
+    if (!inputEl.value) { setStatus("Type or paste a message first.", "err"); inputEl.focus(); return false; }
+    return true;
+  }
+
+  document.getElementById("encBtn").onclick = async function () {
+    if (!guard()) return;
+    setStatus("Encrypting…");
+    try {
+      outputEl.value = await encryptText(inputEl.value, keyEl.value);
+      setStatus("🔒 Encrypted. Copy the result and share it — the recipient needs the same key.", "ok");
+    } catch (e) { setStatus("Couldn't encrypt: " + (e.message || e), "err"); }
+  };
+
+  document.getElementById("decBtn").onclick = async function () {
+    if (!guard()) return;
+    setStatus("Decrypting…");
+    try {
+      outputEl.value = await decryptText(inputEl.value, keyEl.value);
+      setStatus("🔓 Decrypted successfully.", "ok");
+    } catch (e) {
+      outputEl.value = "";
+      setStatus("Couldn't decrypt — wrong key, or the message isn't a valid encrypted message.", "err");
+    }
+  };
+
+  document.getElementById("eye").onclick = function () {
+    keyEl.type = keyEl.type === "password" ? "text" : "password"; keyEl.focus();
+  };
+  document.getElementById("copyBtn").onclick = function () {
+    if (!outputEl.value) return;
+    outputEl.select(); navigator.clipboard ? navigator.clipboard.writeText(outputEl.value) : document.execCommand("copy");
+    setStatus("Copied to clipboard.", "ok");
+  };
+  document.getElementById("swapBtn").onclick = function () {
+    if (!outputEl.value) return;
+    inputEl.value = outputEl.value; outputEl.value = ""; setStatus("Result moved to the message box.");
+  };
+  document.getElementById("clearBtn").onclick = function () {
+    inputEl.value = ""; outputEl.value = ""; setStatus(""); inputEl.focus();
+  };
+
+  // Ctrl+Enter encrypts
+  inputEl.addEventListener("keydown", function (e) {
+    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); document.getElementById("encBtn").click(); }
+  });
+})();
+</script>
+</body>
+</html>
