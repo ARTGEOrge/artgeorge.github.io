@@ -16,22 +16,32 @@
   .logo .a { background: linear-gradient(90deg,#a78bfa,#7c5cff); -webkit-background-clip: text; background-clip: text; color: transparent; }
   header .tag { color: #8b8595; font-size: 13px; }
 
-  .wrap { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: 10px 18px 50px; }
-  .card { width: 640px; max-width: 100%; background: #1c1726; border: 1px solid #2b2238;
-          border-radius: 18px; padding: 26px; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
-  .title { font-size: 26px; font-weight: 800; margin-bottom: 4px; }
-  .title .lock { font-size: 24px; }
-  .sub { color: #8b8595; font-size: 13.5px; margin-bottom: 20px; }
+  .wrap { flex: 1; display: flex; align-items: flex-start; justify-content: center; padding: 6px 18px 60px; }
+  .card { width: 660px; max-width: 100%; background: #1c1726; border: 1px solid #2b2238;
+          border-radius: 18px; padding: 24px; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+
+  .tabs { display: flex; gap: 4px; background: #16131f; border: 1px solid #2b2238; border-radius: 12px; padding: 4px; margin-bottom: 20px; }
+  .tab { flex: 1; text-align: center; padding: 10px; border-radius: 9px; font-size: 14px; color: #9b93ac; cursor: pointer; }
+  .tab:hover { color: #cdbcff; }
+  .tab.active { background: #2a2240; color: #fff; font-weight: 600; }
+
+  .panel { display: none; }
+  .panel.show { display: block; }
 
   label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: #9b93ac; margin: 16px 0 7px; }
-  .keyrow { display: flex; gap: 8px; }
-  input, textarea { width: 100%; background: #241d33; border: 1px solid #34294d; color: #fff;
+  .row { display: flex; gap: 8px; align-items: center; }
+  input, textarea, select { width: 100%; background: #241d33; border: 1px solid #34294d; color: #fff;
                     border-radius: 10px; padding: 12px 14px; font-size: 14px; outline: none; }
-  input:focus, textarea:focus { border-color: #8b6cff; }
-  textarea { resize: vertical; min-height: 110px; line-height: 1.5; }
-  .eye { flex-shrink: 0; width: 46px; border-radius: 10px; background: #241d33; border: 1px solid #34294d;
-         color: #c8c2d6; cursor: pointer; font-size: 17px; }
-  .eye:hover { background: #2a2240; border-color: #8b6cff; }
+  input:focus, textarea:focus, select:focus { border-color: #8b6cff; }
+  textarea { resize: vertical; min-height: 100px; line-height: 1.5; }
+  .iconbtn { flex-shrink: 0; width: 46px; border-radius: 10px; background: #241d33; border: 1px solid #34294d;
+         color: #c8c2d6; cursor: pointer; font-size: 16px; padding: 12px 0; }
+  .iconbtn:hover { background: #2a2240; border-color: #8b6cff; }
+  select { width: auto; flex: 1; }
+
+  .strength { height: 6px; border-radius: 4px; background: #241d33; overflow: hidden; margin-top: 8px; }
+  .strength .fill { height: 100%; width: 0%; transition: width .2s, background .2s; }
+  .strength-label { font-size: 11px; color: #8b8595; margin-top: 4px; }
 
   .btns { display: flex; gap: 10px; margin-top: 18px; }
   .btn { flex: 1; justify-content: center; background: #241d33; border: 1px solid #34294d; color: #d8d2e6;
@@ -41,6 +51,7 @@
   .btn.enc { background: linear-gradient(90deg,#7c5cff,#a78bfa); border: none; color: #fff; }
   .btn.dec { background: linear-gradient(90deg,#2bb673,#37d68a); border: none; color: #06231a; }
   .btn.enc:hover, .btn.dec:hover { filter: brightness(1.08); }
+  .btn.wide { width: 100%; flex: none; }
 
   .outhead { display: flex; align-items: center; margin: 18px 0 7px; }
   .outhead label { margin: 0; }
@@ -48,57 +59,125 @@
   .mini { background: #241d33; border: 1px solid #34294d; color: #c8c2d6; border-radius: 8px;
           padding: 5px 10px; font-size: 12px; cursor: pointer; }
   .mini:hover { background: #2a2240; border-color: #8b6cff; color: #cdbcff; }
-  #output { background: #16131f; min-height: 110px; word-break: break-all; }
+  .outbox { background: #16131f; min-height: 90px; word-break: break-all; }
 
   .status { margin-top: 12px; font-size: 13px; min-height: 18px; }
-  .status.ok { color: #7ee0a8; }
-  .status.err { color: #ff8da3; }
-  .note { margin-top: 18px; font-size: 12px; color: #6f6982; line-height: 1.6; border-top: 1px solid #2b2238; padding-top: 14px; }
+  .status.ok { color: #7ee0a8; } .status.err { color: #ff8da3; }
+  .note { margin-top: 16px; font-size: 12px; color: #6f6982; line-height: 1.6; border-top: 1px solid #2b2238; padding-top: 14px; }
   .note b { color: #9b93ac; }
+  .keybox { background: #16131f; font-size: 12px; word-break: break-all; min-height: 64px; }
+  .sectiontitle { font-size: 14px; font-weight: 700; color: #cdbcff; margin: 22px 0 2px; }
+  .hint { font-size: 12px; color: #6f6982; margin-top: 2px; }
+  .divider { height: 1px; background: #2b2238; margin: 22px 0 4px; }
 </style>
 </head>
 <body>
 
 <header>
   <a href="/" class="logo">🔐 <span class="a">Cipher</span></a>
-  <span class="tag">lock & unlock text and numbers with a secret key</span>
+  <span class="tag">advanced encryption for text &amp; numbers</span>
 </header>
 
 <div class="wrap">
   <div class="card">
-    <div class="title"><span class="lock">🔐</span> Secret message</div>
-    <div class="sub">Type a message or numbers, choose a secret key, and Encrypt. To read an encrypted message, paste it, enter the same key, and Decrypt.</div>
-
-    <label for="key">Secret key (password)</label>
-    <div class="keyrow">
-      <input id="key" type="password" placeholder="Choose / enter a secret key" autocomplete="off" />
-      <button class="eye" id="eye" title="Show / hide key">👁️</button>
+    <div class="tabs">
+      <div class="tab active" data-tab="pw">🔑 Password</div>
+      <div class="tab" data-tab="kp">🗝️ Key pair</div>
     </div>
 
-    <label for="input">Message / numbers</label>
-    <textarea id="input" class="mono" placeholder="Type text or numbers to encrypt — or paste an encrypted message to decrypt"></textarea>
+    <!-- ===================== PASSWORD MODE ===================== -->
+    <div class="panel show" id="panel-pw">
+      <label for="key">Secret key (password)</label>
+      <div class="row">
+        <input id="key" type="password" placeholder="Choose / enter a secret key" autocomplete="off" />
+        <button class="iconbtn" id="eye" title="Show / hide">👁️</button>
+        <button class="iconbtn" id="genPw" title="Generate strong key">🎲</button>
+      </div>
+      <div class="strength"><div class="fill" id="strFill"></div></div>
+      <div class="strength-label" id="strLabel">&nbsp;</div>
 
-    <div class="btns">
-      <button class="btn enc" id="encBtn">🔒 Encrypt</button>
-      <button class="btn dec" id="decBtn">🔓 Decrypt</button>
-    </div>
+      <label for="level">Security level (key-stretching rounds)</label>
+      <div class="row">
+        <select id="level">
+          <option value="310000">Standard — 310,000 rounds (fast)</option>
+          <option value="600000" selected>High — 600,000 rounds</option>
+          <option value="1200000">Maximum — 1,200,000 rounds (slow, strongest)</option>
+        </select>
+      </div>
 
-    <div class="outhead">
-      <label>Result</label>
-      <div class="acts">
-        <button class="mini" id="copyBtn">📋 Copy</button>
-        <button class="mini" id="swapBtn">↥ Use as input</button>
-        <button class="mini" id="clearBtn">🧹 Clear</button>
+      <label for="input">Message / numbers</label>
+      <textarea id="input" class="mono" placeholder="Type text or numbers to encrypt — or paste an encrypted message to decrypt"></textarea>
+
+      <div class="btns">
+        <button class="btn enc" id="encBtn">🔒 Encrypt</button>
+        <button class="btn dec" id="decBtn">🔓 Decrypt</button>
+      </div>
+
+      <div class="outhead">
+        <label>Result</label>
+        <div class="acts">
+          <button class="mini" id="copyBtn">📋 Copy</button>
+          <button class="mini" id="swapBtn">↥ Use as input</button>
+          <button class="mini" id="clearBtn">🧹 Clear</button>
+        </div>
+      </div>
+      <textarea id="output" class="mono outbox" readonly placeholder="The result appears here"></textarea>
+      <div class="status" id="status"></div>
+
+      <div class="note">
+        🔒 <b>AES‑256‑GCM</b> with a key stretched from your password using <b>PBKDF2‑SHA‑256</b>
+        (up to 1.2M rounds). The rounds and a random salt + IV are stored inside the message, so it's
+        self‑describing and future‑proof. Older <b>AG1</b> messages still decrypt. Everything runs on your
+        device. <b>Keep your key safe</b> — it cannot be recovered.
       </div>
     </div>
-    <textarea id="output" class="mono" readonly placeholder="The result appears here"></textarea>
 
-    <div class="status" id="status"></div>
+    <!-- ===================== KEY PAIR MODE ===================== -->
+    <div class="panel" id="panel-kp">
+      <div class="sectiontitle">Your key pair</div>
+      <div class="hint">Share your <b>public key</b> so anyone can encrypt messages to you. Only your <b>private key</b> can decrypt them — never share it.</div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn wide" id="genKpBtn">✨ Generate a new key pair</button>
+      </div>
+      <div class="row" style="margin-top:8px;gap:8px">
+        <label class="strength-label" style="margin:0"><input type="checkbox" id="saveKp" style="width:auto;vertical-align:middle"> Remember on this browser</label>
+      </div>
 
-    <div class="note">
-      🔒 Uses real <b>AES‑256‑GCM</b> encryption with a key derived from your password (PBKDF2, 150k rounds).
-      Everything happens on your device — nothing is sent anywhere. <b>Keep your key safe:</b> without the exact
-      same key, an encrypted message can't be recovered.
+      <label>Public key (share this)</label>
+      <div class="outhead" style="margin:0 0 7px"><label style="visibility:hidden">x</label><div class="acts"><button class="mini" id="copyPub">📋 Copy public</button></div></div>
+      <textarea id="pubKey" class="mono keybox" placeholder="Generate a key pair, or paste your public key"></textarea>
+
+      <label>Private key (keep secret)</label>
+      <div class="outhead" style="margin:0 0 7px"><label style="visibility:hidden">x</label><div class="acts"><button class="mini" id="copyPriv">📋 Copy private</button></div></div>
+      <textarea id="privKey" class="mono keybox" placeholder="Your private key (needed to decrypt messages sent to you)"></textarea>
+
+      <div class="divider"></div>
+
+      <div class="sectiontitle">🔒 Encrypt a message to someone</div>
+      <label for="recipPub">Recipient's public key</label>
+      <textarea id="recipPub" class="mono keybox" placeholder="Paste the recipient's public key (AGPUB.…)"></textarea>
+      <label for="kpMsg">Message / numbers</label>
+      <textarea id="kpMsg" class="mono" placeholder="Type the secret message to send"></textarea>
+      <div class="btns"><button class="btn enc wide" id="encKpBtn">🔒 Encrypt to recipient</button></div>
+
+      <div class="divider"></div>
+
+      <div class="sectiontitle">🔓 Decrypt a message sent to you</div>
+      <label for="kpCipher">Encrypted message</label>
+      <textarea id="kpCipher" class="mono" placeholder="Paste the encrypted message (AGK.…) — uses your private key above"></textarea>
+      <div class="btns"><button class="btn dec wide" id="decKpBtn">🔓 Decrypt with my private key</button></div>
+
+      <div class="outhead">
+        <label>Result</label>
+        <div class="acts"><button class="mini" id="copyKpOut">📋 Copy</button><button class="mini" id="clearKp">🧹 Clear</button></div>
+      </div>
+      <textarea id="kpOut" class="mono outbox" readonly placeholder="The result appears here"></textarea>
+      <div class="status" id="kpStatus"></div>
+
+      <div class="note">
+        🗝️ <b>Public‑key encryption</b> (ECIES): ephemeral <b>ECDH P‑256</b> → <b>HKDF‑SHA‑256</b> → <b>AES‑256‑GCM</b>.
+        No shared password needed — senders use your public key, only your private key decrypts. Keys never leave your device.
+      </div>
     </div>
   </div>
 </div>
@@ -106,102 +185,188 @@
 <script>
 "use strict";
 (function () {
-  var keyEl = document.getElementById("key");
-  var inputEl = document.getElementById("input");
-  var outputEl = document.getElementById("output");
-  var statusEl = document.getElementById("status");
-  var enc = new TextEncoder();
-  var dec = new TextDecoder();
+  var enc = new TextEncoder(), dec = new TextDecoder();
+  function $(id) { return document.getElementById(id); }
+  function setStatus(el, msg, kind) { el.textContent = msg; el.className = "status" + (kind ? " " + kind : ""); }
 
-  function setStatus(msg, kind) { statusEl.textContent = msg; statusEl.className = "status" + (kind ? " " + kind : ""); }
+  function bytesToB64(b) { var s = ""; for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return btoa(s); }
+  function b64ToBytes(b64) { var c = b64.replace(/\s+/g, ""); var bin = atob(c); var a = new Uint8Array(bin.length); for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+  function cat(arrs) { var n = 0, i; for (i = 0; i < arrs.length; i++) n += arrs[i].length; var o = new Uint8Array(n), p = 0; for (i = 0; i < arrs.length; i++) { o.set(arrs[i], p); p += arrs[i].length; } return o; }
+  function u32be(n) { var b = new Uint8Array(4); new DataView(b.buffer).setUint32(0, n >>> 0); return b; }
+  function readU32be(b) { return new DataView(b.buffer, b.byteOffset, 4).getUint32(0); }
+  function secure() { return window.crypto && crypto.subtle; }
 
-  function bytesToB64(bytes) { var bin = ""; for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]); return btoa(bin); }
-  function b64ToBytes(b64) {
-    var clean = b64.replace(/\s+/g, "");
-    var bin = atob(clean);
-    var a = new Uint8Array(bin.length);
-    for (var i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i);
-    return a;
-  }
-
-  async function deriveKey(password, salt) {
+  // ---------------- password (symmetric) ----------------
+  async function deriveKey(password, salt, iter) {
     var base = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
-    return crypto.subtle.deriveKey(
-      { name: "PBKDF2", salt: salt, iterations: 150000, hash: "SHA-256" },
-      base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
-    );
+    return crypto.subtle.deriveKey({ name: "PBKDF2", salt: salt, iterations: iter, hash: "SHA-256" },
+      base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  }
+  async function encryptPassword(text, password, iter) {
+    var salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12));
+    var key = await deriveKey(password, salt, iter);
+    var ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, enc.encode(text)));
+    return "AG2." + bytesToB64(cat([u32be(iter), salt, iv, ct]));
+  }
+  async function decryptPassword(payload, password) {
+    var s = payload.trim();
+    if (s.indexOf("AGK.") === 0) throw new Error("That's a key‑pair message — use the Key pair tab.");
+    var legacy = s.indexOf("AG1.") === 0;
+    var d = b64ToBytes(s.replace(/^AG[12]\./, ""));
+    if (legacy) {
+      var salt = d.slice(0, 16), iv = d.slice(16, 28), ct = d.slice(28);
+      var k = await deriveKey(password, salt, 150000);
+      return dec.decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, k, ct));
+    }
+    var iter = readU32be(d.slice(0, 4)), s2 = d.slice(4, 20), iv2 = d.slice(20, 32), ct2 = d.slice(32);
+    var k2 = await deriveKey(password, s2, iter);
+    return dec.decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv2 }, k2, ct2));
   }
 
-  async function encryptText(text, password) {
-    var salt = crypto.getRandomValues(new Uint8Array(16));
+  // ---------------- key pair (asymmetric, ECIES) ----------------
+  async function aesFromShared(bits) {
+    var hk = await crypto.subtle.importKey("raw", bits, "HKDF", false, ["deriveKey"]);
+    return crypto.subtle.deriveKey({ name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info: enc.encode("AG-ECIES-v1") },
+      hk, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+  }
+  async function generateKeypair() {
+    var kp = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+    var pub = new Uint8Array(await crypto.subtle.exportKey("raw", kp.publicKey));
+    var priv = new Uint8Array(await crypto.subtle.exportKey("pkcs8", kp.privateKey));
+    return { pub: "AGPUB." + bytesToB64(pub), priv: "AGKEY." + bytesToB64(priv) };
+  }
+  async function encryptToPublic(text, pubToken) {
+    var raw = b64ToBytes(pubToken.trim().replace(/^AGPUB\./, ""));
+    var recip = await crypto.subtle.importKey("raw", raw, { name: "ECDH", namedCurve: "P-256" }, false, []);
+    var eph = await crypto.subtle.generateKey({ name: "ECDH", namedCurve: "P-256" }, true, ["deriveBits"]);
+    var bits = new Uint8Array(await crypto.subtle.deriveBits({ name: "ECDH", public: recip }, eph.privateKey, 256));
+    var key = await aesFromShared(bits);
     var iv = crypto.getRandomValues(new Uint8Array(12));
-    var key = await deriveKey(password, salt);
-    var ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, enc.encode(text));
-    var ctb = new Uint8Array(ct);
-    var out = new Uint8Array(salt.length + iv.length + ctb.length);
-    out.set(salt, 0); out.set(iv, salt.length); out.set(ctb, salt.length + iv.length);
-    return "AG1." + bytesToB64(out);
+    var ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv: iv }, key, enc.encode(text)));
+    var ephPub = new Uint8Array(await crypto.subtle.exportKey("raw", eph.publicKey));
+    return "AGK." + bytesToB64(cat([ephPub, iv, ct]));
+  }
+  async function decryptWithPrivate(token, privToken) {
+    var priv = await crypto.subtle.importKey("pkcs8", b64ToBytes(privToken.trim().replace(/^AGKEY\./, "")),
+      { name: "ECDH", namedCurve: "P-256" }, false, ["deriveBits"]);
+    var d = b64ToBytes(token.trim().replace(/^AGK\./, ""));
+    var ephRaw = d.slice(0, 65), iv = d.slice(65, 77), ct = d.slice(77);
+    var ephPub = await crypto.subtle.importKey("raw", ephRaw, { name: "ECDH", namedCurve: "P-256" }, false, []);
+    var bits = new Uint8Array(await crypto.subtle.deriveBits({ name: "ECDH", public: ephPub }, priv, 256));
+    var key = await aesFromShared(bits);
+    return dec.decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, ct));
   }
 
-  async function decryptText(payload, password) {
-    var b64 = payload.trim();
-    if (b64.indexOf("AG1.") === 0) b64 = b64.slice(4);
-    var data = b64ToBytes(b64);
-    if (data.length < 29) throw new Error("too short");
-    var salt = data.slice(0, 16), iv = data.slice(16, 28), ct = data.slice(28);
-    var key = await deriveKey(password, salt);
-    var pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: iv }, key, ct);
-    return dec.decode(pt);
+  // ---------------- password helpers (gen + strength) ----------------
+  function genPassword(len) {
+    var cs = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*-_=+";
+    var a = crypto.getRandomValues(new Uint8Array(len || 20)), out = "";
+    for (var i = 0; i < a.length; i++) out += cs[a[i] % cs.length];
+    return out;
+  }
+  function scorePassword(p) {
+    if (!p) return { pct: 0, label: "", color: "#241d33" };
+    var classes = (/[a-z]/.test(p) ? 1 : 0) + (/[A-Z]/.test(p) ? 1 : 0) + (/[0-9]/.test(p) ? 1 : 0) + (/[^A-Za-z0-9]/.test(p) ? 1 : 0);
+    var bits = p.length * (classes <= 1 ? 2 : classes === 2 ? 3 : classes === 3 ? 4 : 5);
+    var pct = Math.min(100, bits);
+    var label = pct < 35 ? "Weak" : pct < 60 ? "Okay" : pct < 85 ? "Strong" : "Very strong";
+    var color = pct < 35 ? "#ff6b8a" : pct < 60 ? "#ffce6b" : pct < 85 ? "#9fd06b" : "#37d68a";
+    return { pct: pct, label: label + " key", color: color };
+  }
+  function updateStrength() {
+    var s = scorePassword($("key").value);
+    $("strFill").style.width = s.pct + "%"; $("strFill").style.background = s.color;
+    $("strLabel").textContent = s.label || " ";
   }
 
-  function guard() {
-    if (!window.crypto || !crypto.subtle) { setStatus("Encryption needs a secure (https) page — open the site over https.", "err"); return false; }
-    if (!keyEl.value) { setStatus("Enter a secret key first.", "err"); keyEl.focus(); return false; }
-    if (!inputEl.value) { setStatus("Type or paste a message first.", "err"); inputEl.focus(); return false; }
+  // ---------------- wire: password tab ----------------
+  function guardPw() {
+    if (!secure()) { setStatus($("status"), "Encryption needs a secure (https) page.", "err"); return false; }
+    if (!$("key").value) { setStatus($("status"), "Enter a secret key first.", "err"); $("key").focus(); return false; }
+    if (!$("input").value) { setStatus($("status"), "Type or paste a message first.", "err"); $("input").focus(); return false; }
     return true;
   }
+  $("encBtn").onclick = async function () {
+    if (!guardPw()) return; setStatus($("status"), "Encrypting…");
+    try { $("output").value = await encryptPassword($("input").value, $("key").value, parseInt($("level").value, 10));
+      setStatus($("status"), "🔒 Encrypted. Share the result; the recipient needs the same key.", "ok");
+    } catch (e) { setStatus($("status"), "Couldn't encrypt: " + (e.message || e), "err"); }
+  };
+  $("decBtn").onclick = async function () {
+    if (!guardPw()) return; setStatus($("status"), "Decrypting…");
+    try { $("output").value = await decryptPassword($("input").value, $("key").value);
+      setStatus($("status"), "🔓 Decrypted successfully.", "ok");
+    } catch (e) { $("output").value = ""; setStatus($("status"), e.message && e.message.indexOf("key‑pair") >= 0 ? e.message : "Couldn't decrypt — wrong key or not a valid message.", "err"); }
+  };
+  $("eye").onclick = function () { var k = $("key"); k.type = k.type === "password" ? "text" : "password"; k.focus(); };
+  $("genPw").onclick = function () { $("key").value = genPassword(20); $("key").type = "text"; updateStrength(); setStatus($("status"), "Generated a strong random key — copy it somewhere safe.", "ok"); };
+  $("key").addEventListener("input", updateStrength);
+  $("copyBtn").onclick = function () { copy($("output").value, $("status")); };
+  $("swapBtn").onclick = function () { if ($("output").value) { $("input").value = $("output").value; $("output").value = ""; setStatus($("status"), "Moved to message box."); } };
+  $("clearBtn").onclick = function () { $("input").value = ""; $("output").value = ""; setStatus($("status"), ""); $("input").focus(); };
+  $("input").addEventListener("keydown", function (e) { if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); $("encBtn").click(); } });
 
-  document.getElementById("encBtn").onclick = async function () {
-    if (!guard()) return;
-    setStatus("Encrypting…");
+  function copy(text, statusEl) {
+    if (!text) return;
+    if (navigator.clipboard) navigator.clipboard.writeText(text);
+    setStatus(statusEl, "Copied to clipboard.", "ok");
+  }
+
+  // ---------------- wire: key pair tab ----------------
+  var KP_PUB = "ag-cipher-pub", KP_PRIV = "ag-cipher-priv";
+  $("genKpBtn").onclick = async function () {
+    if (!secure()) { setStatus($("kpStatus"), "Needs a secure (https) page.", "err"); return; }
+    setStatus($("kpStatus"), "Generating…");
     try {
-      outputEl.value = await encryptText(inputEl.value, keyEl.value);
-      setStatus("🔒 Encrypted. Copy the result and share it — the recipient needs the same key.", "ok");
-    } catch (e) { setStatus("Couldn't encrypt: " + (e.message || e), "err"); }
+      var kp = await generateKeypair();
+      $("pubKey").value = kp.pub; $("privKey").value = kp.priv;
+      if ($("saveKp").checked) { localStorage.setItem(KP_PUB, kp.pub); localStorage.setItem(KP_PRIV, kp.priv); }
+      setStatus($("kpStatus"), "🗝️ New key pair created. Share the public key; keep the private key secret.", "ok");
+    } catch (e) { setStatus($("kpStatus"), "Couldn't generate: " + (e.message || e), "err"); }
   };
+  $("saveKp").onchange = function () {
+    if (this.checked) { if ($("pubKey").value) localStorage.setItem(KP_PUB, $("pubKey").value); if ($("privKey").value) localStorage.setItem(KP_PRIV, $("privKey").value); }
+    else { localStorage.removeItem(KP_PUB); localStorage.removeItem(KP_PRIV); }
+  };
+  $("copyPub").onclick = function () { copy($("pubKey").value, $("kpStatus")); };
+  $("copyPriv").onclick = function () { copy($("privKey").value, $("kpStatus")); };
+  $("encKpBtn").onclick = async function () {
+    if (!secure()) { setStatus($("kpStatus"), "Needs a secure (https) page.", "err"); return; }
+    if (!$("recipPub").value.trim()) { setStatus($("kpStatus"), "Paste the recipient's public key.", "err"); return; }
+    if (!$("kpMsg").value) { setStatus($("kpStatus"), "Type a message to encrypt.", "err"); return; }
+    setStatus($("kpStatus"), "Encrypting…");
+    try { $("kpOut").value = await encryptToPublic($("kpMsg").value, $("recipPub").value);
+      setStatus($("kpStatus"), "🔒 Encrypted to recipient. Only their private key can read it.", "ok");
+    } catch (e) { $("kpOut").value = ""; setStatus($("kpStatus"), "Couldn't encrypt — is that a valid public key (AGPUB.…)?", "err"); }
+  };
+  $("decKpBtn").onclick = async function () {
+    if (!secure()) { setStatus($("kpStatus"), "Needs a secure (https) page.", "err"); return; }
+    if (!$("privKey").value.trim()) { setStatus($("kpStatus"), "Your private key is needed (generate or paste it above).", "err"); return; }
+    if (!$("kpCipher").value.trim()) { setStatus($("kpStatus"), "Paste the encrypted message.", "err"); return; }
+    setStatus($("kpStatus"), "Decrypting…");
+    try { $("kpOut").value = await decryptWithPrivate($("kpCipher").value, $("privKey").value);
+      setStatus($("kpStatus"), "🔓 Decrypted with your private key.", "ok");
+    } catch (e) { $("kpOut").value = ""; setStatus($("kpStatus"), "Couldn't decrypt — wrong private key or invalid message.", "err"); }
+  };
+  $("copyKpOut").onclick = function () { copy($("kpOut").value, $("kpStatus")); };
+  $("clearKp").onclick = function () { $("kpMsg").value = ""; $("kpCipher").value = ""; $("kpOut").value = ""; setStatus($("kpStatus"), ""); };
 
-  document.getElementById("decBtn").onclick = async function () {
-    if (!guard()) return;
-    setStatus("Decrypting…");
-    try {
-      outputEl.value = await decryptText(inputEl.value, keyEl.value);
-      setStatus("🔓 Decrypted successfully.", "ok");
-    } catch (e) {
-      outputEl.value = "";
-      setStatus("Couldn't decrypt — wrong key, or the message isn't a valid encrypted message.", "err");
-    }
-  };
-
-  document.getElementById("eye").onclick = function () {
-    keyEl.type = keyEl.type === "password" ? "text" : "password"; keyEl.focus();
-  };
-  document.getElementById("copyBtn").onclick = function () {
-    if (!outputEl.value) return;
-    outputEl.select(); navigator.clipboard ? navigator.clipboard.writeText(outputEl.value) : document.execCommand("copy");
-    setStatus("Copied to clipboard.", "ok");
-  };
-  document.getElementById("swapBtn").onclick = function () {
-    if (!outputEl.value) return;
-    inputEl.value = outputEl.value; outputEl.value = ""; setStatus("Result moved to the message box.");
-  };
-  document.getElementById("clearBtn").onclick = function () {
-    inputEl.value = ""; outputEl.value = ""; setStatus(""); inputEl.focus();
-  };
-
-  // Ctrl+Enter encrypts
-  inputEl.addEventListener("keydown", function (e) {
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); document.getElementById("encBtn").click(); }
+  // tabs
+  document.querySelectorAll(".tab").forEach(function (tab) {
+    tab.onclick = function () {
+      document.querySelectorAll(".tab").forEach(function (x) { x.classList.remove("active"); });
+      document.querySelectorAll(".panel").forEach(function (x) { x.classList.remove("show"); });
+      tab.classList.add("active");
+      $("panel-" + tab.dataset.tab).classList.add("show");
+    };
   });
+
+  // restore saved key pair
+  try {
+    var sp = localStorage.getItem(KP_PUB), spv = localStorage.getItem(KP_PRIV);
+    if (sp && spv) { $("pubKey").value = sp; $("privKey").value = spv; $("saveKp").checked = true; }
+  } catch (e) {}
+  updateStrength();
 })();
 </script>
 </body>
