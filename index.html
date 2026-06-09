@@ -120,6 +120,9 @@
     .card--pong    { --accent: #ff5577; --accent-glow: rgba(255,85,119,0.5); }
     .card--shapes  { --accent: #a855f7; --accent-glow: rgba(168,85,247,0.5); }
     .card--ency    { --accent: #1c6ea4; --accent-glow: rgba(28,110,164,0.5); }
+    .card--vidconv { --accent: #ff4466; --accent-glow: rgba(255,68,102,0.5); }
+    .card--imagine { --accent: #a855f7; --accent-glow: rgba(168,85,247,0.5); }
+    .card--recolor { --accent: #22c55e; --accent-glow: rgba(34,197,94,0.5); }
 
     .card-body { padding: 20px 22px 24px; }
 
@@ -246,6 +249,9 @@
     <a class="apps-app" href="/cipher/"><span class="ai">🔐</span><span>Cipher</span></a>
     <a class="apps-app" href="/worldcup/"><span class="ai">⚽</span><span>World Cup</span></a>
     <a class="apps-app" href="/resup/"><span class="ai">⬆️</span><span>ResUp</span></a>
+    <a class="apps-app" href="/video-converter/"><span class="ai">🎞️</span><span>Converter</span></a>
+    <a class="apps-app" href="/photo-gen/"><span class="ai">🖼️</span><span>Imagine</span></a>
+    <a class="apps-app" href="/recolor/"><span class="ai">🎨</span><span>Recolor</span></a>
     <a class="apps-app" href="/os/"><span class="ai">🖥️</span><span>ArtOS</span></a>
   </div>
 </div>
@@ -268,6 +274,108 @@
   </header>
 
   <div class="games">
+
+    <a href="/video-converter/" class="card card--vidconv">
+      <div class="play-btn">&#9654; OPEN</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="vcBg" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#2a0f18"/><stop offset="100%" stop-color="#0a0408"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#vcBg)"/>
+          <circle cx="200" cy="90" r="80" fill="rgba(255,68,102,0.12)"/>
+          <!-- film strip -->
+          <g transform="translate(70,55)">
+            <rect x="0" y="0" width="120" height="72" rx="6" fill="#15151f" stroke="#33202a"/>
+            <g fill="#0a0408"><rect x="6" y="4" width="10" height="9" rx="2"/><rect x="6" y="59" width="10" height="9" rx="2"/><rect x="104" y="4" width="10" height="9" rx="2"/><rect x="104" y="59" width="10" height="9" rx="2"/></g>
+            <rect x="24" y="16" width="72" height="40" rx="3" fill="#ff8c00" opacity="0.85"/>
+          </g>
+          <!-- arrow -->
+          <path d="M200,91 h26 m0,0 l-8,-8 m8,8 l-8,8" stroke="#ff4466" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- MP4 badge -->
+          <g transform="translate(240,58)">
+            <rect x="0" y="0" width="88" height="66" rx="10" fill="#ff4466"/>
+            <text x="44" y="42" text-anchor="middle" font-family="Segoe UI,sans-serif" font-size="26" font-weight="900" fill="#fff">MP4</text>
+          </g>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag" style="color:#ff4466">Tool</div>
+        <div class="card-title">Converter</div>
+        <p class="card-desc">Turn any video — MOV, AVI, MKV, WebM, FLV and more — into a clean universal MP4. Pick resolution and quality. Runs entirely in your browser; files never leave your device.</p>
+        <div class="card-tags"><span class="tag">Video</span><span class="tag">MP4</span><span class="tag">Convert</span><span class="tag">Offline</span></div>
+      </div>
+    </a>
+
+    <a href="/photo-gen/" class="card card--imagine">
+      <div class="play-btn">&#9654; OPEN</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="imBg" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#1a1030"/><stop offset="100%" stop-color="#06121a"/>
+            </linearGradient>
+            <linearGradient id="imPic" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#a855f7"/><stop offset="100%" stop-color="#22d3ee"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#imBg)"/>
+          <g transform="translate(140,42)">
+            <rect x="0" y="0" width="120" height="96" rx="10" fill="#0c0c1a" stroke="#3a2a5a"/>
+            <rect x="8" y="8" width="104" height="80" rx="6" fill="url(#imPic)"/>
+            <circle cx="34" cy="34" r="11" fill="#fff" opacity="0.9"/>
+            <path d="M16,80 L46,50 L66,68 L86,40 L112,80 Z" fill="#0c0c1a" opacity="0.45"/>
+          </g>
+          <!-- sparkles -->
+          <g fill="#ffe27a"><path d="M96,52 l3,8 l8,3 l-8,3 l-3,8 l-3,-8 l-8,-3 l8,-3 z"/><path d="M300,110 l2,6 l6,2 l-6,2 l-2,6 l-2,-6 l-6,-2 l6,-2 z"/></g>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag" style="color:#a855f7">AI</div>
+        <div class="card-title">Imagine</div>
+        <p class="card-desc">Describe anything and get an AI-generated image in seconds. Choose a style and aspect ratio, then download. No account or API key needed.</p>
+        <div class="card-tags"><span class="tag">AI</span><span class="tag">Images</span><span class="tag">Text-to-Image</span><span class="tag">Art</span></div>
+      </div>
+    </a>
+
+    <a href="/recolor/" class="card card--recolor">
+      <div class="play-btn">&#9654; OPEN</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="rcBg" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#0c2418"/><stop offset="100%" stop-color="#05100a"/>
+            </linearGradient>
+            <linearGradient id="rcColor" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#22c55e"/><stop offset="50%" stop-color="#06b6d4"/><stop offset="100%" stop-color="#f59e0b"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#rcBg)"/>
+          <circle cx="200" cy="90" r="78" fill="rgba(34,197,94,0.12)"/>
+          <!-- split frame: gray | color -->
+          <g transform="translate(120,48)">
+            <clipPath id="rcClip"><rect x="0" y="0" width="160" height="84" rx="10"/></clipPath>
+            <g clip-path="url(#rcClip)">
+              <rect x="0" y="0" width="80" height="84" fill="#8a8a8a"/>
+              <rect x="80" y="0" width="80" height="84" fill="url(#rcColor)"/>
+              <circle cx="40" cy="30" r="12" fill="#b5b5b5"/>
+              <circle cx="120" cy="30" r="12" fill="#fff" opacity="0.85"/>
+              <path d="M-4,84 L36,46 L60,66 L96,34 L164,84 Z" fill="#000" opacity="0.25"/>
+            </g>
+            <rect x="0" y="0" width="160" height="84" rx="10" fill="none" stroke="#1d3a2a"/>
+            <rect x="78" y="-6" width="4" height="96" fill="#050510"/>
+          </g>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag" style="color:#22c55e">Tool</div>
+        <div class="card-title">Recolor</div>
+        <p class="card-desc">Convert any video to true black &amp; white, or give an old grayscale clip a warm vintage colorized tint. Keeps the audio and runs fully in your browser.</p>
+        <div class="card-tags"><span class="tag">Video</span><span class="tag">B&amp;W</span><span class="tag">Color</span><span class="tag">Filter</span></div>
+      </div>
+    </a>
 
     <a href="/encyclopedia/" class="card card--ency">
       <div class="play-btn">&#9654; OPEN</div>

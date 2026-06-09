@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Converter — Any Video → MP4</title>
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+  :root{--accent:#ff4466;--accent2:#ff8c00;--glow:rgba(255,68,102,.4);}
+  body{min-height:100vh;background:#050510;color:#fff;font-family:'Segoe UI',system-ui,sans-serif;}
+  a{color:inherit;}
+  .wrap{max-width:760px;margin:0 auto;padding:40px 22px 80px;}
+  .top{display:flex;align-items:center;gap:14px;margin-bottom:8px;}
+  .back{font-size:13px;color:#667;text-decoration:none;border:1px solid #1a1a3a;padding:7px 12px;border-radius:10px;transition:.2s;}
+  .back:hover{border-color:var(--accent);color:#fff;}
+  h1{font-size:clamp(30px,6vw,46px);font-weight:900;letter-spacing:-1px;
+     background:linear-gradient(135deg,var(--accent2),var(--accent));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;margin-top:22px;}
+  .sub{color:#667;margin:10px 0 30px;font-size:15px;}
+  .drop{border:2px dashed #2a2a4a;border-radius:18px;padding:46px 24px;text-align:center;cursor:pointer;transition:.2s;background:#0a0a1e;}
+  .drop:hover,.drop.over{border-color:var(--accent);background:#0d0d24;box-shadow:0 0 40px -10px var(--glow);}
+  .drop .ico{font-size:48px;}
+  .drop h3{margin:14px 0 6px;font-size:19px;}
+  .drop p{color:#667;font-size:13px;}
+  .file{margin-top:18px;background:#0a0a1e;border:1px solid #1a1a3a;border-radius:14px;padding:16px 18px;display:none;}
+  .file.show{display:block;}
+  .file .nm{font-weight:700;word-break:break-all;}
+  .file .meta{color:#667;font-size:13px;margin-top:4px;}
+  .opts{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:18px;}
+  @media(max-width:560px){.opts{grid-template-columns:1fr;}}
+  label.fld{display:block;font-size:12px;letter-spacing:1px;text-transform:uppercase;color:#778;margin-bottom:7px;}
+  select{width:100%;background:#0a0a1e;color:#fff;border:1px solid #2a2a4a;border-radius:11px;padding:12px;font-size:15px;cursor:pointer;}
+  .btn{margin-top:22px;width:100%;border:none;border-radius:14px;padding:16px;font-size:17px;font-weight:800;letter-spacing:.5px;cursor:pointer;
+       background:linear-gradient(135deg,var(--accent2),var(--accent));color:#fff;transition:.2s;}
+  .btn:hover{filter:brightness(1.1);}
+  .btn:disabled{opacity:.5;cursor:not-allowed;filter:none;}
+  .prog{margin-top:22px;display:none;}
+  .prog.show{display:block;}
+  .bar{height:12px;background:#10102a;border-radius:99px;overflow:hidden;}
+  .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--accent2),var(--accent));transition:width .2s;}
+  .stat{color:#889;font-size:13px;margin-top:10px;text-align:center;min-height:18px;}
+  .result{margin-top:22px;display:none;text-align:center;}
+  .result.show{display:block;}
+  video{max-width:100%;border-radius:14px;margin-top:14px;border:1px solid #1a1a3a;}
+  .dl{display:inline-block;margin-top:16px;background:#10b981;color:#012;font-weight:800;padding:14px 28px;border-radius:13px;text-decoration:none;}
+  .note{margin-top:26px;color:#556;font-size:12.5px;line-height:1.6;border-top:1px solid #16162e;padding-top:16px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><a class="back" href="/">&larr; Arcade</a></div>
+  <h1>🎞️ Converter</h1>
+  <p class="sub">Turn any video — MOV, AVI, MKV, WebM, FLV, WMV, 3GP and more — into a clean, universal MP4. Everything runs locally in your browser; your files never leave your device.</p>
+
+  <div class="drop" id="drop">
+    <div class="ico">📂</div>
+    <h3>Drop a video here</h3>
+    <p>or click to choose a file</p>
+    <input type="file" id="file" accept="video/*" hidden>
+  </div>
+
+  <div class="file" id="fileBox">
+    <div class="nm" id="fname"></div>
+    <div class="meta" id="fmeta"></div>
+  </div>
+
+  <div class="opts">
+    <div>
+      <label class="fld">Resolution</label>
+      <select id="res">
+        <option value="0">Keep original</option>
+        <option value="2160">2160p (4K)</option>
+        <option value="1080">1080p (Full HD)</option>
+        <option value="720">720p (HD)</option>
+        <option value="480">480p</option>
+      </select>
+    </div>
+    <div>
+      <label class="fld">Quality</label>
+      <select id="q">
+        <option value="23">Balanced</option>
+        <option value="18">High quality</option>
+        <option value="28">Smaller file</option>
+      </select>
+    </div>
+  </div>
+
+  <button class="btn" id="go" disabled>Convert to MP4</button>
+
+  <div class="prog" id="prog">
+    <div class="bar"><i id="bar"></i></div>
+    <div class="stat" id="stat">Loading engine…</div>
+  </div>
+
+  <div class="result" id="result">
+    <video id="out" controls></video><br>
+    <a class="dl" id="dl" download>⬇ Download MP4</a>
+  </div>
+
+  <p class="note">Powered by ffmpeg.wasm running entirely in your browser. The first conversion downloads the ~25&nbsp;MB engine once, then it's cached. Large videos take time — a rough rule is about real-time speed.</p>
+</div>
+
+<script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<script>
+const { createFFmpeg, fetchFile } = FFmpeg;
+const ffmpeg = createFFmpeg({ log:false, corePath:'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js' });
+
+const drop=document.getElementById('drop'), fileIn=document.getElementById('file');
+const fileBox=document.getElementById('fileBox'), fname=document.getElementById('fname'), fmeta=document.getElementById('fmeta');
+const go=document.getElementById('go'), prog=document.getElementById('prog'), bar=document.getElementById('bar'), stat=document.getElementById('stat');
+const result=document.getElementById('result'), out=document.getElementById('out'), dl=document.getElementById('dl');
+let current=null, lastUrl=null;
+
+function human(b){const u=['B','KB','MB','GB'];let i=0;while(b>=1024&&i<u.length-1){b/=1024;i++;}return b.toFixed(1)+' '+u[i];}
+
+function setFile(f){
+  if(!f) return;
+  current=f;
+  fname.textContent=f.name;
+  fmeta.textContent=human(f.size)+' · '+(f.type||'unknown type');
+  fileBox.classList.add('show');
+  go.disabled=false;
+  result.classList.remove('show');
+}
+
+drop.addEventListener('click',()=>fileIn.click());
+fileIn.addEventListener('change',e=>setFile(e.target.files[0]));
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',e=>setFile(e.dataTransfer.files[0]));
+
+ffmpeg.setProgress(({ratio})=>{
+  if(ratio>=0&&ratio<=1){bar.style.width=(ratio*100).toFixed(0)+'%';stat.textContent='Converting… '+(ratio*100).toFixed(0)+'%';}
+});
+
+go.addEventListener('click',async()=>{
+  if(!current) return;
+  go.disabled=true; prog.classList.add('show'); result.classList.remove('show'); bar.style.width='0%';
+  try{
+    if(!ffmpeg.isLoaded()){ stat.textContent='Loading engine (one-time ~25 MB)…'; await ffmpeg.load(); }
+    stat.textContent='Reading file…';
+    const ext=(current.name.split('.').pop()||'mp4').toLowerCase();
+    const inName='input.'+ext;
+    ffmpeg.FS('writeFile', inName, await fetchFile(current));
+
+    const args=['-i',inName];
+    const res=document.getElementById('res').value;
+    if(res!=='0') args.push('-vf','scale=-2:'+res);
+    args.push('-c:v','libx264','-preset','veryfast','-crf',document.getElementById('q').value,
+              '-pix_fmt','yuv420p','-c:a','aac','-b:a','160k','-movflags','+faststart','output.mp4');
+
+    stat.textContent='Converting…';
+    await ffmpeg.run(...args);
+
+    const data=ffmpeg.FS('readFile','output.mp4');
+    try{ffmpeg.FS('unlink',inName);ffmpeg.FS('unlink','output.mp4');}catch(e){}
+    if(lastUrl) URL.revokeObjectURL(lastUrl);
+    lastUrl=URL.createObjectURL(new Blob([data.buffer],{type:'video/mp4'}));
+    out.src=lastUrl;
+    dl.href=lastUrl;
+    dl.download=current.name.replace(/\.[^.]+$/,'')+'.mp4';
+    bar.style.width='100%'; stat.textContent='Done! ('+human(data.length)+')';
+    result.classList.add('show');
+  }catch(err){
+    console.error(err);
+    stat.textContent='⚠ Conversion failed: '+(err&&err.message||err)+'. Try a smaller file or another format.';
+  }
+  go.disabled=false;
+});
+</script>
+</body>
+</html>
