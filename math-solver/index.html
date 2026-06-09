@@ -109,7 +109,15 @@
       <button data-ex="y = x^2 - 4">y = x^2 - 4</button>
       <button data-ex="pi*r^2, r=7">pi*r^2, r=7</button>
       <button data-ex="sqrt(144)">sqrt(144)</button>
-      <button data-ex="sin(pi / 2)">sin(pi / 2)</button>
+      <button data-ex="rectangle l=8 w=5">rectangle l=8 w=5</button>
+      <button data-ex="triangle b=6 h=4">triangle b=6 h=4</button>
+      <button data-ex="circle area r=7">circle area r=7</button>
+      <button data-ex="trapezoid a=4 b=8 h=5">trapezoid a=4 b=8 h=5</button>
+      <button data-ex="cylinder r=3 h=10">cylinder r=3 h=10</button>
+      <button data-ex="cone r=3 h=4">cone r=3 h=4</button>
+      <button data-ex="sphere r=5">sphere r=5</button>
+      <button data-ex="cube s=4">cube s=4</button>
+      <button data-ex="pyramid b=6 h=9">pyramid b=6 h=9</button>
     </div>
 
     <div class="legend">
@@ -121,7 +129,17 @@
       <b>Or just calculate:</b> <code>+ - * / ^</code>, <code>%</code> (remainder),
       parentheses, and functions <code>sqrt</code>, <code>sin</code>, <code>cos</code>,
       <code>tan</code>, <code>log</code> (base 10), <code>ln</code>, <code>abs</code>,
-      <code>round</code>. Constants: <code>pi</code>, <code>e</code>.
+      <code>round</code>. Constants: <code>pi</code>, <code>e</code>.<br>
+      <b>Geometry:</b> name a shape and give measurements as <code>key=value</code> —
+      area, perimeter, volume &amp; surface area with a labelled diagram.<br>
+      <b>2-D:</b> <code>rectangle l=8 w=5</code>, <code>square s=4</code>,
+      <code>triangle b=6 h=4</code> (or <code>a=3 b=4 c=5</code>),
+      <code>circle r=7</code>, <code>parallelogram b=6 h=4</code>,
+      <code>trapezoid a=4 b=8 h=5</code>, <code>rhombus d1=6 d2=8</code>.<br>
+      <b>3-D:</b> <code>cube s=4</code>, <code>cuboid l=4 w=3 h=2</code>,
+      <code>sphere r=5</code>, <code>cylinder r=3 h=10</code>,
+      <code>cone r=3 h=4</code>, <code>pyramid b=6 h=9</code>.
+      Type just the shape name to see its formulas.
     </div>
   </div>
 
@@ -698,6 +716,448 @@
     plot(yfun, roots, original.trim());
   }
 
+  // ===================== Geometry =====================
+  // Parse a shape name + key=value measurements, compute every relevant
+  // formula (area / perimeter / volume / surface area …) and draw a labelled
+  // diagram. Works symbolically too: with no numbers it just shows the shape
+  // and its formulas.
+
+  const C_STROKE = '#7fd1ff', C_FILL = 'rgba(127,209,255,0.18)', C_DIM = '#ffd479';
+
+  // Label helper: "l = 5" when a value is known, otherwise just the symbol.
+  function lab(p, key, sym) { return p[key] != null ? sym + ' = ' + tidy(p[key]) : sym; }
+  function ellipse(ctx, cx, cy, rx, ry) {
+    ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+  }
+  function txt(ctx, t, x, y, color, align, base, font) {
+    ctx.fillStyle = color || '#fff';
+    ctx.textAlign = align || 'center';
+    ctx.textBaseline = base || 'middle';
+    ctx.font = font || '13px Consolas, monospace';
+    ctx.fillText(t, x, y);
+  }
+  // Oblique "3-D" box from a front face at (x,y,fw,fh) pushed back by (dx,dy).
+  function box3d(ctx, x, y, fw, fh, dx, dy) {
+    ctx.strokeStyle = C_STROKE; ctx.lineWidth = 2;
+    ctx.fillStyle = C_FILL;
+    // back face
+    ctx.beginPath(); ctx.rect(x + dx, y + dy, fw, fh); ctx.stroke();
+    // connecting edges
+    ctx.beginPath();
+    ctx.moveTo(x, y); ctx.lineTo(x + dx, y + dy);
+    ctx.moveTo(x + fw, y); ctx.lineTo(x + fw + dx, y + dy);
+    ctx.moveTo(x, y + fh); ctx.lineTo(x + dx, y + fh + dy);
+    ctx.moveTo(x + fw, y + fh); ctx.lineTo(x + fw + dx, y + fh + dy);
+    ctx.stroke();
+    // front face on top
+    ctx.beginPath(); ctx.rect(x, y, fw, fh); ctx.fill(); ctx.stroke();
+  }
+
+  const GEO = {
+    rectangle: {
+      aliases: ['rectangle', 'rect'], keys: 'length l, width w',
+      formulas: ['Area  A = l × w', 'Perimeter  P = 2(l + w)', 'Diagonal  d = √(l² + w²)'],
+      solve(p) {
+        if (p.l == null || p.w == null) return [];
+        const A = p.l * p.w, P = 2 * (p.l + p.w), d = Math.hypot(p.l, p.w);
+        return [
+          { key: 'area', label: 'Area', value: A, step: `A = l × w = ${fmt(p.l)} × ${fmt(p.w)} = ${fmt(A)}` },
+          { key: 'perimeter', label: 'Perimeter', value: P, step: `P = 2(l + w) = 2(${fmt(p.l)} + ${fmt(p.w)}) = ${fmt(P)}` },
+          { key: 'diagonal', label: 'Diagonal', value: d, step: `d = √(l² + w²) = √(${fmt(p.l)}² + ${fmt(p.w)}²) = ${fmt(d)}` }
+        ];
+      },
+      draw(ctx, W, H, p) {
+        const cx = W / 2, cy = H / 2;
+        let rw = 250, rh = 150;
+        if (p.l != null && p.w != null) {
+          const ar = p.l / p.w;
+          if (ar >= 1) { rw = 260; rh = Math.max(40, Math.min(180, 260 / ar)); }
+          else { rh = 170; rw = Math.max(40, Math.min(300, 170 * ar)); }
+        }
+        const x = cx - rw / 2, y = cy - rh / 2;
+        ctx.fillStyle = C_FILL; ctx.strokeStyle = C_STROKE; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.rect(x, y, rw, rh); ctx.fill(); ctx.stroke();
+        txt(ctx, lab(p, 'l', 'l'), cx, y + rh + 14, C_DIM);
+        txt(ctx, lab(p, 'w', 'w'), x - 14, cy, C_DIM, 'right');
+      }
+    },
+
+    square: {
+      aliases: ['square'], keys: 'side s',
+      formulas: ['Area  A = s²', 'Perimeter  P = 4s', 'Diagonal  d = s√2'],
+      solve(p) {
+        if (p.s == null) return [];
+        const A = p.s * p.s, P = 4 * p.s, d = p.s * Math.SQRT2;
+        return [
+          { key: 'area', label: 'Area', value: A, step: `A = s² = ${fmt(p.s)}² = ${fmt(A)}` },
+          { key: 'perimeter', label: 'Perimeter', value: P, step: `P = 4s = 4 × ${fmt(p.s)} = ${fmt(P)}` },
+          { key: 'diagonal', label: 'Diagonal', value: d, step: `d = s√2 = ${fmt(p.s)} × 1.41421 = ${fmt(d)}` }
+        ];
+      },
+      draw(ctx, W, H, p) {
+        const s = 160, x = W / 2 - s / 2, y = H / 2 - s / 2;
+        ctx.fillStyle = C_FILL; ctx.strokeStyle = C_STROKE; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.rect(x, y, s, s); ctx.fill(); ctx.stroke();
+        txt(ctx, lab(p, 's', 's'), W / 2, y + s + 14, C_DIM);
+        txt(ctx, lab(p, 's', 's'), x - 14, H / 2, C_DIM, 'right');
+      }
+    },
+
+    triangle: {
+      aliases: ['triangle'], keys: 'base b, height h  (or three sides a, b, c)',
+      formulas: ['Area  A = ½ × b × h', 'Heron  A = √(s(s−a)(s−b)(s−c)),  s = ½(a+b+c)', 'Perimeter  P = a + b + c'],
+      solve(p) {
+        const res = [];
+        if (p.b != null && p.h != null) {
+          const A = 0.5 * p.b * p.h;
+          res.push({ key: 'area', label: 'Area', value: A, step: `A = ½ × b × h = ½ × ${fmt(p.b)} × ${fmt(p.h)} = ${fmt(A)}` });
+        }
+        if (p.a != null && p.b != null && p.c != null) {
+          const P = p.a + p.b + p.c, sp = P / 2;
+          res.push({ key: 'perimeter', label: 'Perimeter', value: P, step: `P = a + b + c = ${fmt(p.a)} + ${fmt(p.b)} + ${fmt(p.c)} = ${fmt(P)}` });
+          const inside = sp * (sp - p.a) * (sp - p.b) * (sp - p.c);
+          if (inside > 0) {
+            const A = Math.sqrt(inside);
+            res.push({ key: 'area', label: 'Area (Heron)', value: A, step: `s = ½P = ${fmt(sp)};  A = √(s(s−a)(s−b)(s−c)) = ${fmt(A)}` });
+          }
+        }
+        return res;
+      },
+      draw(ctx, W, H, p) {
+        const bw = 220, ht = 150, bx = W / 2 - bw / 2, by = H / 2 + ht / 2;
+        const apexX = W / 2 - 20, apexY = by - ht;
+        ctx.fillStyle = C_FILL; ctx.strokeStyle = C_STROKE; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + bw, by); ctx.lineTo(apexX, apexY);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        // height (dashed)
+        ctx.strokeStyle = C_DIM; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+        ctx.beginPath(); ctx.moveTo(apexX, apexY); ctx.lineTo(apexX, by); ctx.stroke();
+        ctx.setLineDash([]);
+        txt(ctx, lab(p, 'b', 'b'), W / 2, by + 14, C_DIM);
+        txt(ctx, lab(p, 'h', 'h'), apexX + 12, (apexY + by) / 2, C_DIM, 'left');
+      }
+    },
+
+    circle: {
+      aliases: ['circle'], keys: 'radius r',
+      formulas: ['Area  A = π r²', 'Circumference  C = 2 π r', 'Diameter  d = 2r'],
+      solve(p) {
+        if (p.r == null) return [];
+        const A = Math.PI * p.r * p.r, Cc = 2 * Math.PI * p.r, d = 2 * p.r;
+        return [
+          { key: 'area', label: 'Area', value: A, step: `A = π r² = π × ${fmt(p.r)}² = ${fmt(A)}` },
+          { key: 'circumference', label: 'Circumference', value: Cc, step: `C = 2 π r = 2 π × ${fmt(p.r)} = ${fmt(Cc)}` },
+          { key: 'diameter', label: 'Diameter', value: d, step: `d = 2r = ${fmt(d)}` }
+        ];
+      },
+      draw(ctx, W, H, p) {
+        const cx = W / 2, cy = H / 2, R = 80;
+        ctx.fillStyle = C_FILL; ctx.strokeStyle = C_STROKE; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = C_DIM; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx, cy, 3, 0, 2 * Math.PI); ctx.fill();
+        txt(ctx, lab(p, 'r', 'r'), cx + R / 2, cy - 12, C_DIM);
+      }
+    },
+
+    parallelogram: {
+      aliases: ['parallelogram'], keys: 'base b, height h  (side s for perimeter)',
+      formulas: ['Area  A = b × h', 'Perimeter  P = 2(b + s)'],
+      solve(p) {
+        const res = [];
+        if (p.b != null && p.h != null) {
+          const A = p.b * p.h;
+          res.push({ key: 'area', label: 'Area', value: A, step: `A = b × h = ${fmt(p.b)} × ${fmt(p.h)} = ${fmt(A)}` });
+        }
+        if (p.b != null && p.s != null) {
+          const P = 2 * (p.b + p.s);
+          res.push({ key: 'perimeter', label: 'Perimeter', value: P, step: `P = 2(b + s) = 2(${fmt(p.b)} + ${fmt(p.s)}) = ${fmt(P)}` });
+        }
+        return res;
+      },
+      draw(ctx, W, H, p) {
+        const bw = 200, ht = 120, sk = 50, cx = W / 2, cy = H / 2;
+        const x = cx - bw / 2 - sk / 2 + sk, y = cy + ht / 2;
+        ctx.fillStyle = C_FILL; ctx.strokeStyle = C_STROKE; ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(x, y); ctx.lineTo(x + bw, y);
+        ctx.lineTo(x + bw - sk, y - ht); ctx.lineTo(x - sk, y - ht);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = C_DIM; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+        ctx.beginPath(); ctx.moveTo(x - sk + 30, y - ht); ctx.lineTo(x - sk + 30, y); ctx.stroke();
+        ctx.setLineDash([]);
+        txt(ctx, lab(p, 'b', 'b'), cx, y + 14, C_DIM);
+        txt(ctx, lab(p, 'h', 'h'), x - sk + 18, cy, C_DIM, 'right');
+      }
+    },
+
+    trapezoid: {
+      aliases: ['trapezoid', 'trapezium'], keys: 'parallel sides a & b, height h',
+      formulas: ['Area  A = ½ (a + b) × h'],
+      solve(p) {
+        if (p.a == null || p.b == null || p.h == null) return [];
+        const A = 0.5 * (p.a + p.b) * p.h;
+        return [{ key: 'area', label: 'Area', value: A, step: `A = ½(a + b) × h = ½(${fmt(p.a)} + ${fmt(p.b)}) × ${fmt(p.h)} = ${fmt(A)}` }];
+      },
+      draw(ctx, W, H, p) {
+        const bw = 230, tw = 130, ht = 120, cx = W / 2, cy = H / 2;
+        const by = cy + ht / 2, ty = cy - ht / 2;
+        ctx.fillStyle = C_FILL; ctx.strokeStyle = C_STROKE; ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx - bw / 2, by); ctx.lineTo(cx + bw / 2, by);
+        ctx.lineTo(cx + tw / 2, ty); ctx.lineTo(cx - tw / 2, ty);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = C_DIM; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+        ctx.beginPath(); ctx.moveTo(cx - tw / 2 + 18, ty); ctx.lineTo(cx - tw / 2 + 18, by); ctx.stroke();
+        ctx.setLineDash([]);
+        txt(ctx, lab(p, 'a', 'a'), cx, ty - 12, C_DIM);
+        txt(ctx, lab(p, 'b', 'b'), cx, by + 14, C_DIM);
+        txt(ctx, lab(p, 'h', 'h'), cx - tw / 2 + 30, cy, C_DIM, 'left');
+      }
+    },
+
+    rhombus: {
+      aliases: ['rhombus'], keys: 'diagonals d1 & d2',
+      formulas: ['Area  A = ½ × d1 × d2', 'Side  s = √((d1/2)² + (d2/2)²)', 'Perimeter  P = 4s'],
+      solve(p) {
+        if (p.d1 == null || p.d2 == null) return [];
+        const A = 0.5 * p.d1 * p.d2, s = Math.hypot(p.d1 / 2, p.d2 / 2), P = 4 * s;
+        return [
+          { key: 'area', label: 'Area', value: A, step: `A = ½ × d1 × d2 = ½ × ${fmt(p.d1)} × ${fmt(p.d2)} = ${fmt(A)}` },
+          { key: 'side', label: 'Side', value: s, step: `s = √((d1/2)² + (d2/2)²) = ${fmt(s)}` },
+          { key: 'perimeter', label: 'Perimeter', value: P, step: `P = 4s = ${fmt(P)}` }
+        ];
+      },
+      draw(ctx, W, H, p) {
+        const cx = W / 2, cy = H / 2, rx = 110, ry = 90;
+        ctx.fillStyle = C_FILL; ctx.strokeStyle = C_STROKE; ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - ry); ctx.lineTo(cx + rx, cy);
+        ctx.lineTo(cx, cy + ry); ctx.lineTo(cx - rx, cy);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = C_DIM; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+        ctx.beginPath(); ctx.moveTo(cx - rx, cy); ctx.lineTo(cx + rx, cy);
+        ctx.moveTo(cx, cy - ry); ctx.lineTo(cx, cy + ry); ctx.stroke();
+        ctx.setLineDash([]);
+        txt(ctx, lab(p, 'd1', 'd1'), cx + rx / 2, cy - 12, C_DIM);
+        txt(ctx, lab(p, 'd2', 'd2'), cx + 12, cy - ry / 2, C_DIM, 'left');
+      }
+    },
+
+    cube: {
+      aliases: ['cube'], keys: 'side s',
+      formulas: ['Volume  V = s³', 'Surface area  S = 6 s²', 'Space diagonal  d = s√3'],
+      solve(p) {
+        if (p.s == null) return [];
+        const V = p.s ** 3, S = 6 * p.s * p.s, d = p.s * Math.sqrt(3);
+        return [
+          { key: 'volume', label: 'Volume', value: V, step: `V = s³ = ${fmt(p.s)}³ = ${fmt(V)}` },
+          { key: 'surface', label: 'Surface area', value: S, step: `S = 6 s² = 6 × ${fmt(p.s)}² = ${fmt(S)}` },
+          { key: 'diagonal', label: 'Space diagonal', value: d, step: `d = s√3 = ${fmt(p.s)} × 1.73205 = ${fmt(d)}` }
+        ];
+      },
+      draw(ctx, W, H, p) {
+        const sz = 130, x = W / 2 - sz / 2 - 16, y = H / 2 - sz / 2 + 14;
+        box3d(ctx, x, y, sz, sz, 34, -28);
+        txt(ctx, lab(p, 's', 's'), x + sz / 2, y + sz + 14, C_DIM);
+      }
+    },
+
+    cuboid: {
+      aliases: ['cuboid', 'box', 'rectangular prism'], keys: 'length l, width w, height h',
+      formulas: ['Volume  V = l × w × h', 'Surface area  S = 2(lw + lh + wh)', 'Diagonal  d = √(l² + w² + h²)'],
+      solve(p) {
+        if (p.l == null || p.w == null || p.h == null) return [];
+        const V = p.l * p.w * p.h, S = 2 * (p.l * p.w + p.l * p.h + p.w * p.h), d = Math.hypot(p.l, p.w, p.h);
+        return [
+          { key: 'volume', label: 'Volume', value: V, step: `V = l × w × h = ${fmt(p.l)} × ${fmt(p.w)} × ${fmt(p.h)} = ${fmt(V)}` },
+          { key: 'surface', label: 'Surface area', value: S, step: `S = 2(lw + lh + wh) = ${fmt(S)}` },
+          { key: 'diagonal', label: 'Diagonal', value: d, step: `d = √(l² + w² + h²) = ${fmt(d)}` }
+        ];
+      },
+      draw(ctx, W, H, p) {
+        const fw = 170, fh = 110, x = W / 2 - fw / 2 - 16, y = H / 2 - fh / 2 + 12;
+        box3d(ctx, x, y, fw, fh, 36, -30);
+        txt(ctx, lab(p, 'l', 'l'), x + fw / 2, y + fh + 14, C_DIM);
+        txt(ctx, lab(p, 'h', 'h'), x - 14, y + fh / 2, C_DIM, 'right');
+        txt(ctx, lab(p, 'w', 'w'), x + fw + 22, y - 18, C_DIM, 'left');
+      }
+    },
+
+    sphere: {
+      aliases: ['sphere', 'ball'], keys: 'radius r',
+      formulas: ['Volume  V = 4⁄3 π r³', 'Surface area  S = 4 π r²'],
+      solve(p) {
+        if (p.r == null) return [];
+        const V = 4 / 3 * Math.PI * p.r ** 3, S = 4 * Math.PI * p.r * p.r;
+        return [
+          { key: 'volume', label: 'Volume', value: V, step: `V = 4⁄3 π r³ = 4⁄3 π × ${fmt(p.r)}³ = ${fmt(V)}` },
+          { key: 'surface', label: 'Surface area', value: S, step: `S = 4 π r² = 4 π × ${fmt(p.r)}² = ${fmt(S)}` }
+        ];
+      },
+      draw(ctx, W, H, p) {
+        const cx = W / 2, cy = H / 2, R = 85;
+        ctx.fillStyle = C_FILL; ctx.strokeStyle = C_STROKE; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(cx, cy, R, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = 'rgba(127,209,255,0.6)'; ctx.lineWidth = 1.5;
+        ellipse(ctx, cx, cy, R, R * 0.32); ctx.stroke();          // equator
+        ctx.strokeStyle = C_DIM; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + R, cy); ctx.stroke();
+        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(cx, cy, 3, 0, 2 * Math.PI); ctx.fill();
+        txt(ctx, lab(p, 'r', 'r'), cx + R / 2, cy - 12, C_DIM);
+      }
+    },
+
+    cylinder: {
+      aliases: ['cylinder'], keys: 'radius r, height h',
+      formulas: ['Volume  V = π r² h', 'Surface area  S = 2 π r² + 2 π r h'],
+      solve(p) {
+        if (p.r == null || p.h == null) return [];
+        const V = Math.PI * p.r * p.r * p.h, S = 2 * Math.PI * p.r * p.r + 2 * Math.PI * p.r * p.h;
+        return [
+          { key: 'volume', label: 'Volume', value: V, step: `V = π r² h = π × ${fmt(p.r)}² × ${fmt(p.h)} = ${fmt(V)}` },
+          { key: 'surface', label: 'Surface area', value: S, step: `S = 2π r² + 2π r h = ${fmt(S)}` }
+        ];
+      },
+      draw(ctx, W, H, p) {
+        const cx = W / 2, R = 70, ry = 22, ht = 130, top = H / 2 - ht / 2, bot = H / 2 + ht / 2;
+        ctx.fillStyle = C_FILL; ctx.strokeStyle = C_STROKE; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.rect(cx - R, top, 2 * R, ht); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(cx - R, top); ctx.lineTo(cx - R, bot);
+        ctx.moveTo(cx + R, top); ctx.lineTo(cx + R, bot); ctx.stroke();
+        ellipse(ctx, cx, bot, R, ry); ctx.stroke();              // bottom (back arc faint)
+        ctx.fillStyle = C_FILL; ellipse(ctx, cx, top, R, ry); ctx.fill(); ctx.stroke();  // top
+        ctx.strokeStyle = C_DIM; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(cx, top); ctx.lineTo(cx + R, top); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(cx + R + 14, top); ctx.lineTo(cx + R + 14, bot); ctx.stroke();
+        txt(ctx, lab(p, 'r', 'r'), cx + R / 2, top - 12, C_DIM);
+        txt(ctx, lab(p, 'h', 'h'), cx + R + 22, H / 2, C_DIM, 'left');
+      }
+    },
+
+    cone: {
+      aliases: ['cone'], keys: 'radius r, height h',
+      formulas: ['Volume  V = ⅓ π r² h', 'Slant  l = √(r² + h²)', 'Surface area  S = π r² + π r l'],
+      solve(p) {
+        if (p.r == null || p.h == null) return [];
+        const V = 1 / 3 * Math.PI * p.r * p.r * p.h, l = Math.hypot(p.r, p.h), S = Math.PI * p.r * p.r + Math.PI * p.r * l;
+        return [
+          { key: 'volume', label: 'Volume', value: V, step: `V = ⅓ π r² h = ⅓ π × ${fmt(p.r)}² × ${fmt(p.h)} = ${fmt(V)}` },
+          { key: 'slant', label: 'Slant height', value: l, step: `l = √(r² + h²) = √(${fmt(p.r)}² + ${fmt(p.h)}²) = ${fmt(l)}` },
+          { key: 'surface', label: 'Surface area', value: S, step: `S = π r² + π r l = ${fmt(S)}` }
+        ];
+      },
+      draw(ctx, W, H, p) {
+        const cx = W / 2, R = 75, ry = 24, ht = 140, apexY = H / 2 - ht / 2, baseY = H / 2 + ht / 2;
+        ctx.fillStyle = C_FILL; ctx.strokeStyle = C_STROKE; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(cx - R, baseY); ctx.lineTo(cx, apexY); ctx.lineTo(cx + R, baseY);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ellipse(ctx, cx, baseY, R, ry); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = C_DIM; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+        ctx.beginPath(); ctx.moveTo(cx, apexY); ctx.lineTo(cx, baseY); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = C_DIM; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(cx, baseY); ctx.lineTo(cx + R, baseY); ctx.stroke();
+        txt(ctx, lab(p, 'r', 'r'), cx + R / 2, baseY + 14, C_DIM);
+        txt(ctx, lab(p, 'h', 'h'), cx + 10, H / 2, C_DIM, 'left');
+      }
+    },
+
+    pyramid: {
+      aliases: ['pyramid'], keys: 'base side b, height h  (square base)',
+      formulas: ['Volume  V = ⅓ b² h', 'Slant  l = √((b/2)² + h²)', 'Surface area  S = b² + 2 b l'],
+      solve(p) {
+        if (p.b == null || p.h == null) return [];
+        const V = 1 / 3 * p.b * p.b * p.h, l = Math.hypot(p.b / 2, p.h), S = p.b * p.b + 2 * p.b * l;
+        return [
+          { key: 'volume', label: 'Volume', value: V, step: `V = ⅓ b² h = ⅓ × ${fmt(p.b)}² × ${fmt(p.h)} = ${fmt(V)}` },
+          { key: 'slant', label: 'Slant height', value: l, step: `l = √((b/2)² + h²) = ${fmt(l)}` },
+          { key: 'surface', label: 'Surface area', value: S, step: `S = b² + 2 b l = ${fmt(S)}` }
+        ];
+      },
+      draw(ctx, W, H, p) {
+        const cx = W / 2, bw = 170, dep = 50, ht = 130;
+        const baseY = H / 2 + ht / 2, apexX = cx - dep / 2, apexY = H / 2 - ht / 2;
+        const fl = cx - bw / 2, fr = cx + bw / 2;          // front base corners
+        const bl = fl + dep, br = fr + dep, backY = baseY - dep * 0.7; // back corners
+        ctx.fillStyle = C_FILL; ctx.strokeStyle = C_STROKE; ctx.lineWidth = 2.5;
+        // visible front faces
+        ctx.beginPath();
+        ctx.moveTo(fl, baseY); ctx.lineTo(fr, baseY); ctx.lineTo(apexX, apexY);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(fr, baseY); ctx.lineTo(br, backY); ctx.lineTo(apexX, apexY);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+        // back base edges (faint)
+        ctx.strokeStyle = 'rgba(127,209,255,0.45)'; ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(fl, baseY); ctx.lineTo(bl, backY); ctx.lineTo(br, backY);
+        ctx.moveTo(bl, backY); ctx.lineTo(apexX, apexY); ctx.stroke();
+        ctx.strokeStyle = C_DIM; ctx.lineWidth = 1.5; ctx.setLineDash([5, 4]);
+        ctx.beginPath(); ctx.moveTo(apexX, apexY); ctx.lineTo(apexX, baseY - dep * 0.35); ctx.stroke();
+        ctx.setLineDash([]);
+        txt(ctx, lab(p, 'b', 'b'), cx, baseY + 14, C_DIM);
+        txt(ctx, lab(p, 'h', 'h'), apexX - 12, H / 2, C_DIM, 'right');
+      }
+    }
+  };
+
+  // Recognise a shape name + pull out key=value measurements.
+  function detectGeometry(text) {
+    const s = text.toLowerCase();
+    let shapeKey = null, matchLen = 0;
+    for (const k in GEO) {
+      for (const a of GEO[k].aliases) {
+        const re = new RegExp('\\b' + a.replace(/ /g, '\\s+') + '\\b');
+        if (re.test(s) && a.length > matchLen) { shapeKey = k; matchLen = a.length; }
+      }
+    }
+    if (!shapeKey) return null;
+    const params = {};
+    const re = /\b([a-z]\d?)\s*=\s*(-?\d*\.?\d+)/g;
+    let m;
+    while ((m = re.exec(s))) params[m[1]] = parseFloat(m[2]);
+    // which quantity did they ask for? (optional)
+    const wantMap = { area: 'area', perimeter: 'perimeter', circumference: 'circumference',
+      volume: 'volume', surface: 'surface', diagonal: 'diagonal', diameter: 'diameter',
+      slant: 'slant', side: 'side' };
+    let want = null;
+    for (const w in wantMap) if (s.includes(w)) want = wantMap[w];
+    return { shapeKey, params, want };
+  }
+
+  function drawGeo(shapeKey, params) {
+    const { ctx, w, h } = fitCanvas();
+    ctx.clearRect(0, 0, w, h);
+    GEO[shapeKey].draw(ctx, w, h, params);
+  }
+
+  function showGeometry(g) {
+    const shape = GEO[g.shapeKey];
+    const name = g.shapeKey[0].toUpperCase() + g.shapeKey.slice(1);
+    const results = shape.solve(g.params);
+
+    if (results.length) {
+      // Pick the headline: the asked-for quantity, else the first result.
+      let head = (g.want && results.find(r => r.key === g.want)) || results[0];
+      output.textContent = name + ' — ' + head.label + ' = ' + fmt(head.value);
+      const steps = results.map(r => r.label + ':  ' + r.step);
+      showSteps(steps);
+    } else {
+      // No numbers given (or not enough): show the formulas to fill in.
+      output.textContent = name + ' formulas';
+      const steps = shape.formulas.slice();
+      steps.push('Enter measurements, e.g.  ' + shape.keys);
+      showSteps(steps);
+    }
+    output.className = 'result';
+    lastPlot = { geo: true, shapeKey: g.shapeKey, params: g.params };
+    graphWrap.classList.remove('hidden');
+    glabel.textContent = name + ' — ' + shape.formulas[0];
+    drawGeo(g.shapeKey, g.params);
+  }
+
   function run() {
     const text = input.value.trim();
     if (!text) {
@@ -712,6 +1172,8 @@
         showSteps(null); showPiDiagram();
         return;
       }
+      const geo = detectGeometry(text);
+      if (geo) { showGeometry(geo); return; }
       const { core, rVal } = parseRadius(text);
       // "r = 7" on its own just reports the value.
       if (rVal !== null && core === '') {
@@ -791,6 +1253,7 @@
     if (!lastPlot) return;
     if (lastPlot.pi) drawPiDiagram();
     else if (lastPlot.circle) drawCircleDiagram(lastPlot.mode, lastPlot.r);
+    else if (lastPlot.geo) drawGeo(lastPlot.shapeKey, lastPlot.params);
     else drawGraph(lastPlot.fn, lastPlot.roots);
   });
 </script>
