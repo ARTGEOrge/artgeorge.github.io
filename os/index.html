@@ -97,6 +97,15 @@
   .fitem{display:flex;flex-direction:column;align-items:center;gap:5px;padding:8px;border-radius:9px;cursor:pointer;text-align:center;font-size:12px;}
   .fitem:hover{background:rgba(255,255,255,0.12);}
   .fitem .em{font-size:32px;}
+  .fchoose{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px;text-align:center;}
+  .fchoose h3{font-size:17px;font-weight:600;opacity:.9;}
+  .fcards{display:flex;gap:18px;flex-wrap:wrap;justify-content:center;}
+  .fcard{width:210px;background:rgba(255,255,255,0.06);border:1px solid var(--glassb);border-radius:14px;padding:22px 18px;cursor:pointer;transition:.15s;display:flex;flex-direction:column;align-items:center;gap:8px;}
+  .fcard:hover{background:rgba(255,255,255,0.13);transform:translateY(-3px);}
+  .fcard .em{font-size:44px;}
+  .fcard b{font-size:15px;}
+  .fcard small{opacity:.65;font-size:12px;line-height:1.45;}
+  .files .bar #fpath{opacity:.75;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .calc{display:flex;flex-direction:column;height:100%;background:#0e1320;padding:12px;gap:10px;}
   .calc .disp{background:#0b0f18;border-radius:10px;padding:14px;font-size:26px;text-align:right;min-height:54px;font-family:Consolas,monospace;overflow:hidden;}
   .calc .pad{flex:1;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;}
@@ -455,27 +464,59 @@
               Pictures:{"wallpaper.png":"🖼️ (image)","cat.png":"🐱 (image)"},
               Music:{"song.mp3":"🎵 (audio)"}, Apps:"__apps__"};
   function buildFiles(body){
-    body.innerHTML=`<div class="files"><div class="bar"><button data-a="up">⬅ Up</button><span id="fpath">This PC</span></div><div class="grid" id="fgrid"></div></div>`;
-    let path=[];
+    // Choose a file space: ArtOS Files (independent demo storage) or the real
+    // File Explorer (only available in the ArtOS desktop app).
+    body.innerHTML=`<div class="files">
+      <div class="fchoose" id="fchoose">
+        <h3>Open which file space?</h3>
+        <div class="fcards">
+          <div class="fcard" data-go="artos">
+            <span class="em">📦</span><b>ArtOS Files</b>
+            <small>An independent file space inside ArtOS, separate from your PC's File Explorer.</small>
+          </div>
+          <div class="fcard" data-go="real">
+            <span class="em">🖥️</span><b>File Explorer</b>
+            <small>Browse the real files on this PC — available in the ArtOS desktop app.</small>
+          </div>
+        </div>
+      </div>
+      <div class="files" id="fbrowse" style="display:none;flex:1">
+        <div class="bar">
+          <button data-a="switch" title="Choose a different file space">⤴ Switch</button>
+          <button data-a="up">⬅ Up</button>
+          <button data-a="home">🏠 Home</button>
+          <span id="fpath"></span>
+        </div>
+        <div class="grid" id="fgrid"></div>
+      </div>
+    </div>`;
+    const chooser=body.querySelector("#fchoose"), browse=body.querySelector("#fbrowse");
     const grid=body.querySelector("#fgrid"), pl=body.querySelector("#fpath");
+    let path=[];
     function node(){ let n=FS; for(const p of path) n=n[p]; return n; }
-    function render(){
-      pl.textContent="This PC"+(path.length?" › "+path.join(" › "):"");
-      grid.innerHTML="";
-      let n=node();
-      if(n==="__apps__"){ DESKTOP.forEach(a=>addItem(APPS[a].icon, APPS[a].name, ()=>AprtOpen(a))); return; }
-      for(const k in n){
-        const v=n[k]; const isDir=(typeof v==="object")|| v==="__apps__";
-        addItem(isDir?"📁":"📄", k, ()=> isDir? (path.push(k),render()) : openFile(k,v));
-      }
-    }
     function addItem(em,label,onOpen){ const d=document.createElement("div"); d.className="fitem";
       d.innerHTML=`<span class="em">${em}</span><span>${escapeHtml(label)}</span>`; d.ondblclick=onOpen; grid.appendChild(d); }
     function openFile(name,content){ if(name.endsWith(".txt")){ const id=AprtOpen("notepad");
         setTimeout(()=>{const W=windows[id]; if(W){W.el.querySelector("textarea").value=content; W.el.querySelector("#npname").textContent=name;}},60);
       } else alert(name+"\n\n"+content); }
+    function render(){
+      pl.textContent="ArtOS Files"+(path.length?" › "+path.join(" › "):"");
+      grid.innerHTML=""; let n=node();
+      if(n==="__apps__"){ DESKTOP.forEach(a=>addItem(APPS[a].icon, APPS[a].name, ()=>AprtOpen(a))); return; }
+      for(const k in n){ const v=n[k]; const isDir=(typeof v==="object")||v==="__apps__";
+        addItem(isDir?"📁":"📄", k, ()=> isDir?(path.push(k),render()):openFile(k,v)); }
+    }
+    function start(go){
+      chooser.style.display="none"; browse.style.display="";
+      if(go==="real"){ pl.textContent="File Explorer";
+        grid.innerHTML=`<div style="opacity:.6;padding:18px;font-size:13px;line-height:1.6">🖥️ <b>File Explorer</b> opens the real files on this PC.<br>It's available when ArtOS runs as the <b>desktop app</b>; on the web, only <b>ArtOS Files</b> can be browsed.</div>`;
+        return; }
+      path=[]; render();
+    }
+    chooser.querySelectorAll(".fcard").forEach(c=> c.onclick=()=>start(c.dataset.go));
+    body.querySelector('[data-a="switch"]').onclick=()=>{ browse.style.display="none"; chooser.style.display=""; };
     body.querySelector('[data-a="up"]').onclick=()=>{ if(path.length){path.pop();render();} };
-    render();
+    body.querySelector('[data-a="home"]').onclick=()=>{ path=[]; render(); };
   }
 
   // --- Calculator
