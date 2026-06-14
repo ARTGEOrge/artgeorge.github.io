@@ -431,76 +431,83 @@
       transform: translateY(-1px);
     }
 
+    /* ChatGPT (Mac app) style composer */
     #input-area {
-      padding: 16px 22px 18px;
-      background: rgba(0, 22, 44, 0.7);
-      backdrop-filter: blur(14px);
+      padding: 14px 22px 22px;
+      background: transparent;
       display: flex;
-      gap: 12px;
-      align-items: flex-end;
-      border-top: 1px solid var(--border);
+      justify-content: center;
       position: relative;
     }
-    #input-area::before {
-      content: '';
-      position: absolute; left: 0; right: 0; top: 0; height: 1px;
-      background: var(--rainbow);
-      background-size: 200% 100%;
-      animation: rainbow-slide 6s linear infinite;
-      opacity: 0.6;
+
+    #composer {
+      width: 100%;
+      max-width: 760px;
+      display: flex;
+      align-items: flex-end;
+      gap: 6px;
+      background: #303030;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 26px;
+      padding: 7px 7px 7px 8px;
+      box-shadow: 0 12px 34px -12px rgba(0, 0, 0, 0.65);
+      transition: border-color 0.2s, box-shadow 0.2s;
     }
+    #composer:focus-within {
+      border-color: rgba(255, 255, 255, 0.24);
+      box-shadow: 0 14px 40px -10px rgba(0, 0, 0, 0.75);
+    }
+
+    #attach-btn {
+      flex-shrink: 0;
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      border: none;
+      background: transparent;
+      color: #c5c9cd;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s, color 0.15s;
+    }
+    #attach-btn:hover { background: rgba(255, 255, 255, 0.09); color: #fff; }
+    #attach-btn svg { width: 20px; height: 20px; }
 
     #user-input {
       flex: 1;
-      background: rgba(0, 16, 32, 0.8);
-      border: 1px solid var(--border-strong);
-      border-radius: 14px;
-      padding: 13px 18px;
-      color: var(--text-primary);
-      font-size: 0.96rem;
+      background: transparent;
+      border: none;
+      padding: 8px 4px;
+      color: #ececec;
+      font-size: 1rem;
+      line-height: 1.5;
       resize: none;
-      max-height: 150px;
+      max-height: 200px;
       outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
       font-family: inherit;
     }
-    #user-input:focus {
-      border-color: var(--hawks-green);
-      box-shadow: 0 0 0 3px rgba(105, 190, 40, 0.22), 0 0 28px -6px rgba(105, 190, 40, 0.6);
-      background: rgba(0, 16, 32, 0.95);
-    }
-    #user-input::placeholder { color: #6e7780; }
-    #user-input:disabled { opacity: 0.5; }
+    #user-input::placeholder { color: #8e9296; }
+    #user-input:disabled { opacity: 0.55; }
 
     #send-btn {
-      background: var(--user-grad);
-      background-size: 200% 200%;
-      animation: rainbow-slide 6s linear infinite;
+      flex-shrink: 0;
+      width: 36px; height: 36px;
+      border-radius: 50%;
       border: none;
-      border-radius: 14px;
-      width: 52px; height: 52px;
+      background: #ffffff;
       cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      transition: transform 0.2s, box-shadow 0.2s;
-      flex-shrink: 0;
-      box-shadow: 0 6px 24px -4px rgba(105, 190, 40, 0.6);
-      position: relative;
+      transition: background 0.15s, opacity 0.15s, transform 0.1s;
     }
-    #send-btn:hover:not(:disabled) {
-      transform: translateY(-2px);
-      box-shadow: 0 10px 32px -2px rgba(105, 190, 40, 0.85);
-    }
-    #send-btn:active:not(:disabled) { transform: translateY(0) scale(0.94); }
+    #send-btn:hover:not(:disabled) { background: #e3e3e3; }
+    #send-btn:active:not(:disabled) { transform: scale(0.92); }
     #send-btn:disabled {
-      background: #001428;
-      animation: none;
+      background: rgba(255, 255, 255, 0.18);
       cursor: not-allowed;
-      box-shadow: none;
     }
-    #send-btn svg { width: 22px; height: 22px; fill: white; transition: transform 0.2s; }
-    #send-btn:hover:not(:disabled) svg { transform: translate(3px, -3px); }
-    #send-btn.stop { background: #7f1d1d; animation: none; }
-    #send-btn.stop svg { fill: #fecaca; }
+    #send-btn svg { width: 20px; height: 20px; color: #1a1a1a; fill: currentColor; transition: color 0.15s; }
+    #send-btn:disabled svg { color: rgba(255, 255, 255, 0.45); }
+    #send-btn.stop { background: #ffffff; }
+    #send-btn.stop svg { color: #1a1a1a; }
     .stop-icon { display: none; }
     #send-btn.stop .send-icon { display: none; }
     #send-btn.stop .stop-icon { display: block; }
@@ -578,16 +585,21 @@
   </div>
 
   <div id="input-area">
-    <textarea
-      id="user-input"
-      rows="1"
-      placeholder="Loading model… one moment"
-      disabled
-    ></textarea>
-    <button id="send-btn" disabled title="Send">
-      <svg class="send-icon" viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
-      <svg class="stop-icon" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-    </button>
+    <div id="composer">
+      <button id="attach-btn" type="button" title="Attach" onclick="document.getElementById('user-input').focus()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <textarea
+        id="user-input"
+        rows="1"
+        placeholder="Loading model… one moment"
+        disabled
+      ></textarea>
+      <button id="send-btn" disabled title="Send">
+        <svg class="send-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+        <svg class="stop-icon" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+      </button>
+    </div>
   </div>
 </div>
 
