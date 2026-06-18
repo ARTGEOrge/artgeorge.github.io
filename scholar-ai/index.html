@@ -93,7 +93,7 @@ a:hover{ color:var(--blue-d); text-decoration:underline; }
 <header class="masthead">
   <div class="masthead-inner">
     <a class="home-link" href="/">← ARTGEOrge</a>
-    <div class="brand">Scholar <span class="dot">AI</span> <small id="srcLabel">Britannica · Recent · World News</small></div>
+    <div class="brand">Scholar <span class="dot">AI</span> <small id="srcLabel">Britannica · News · Steve Jobs</small></div>
     <div class="masthead-spacer"></div>
     <button class="train-btn" id="trainBtn">⟳ Retrain</button>
   </div>
@@ -111,7 +111,7 @@ a:hover{ color:var(--blue-d); text-decoration:underline; }
   <main class="chat">
     <div class="chat-head">
       <h1>Ask the Scholar</h1>
-      <p id="chatSub">An AI trained on the 1911 Encyclopædia Britannica, today’s most recent articles, and recent world &amp; business news. It answers from what it has read — and cites every source.</p>
+      <p id="chatSub">An AI trained on the 1911 Encyclopædia Britannica, today’s most recent articles, recent world &amp; business news, and the biography <em>Steve Jobs</em> by Barbara Sheen. It answers from what it has read — and cites every source.</p>
     </div>
     <div class="stream" id="stream"></div>
     <div class="suggest" id="suggest"></div>
@@ -229,18 +229,21 @@ function indexDoc(doc){
 
 function makeDoc(title, extract, desc, source, opts){
   opts = opts || {};
-  // Britannica docs link to the 1911 EB page on Wikisource; Wikinews docs to Wikinews.
+  // Britannica docs link to Wikisource; Wikinews to Wikinews; book docs have no external link.
   const isEB = !!opts.eb;
   const isWN = !!opts.wikinews;
+  const isBook = !!opts.book;
   const displayTitle = opts.headword || title;
   const slug = encodeURIComponent((title||'').replace(/ /g,'_'));
   const url = isEB ? 'https://en.wikisource.org/wiki/' + slug
             : isWN ? 'https://en.wikinews.org/wiki/' + slug
+            : isBook ? ''
             : '/encyclopedia/#article/' + slug;
   return {
-    title: displayTitle, fullTitle: title,
+    title: displayTitle, fullTitle: opts.key || title,
     extract: extract||'', desc: desc||'', url,
-    source: source||'recent', eb: isEB, wikinews: isWN
+    source: source||'recent', eb: isEB, wikinews: isWN, book: isBook,
+    cite: opts.cite || ''
   };
 }
 
@@ -302,7 +305,7 @@ function answer(query){
   if(/^(hi|hello|hey|yo|sup|howdy)\b/.test(low))
     return Promise.resolve({ text:`<p>Hello! I’m a self-taught AI trained on both the <b>1911 Encyclopædia Britannica</b> and <b>today’s most recent articles</b>. I’ve read <b>${KB.length}</b> articles so far — ask me about any of them, or anything at all, and I’ll go learn it.</p>` });
   if(/what (can|do) you|who are you|how do you work|what did you learn/.test(low))
-    return Promise.resolve({ text:`<p>I’m trained on several libraries at once: the <b>1911 Encyclopædia Britannica</b> (the famous 11th edition, public domain), the <b>recent articles</b> of the Encyclopædia (today’s featured article, what’s in the news, the most-read pages), and recent <b>world &amp; business news</b> from Wikinews.</p><p>When you ask something, I rank everything I’ve read for relevance, pull out the passages that answer you, and cite the source. If I haven’t read it yet, I look it up and keep whichever answers best — then <b>add it to my memory</b>.</p>` });
+    return Promise.resolve({ text:`<p>I’m trained on several libraries at once: the <b>1911 Encyclopædia Britannica</b> (the famous 11th edition, public domain), the <b>recent articles</b> of the Encyclopædia (today’s featured article, what’s in the news, the most-read pages), recent <b>world &amp; business news</b> from Wikinews, and the full biography <b><em>Steve Jobs</em></b> by Barbara Sheen.</p><p>When you ask something, I rank everything I’ve read for relevance, pull out the passages that answer you, and cite the source. If I haven’t read it yet, I look it up and keep whichever answers best — then <b>add it to my memory</b>.</p>` });
 
   if(!qt.length)
     return Promise.resolve({ text:`<p>Could you rephrase that with a few more words? I match questions against what I’ve read.</p>` });
@@ -361,11 +364,15 @@ async function handleAsk(query){
   let html = res.text;
   if(res.doc){
     const conf = res.conf ? `<span class="confidence">· ${res.conf} confidence</span>` : '';
-    const where = res.doc.eb ? 'in the 1911 Encyclopædia Britannica'
-                : res.doc.wikinews ? 'on Wikinews'
-                : 'in the Encyclopædia';
-    const tgt = (res.doc.eb || res.doc.wikinews) ? ' target="_blank" rel="noopener"' : '';
-    html += `<div class="cite">Source: <a href="${res.doc.url}"${tgt}>${esc(res.doc.title)}</a> ${where}${conf}</div>`;
+    if(res.doc.book){
+      html += `<div class="cite">Source: <b>${esc(res.doc.cite)}</b>${conf}</div>`;
+    } else {
+      const where = res.doc.eb ? 'in the 1911 Encyclopædia Britannica'
+                  : res.doc.wikinews ? 'on Wikinews'
+                  : 'in the Encyclopædia';
+      const tgt = (res.doc.eb || res.doc.wikinews) ? ' target="_blank" rel="noopener"' : '';
+      html += `<div class="cite">Source: <a href="${res.doc.url}"${tgt}>${esc(res.doc.title)}</a> ${where}${conf}</div>`;
+    }
   }
   addMsg('ai', html);
 }
@@ -388,9 +395,10 @@ const kbStat = document.getElementById('kbStat');
 function renderKB(){
   const eb = KB.filter(d=>d.source==='eb').length;
   const news = KB.filter(d=>d.source==='wikinews').length;
-  const recent = KB.filter(d=>d.source!=='live' && d.source!=='eb' && d.source!=='wikinews').length;
+  const book = KB.filter(d=>d.source==='book').length;
+  const recent = KB.filter(d=>d.source!=='live' && d.source!=='eb' && d.source!=='wikinews' && d.source!=='book').length;
   const live = KB.filter(d=>d.source==='live').length;
-  kbStat.innerHTML = `<b>${KB.length}</b> read · ${eb} Britannica · ${recent} recent` + (news?` · ${news} news`:'') + (live?` · ${live} live`:'');
+  kbStat.innerHTML = `<b>${KB.length}</b> read · ${eb} Britannica · ${recent} recent` + (news?` · ${news} news`:'') + (book?` · ${book} book`:'') + (live?` · ${live} live`:'');
   kbList.innerHTML = '';
   for(const d of KB){
     const el = document.createElement('div');
@@ -398,6 +406,7 @@ function renderKB(){
     const tag = d.source==='live' ? '<span class="tag live">learned live</span>'
               : d.source==='eb' ? '<span class="tag">Britannica 1911</span>'
               : d.source==='wikinews' ? '<span class="tag">world &amp; business</span>'
+              : d.source==='book' ? '<span class="tag">Steve Jobs (book)</span>'
               : d.source==='news' ? '<span class="tag">in the news</span>'
               : d.source==='featured' ? '<span class="tag">featured</span>'
               : '<span class="tag">most read</span>';
@@ -475,11 +484,24 @@ async function trainRecent(){
   }
 }
 
+// Bundled book: the Steve Jobs biography (Barbara Sheen), pre-chunked into steve-jobs.json.
+const BOOK_META = { title:'Steve Jobs', author:'Barbara Sheen' };
+async function trainBook(){
+  try{
+    const chunks = await jget('steve-jobs.json');
+    for(const c of chunks){
+      const key = `book:${c.chapter}:${c.part}`;
+      indexDoc(makeDoc(c.chapter, c.text, `${BOOK_META.title} — part ${c.part}/${c.parts}`, 'book',
+        { book:true, key, cite:`${BOOK_META.title} by ${BOOK_META.author} — ${c.chapter}` }));
+    }
+  }catch(e){}
+}
+
 async function train(){
   trainBtn.disabled = true;
   KB.length = 0; seenTitles.clear(); docFreq = new Map();
-  // Train on BOTH libraries at once into one shared knowledge base.
-  await Promise.all([ trainBritannica(), trainRecent() ]);
+  // Train on all libraries at once into one shared knowledge base.
+  await Promise.all([ trainBritannica(), trainRecent(), trainBook() ]);
   renderKB(); renderSuggest();
   trainBtn.disabled = false;
   return KB.length;
@@ -488,13 +510,14 @@ async function train(){
 /* =================== Boot =================== */
 async function boot(){
   stream.innerHTML = '';
-  addMsg('ai', `<div class="boot">📚 <b>Training…</b> reading the 1911 Encyclopædia Britannica, today’s latest articles, and recent world &amp; business news. One moment.</div>`);
+  addMsg('ai', `<div class="boot">📚 <b>Training…</b> reading the 1911 Encyclopædia Britannica, today’s latest articles, recent world &amp; business news, and the <em>Steve Jobs</em> biography. One moment.</div>`);
   const n = await train();
   const eb = KB.filter(d=>d.source==='eb').length;
   const news = KB.filter(d=>d.source==='wikinews').length;
-  const recent = n - eb - news;
+  const book = KB.filter(d=>d.source==='book').length;
+  const recent = n - eb - news - book;
   stream.innerHTML = '';
-  addMsg('ai', `<p>I just read <b>${n}</b> articles — <b>${eb}</b> from the <b>1911 Encyclopædia Britannica</b>, <b>${recent}</b> of today’s most recent articles, and <b>${news}</b> recent <b>world &amp; business news</b> stories.</p><p>Ask me about any of them, or anything else. I’ll answer from whichever source fits best and cite it — and if I haven’t read it yet, I’ll go learn it. 👇</p>`);
+  addMsg('ai', `<p>I just read <b>${n}</b> passages — <b>${eb}</b> from the <b>1911 Encyclopædia Britannica</b>, <b>${recent}</b> of today’s most recent articles, <b>${news}</b> <b>world &amp; business news</b> stories, and <b>${book}</b> from the biography <b><em>Steve Jobs</em></b> by Barbara Sheen.</p><p>Ask me about any of them, or anything else. I’ll answer from whichever source fits best and cite it — and if I haven’t read it yet, I’ll go learn it. 👇</p>`);
 }
 boot();
 
