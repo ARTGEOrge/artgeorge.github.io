@@ -1,0 +1,6 @@
+# Scholar AI — kept local to this laptop only, not published to the public site
+scholar-ai/
+.github/workflows/wsj.yml
+
+# Local tooling
+.claude/
