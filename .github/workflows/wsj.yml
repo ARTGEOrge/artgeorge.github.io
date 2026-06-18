@@ -1,0 +1,36 @@
+name: Refresh WSJ headlines
+
+# Keeps scholar-ai/wsj.json fresh for Scholar AI, server-side (no CORS proxy needed).
+on:
+  schedule:
+    - cron: '17 */4 * * *'   # every 4 hours
+  workflow_dispatch:          # also runnable on demand from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wsj-refresh
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build wsj.json from WSJ public RSS
+        run: node scholar-ai/build-wsj.mjs
+      - name: Commit if changed
+        run: |
+          if [ -n "$(git status --porcelain scholar-ai/wsj.json)" ]; then
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add scholar-ai/wsj.json
+            git commit -m "chore: refresh WSJ headlines"
+            git push
+          else
+            echo "No change in wsj.json"
+          fi

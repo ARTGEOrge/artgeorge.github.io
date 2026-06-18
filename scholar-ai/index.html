@@ -493,13 +493,12 @@ async function trainRecent(){
   }
 }
 
-// Wall Street Journal headlines via a small Cloudflare Worker (see scholar-ai/wsj-worker.js).
-// Paste your deployed Worker URL here to switch WSJ on (leave '' to disable cleanly).
-const WSJ_WORKER = '';
+// Wall Street Journal headlines. A scheduled GitHub Action (.github/workflows/wsj.yml)
+// fetches WSJ's public RSS server-side and writes scholar-ai/wsj.json, which we read
+// same-origin here — no CORS proxy and no third-party service required.
 async function trainWSJ(){
-  if(!WSJ_WORKER) return;
   try{
-    const items = await jget(WSJ_WORKER);
+    const items = await jget('wsj.json');
     let i = 0;
     for(const a of (items||[])){
       if(!a.title || !a.summary) continue;
