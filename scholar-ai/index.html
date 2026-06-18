@@ -93,7 +93,7 @@ a:hover{ color:var(--blue-d); text-decoration:underline; }
 <header class="masthead">
   <div class="masthead-inner">
     <a class="home-link" href="/">← ARTGEOrge</a>
-    <div class="brand">Scholar <span class="dot">AI</span> <small id="srcLabel">Britannica 1911 + Recent</small></div>
+    <div class="brand">Scholar <span class="dot">AI</span> <small id="srcLabel">Britannica · Recent · World News</small></div>
     <div class="masthead-spacer"></div>
     <button class="train-btn" id="trainBtn">⟳ Retrain</button>
   </div>
@@ -111,7 +111,7 @@ a:hover{ color:var(--blue-d); text-decoration:underline; }
   <main class="chat">
     <div class="chat-head">
       <h1>Ask the Scholar</h1>
-      <p id="chatSub">An AI trained on the 1911 Encyclopædia Britannica and today’s most recent articles. It answers from what it has read — and cites every source.</p>
+      <p id="chatSub">An AI trained on the 1911 Encyclopædia Britannica, today’s most recent articles, and recent world &amp; business news. It answers from what it has read — and cites every source.</p>
     </div>
     <div class="stream" id="stream"></div>
     <div class="suggest" id="suggest"></div>
@@ -127,6 +127,7 @@ a:hover{ color:var(--blue-d); text-decoration:underline; }
 const WP_API  = 'https://en.wikipedia.org/w/api.php';
 const WP_REST = 'https://en.wikipedia.org/api/rest_v1';
 const WS_API  = 'https://en.wikisource.org/w/api.php';
+const WN_API  = 'https://en.wikinews.org/w/api.php';
 const EB_PREFIX = '1911 Encyclopædia Britannica/';
 
 async function jget(url){ const r = await fetch(url); if(!r.ok) throw new Error('HTTP '+r.status); return r.json(); }
@@ -145,6 +146,21 @@ async function featuredFeed(date){
   const m = String(date.getMonth()+1).padStart(2,'0');
   const d = String(date.getDate()).padStart(2,'0');
   return jget(`${WP_REST}/feed/featured/${y}/${m}/${d}`);
+}
+
+/* ---- Wikinews (recent world / business / finance news) ---- */
+async function wikinewsCategory(category, limit=10){
+  const d = await jget(apiUrl(WN_API, {
+    action:'query', prop:'extracts', explaintext:'1', exintro:'1', exsentences:'3',
+    generator:'categorymembers', gcmtitle:'Category:'+category, gcmsort:'timestamp',
+    gcmdir:'desc', gcmlimit:String(limit), gcmnamespace:'0'
+  }));
+  const pages = Object.values((d.query && d.query.pages) || {});
+  return pages.map(p=>{
+    let ex = (p.extract||'').trim()
+      .replace(/^[A-Za-z]+,\s+[A-Za-z]+\s+\d{1,2},\s+\d{4}\s*/, '').trim(); // drop dateline
+    return { title:p.title, extract:ex };
+  }).filter(a => a.extract.length > 50);
 }
 
 /* ---- 1911 Encyclopædia Britannica (via Wikisource) ---- */
@@ -213,16 +229,18 @@ function indexDoc(doc){
 
 function makeDoc(title, extract, desc, source, opts){
   opts = opts || {};
-  // Britannica docs display the headword and link to the 1911 EB page on Wikisource.
+  // Britannica docs link to the 1911 EB page on Wikisource; Wikinews docs to Wikinews.
   const isEB = !!opts.eb;
+  const isWN = !!opts.wikinews;
   const displayTitle = opts.headword || title;
-  const url = isEB
-    ? 'https://en.wikisource.org/wiki/' + encodeURIComponent((title||'').replace(/ /g,'_'))
-    : '/encyclopedia/#article/' + encodeURIComponent((title||'').replace(/ /g,'_'));
+  const slug = encodeURIComponent((title||'').replace(/ /g,'_'));
+  const url = isEB ? 'https://en.wikisource.org/wiki/' + slug
+            : isWN ? 'https://en.wikinews.org/wiki/' + slug
+            : '/encyclopedia/#article/' + slug;
   return {
     title: displayTitle, fullTitle: title,
     extract: extract||'', desc: desc||'', url,
-    source: source||'recent', eb: isEB
+    source: source||'recent', eb: isEB, wikinews: isWN
   };
 }
 
@@ -284,7 +302,7 @@ function answer(query){
   if(/^(hi|hello|hey|yo|sup|howdy)\b/.test(low))
     return Promise.resolve({ text:`<p>Hello! I’m a self-taught AI trained on both the <b>1911 Encyclopædia Britannica</b> and <b>today’s most recent articles</b>. I’ve read <b>${KB.length}</b> articles so far — ask me about any of them, or anything at all, and I’ll go learn it.</p>` });
   if(/what (can|do) you|who are you|how do you work|what did you learn/.test(low))
-    return Promise.resolve({ text:`<p>I’m trained on two libraries at once: the <b>1911 Encyclopædia Britannica</b> (the famous 11th edition, public domain) and the <b>recent articles</b> of the Encyclopædia — today’s featured article, what’s in the news, and the most-read pages.</p><p>When you ask something, I rank everything I’ve read across both for relevance, pull out the passages that answer you, and cite the source. If I haven’t read it yet, I look it up in <b>both</b> and keep whichever answers best — then <b>add it to my memory</b>.</p>` });
+    return Promise.resolve({ text:`<p>I’m trained on several libraries at once: the <b>1911 Encyclopædia Britannica</b> (the famous 11th edition, public domain), the <b>recent articles</b> of the Encyclopædia (today’s featured article, what’s in the news, the most-read pages), and recent <b>world &amp; business news</b> from Wikinews.</p><p>When you ask something, I rank everything I’ve read for relevance, pull out the passages that answer you, and cite the source. If I haven’t read it yet, I look it up and keep whichever answers best — then <b>add it to my memory</b>.</p>` });
 
   if(!qt.length)
     return Promise.resolve({ text:`<p>Could you rephrase that with a few more words? I match questions against what I’ve read.</p>` });
@@ -343,8 +361,10 @@ async function handleAsk(query){
   let html = res.text;
   if(res.doc){
     const conf = res.conf ? `<span class="confidence">· ${res.conf} confidence</span>` : '';
-    const where = res.doc.eb ? 'in the 1911 Encyclopædia Britannica' : 'in the Encyclopædia';
-    const tgt = res.doc.eb ? ' target="_blank" rel="noopener"' : '';
+    const where = res.doc.eb ? 'in the 1911 Encyclopædia Britannica'
+                : res.doc.wikinews ? 'on Wikinews'
+                : 'in the Encyclopædia';
+    const tgt = (res.doc.eb || res.doc.wikinews) ? ' target="_blank" rel="noopener"' : '';
     html += `<div class="cite">Source: <a href="${res.doc.url}"${tgt}>${esc(res.doc.title)}</a> ${where}${conf}</div>`;
   }
   addMsg('ai', html);
@@ -367,15 +387,17 @@ const kbList = document.getElementById('kbList');
 const kbStat = document.getElementById('kbStat');
 function renderKB(){
   const eb = KB.filter(d=>d.source==='eb').length;
-  const recent = KB.filter(d=>d.source!=='live' && d.source!=='eb').length;
+  const news = KB.filter(d=>d.source==='wikinews').length;
+  const recent = KB.filter(d=>d.source!=='live' && d.source!=='eb' && d.source!=='wikinews').length;
   const live = KB.filter(d=>d.source==='live').length;
-  kbStat.innerHTML = `<b>${KB.length}</b> articles read · ${eb} Britannica · ${recent} recent` + (live?` · ${live} live`:'');
+  kbStat.innerHTML = `<b>${KB.length}</b> read · ${eb} Britannica · ${recent} recent` + (news?` · ${news} news`:'') + (live?` · ${live} live`:'');
   kbList.innerHTML = '';
   for(const d of KB){
     const el = document.createElement('div');
     el.className='kb-item';
     const tag = d.source==='live' ? '<span class="tag live">learned live</span>'
               : d.source==='eb' ? '<span class="tag">Britannica 1911</span>'
+              : d.source==='wikinews' ? '<span class="tag">world &amp; business</span>'
               : d.source==='news' ? '<span class="tag">in the news</span>'
               : d.source==='featured' ? '<span class="tag">featured</span>'
               : '<span class="tag">most read</span>';
@@ -436,6 +458,16 @@ async function trainRecent(){
       for(const a of feed.mostread.articles.slice(0,25))
         indexDoc(makeDoc(a.normalizedtitle || a.title, a.extract, a.description, 'recent'));
   }
+  // Add recent world / business / finance news from Wikinews.
+  try{
+    const [biz, world] = await Promise.all([
+      wikinewsCategory('Economy_and_business', 12).catch(()=>[]),
+      wikinewsCategory('Politics_and_conflicts', 8).catch(()=>[])
+    ]);
+    for(const a of [...biz, ...world])
+      indexDoc(makeDoc(a.title, a.extract, '', 'wikinews', { wikinews:true }));
+  }catch(e){}
+
   if(!KB.length){
     for(const t of ['Artificial intelligence','History','Science','Earth','Music']){
       try{ const s = await summary(t); if(s&&s.extract) indexDoc(makeDoc(s.title, s.extract, s.description, 'recent')); }catch(e){}
@@ -456,12 +488,13 @@ async function train(){
 /* =================== Boot =================== */
 async function boot(){
   stream.innerHTML = '';
-  addMsg('ai', `<div class="boot">📚 <b>Training…</b> reading the 1911 Encyclopædia Britannica and today’s latest articles. One moment.</div>`);
+  addMsg('ai', `<div class="boot">📚 <b>Training…</b> reading the 1911 Encyclopædia Britannica, today’s latest articles, and recent world &amp; business news. One moment.</div>`);
   const n = await train();
   const eb = KB.filter(d=>d.source==='eb').length;
-  const recent = n - eb;
+  const news = KB.filter(d=>d.source==='wikinews').length;
+  const recent = n - eb - news;
   stream.innerHTML = '';
-  addMsg('ai', `<p>I just read <b>${n}</b> articles — <b>${eb}</b> from the <b>1911 Encyclopædia Britannica</b> and <b>${recent}</b> of today’s most recent articles.</p><p>Ask me about any of them, or anything else. I’ll answer from whichever source fits best and cite it — and if I haven’t read it yet, I’ll go learn it. 👇</p>`);
+  addMsg('ai', `<p>I just read <b>${n}</b> articles — <b>${eb}</b> from the <b>1911 Encyclopædia Britannica</b>, <b>${recent}</b> of today’s most recent articles, and <b>${news}</b> recent <b>world &amp; business news</b> stories.</p><p>Ask me about any of them, or anything else. I’ll answer from whichever source fits best and cite it — and if I haven’t read it yet, I’ll go learn it. 👇</p>`);
 }
 boot();
 
