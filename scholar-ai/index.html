@@ -229,20 +229,22 @@ function indexDoc(doc){
 
 function makeDoc(title, extract, desc, source, opts){
   opts = opts || {};
-  // Britannica docs link to Wikisource; Wikinews to Wikinews; book docs have no external link.
+  // Britannica → Wikisource; Wikinews → Wikinews; WSJ → article link; book → no link.
   const isEB = !!opts.eb;
   const isWN = !!opts.wikinews;
   const isBook = !!opts.book;
+  const isWSJ = !!opts.wsj;
   const displayTitle = opts.headword || title;
   const slug = encodeURIComponent((title||'').replace(/ /g,'_'));
   const url = isEB ? 'https://en.wikisource.org/wiki/' + slug
             : isWN ? 'https://en.wikinews.org/wiki/' + slug
+            : isWSJ ? (opts.link || '')
             : isBook ? ''
             : '/encyclopedia/#article/' + slug;
   return {
     title: displayTitle, fullTitle: opts.key || title,
     extract: extract||'', desc: desc||'', url,
-    source: source||'recent', eb: isEB, wikinews: isWN, book: isBook,
+    source: source||'recent', eb: isEB, wikinews: isWN, book: isBook, wsj: isWSJ,
     cite: opts.cite || ''
   };
 }
@@ -366,6 +368,9 @@ async function handleAsk(query){
     const conf = res.conf ? `<span class="confidence">· ${res.conf} confidence</span>` : '';
     if(res.doc.book){
       html += `<div class="cite">Source: <b>${esc(res.doc.cite)}</b>${conf}</div>`;
+    } else if(res.doc.wsj){
+      const link = res.doc.url ? `<a href="${res.doc.url}" target="_blank" rel="noopener">${esc(res.doc.title)}</a>` : `<b>${esc(res.doc.title)}</b>`;
+      html += `<div class="cite">Source: ${link} — <b>The Wall Street Journal</b>${conf}</div>`;
     } else {
       const where = res.doc.eb ? 'in the 1911 Encyclopædia Britannica'
                   : res.doc.wikinews ? 'on Wikinews'
@@ -395,11 +400,12 @@ const kbStat = document.getElementById('kbStat');
 function renderKB(){
   const eb = KB.filter(d=>d.source==='eb').length;
   const news = KB.filter(d=>d.source==='wikinews').length;
+  const wsj = KB.filter(d=>d.source==='wsj').length;
   const book = KB.filter(d=>d.source==='book').length;
   const hist = KB.filter(d=>d.source==='history').length;
-  const recent = KB.filter(d=>!['live','eb','wikinews','book','history'].includes(d.source)).length;
+  const recent = KB.filter(d=>!['live','eb','wikinews','wsj','book','history'].includes(d.source)).length;
   const live = KB.filter(d=>d.source==='live').length;
-  kbStat.innerHTML = `<b>${KB.length}</b> read · ${eb} Britannica · ${hist} history · ${recent} recent` + (news?` · ${news} news`:'') + (book?` · ${book} book`:'') + (live?` · ${live} live`:'');
+  kbStat.innerHTML = `<b>${KB.length}</b> read · ${eb} Britannica · ${hist} history · ${recent} recent` + (news?` · ${news} news`:'') + (wsj?` · ${wsj} WSJ`:'') + (book?` · ${book} book`:'') + (live?` · ${live} live`:'');
   kbList.innerHTML = '';
   for(const d of KB){
     const el = document.createElement('div');
@@ -408,6 +414,7 @@ function renderKB(){
               : d.source==='eb' ? '<span class="tag">Britannica 1911</span>'
               : d.source==='wikinews' ? '<span class="tag">world &amp; business</span>'
               : d.source==='book' ? '<span class="tag">Steve Jobs (book)</span>'
+              : d.source==='wsj' ? '<span class="tag">Wall Street Journal</span>'
               : d.source==='history' ? '<span class="tag">history</span>'
               : d.source==='news' ? '<span class="tag">in the news</span>'
               : d.source==='featured' ? '<span class="tag">featured</span>'
@@ -486,6 +493,23 @@ async function trainRecent(){
   }
 }
 
+// Wall Street Journal headlines via a small Cloudflare Worker (see scholar-ai/wsj-worker.js).
+// Paste your deployed Worker URL here to switch WSJ on (leave '' to disable cleanly).
+const WSJ_WORKER = '';
+async function trainWSJ(){
+  if(!WSJ_WORKER) return;
+  try{
+    const items = await jget(WSJ_WORKER);
+    let i = 0;
+    for(const a of (items||[])){
+      if(!a.title || !a.summary) continue;
+      indexDoc(makeDoc(a.title, a.summary, '', 'wsj',
+        { wsj:true, link:a.link, key:'wsj:'+(a.link||a.title)+':'+(i++),
+          cite:'The Wall Street Journal' }));
+    }
+  }catch(e){}
+}
+
 // History articles from the Encyclopædia (same Wikipedia source it is powered by).
 const HISTORY_SEED = ['Ancient Egypt','Ancient Greece','Roman Empire','Byzantine Empire',
   'Middle Ages','Renaissance','Age of Discovery','Ottoman Empire','Mongol Empire','Black Death',
@@ -516,7 +540,7 @@ async function train(){
   trainBtn.disabled = true;
   KB.length = 0; seenTitles.clear(); docFreq = new Map();
   // Train on all libraries at once into one shared knowledge base.
-  await Promise.all([ trainBritannica(), trainRecent(), trainHistory(), trainBook() ]);
+  await Promise.all([ trainBritannica(), trainRecent(), trainHistory(), trainBook(), trainWSJ() ]);
   renderKB(); renderSuggest();
   trainBtn.disabled = false;
   return KB.length;
@@ -529,11 +553,13 @@ async function boot(){
   const n = await train();
   const eb = KB.filter(d=>d.source==='eb').length;
   const news = KB.filter(d=>d.source==='wikinews').length;
+  const wsj = KB.filter(d=>d.source==='wsj').length;
   const book = KB.filter(d=>d.source==='book').length;
   const hist = KB.filter(d=>d.source==='history').length;
-  const recent = n - eb - news - book - hist;
+  const recent = n - eb - news - wsj - book - hist;
+  const wsjBit = wsj ? `, <b>${wsj}</b> <b>Wall Street Journal</b> headlines` : '';
   stream.innerHTML = '';
-  addMsg('ai', `<p>I just read <b>${n}</b> passages — <b>${eb}</b> from the <b>1911 Encyclopædia Britannica</b>, <b>${hist}</b> of the Encyclopædia’s <b>history articles</b>, <b>${recent}</b> of today’s most recent articles, <b>${news}</b> <b>world &amp; business news</b> stories, and <b>${book}</b> from the biography <b><em>Steve Jobs</em></b> by Barbara Sheen.</p><p>Ask me about any of them, or anything else. I’ll answer from whichever source fits best and cite it — and if I haven’t read it yet, I’ll go learn it. 👇</p>`);
+  addMsg('ai', `<p>I just read <b>${n}</b> passages — <b>${eb}</b> from the <b>1911 Encyclopædia Britannica</b>, <b>${hist}</b> of the Encyclopædia’s <b>history articles</b>, <b>${recent}</b> of today’s most recent articles, <b>${news}</b> <b>world &amp; business news</b> stories${wsjBit}, and <b>${book}</b> from the biography <b><em>Steve Jobs</em></b> by Barbara Sheen.</p><p>Ask me about any of them, or anything else. I’ll answer from whichever source fits best and cite it — and if I haven’t read it yet, I’ll go learn it. 👇</p>`);
 }
 boot();
 
