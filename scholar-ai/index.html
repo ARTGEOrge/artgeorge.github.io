@@ -93,7 +93,7 @@ a:hover{ color:var(--blue-d); text-decoration:underline; }
 <header class="masthead">
   <div class="masthead-inner">
     <a class="home-link" href="/">← ARTGEOrge</a>
-    <div class="brand">Scholar <span class="dot">AI</span> <small id="srcLabel">Britannica · News · Steve Jobs</small></div>
+    <div class="brand">Scholar <span class="dot">AI</span> <small id="srcLabel">Britannica · History · News · Steve Jobs</small></div>
     <div class="masthead-spacer"></div>
     <button class="train-btn" id="trainBtn">⟳ Retrain</button>
   </div>
@@ -111,7 +111,7 @@ a:hover{ color:var(--blue-d); text-decoration:underline; }
   <main class="chat">
     <div class="chat-head">
       <h1>Ask the Scholar</h1>
-      <p id="chatSub">An AI trained on the 1911 Encyclopædia Britannica, today’s most recent articles, recent world &amp; business news, and the biography <em>Steve Jobs</em> by Barbara Sheen. It answers from what it has read — and cites every source.</p>
+      <p id="chatSub">An AI trained on the 1911 Encyclopædia Britannica, the Encyclopædia’s history articles, today’s most recent articles, recent world &amp; business news, and the biography <em>Steve Jobs</em> by Barbara Sheen. It answers from what it has read — and cites every source.</p>
     </div>
     <div class="stream" id="stream"></div>
     <div class="suggest" id="suggest"></div>
@@ -305,7 +305,7 @@ function answer(query){
   if(/^(hi|hello|hey|yo|sup|howdy)\b/.test(low))
     return Promise.resolve({ text:`<p>Hello! I’m a self-taught AI trained on both the <b>1911 Encyclopædia Britannica</b> and <b>today’s most recent articles</b>. I’ve read <b>${KB.length}</b> articles so far — ask me about any of them, or anything at all, and I’ll go learn it.</p>` });
   if(/what (can|do) you|who are you|how do you work|what did you learn/.test(low))
-    return Promise.resolve({ text:`<p>I’m trained on several libraries at once: the <b>1911 Encyclopædia Britannica</b> (the famous 11th edition, public domain), the <b>recent articles</b> of the Encyclopædia (today’s featured article, what’s in the news, the most-read pages), recent <b>world &amp; business news</b> from Wikinews, and the full biography <b><em>Steve Jobs</em></b> by Barbara Sheen.</p><p>When you ask something, I rank everything I’ve read for relevance, pull out the passages that answer you, and cite the source. If I haven’t read it yet, I look it up and keep whichever answers best — then <b>add it to my memory</b>.</p>` });
+    return Promise.resolve({ text:`<p>I’m trained on several libraries at once: the <b>1911 Encyclopædia Britannica</b> (the famous 11th edition, public domain), the Encyclopædia’s <b>history articles</b>, its <b>recent articles</b> (today’s featured article, what’s in the news, the most-read pages), recent <b>world &amp; business news</b> from Wikinews, and the full biography <b><em>Steve Jobs</em></b> by Barbara Sheen.</p><p>When you ask something, I rank everything I’ve read for relevance, pull out the passages that answer you, and cite the source. If I haven’t read it yet, I look it up and keep whichever answers best — then <b>add it to my memory</b>.</p>` });
 
   if(!qt.length)
     return Promise.resolve({ text:`<p>Could you rephrase that with a few more words? I match questions against what I’ve read.</p>` });
@@ -396,9 +396,10 @@ function renderKB(){
   const eb = KB.filter(d=>d.source==='eb').length;
   const news = KB.filter(d=>d.source==='wikinews').length;
   const book = KB.filter(d=>d.source==='book').length;
-  const recent = KB.filter(d=>d.source!=='live' && d.source!=='eb' && d.source!=='wikinews' && d.source!=='book').length;
+  const hist = KB.filter(d=>d.source==='history').length;
+  const recent = KB.filter(d=>!['live','eb','wikinews','book','history'].includes(d.source)).length;
   const live = KB.filter(d=>d.source==='live').length;
-  kbStat.innerHTML = `<b>${KB.length}</b> read · ${eb} Britannica · ${recent} recent` + (news?` · ${news} news`:'') + (book?` · ${book} book`:'') + (live?` · ${live} live`:'');
+  kbStat.innerHTML = `<b>${KB.length}</b> read · ${eb} Britannica · ${hist} history · ${recent} recent` + (news?` · ${news} news`:'') + (book?` · ${book} book`:'') + (live?` · ${live} live`:'');
   kbList.innerHTML = '';
   for(const d of KB){
     const el = document.createElement('div');
@@ -407,6 +408,7 @@ function renderKB(){
               : d.source==='eb' ? '<span class="tag">Britannica 1911</span>'
               : d.source==='wikinews' ? '<span class="tag">world &amp; business</span>'
               : d.source==='book' ? '<span class="tag">Steve Jobs (book)</span>'
+              : d.source==='history' ? '<span class="tag">history</span>'
               : d.source==='news' ? '<span class="tag">in the news</span>'
               : d.source==='featured' ? '<span class="tag">featured</span>'
               : '<span class="tag">most read</span>';
@@ -484,6 +486,19 @@ async function trainRecent(){
   }
 }
 
+// History articles from the Encyclopædia (same Wikipedia source it is powered by).
+const HISTORY_SEED = ['Ancient Egypt','Ancient Greece','Roman Empire','Byzantine Empire',
+  'Middle Ages','Renaissance','Age of Discovery','Ottoman Empire','Mongol Empire','Black Death',
+  'French Revolution','Industrial Revolution','American Revolution','American Civil War',
+  'World War I','World War II','Cold War','Great Depression','Civil rights movement','Russian Revolution'];
+async function trainHistory(){
+  await Promise.all(HISTORY_SEED.map(async t=>{
+    try{ const s = await summary(t);
+      if(s && s.extract) indexDoc(makeDoc(s.title, s.extract, s.description, 'history'));
+    }catch(e){}
+  }));
+}
+
 // Bundled book: the Steve Jobs biography (Barbara Sheen), pre-chunked into steve-jobs.json.
 const BOOK_META = { title:'Steve Jobs', author:'Barbara Sheen' };
 async function trainBook(){
@@ -501,7 +516,7 @@ async function train(){
   trainBtn.disabled = true;
   KB.length = 0; seenTitles.clear(); docFreq = new Map();
   // Train on all libraries at once into one shared knowledge base.
-  await Promise.all([ trainBritannica(), trainRecent(), trainBook() ]);
+  await Promise.all([ trainBritannica(), trainRecent(), trainHistory(), trainBook() ]);
   renderKB(); renderSuggest();
   trainBtn.disabled = false;
   return KB.length;
@@ -510,14 +525,15 @@ async function train(){
 /* =================== Boot =================== */
 async function boot(){
   stream.innerHTML = '';
-  addMsg('ai', `<div class="boot">📚 <b>Training…</b> reading the 1911 Encyclopædia Britannica, today’s latest articles, recent world &amp; business news, and the <em>Steve Jobs</em> biography. One moment.</div>`);
+  addMsg('ai', `<div class="boot">📚 <b>Training…</b> reading the 1911 Encyclopædia Britannica, the Encyclopædia’s history articles, today’s latest articles, recent world &amp; business news, and the <em>Steve Jobs</em> biography. One moment.</div>`);
   const n = await train();
   const eb = KB.filter(d=>d.source==='eb').length;
   const news = KB.filter(d=>d.source==='wikinews').length;
   const book = KB.filter(d=>d.source==='book').length;
-  const recent = n - eb - news - book;
+  const hist = KB.filter(d=>d.source==='history').length;
+  const recent = n - eb - news - book - hist;
   stream.innerHTML = '';
-  addMsg('ai', `<p>I just read <b>${n}</b> passages — <b>${eb}</b> from the <b>1911 Encyclopædia Britannica</b>, <b>${recent}</b> of today’s most recent articles, <b>${news}</b> <b>world &amp; business news</b> stories, and <b>${book}</b> from the biography <b><em>Steve Jobs</em></b> by Barbara Sheen.</p><p>Ask me about any of them, or anything else. I’ll answer from whichever source fits best and cite it — and if I haven’t read it yet, I’ll go learn it. 👇</p>`);
+  addMsg('ai', `<p>I just read <b>${n}</b> passages — <b>${eb}</b> from the <b>1911 Encyclopædia Britannica</b>, <b>${hist}</b> of the Encyclopædia’s <b>history articles</b>, <b>${recent}</b> of today’s most recent articles, <b>${news}</b> <b>world &amp; business news</b> stories, and <b>${book}</b> from the biography <b><em>Steve Jobs</em></b> by Barbara Sheen.</p><p>Ask me about any of them, or anything else. I’ll answer from whichever source fits best and cite it — and if I haven’t read it yet, I’ll go learn it. 👇</p>`);
 }
 boot();
 
