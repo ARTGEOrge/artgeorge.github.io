@@ -102,6 +102,7 @@
     .card--escape { --accent: #ffd700; --accent-glow: rgba(255,180,0,0.4); }
     .card--neon   { --accent: #22d3ee; --accent-glow: rgba(34,211,238,0.4); }
     .card--escape2 { --accent: #ff6600; --accent-glow: rgba(255,102,0,0.4); }
+    .card--snow    { --accent: #aaddff; --accent-glow: rgba(170,221,255,0.4); }
     .card--eagle   { --accent: #55cc55; --accent-glow: rgba(85,204,85,0.4); }
     .card--bombs   { --accent: #ff3322; --accent-glow: rgba(255,80,40,0.45); }
     .card--crossy  { --accent: #ffcc33; --accent-glow: rgba(255,204,51,0.45); }
@@ -589,6 +590,65 @@
           <span class="tag">Driving</span>
           <span class="tag">Chase</span>
           <span class="tag">City</span>
+          <span class="tag">Arcade</span>
+        </div>
+      </div>
+    </a>
+
+    <a href="/Snow%20Rider%203D.html" class="card card--snow">
+      <div class="play-btn">&#9654; PLAY</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="snowSky" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#0a1a30"/>
+              <stop offset="100%" stop-color="#1a3a5a"/>
+            </linearGradient>
+            <linearGradient id="snowSlope" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#c8e8ff"/>
+              <stop offset="100%" stop-color="#90c8ee"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#snowSky)"/>
+          <!-- Mountains -->
+          <polygon points="0,140 80,40 160,140"   fill="#d8eeff" opacity="0.9"/>
+          <polygon points="60,140 160,30 260,140"  fill="#e8f4ff"/>
+          <polygon points="180,140 280,50 380,140" fill="#d0e8ff" opacity="0.95"/>
+          <polygon points="300,140 380,60 430,140" fill="#ddeeff" opacity="0.85"/>
+          <!-- Snow shading on mountains -->
+          <polygon points="80,40 100,80 60,80"    fill="rgba(255,255,255,0.4)"/>
+          <polygon points="160,30 185,75 135,75"  fill="rgba(255,255,255,0.4)"/>
+          <polygon points="280,50 300,90 258,90"  fill="rgba(255,255,255,0.4)"/>
+          <!-- Ground snow -->
+          <rect x="0" y="135" width="400" height="45" fill="url(#snowSlope)"/>
+          <!-- Snow tracks -->
+          <line x1="50"  y1="140" x2="200" y2="175" stroke="rgba(100,160,220,0.5)" stroke-width="2"/>
+          <line x1="70"  y1="140" x2="220" y2="175" stroke="rgba(100,160,220,0.5)" stroke-width="2"/>
+          <!-- Rider/sled -->
+          <rect x="175" y="128" width="36" height="12" rx="6" fill="#cc3300"/>
+          <ellipse cx="193" cy="125" rx="10" ry="12" fill="#ffcc88"/>
+          <rect x="172" y="138" width="42" height="4" rx="2" fill="#884400"/>
+          <!-- Snowflakes -->
+          <circle cx="40"  cy="30" r="2" fill="rgba(255,255,255,0.8)"/>
+          <circle cx="120" cy="55" r="1.5" fill="rgba(255,255,255,0.7)"/>
+          <circle cx="200" cy="20" r="2" fill="rgba(255,255,255,0.8)"/>
+          <circle cx="300" cy="40" r="1.5" fill="rgba(255,255,255,0.7)"/>
+          <circle cx="360" cy="25" r="2" fill="rgba(255,255,255,0.8)"/>
+          <circle cx="80"  cy="70" r="1.5" fill="rgba(255,255,255,0.6)"/>
+          <circle cx="340" cy="70" r="1.5" fill="rgba(255,255,255,0.6)"/>
+          <!-- Speed lines -->
+          <line x1="100" y1="145" x2="165" y2="140" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/>
+          <line x1="105" y1="151" x2="168" y2="147" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag" style="color:#aaddff">3D</div>
+        <div class="card-title">Snow Rider 3D</div>
+        <p class="card-desc">Strap in and race down snowy mountain slopes on a sled. Dodge trees, grab gifts, and go for the highest score!</p>
+        <div class="card-tags">
+          <span class="tag">3D</span>
+          <span class="tag">Sled</span>
+          <span class="tag">Snow</span>
           <span class="tag">Arcade</span>
         </div>
       </div>
