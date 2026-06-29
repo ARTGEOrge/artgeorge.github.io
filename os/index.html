@@ -220,6 +220,22 @@
   body.light .paint,body.light .tasks,body.light .sysmon{background:#eef2f8;color:#161b25;}
   body.noanim *{transition:none!important;animation:none!important;}
   /* desktop right-click menu reuses #ctxmenu */
+  .nvx{display:flex;flex-direction:column;height:100%;}
+  .nvxtabs{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid var(--glassb);background:rgba(255,255,255,0.03);}
+  .nvxtabs button{padding:6px 14px;border-radius:8px;border:1px solid transparent;background:transparent;color:var(--text);cursor:pointer;font-size:13px;font-weight:600;}
+  .nvxtabs button.sel{background:rgba(255,255,255,0.12);border-color:var(--glassb);}
+  .nvxpane{flex:1;min-height:0;position:relative;}
+  .nvxpane iframe{width:100%;height:100%;border:0;}
+  .nvstore{height:100%;overflow:auto;padding:18px 20px 30px;}
+  .nvstore h2{margin:0 0 4px;font-size:20px;} .nvstore .sub{opacity:.65;font-size:13px;margin:0 0 18px;}
+  .nvstore h3{font-size:12px;text-transform:uppercase;letter-spacing:.6px;opacity:.6;margin:20px 0 8px;}
+  .nvcard{display:flex;align-items:center;gap:14px;background:rgba(255,255,255,0.06);border:1px solid var(--glassb);border-radius:13px;padding:13px 15px;margin-bottom:9px;}
+  .nvcard .ic{font-size:28px;width:40px;text-align:center;} .nvcard .bd{flex:1;min-width:0;}
+  .nvcard .nm{font-weight:600;font-size:15px;} .nvcard .ds{opacity:.65;font-size:12.5px;margin-top:2px;}
+  .nvpill{font-size:12px;font-weight:600;padding:6px 12px;border-radius:16px;border:1px solid var(--glassb);white-space:nowrap;}
+  .nvpill.on{background:rgba(40,160,90,0.25);border-color:rgba(60,200,120,.5);color:#9be8b6;}
+  .nvpill.get{background:linear-gradient(135deg,var(--accent),var(--accent2));border-color:transparent;color:#fff;cursor:pointer;}
+  .nvnote{margin-top:22px;font-size:12px;opacity:.6;line-height:1.6;border-top:1px solid var(--glassb);padding-top:14px;}
 </style>
 </head>
 <body>
@@ -473,23 +489,71 @@
     else if(app.kind==="sysmon")   buildSysmon(body);
   }
 
-  // --- Nova Browser: embed Nova's own search server (runs inside ArtOS desktop)
+  // --- Nova Browser: tabbed Browser + Add-ons store. The live browser embeds
+  // Nova's loopback server (in the ArtOS desktop app); the Add-ons tab mirrors
+  // the Firefox-style extensions that ship in the Nova desktop browser.
+  const NOVA_EXTS = [
+    {ic:"🌙",nm:"Dark Night",        ds:"Forces a dark theme on every website, like Dark Reader."},
+    {ic:"🚫",nm:"Clutter Blocker",   ds:"Hides ad slots and sponsored blocks — a uBlock-style cosmetic filter."},
+    {ic:"🍪",nm:"Cookie Banner Eater",ds:"Auto-dismisses cookie consent pop-ups so you can read in peace."},
+    {ic:"📖",nm:"Reader View",       ds:"Adds a Reader button that strips a page to clean article text.", store:true},
+    {ic:"⬆️",nm:"Back to Top",       ds:"A floating button that smooth-scrolls long pages to the top.", store:true},
+    {ic:"🔍",nm:"Big Text",          ds:"Bumps the base font size up 20% for easier reading.", store:true},
+  ];
   function buildNova(body, app){
-    let tries = 0;
-    (function load(){
-      if(window.__artosDesktop){
-        body.innerHTML = `<iframe src="${app.url}" allow="clipboard-write"></iframe>`;
-      } else if(tries++ < 14){
-        body.innerHTML = `<div class="launch"><div style="font-size:48px">${app.icon}</div>
-          <div style="opacity:.8">Starting ${app.name}…</div></div>`;
-        setTimeout(load, 150);
-      } else {
-        body.innerHTML = `<div class="launch"><div style="font-size:54px">${app.icon}</div>
-          <div style="font-size:20px;font-weight:700">${app.name}</div>
-          <p style="opacity:.8;max-width:380px">Nova Browser runs inside the <b>ArtOS desktop app</b>.
-          Launch ArtOS Desktop (start.bat) to browse with Nova right here in a window.</p></div>`;
-      }
-    })();
+    body.innerHTML = `<div class="nvx">
+      <div class="nvxtabs">
+        <button data-t="web" class="sel">🌐 Browser</button>
+        <button data-t="ext">🧩 Add-ons</button>
+      </div><div class="nvxpane" id="nvxpane"></div></div>`;
+    const pane = body.querySelector("#nvxpane");
+    const tabs = body.querySelectorAll(".nvxtabs button");
+
+    function showWeb(){
+      let tries = 0;
+      (function load(){
+        if(window.__artosDesktop){
+          pane.innerHTML = `<iframe src="${app.url}" allow="clipboard-write"></iframe>`;
+        } else if(tries++ < 14){
+          pane.innerHTML = `<div class="launch"><div style="font-size:48px">${app.icon}</div>
+            <div style="opacity:.8">Starting ${app.name}…</div></div>`;
+          setTimeout(load, 150);
+        } else {
+          pane.innerHTML = `<div class="launch"><div style="font-size:54px">${app.icon}</div>
+            <div style="font-size:20px;font-weight:700">${app.name}</div>
+            <p style="opacity:.8;max-width:400px">Nova Browser runs inside the <b>ArtOS desktop app</b>.
+            Launch ArtOS Desktop (start.bat) to browse with Nova here — then open the
+            <b>🧩 Add-ons</b> tab inside Nova to turn extensions on.</p></div>`;
+        }
+      })();
+    }
+
+    function showExt(){
+      const card = e => `<div class="nvcard"><div class="ic">${e.ic}</div>
+        <div class="bd"><div class="nm">${e.nm}</div><div class="ds">${e.ds}</div></div>
+        ${e.store ? `<span class="nvpill get">+ Add to Nova</span>`
+                  : `<span class="nvpill on">● Installed</span>`}</div>`;
+      const mine  = NOVA_EXTS.filter(e=>!e.store).map(card).join("");
+      const store = NOVA_EXTS.filter(e=> e.store).map(card).join("");
+      pane.innerHTML = `<div class="nvstore">
+        <h2>🧩 Nova Add-ons</h2>
+        <p class="sub">Firefox-style extensions, adapted to run inside Nova.</p>
+        <h3>Your extensions</h3>${mine}
+        <h3>Get more extensions</h3>${store}
+        <div class="nvnote">These add-ons run inside the <b>Nova desktop browser</b>, where each one
+        injects its content script into every page you visit. Open Nova, click the <b>🧩</b> button
+        (⇧⌘A), and toggle them on. You can also load a real Firefox <b>.xpi</b> there — Nova runs
+        the parts it understands (the content scripts).</div></div>`;
+      pane.querySelectorAll(".nvpill.get").forEach(p=>{
+        p.onclick = ()=>{ p.textContent = "● Installed"; p.classList.replace("get","on"); };
+      });
+    }
+
+    tabs.forEach(t=> t.onclick = ()=>{
+      tabs.forEach(x=>x.classList.remove("sel")); t.classList.add("sel");
+      (t.dataset.t === "web" ? showWeb : showExt)();
+    });
+    showWeb();
   }
 
   // --- Native app launcher (e.g. Nova Browser) — works in the ArtOS desktop app
