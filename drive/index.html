@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ArtDrive — your files</title>
+<style>
+  :root{
+    --blue:#0a64c2; --blue2:#19c3b1; --bg:#f5f8fc; --panel:#ffffff;
+    --line:#e1e7f0; --text:#1b2733; --mut:#5f6f81; --sel:#e3f0ff; --selb:#b6d7ff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font:14px/1.45 -apple-system,system-ui,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;}
+
+  /* top bar */
+  header{display:flex;align-items:center;gap:14px;background:linear-gradient(90deg,var(--blue),var(--blue2));color:#fff;padding:10px 16px;flex:0 0 auto;}
+  header .logo{font-size:17px;font-weight:700;display:flex;align-items:center;gap:8px;white-space:nowrap;}
+  header .logo .cl{font-size:20px;}
+  header input{flex:1;max-width:520px;border:0;border-radius:8px;padding:8px 13px;font-size:14px;outline:none;background:rgba(255,255,255,.92);}
+  header .spacer{flex:1;}
+  header a{color:#fff;text-decoration:none;font-size:13px;opacity:.9;}
+
+  /* layout */
+  main{flex:1;display:flex;min-height:0;}
+  nav{width:200px;background:var(--panel);border-right:1px solid var(--line);padding:14px 8px;display:flex;flex-direction:column;gap:2px;flex:0 0 auto;}
+  nav button{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;padding:9px 12px;border-radius:8px;font-size:14px;color:var(--text);cursor:pointer;text-align:left;}
+  nav button:hover{background:#eef3fa;}
+  nav button.sel{background:var(--sel);color:var(--blue);font-weight:600;}
+  nav .quota{margin-top:auto;padding:10px 12px;font-size:12px;color:var(--mut);}
+  nav .qbar{height:6px;border-radius:4px;background:#e7ecf4;overflow:hidden;margin:6px 0 4px;}
+  nav .qbar span{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--blue2));border-radius:4px;}
+
+  section{flex:1;display:flex;flex-direction:column;min-width:0;}
+
+  /* command bar */
+  .cmd{display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--line);flex-wrap:wrap;flex:0 0 auto;}
+  .cmd button{border:1px solid transparent;background:transparent;color:var(--blue);font-size:13.5px;font-weight:600;padding:7px 11px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:6px;}
+  .cmd button:hover{background:#eef3fa;}
+  .cmd button:disabled{color:#a8b4c2;cursor:default;background:transparent;}
+  .cmd .grow{flex:1;}
+  .cmd .vt{color:var(--mut);font-weight:400;}
+
+  /* breadcrumbs */
+  .crumbs{display:flex;align-items:center;gap:4px;padding:12px 18px 4px;font-size:15px;flex-wrap:wrap;flex:0 0 auto;}
+  .crumbs a{color:var(--mut);text-decoration:none;padding:2px 4px;border-radius:6px;}
+  .crumbs a:hover{background:#e9eef6;color:var(--blue);}
+  .crumbs .cur{font-weight:700;font-size:17px;padding:2px 4px;}
+  .crumbs .sep{color:#b7c2cf;}
+
+  /* files area */
+  .files{flex:1;overflow:auto;padding:10px 18px 30px;}
+  .files.drag{outline:3px dashed var(--blue);outline-offset:-8px;background:#eef6ff;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;}
+  .tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 10px 10px;text-align:center;cursor:pointer;user-select:none;position:relative;}
+  .tile:hover{box-shadow:0 3px 14px rgba(20,60,120,.10);border-color:#c9d6e8;}
+  .tile.sel{background:var(--sel);border-color:var(--selb);}
+  .tile .big{font-size:44px;line-height:1.15;height:52px;display:flex;align-items:center;justify-content:center;}
+  .tile .big img{max-width:92%;max-height:52px;border-radius:6px;object-fit:cover;}
+  .tile .nm{font-size:13px;font-weight:600;margin-top:8px;word-break:break-word;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;}
+  .tile .mt{font-size:11px;color:var(--mut);margin-top:3px;}
+
+  table.lst{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .lst th{font-size:12px;text-align:left;color:var(--mut);font-weight:600;padding:9px 14px;border-bottom:1px solid var(--line);background:#fafcff;}
+  .lst td{padding:9px 14px;border-bottom:1px solid #eef2f8;font-size:13.5px;cursor:pointer;user-select:none;}
+  .lst tr:hover td{background:#f4f8fd;}
+  .lst tr.sel td{background:var(--sel);}
+  .lst .fic{width:30px;font-size:19px;}
+
+  .empty{padding:70px 20px;text-align:center;color:var(--mut);}
+  .empty .e{font-size:56px;margin-bottom:12px;}
+  .empty b{display:block;font-size:16px;color:var(--text);margin-bottom:4px;}
+
+  /* preview overlay */
+  #ovl{position:fixed;inset:0;background:rgba(12,22,38,.88);display:none;flex-direction:column;z-index:50;}
+  #ovl.open{display:flex;}
+  #ovl .obar{display:flex;align-items:center;gap:12px;padding:12px 18px;color:#fff;}
+  #ovl .obar b{flex:1;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  #ovl .obar button{background:rgba(255,255,255,.14);border:0;color:#fff;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer;}
+  #ovl .obody{flex:1;display:flex;align-items:center;justify-content:center;min-height:0;padding:0 20px 20px;}
+  #ovl img,#ovl video{max-width:100%;max-height:100%;border-radius:8px;}
+  #ovl iframe{width:min(900px,95%);height:96%;border:0;border-radius:8px;background:#fff;}
+  #ovl pre{width:min(860px,95%);height:92%;overflow:auto;background:#fff;border-radius:8px;padding:20px;font:13px/1.5 Menlo,Consolas,monospace;white-space:pre-wrap;}
+  #ovl .noprev{color:#cfd8e4;text-align:center;font-size:15px;}
+
+  /* toast */
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(80px);background:#1b2733;color:#fff;padding:11px 20px;border-radius:10px;font-size:13.5px;transition:.25s;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.3);}
+  #toast.show{transform:translateX(-50%) translateY(0);}
+
+  @media (max-width:640px){
+    nav{width:60px;}
+    nav button .lbl,nav .quota{display:none;}
+    header .logo .word{display:none;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo"><span class="cl">☁️</span><span class="word">ArtDrive</span></span>
+  <input id="search" type="search" placeholder="Search your files">
+  <span class="spacer"></span>
+  <a href="https://artgeorge.github.io/">ARTGEOrge&nbsp;home</a>
+</header>
+
+<main>
+  <nav>
+    <button data-v="files" class="sel">📁 <span class="lbl">My files</span></button>
+    <button data-v="recent">🕒 <span class="lbl">Recent</span></button>
+    <button data-v="photos">🖼️ <span class="lbl">Photos</span></button>
+    <button data-v="bin">🗑️ <span class="lbl">Recycle bin</span></button>
+    <div class="quota">
+      <div>Storage</div>
+      <div class="qbar"><span id="qfill" style="width:0%"></span></div>
+      <span id="qtext">…</span>
+    </div>
+  </nav>
+
+  <section>
+    <div class="cmd" id="cmd">
+      <button id="bUpload">⬆️ Upload</button>
+      <button id="bFolder">📁 New folder</button>
+      <button id="bDoc">📄 New text file</button>
+      <span class="vt">|</span>
+      <button id="bOpen" disabled>👁️ Open</button>
+      <button id="bDown" disabled>⬇️ Download</button>
+      <button id="bRen" disabled>✏️ Rename</button>
+      <button id="bDel" disabled>🗑️ Delete</button>
+      <span class="grow"></span>
+      <button id="bView">☰ List</button>
+    </div>
+    <div class="crumbs" id="crumbs"></div>
+    <div class="files" id="files"></div>
+  </section>
+</main>
+
+<div id="ovl">
+  <div class="obar"><b id="oname"></b><button id="oDown">⬇️ Download</button><button id="oClose">✕ Close</button></div>
+  <div class="obody" id="obody"></div>
+</div>
+
+<div id="toast"></div>
+<input type="file" id="fpick" multiple hidden>
+
+<script>
+(function(){
+"use strict";
+/* ---------------- IndexedDB ---------------- */
+const DB="artdrive", STORE="items";
+let db;
+function idb(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open(DB,1);
+    r.onupgradeneeded=()=>{const s=r.result.createObjectStore(STORE,{keyPath:"id"});
+      s.createIndex("parent","parent");};
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+}
+function tx(mode){return db.transaction(STORE,mode).objectStore(STORE);}
+function put(item){return new Promise((res,rej)=>{const q=tx("readwrite").put(item);q.onsuccess=()=>res();q.onerror=()=>rej(q.error);});}
+function del(id){return new Promise((res,rej)=>{const q=tx("readwrite").delete(id);q.onsuccess=()=>res();q.onerror=()=>rej(q.error);});}
+function all(){return new Promise((res,rej)=>{const q=tx("readonly").getAll();q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});}
+
+/* ---------------- state ---------------- */
+let view="files";          // files | recent | photos | bin | search
+let cwd="root";            // current folder id
+let path=[{id:"root",name:"My files"}];
+let items=[];              // cache of all items
+let selected=new Set();
+let listMode=false;
+let searchQ="";
+const $=s=>document.querySelector(s);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+
+/* ---------------- helpers ---------------- */
+function fmtSize(n){
+  if(n==null)return"";
+  if(n<1024)return n+" B";
+  if(n<1048576)return (n/1024).toFixed(1)+" KB";
+  if(n<1073741824)return (n/1048576).toFixed(1)+" MB";
+  return (n/1073741824).toFixed(2)+" GB";
+}
+function fmtDate(t){const d=new Date(t);return d.toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});}
+function icon(it){
+  if(it.isFolder)return"📁";
+  const t=it.type||"", n=it.name.toLowerCase();
+  if(t.startsWith("image/"))return"🖼️";
+  if(t.startsWith("video/"))return"🎬";
+  if(t.startsWith("audio/"))return"🎵";
+  if(t==="application/pdf")return"📕";
+  if(/\.(zip|gz|tar|rar|7z)$/.test(n))return"🗜️";
+  if(/\.(js|py|html|css|json|ts|swift|c|cpp|java)$/.test(n))return"💻";
+  if(/\.(doc|docx)$/.test(n))return"📘";
+  if(/\.(xls|xlsx|csv)$/.test(n))return"📗";
+  if(/\.(ppt|pptx)$/.test(n))return"📙";
+  if(t.startsWith("text/")||/\.(txt|md)$/.test(n))return"📄";
+  return"📄";
+}
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2400);}
+async function refreshQuota(){
+  try{
+    const e=await navigator.storage.estimate();
+    const used=e.usage||0, tot=e.quota||1;
+    $("#qfill").style.width=Math.max(1,Math.round(used/tot*100))+"%";
+    $("#qtext").textContent=fmtSize(used)+" of "+fmtSize(tot)+" used";
+  }catch(_){$("#qtext").textContent="";}
+}
+
+/* ---------------- data ops ---------------- */
+async function reload(){items=await all();render();refreshQuota();}
+async function addFiles(fileList){
+  let n=0;
+  for(const f of fileList){
+    await put({id:uid(),name:f.name,type:f.type,size:f.size,parent:cwd,
+               isFolder:false,blob:f,created:Date.now(),modified:f.lastModified||Date.now(),deleted:false});
+    n++;
+  }
+  toast(n===1?"Uploaded 1 file":"Uploaded "+n+" files");
+  await reload();
+}
+async function newFolder(){
+  const name=prompt("Folder name:","New folder"); if(!name)return;
+  await put({id:uid(),name,parent:cwd,isFolder:true,created:Date.now(),modified:Date.now(),deleted:false});
+  await reload();
+}
+async function newDoc(){
+  const name=prompt("File name:","notes.txt"); if(!name)return;
+  const text=prompt("Contents (you can edit later by re-creating):","")||"";
+  const blob=new Blob([text],{type:"text/plain"});
+  await put({id:uid(),name,type:"text/plain",size:blob.size,parent:cwd,
+             isFolder:false,blob,created:Date.now(),modified:Date.now(),deleted:false});
+  await reload();
+}
+async function renameSel(){
+  const it=one(); if(!it)return;
+  const name=prompt("Rename to:",it.name); if(!name||name===it.name)return;
+  it.name=name; it.modified=Date.now(); await put(it); await reload();
+}
+async function deleteSel(){
+  const ids=[...selected]; if(!ids.length)return;
+  if(view==="bin"){
+    if(!confirm("Permanently delete "+ids.length+" item(s)? This can't be undone."))return;
+    for(const id of ids){await removeTree(id,true);}
+    toast("Deleted permanently");
+  }else{
+    for(const id of ids){const it=items.find(i=>i.id===id);if(it){it.deleted=true;it.modified=Date.now();await put(it);}}
+    toast(ids.length+" item(s) moved to recycle bin");
+  }
+  selected.clear(); await reload();
+}
+async function removeTree(id,hard){
+  const kids=items.filter(i=>i.parent===id);
+  for(const k of kids)await removeTree(k.id,hard);
+  if(hard)await del(id);
+}
+async function restoreSel(){
+  for(const id of selected){const it=items.find(i=>i.id===id);if(it){it.deleted=false;await put(it);}}
+  toast("Restored"); selected.clear(); await reload();
+}
+function one(){if(selected.size!==1)return null;return items.find(i=>i.id===[...selected][0]);}
+function downloadItem(it){
+  if(!it||it.isFolder)return;
+  const u=URL.createObjectURL(it.blob);
+  const a=document.createElement("a");a.href=u;a.download=it.name;a.click();
+  setTimeout(()=>URL.revokeObjectURL(u),4000);
+}
+
+/* ---------------- rendering ---------------- */
+function visibleItems(){
+  if(view==="bin")   return items.filter(i=>i.deleted);
+  if(view==="recent")return items.filter(i=>!i.deleted&&!i.isFolder).sort((a,b)=>b.modified-a.modified).slice(0,40);
+  if(view==="photos")return items.filter(i=>!i.deleted&&(i.type||"").startsWith("image/"));
+  if(view==="search")return items.filter(i=>!i.deleted&&i.name.toLowerCase().includes(searchQ));
+  return items.filter(i=>!i.deleted&&i.parent===cwd)
+              .sort((a,b)=>(b.isFolder-a.isFolder)||a.name.localeCompare(b.name));
+}
+function crumbHtml(){
+  if(view!=="files"){
+    const t={recent:"Recent",photos:"Photos",bin:"Recycle bin",search:"Search: “"+searchQ+"”"}[view];
+    return "<span class='cur'>"+t+"</span>";
+  }
+  return path.map((p,i)=> i===path.length-1
+    ? "<span class='cur'>"+esc(p.name)+"</span>"
+    : "<a href='#' data-nav='"+i+"'>"+esc(p.name)+"</a><span class='sep'>›</span>").join("");
+}
+function esc(s){return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function render(){
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("sel",b.dataset.v===view));
+  $("#crumbs").innerHTML=crumbHtml();
+  $("#crumbs").querySelectorAll("a").forEach(a=>a.onclick=e=>{e.preventDefault();
+    const i=+a.dataset.nav; path=path.slice(0,i+1); cwd=path[i].id; selected.clear(); render();});
+  const vis=visibleItems(), box=$("#files");
+  if(!vis.length){
+    const msg={files:["📂","This folder is empty","Upload files or create a folder to get started."],
+      recent:["🕒","Nothing recent yet","Files you add will show up here."],
+      photos:["🖼️","No photos","Upload images and they'll appear here."],
+      bin:["🗑️","Recycle bin is empty","Deleted files land here before they're gone for good."],
+      search:["🔎","No matches","Nothing named “"+esc(searchQ)+"”."]}[view];
+    box.innerHTML="<div class='empty'><div class='e'>"+msg[0]+"</div><b>"+msg[1]+"</b>"+msg[2]+"</div>";
+  }else if(listMode){
+    box.innerHTML="<table class='lst'><tr><th></th><th>Name</th><th>Modified</th><th>Size</th></tr>"+
+      vis.map(it=>"<tr data-id='"+it.id+"' class='"+(selected.has(it.id)?"sel":"")+"'>"+
+        "<td class='fic'>"+icon(it)+"</td><td>"+esc(it.name)+"</td>"+
+        "<td>"+fmtDate(it.modified)+"</td><td>"+(it.isFolder?"—":fmtSize(it.size))+"</td></tr>").join("")+"</table>";
+    box.querySelectorAll("tr[data-id]").forEach(wire);
+  }else{
+    box.innerHTML="<div class='grid'>"+vis.map(it=>{
+      let big=icon(it);
+      if((it.type||"").startsWith("image/")&&it.blob){
+        const u=URL.createObjectURL(it.blob); big="<img src='"+u+"' alt=''>";
+      }
+      return "<div class='tile "+(selected.has(it.id)?"sel":"")+"' data-id='"+it.id+"'>"+
+        "<div class='big'>"+big+"</div><div class='nm'>"+esc(it.name)+"</div>"+
+        "<div class='mt'>"+(it.isFolder?"Folder":fmtSize(it.size))+" · "+fmtDate(it.modified)+"</div></div>";
+    }).join("")+"</div>";
+    box.querySelectorAll(".tile").forEach(wire);
+  }
+  updateCmd();
+}
+function wire(el){
+  el.onclick=e=>{
+    const id=el.dataset.id;
+    if(e.metaKey||e.ctrlKey){selected.has(id)?selected.delete(id):selected.add(id);}
+    else{selected.clear();selected.add(id);}
+    render();
+  };
+  el.ondblclick=()=>{const it=items.find(i=>i.id===el.dataset.id);openItem(it);};
+}
+function updateCmd(){
+  const n=selected.size, it=one();
+  $("#bOpen").disabled=!it;
+  $("#bDown").disabled=!it||it.isFolder;
+  $("#bRen").disabled=!it;
+  $("#bDel").disabled=!n;
+  $("#bDel").textContent=view==="bin"?"🗑️ Delete forever":"🗑️ Delete";
+  let restore=$("#bRestore");
+  if(view==="bin"&&n){
+    if(!restore){restore=document.createElement("button");restore.id="bRestore";restore.textContent="♻️ Restore";
+      restore.onclick=restoreSel;$("#bDel").before(restore);}
+  }else if(restore)restore.remove();
+}
+
+/* ---------------- open / preview ---------------- */
+function openItem(it){
+  if(!it)return;
+  if(it.isFolder){
+    if(view!=="files"){view="files";path=[{id:"root",name:"My files"}];}
+    cwd=it.id;path.push({id:it.id,name:it.name});selected.clear();render();return;
+  }
+  const t=it.type||"", body=$("#obody");
+  $("#oname").textContent=it.name;
+  $("#oDown").onclick=()=>downloadItem(it);
+  body.innerHTML="";
+  const u=URL.createObjectURL(it.blob);
+  if(t.startsWith("image/"))body.innerHTML="<img src='"+u+"'>";
+  else if(t.startsWith("video/"))body.innerHTML="<video src='"+u+"' controls autoplay></video>";
+  else if(t.startsWith("audio/"))body.innerHTML="<audio src='"+u+"' controls autoplay style='width:min(500px,90%)'></audio>";
+  else if(t==="application/pdf")body.innerHTML="<iframe src='"+u+"'></iframe>";
+  else if(t.startsWith("text/")||/\.(txt|md|json|js|py|css|html|csv|log)$/i.test(it.name)){
+    it.blob.text().then(txt=>{const pre=document.createElement("pre");pre.textContent=txt;body.appendChild(pre);});
+  }else body.innerHTML="<div class='noprev'>No preview for this file type.<br><br>Use Download to open it on your Mac.</div>";
+  $("#ovl").classList.add("open");
+}
+$("#oClose").onclick=()=>{$("#ovl").classList.remove("open");$("#obody").innerHTML="";};
+
+/* ---------------- events ---------------- */
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
+  view=b.dataset.v; if(view==="files"){cwd="root";path=[{id:"root",name:"My files"}];}
+  selected.clear(); $("#search").value=""; render();
+});
+$("#bUpload").onclick=()=>$("#fpick").click();
+$("#fpick").onchange=e=>{if(e.target.files.length)addFiles(e.target.files);e.target.value="";};
+$("#bFolder").onclick=newFolder;
+$("#bDoc").onclick=newDoc;
+$("#bRen").onclick=renameSel;
+$("#bDel").onclick=deleteSel;
+$("#bDown").onclick=()=>downloadItem(one());
+$("#bOpen").onclick=()=>openItem(one());
+$("#bView").onclick=()=>{listMode=!listMode;$("#bView").textContent=listMode?"⊞ Grid":"☰ List";render();};
+$("#search").oninput=e=>{
+  searchQ=e.target.value.trim().toLowerCase();
+  if(searchQ){view="search";}else{view="files";cwd="root";path=[{id:"root",name:"My files"}];}
+  selected.clear();render();
+};
+/* drag & drop upload */
+const fbox=$("#files");
+["dragover","dragenter"].forEach(ev=>fbox.addEventListener(ev,e=>{e.preventDefault();fbox.classList.add("drag");}));
+["dragleave","drop"].forEach(ev=>fbox.addEventListener(ev,e=>{e.preventDefault();fbox.classList.remove("drag");}));
+fbox.addEventListener("drop",e=>{if(e.dataTransfer.files.length)addFiles(e.dataTransfer.files);});
+/* click empty space clears selection */
+fbox.addEventListener("click",e=>{if(e.target===fbox||e.target.classList.contains("grid")){selected.clear();render();}});
+
+/* ---------------- boot ---------------- */
+idb().then(d=>{db=d;reload();});
+})();
+</script>
+</body>
+</html>
