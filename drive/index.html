@@ -22,13 +22,20 @@
 
   /* layout */
   main{flex:1;display:flex;min-height:0;}
-  nav{width:200px;background:var(--panel);border-right:1px solid var(--line);padding:14px 8px;display:flex;flex-direction:column;gap:2px;flex:0 0 auto;}
-  nav button{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;padding:9px 12px;border-radius:8px;font-size:14px;color:var(--text);cursor:pointer;text-align:left;}
-  nav button:hover{background:#eef3fa;}
-  nav button.sel{background:var(--sel);color:var(--blue);font-weight:600;}
-  nav .quota{margin-top:auto;padding:10px 12px;font-size:12px;color:var(--mut);}
+  nav{width:210px;background:var(--panel);border-right:1px solid var(--line);padding:14px 8px 10px;display:flex;flex-direction:column;gap:2px;flex:0 0 auto;}
+  nav button.nb{display:flex;align-items:center;gap:10px;width:100%;border:0;background:transparent;padding:9px 12px;border-radius:8px;font-size:14px;color:var(--text);cursor:pointer;text-align:left;}
+  nav button.nb:hover{background:#eef3fa;}
+  nav button.nb.sel{background:var(--sel);color:var(--blue);font-weight:600;}
+  nav .quota{margin-top:auto;padding:10px 12px 6px;font-size:12px;color:var(--mut);}
   nav .qbar{height:6px;border-radius:4px;background:#e7ecf4;overflow:hidden;margin:6px 0 4px;}
   nav .qbar span{display:block;height:100%;background:linear-gradient(90deg,var(--blue),var(--blue2));border-radius:4px;}
+  .sync{padding:10px 12px 4px;border-top:1px solid var(--line);font-size:12px;color:var(--mut);}
+  .sync .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#b7c2cf;margin-right:6px;}
+  .sync .dot.on{background:#23a55a;}
+  .sync .who{word-break:break-all;}
+  .sync button{margin-top:8px;width:100%;border:1px solid var(--line);background:#fff;color:var(--blue);font-weight:600;border-radius:8px;padding:7px;cursor:pointer;font-size:12.5px;}
+  .sync button:hover{background:#eef3fa;}
+  .sync button.ghost{color:var(--mut);font-weight:500;}
 
   section{flex:1;display:flex;flex-direction:column;min-width:0;}
 
@@ -82,13 +89,28 @@
   #ovl pre{width:min(860px,95%);height:92%;overflow:auto;background:#fff;border-radius:8px;padding:20px;font:13px/1.5 Menlo,Consolas,monospace;white-space:pre-wrap;}
   #ovl .noprev{color:#cfd8e4;text-align:center;font-size:15px;}
 
+  /* sync dialog */
+  #sdlg{position:fixed;inset:0;background:rgba(12,22,38,.55);display:none;align-items:center;justify-content:center;z-index:70;}
+  #sdlg.open{display:flex;}
+  #sdlg .card{background:#fff;border-radius:14px;max-width:460px;width:92%;padding:22px;box-shadow:0 24px 70px rgba(0,0,0,.35);}
+  #sdlg h3{font-size:18px;margin-bottom:8px;}
+  #sdlg p{font-size:13.5px;color:var(--mut);margin:8px 0;}
+  #sdlg ol{font-size:13.5px;color:var(--text);margin:10px 0 10px 20px;display:flex;flex-direction:column;gap:6px;}
+  #sdlg a{color:var(--blue);}
+  #sdlg input{width:100%;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-size:13px;margin:8px 0 4px;font-family:Menlo,monospace;}
+  #sdlg .row{display:flex;gap:10px;justify-content:flex-end;margin-top:14px;}
+  #sdlg .row button{border:0;border-radius:8px;padding:9px 18px;font-size:13.5px;font-weight:600;cursor:pointer;}
+  #sdlg .go{background:linear-gradient(90deg,var(--blue),var(--blue2));color:#fff;}
+  #sdlg .no{background:#eef1f6;color:var(--text);}
+  #sdlg .err{color:#c2372c;font-size:12.5px;min-height:16px;}
+
   /* toast */
-  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(80px);background:#1b2733;color:#fff;padding:11px 20px;border-radius:10px;font-size:13.5px;transition:.25s;z-index:60;box-shadow:0 10px 30px rgba(0,0,0,.3);}
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(80px);background:#1b2733;color:#fff;padding:11px 20px;border-radius:10px;font-size:13.5px;transition:.25s;z-index:80;box-shadow:0 10px 30px rgba(0,0,0,.3);}
   #toast.show{transform:translateX(-50%) translateY(0);}
 
   @media (max-width:640px){
     nav{width:60px;}
-    nav button .lbl,nav .quota{display:none;}
+    nav button.nb .lbl,nav .quota,nav .sync{display:none;}
     header .logo .word{display:none;}
   }
 </style>
@@ -104,15 +126,16 @@
 
 <main>
   <nav>
-    <button data-v="files" class="sel">📁 <span class="lbl">My files</span></button>
-    <button data-v="recent">🕒 <span class="lbl">Recent</span></button>
-    <button data-v="photos">🖼️ <span class="lbl">Photos</span></button>
-    <button data-v="bin">🗑️ <span class="lbl">Recycle bin</span></button>
+    <button class="nb sel" data-v="files">📁 <span class="lbl">My files</span></button>
+    <button class="nb" data-v="recent">🕒 <span class="lbl">Recent</span></button>
+    <button class="nb" data-v="photos">🖼️ <span class="lbl">Photos</span></button>
+    <button class="nb" data-v="bin">🗑️ <span class="lbl">Recycle bin</span></button>
     <div class="quota">
       <div>Storage</div>
       <div class="qbar"><span id="qfill" style="width:0%"></span></div>
       <span id="qtext">…</span>
     </div>
+    <div class="sync" id="syncbox"></div>
   </nav>
 
   <section>
@@ -138,13 +161,32 @@
   <div class="obody" id="obody"></div>
 </div>
 
+<div id="sdlg">
+  <div class="card">
+    <h3>🔗 Turn on sync</h3>
+    <p>Sync saves your files to a <b>private GitHub repository</b> (<span id="srepo">artdrive-storage</span>) so ArtDrive shows the same files on every computer you connect.</p>
+    <ol>
+      <li><a href="https://github.com/settings/tokens/new?scopes=repo&description=ArtDrive%20sync" target="_blank" rel="noopener">Create a GitHub token</a> (the <b>repo</b> box is pre-checked — scroll down, click <b>Generate token</b>).</li>
+      <li>Copy the token and paste it below.</li>
+      <li>Do the same on your other laptop with the <b>same token</b>.</li>
+    </ol>
+    <input id="stok" type="password" placeholder="ghp_… paste your token here" autocomplete="off">
+    <div class="err" id="serr"></div>
+    <p style="font-size:12px">The token is saved only in this browser. Anyone with it can use your GitHub — don't share it.</p>
+    <div class="row">
+      <button class="no" id="sCancel">Cancel</button>
+      <button class="go" id="sGo">Connect</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 <input type="file" id="fpick" multiple hidden>
 
 <script>
 (function(){
 "use strict";
-/* ---------------- IndexedDB ---------------- */
+/* ================= IndexedDB (local store / sync cache) ================= */
 const DB="artdrive", STORE="items";
 let db;
 function idb(){
@@ -159,19 +201,151 @@ function tx(mode){return db.transaction(STORE,mode).objectStore(STORE);}
 function put(item){return new Promise((res,rej)=>{const q=tx("readwrite").put(item);q.onsuccess=()=>res();q.onerror=()=>rej(q.error);});}
 function del(id){return new Promise((res,rej)=>{const q=tx("readwrite").delete(id);q.onsuccess=()=>res();q.onerror=()=>rej(q.error);});}
 function all(){return new Promise((res,rej)=>{const q=tx("readonly").getAll();q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});}
+function idbGet(id){return new Promise((res,rej)=>{const q=tx("readonly").get(id);q.onsuccess=()=>res(q.result);q.onerror=()=>rej(q.error);});}
 
-/* ---------------- state ---------------- */
+/* ================= state ================= */
 let view="files";          // files | recent | photos | bin | search
-let cwd="root";            // current folder id
+let cwd="root";
 let path=[{id:"root",name:"My files"}];
-let items=[];              // cache of all items
+let items=[];              // metadata list (cloud index when synced, IDB records when local)
 let selected=new Set();
 let listMode=false;
 let searchQ="";
 const $=s=>document.querySelector(s);
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+const MAXSYNC=25*1024*1024;   // per-file cap when syncing through the GitHub API
 
-/* ---------------- helpers ---------------- */
+/* ================= GitHub sync ================= */
+const LS_TOKEN="artdrive_token", LS_OWNER="artdrive_owner", REPO="artdrive-storage";
+let token=localStorage.getItem(LS_TOKEN)||"";
+let owner=localStorage.getItem(LS_OWNER)||"";
+let indexSha=null, lastPull=0, cloudBytes=0;
+const syncOn=()=>!!token;
+
+async function gh(pathname, opts={}){
+  const r=await fetch("https://api.github.com"+pathname,{
+    method:opts.method||"GET",
+    body:opts.body,
+    headers:{Authorization:"Bearer "+token,
+             Accept:opts.accept||"application/vnd.github+json"}});
+  if(r.status===404&&opts.ok404)return null;
+  if(!r.ok){const e=new Error("GitHub error "+r.status);e.status=r.status;throw e;}
+  return opts.raw?r:r.json();
+}
+function b64enc(str){const u=new TextEncoder().encode(str);let s="";
+  for(let i=0;i<u.length;i+=8192)s+=String.fromCharCode.apply(null,u.subarray(i,i+8192));return btoa(s);}
+function b64dec(b){const s=atob(b.replace(/\s/g,""));const u=new Uint8Array(s.length);
+  for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return new TextDecoder().decode(u);}
+function blobB64(blob){return new Promise((res,rej)=>{const r=new FileReader();
+  r.onload=()=>res(String(r.result).split(",")[1]);r.onerror=rej;r.readAsDataURL(blob);});}
+const meta=it=>({id:it.id,name:it.name,type:it.type,size:it.size,parent:it.parent,
+  isFolder:!!it.isFolder,created:it.created,modified:it.modified,deleted:!!it.deleted});
+
+async function pullIndex(){
+  const m=await gh(`/repos/${owner}/${REPO}/contents/index.json`,
+                   {ok404:true,accept:"application/vnd.github.object+json"});
+  if(!m){items=[];indexSha=null;lastPull=Date.now();return;}
+  indexSha=m.sha;
+  let txt;
+  if(m.content)txt=b64dec(m.content);
+  else{const r=await gh(`/repos/${owner}/${REPO}/contents/index.json`,
+                        {accept:"application/vnd.github.raw",raw:true});txt=await r.text();}
+  items=JSON.parse(txt);
+  cloudBytes=items.filter(i=>!i.isFolder).reduce((a,i)=>a+(i.size||0),0);
+  lastPull=Date.now();
+}
+let saveChain=Promise.resolve();
+function saveIndex(msg){saveChain=saveChain.then(()=>saveIndexNow(msg,0));return saveChain;}
+async function saveIndexNow(msg,attempt){
+  const body={message:msg||"update",content:b64enc(JSON.stringify(items.map(meta)))};
+  if(indexSha)body.sha=indexSha;
+  try{
+    const res=await gh(`/repos/${owner}/${REPO}/contents/index.json`,
+                       {method:"PUT",body:JSON.stringify(body)});
+    indexSha=res.content.sha;
+  }catch(e){
+    if(attempt<1){const m=await gh(`/repos/${owner}/${REPO}/contents/index.json`,
+      {ok404:true,accept:"application/vnd.github.object+json"});
+      indexSha=m?m.sha:null;return saveIndexNow(msg,1);}
+    throw e;
+  }
+}
+async function putFileBlob(id,blob,name){
+  const content=await blobB64(blob);
+  const m=await gh(`/repos/${owner}/${REPO}/contents/files/${id}`,
+                   {ok404:true,accept:"application/vnd.github.object+json"});
+  const body={message:"upload "+name,content};if(m)body.sha=m.sha;
+  await gh(`/repos/${owner}/${REPO}/contents/files/${id}`,
+           {method:"PUT",body:JSON.stringify(body)});
+}
+async function deleteFileBlob(id){
+  const m=await gh(`/repos/${owner}/${REPO}/contents/files/${id}`,
+                   {ok404:true,accept:"application/vnd.github.object+json"});
+  if(!m)return;
+  await gh(`/repos/${owner}/${REPO}/contents/files/${id}`,
+           {method:"DELETE",body:JSON.stringify({message:"delete",sha:m.sha})});
+}
+function b64toBlob(b64,type){const s=atob(b64.replace(/\s/g,""));const u=new Uint8Array(s.length);
+  for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return new Blob([u],{type:type||"application/octet-stream"});}
+async function getBlob(it){
+  if(it.isFolder)return null;
+  if(it._blob)return it._blob;
+  const c=await idbGet(it.id);
+  if(c&&c.blob){it._blob=c.blob;return c.blob;}
+  if(!syncOn())return null;
+  // The Contents API only inlines/serves raw bytes for files <=1MB; for bigger
+  // files fetch the git blob by sha (works up to 100MB). Ask for metadata first.
+  const m=await gh(`/repos/${owner}/${REPO}/contents/files/${it.id}`,
+                   {accept:"application/vnd.github.object+json"});
+  let blob;
+  if(m.content){blob=b64toBlob(m.content,it.type);}
+  else{const b=await gh(`/repos/${owner}/${REPO}/git/blobs/${m.sha}`);
+       blob=b64toBlob(b.content,it.type);}
+  it._blob=blob;
+  put({id:it.id,blob,cache:true}).catch(()=>{});
+  return blob;
+}
+async function connect(tok){
+  const prev=token;token=tok.trim();
+  try{
+    const me=await gh("/user");owner=me.login;
+    let repo=await gh(`/repos/${owner}/${REPO}`,{ok404:true});
+    if(!repo){
+      repo=await gh("/user/repos",{method:"POST",body:JSON.stringify(
+        {name:REPO,private:true,auto_init:true,
+         description:"ArtDrive file storage (auto-created)"})});
+    }
+    await pullIndex();
+    // first-connect migration: push this laptop's local files to the cloud
+    const local=(await all()).filter(r=>r.name);
+    const have=new Set(items.map(i=>i.id));
+    const toPush=local.filter(r=>!have.has(r.id));
+    let n=0;
+    for(const r of toPush){
+      if(!r.isFolder&&r.blob){
+        if(r.size>MAXSYNC)continue;
+        await putFileBlob(r.id,r.blob,r.name);
+      }
+      items.push(meta(r));n++;
+    }
+    if(n)await saveIndex("migrate "+n+" local item(s)");
+    localStorage.setItem(LS_TOKEN,token);
+    localStorage.setItem(LS_OWNER,owner);
+    toast("Sync is on — "+owner+"/"+REPO+(n?(" ("+n+" local items uploaded)"):""));
+    render();updateSyncUI();
+    return true;
+  }catch(e){
+    token=prev;
+    throw e;
+  }
+}
+function signOut(){
+  localStorage.removeItem(LS_TOKEN);localStorage.removeItem(LS_OWNER);
+  token="";owner="";indexSha=null;items=[];
+  reload();toast("Sync turned off on this computer");
+}
+
+/* ================= helpers ================= */
 function fmtSize(n){
   if(n==null)return"";
   if(n<1024)return n+" B";
@@ -195,76 +369,130 @@ function icon(it){
   if(t.startsWith("text/")||/\.(txt|md)$/.test(n))return"📄";
   return"📄";
 }
-function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2400);}
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove("show"),2800);}
+function oops(e){console.error(e);toast(e&&e.status===401?"GitHub says the token isn't valid.":"Couldn't reach GitHub — check your internet and try again.");}
 async function refreshQuota(){
+  if(syncOn()){
+    $("#qfill").style.width=Math.max(1,Math.min(100,Math.round(cloudBytes/1073741824*100)))+"%";
+    $("#qtext").textContent=fmtSize(cloudBytes)+" in the cloud";
+    return;
+  }
   try{
     const e=await navigator.storage.estimate();
-    const used=e.usage||0, tot=e.quota||1;
+    const used=e.usage||0,tot=e.quota||1;
     $("#qfill").style.width=Math.max(1,Math.round(used/tot*100))+"%";
     $("#qtext").textContent=fmtSize(used)+" of "+fmtSize(tot)+" used";
   }catch(_){$("#qtext").textContent="";}
 }
 
-/* ---------------- data ops ---------------- */
-async function reload(){items=await all();render();refreshQuota();}
-async function addFiles(fileList){
-  let n=0;
-  for(const f of fileList){
-    await put({id:uid(),name:f.name,type:f.type,size:f.size,parent:cwd,
-               isFolder:false,blob:f,created:Date.now(),modified:f.lastModified||Date.now(),deleted:false});
-    n++;
+/* ================= data ops (branch on sync) ================= */
+async function reload(){
+  if(syncOn()){
+    try{await pullIndex();}
+    catch(e){oops(e);}
+  }else{
+    items=(await all()).filter(r=>r.name);
   }
-  toast(n===1?"Uploaded 1 file":"Uploaded "+n+" files");
+  render();refreshQuota();updateSyncUI();
+}
+async function persistNew(rec,blob){
+  if(syncOn()){
+    items.push(rec);
+    render();
+    try{
+      if(blob){await putFileBlob(rec.id,blob,rec.name);
+        put({id:rec.id,blob,cache:true}).catch(()=>{});rec._blob=blob;}
+      await saveIndex((blob?"upload ":"create ")+rec.name);
+    }catch(e){items=items.filter(i=>i.id!==rec.id);render();oops(e);return false;}
+  }else{
+    await put({...rec,blob});
+    items=(await all()).filter(r=>r.name);
+  }
+  return true;
+}
+async function persistChange(it,msg){
+  if(syncOn()){
+    try{await saveIndex(msg);}catch(e){oops(e);}
+  }else{
+    const r=await idbGet(it.id);
+    if(r){Object.assign(r,meta(it),{blob:r.blob});await put(r);}
+  }
+}
+async function addFiles(fileList){
+  let n=0,skipped=0;
+  for(const f of fileList){
+    if(syncOn()&&f.size>MAXSYNC){skipped++;continue;}
+    const rec={id:uid(),name:f.name,type:f.type,size:f.size,parent:cwd,isFolder:false,
+               created:Date.now(),modified:f.lastModified||Date.now(),deleted:false};
+    if(await persistNew(rec,f))n++;
+  }
+  if(n)toast(n===1?"Uploaded 1 file":"Uploaded "+n+" files");
+  if(skipped)toast(skipped+" file(s) skipped — over the "+fmtSize(MAXSYNC)+" sync limit");
   await reload();
 }
 async function newFolder(){
-  const name=prompt("Folder name:","New folder"); if(!name)return;
-  await put({id:uid(),name,parent:cwd,isFolder:true,created:Date.now(),modified:Date.now(),deleted:false});
+  const name=prompt("Folder name:","New folder");if(!name)return;
+  await persistNew({id:uid(),name,parent:cwd,isFolder:true,created:Date.now(),
+                    modified:Date.now(),deleted:false},null);
   await reload();
 }
 async function newDoc(){
-  const name=prompt("File name:","notes.txt"); if(!name)return;
-  const text=prompt("Contents (you can edit later by re-creating):","")||"";
+  const name=prompt("File name:","notes.txt");if(!name)return;
+  const text=prompt("Contents:","")||"";
   const blob=new Blob([text],{type:"text/plain"});
-  await put({id:uid(),name,type:"text/plain",size:blob.size,parent:cwd,
-             isFolder:false,blob,created:Date.now(),modified:Date.now(),deleted:false});
+  await persistNew({id:uid(),name,type:"text/plain",size:blob.size,parent:cwd,isFolder:false,
+                    created:Date.now(),modified:Date.now(),deleted:false},blob);
   await reload();
 }
 async function renameSel(){
-  const it=one(); if(!it)return;
-  const name=prompt("Rename to:",it.name); if(!name||name===it.name)return;
-  it.name=name; it.modified=Date.now(); await put(it); await reload();
+  const it=one();if(!it)return;
+  const name=prompt("Rename to:",it.name);if(!name||name===it.name)return;
+  it.name=name;it.modified=Date.now();
+  await persistChange(it,"rename to "+name);await reload();
 }
 async function deleteSel(){
-  const ids=[...selected]; if(!ids.length)return;
+  const ids=[...selected];if(!ids.length)return;
   if(view==="bin"){
     if(!confirm("Permanently delete "+ids.length+" item(s)? This can't be undone."))return;
-    for(const id of ids){await removeTree(id,true);}
+    for(const id of ids)await removeTree(id);
+    if(syncOn()){try{await saveIndex("empty bin items");}catch(e){oops(e);}}
     toast("Deleted permanently");
   }else{
-    for(const id of ids){const it=items.find(i=>i.id===id);if(it){it.deleted=true;it.modified=Date.now();await put(it);}}
+    for(const id of ids){const it=items.find(i=>i.id===id);
+      if(it){it.deleted=true;it.modified=Date.now();
+        if(!syncOn())await persistChange(it,"");}}
+    if(syncOn()){try{await saveIndex("move to bin");}catch(e){oops(e);}}
     toast(ids.length+" item(s) moved to recycle bin");
   }
-  selected.clear(); await reload();
+  selected.clear();await reload();
 }
-async function removeTree(id,hard){
+async function removeTree(id){
   const kids=items.filter(i=>i.parent===id);
-  for(const k of kids)await removeTree(k.id,hard);
-  if(hard)await del(id);
+  for(const k of kids)await removeTree(k.id);
+  const it=items.find(i=>i.id===id);
+  if(it&&!it.isFolder&&syncOn()){try{await deleteFileBlob(id);}catch(e){}}
+  items=items.filter(i=>i.id!==id);
+  await del(id).catch(()=>{});
 }
 async function restoreSel(){
-  for(const id of selected){const it=items.find(i=>i.id===id);if(it){it.deleted=false;await put(it);}}
-  toast("Restored"); selected.clear(); await reload();
+  for(const id of selected){const it=items.find(i=>i.id===id);
+    if(it){it.deleted=false;if(!syncOn())await persistChange(it,"");}}
+  if(syncOn()){try{await saveIndex("restore");}catch(e){oops(e);}}
+  toast("Restored");selected.clear();await reload();
 }
 function one(){if(selected.size!==1)return null;return items.find(i=>i.id===[...selected][0]);}
-function downloadItem(it){
+async function downloadItem(it){
   if(!it||it.isFolder)return;
-  const u=URL.createObjectURL(it.blob);
-  const a=document.createElement("a");a.href=u;a.download=it.name;a.click();
-  setTimeout(()=>URL.revokeObjectURL(u),4000);
+  try{
+    const blob=await getBlob(it);
+    if(!blob){toast("Couldn't get that file right now.");return;}
+    const u=URL.createObjectURL(blob);
+    const a=document.createElement("a");a.href=u;a.download=it.name;a.click();
+    setTimeout(()=>URL.revokeObjectURL(u),4000);
+  }catch(e){oops(e);}
 }
 
-/* ---------------- rendering ---------------- */
+/* ================= rendering ================= */
 function visibleItems(){
   if(view==="bin")   return items.filter(i=>i.deleted);
   if(view==="recent")return items.filter(i=>!i.deleted&&!i.isFolder).sort((a,b)=>b.modified-a.modified).slice(0,40);
@@ -275,20 +503,20 @@ function visibleItems(){
 }
 function crumbHtml(){
   if(view!=="files"){
-    const t={recent:"Recent",photos:"Photos",bin:"Recycle bin",search:"Search: “"+searchQ+"”"}[view];
+    const t={recent:"Recent",photos:"Photos",bin:"Recycle bin",search:"Search: “"+esc(searchQ)+"”"}[view];
     return "<span class='cur'>"+t+"</span>";
   }
   return path.map((p,i)=> i===path.length-1
     ? "<span class='cur'>"+esc(p.name)+"</span>"
     : "<a href='#' data-nav='"+i+"'>"+esc(p.name)+"</a><span class='sep'>›</span>").join("");
 }
-function esc(s){return s.replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
 function render(){
-  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("sel",b.dataset.v===view));
+  document.querySelectorAll("nav button.nb").forEach(b=>b.classList.toggle("sel",b.dataset.v===view));
   $("#crumbs").innerHTML=crumbHtml();
   $("#crumbs").querySelectorAll("a").forEach(a=>a.onclick=e=>{e.preventDefault();
-    const i=+a.dataset.nav; path=path.slice(0,i+1); cwd=path[i].id; selected.clear(); render();});
-  const vis=visibleItems(), box=$("#files");
+    const i=+a.dataset.nav;path=path.slice(0,i+1);cwd=path[i].id;selected.clear();render();});
+  const vis=visibleItems(),box=$("#files");
   if(!vis.length){
     const msg={files:["📂","This folder is empty","Upload files or create a folder to get started."],
       recent:["🕒","Nothing recent yet","Files you add will show up here."],
@@ -305,16 +533,32 @@ function render(){
   }else{
     box.innerHTML="<div class='grid'>"+vis.map(it=>{
       let big=icon(it);
-      if((it.type||"").startsWith("image/")&&it.blob){
-        const u=URL.createObjectURL(it.blob); big="<img src='"+u+"' alt=''>";
+      if((it.type||"").startsWith("image/")&&it._blob){
+        big="<img src='"+URL.createObjectURL(it._blob)+"' alt=''>";
       }
       return "<div class='tile "+(selected.has(it.id)?"sel":"")+"' data-id='"+it.id+"'>"+
-        "<div class='big'>"+big+"</div><div class='nm'>"+esc(it.name)+"</div>"+
+        "<div class='big' data-big='"+it.id+"'>"+big+"</div><div class='nm'>"+esc(it.name)+"</div>"+
         "<div class='mt'>"+(it.isFolder?"Folder":fmtSize(it.size))+" · "+fmtDate(it.modified)+"</div></div>";
     }).join("")+"</div>";
     box.querySelectorAll(".tile").forEach(wire);
+    hydrateThumbs(vis);
   }
   updateCmd();
+}
+const thumbTried=new Set();
+async function hydrateThumbs(vis){
+  const imgs=vis.filter(i=>(i.type||"").startsWith("image/")&&!i._blob&&!thumbTried.has(i.id));
+  let fetched=0;
+  for(const it of imgs){
+    thumbTried.add(it.id);
+    try{
+      const c=await idbGet(it.id);
+      if(c&&c.blob)it._blob=c.blob;
+      else if(syncOn()&&(it.size||0)<3145728&&fetched<8){await getBlob(it);fetched++;}
+    }catch(_){}
+    const slot=document.querySelector("[data-big='"+it.id+"']");
+    if(slot&&it._blob)slot.innerHTML="<img src='"+URL.createObjectURL(it._blob)+"' alt=''>";
+  }
 }
 function wire(el){
   el.onclick=e=>{
@@ -326,7 +570,7 @@ function wire(el){
   el.ondblclick=()=>{const it=items.find(i=>i.id===el.dataset.id);openItem(it);};
 }
 function updateCmd(){
-  const n=selected.size, it=one();
+  const n=selected.size,it=one();
   $("#bOpen").disabled=!it;
   $("#bDown").disabled=!it||it.isFolder;
   $("#bRen").disabled=!it;
@@ -338,41 +582,59 @@ function updateCmd(){
       restore.onclick=restoreSel;$("#bDel").before(restore);}
   }else if(restore)restore.remove();
 }
+function updateSyncUI(){
+  const box=$("#syncbox");
+  if(syncOn()){
+    box.innerHTML="<span class='dot on'></span>Synced · <span class='who'>"+esc(owner+"/"+REPO)+"</span>"+
+      "<button id='sbNow'>🔄 Sync now</button><button class='ghost' id='sbOut'>Turn off sync</button>";
+    $("#sbNow").onclick=()=>{toast("Syncing…");reload();};
+    $("#sbOut").onclick=()=>{if(confirm("Turn off sync on this computer? Your files stay safe in "+owner+"/"+REPO+" on GitHub."))signOut();};
+  }else{
+    box.innerHTML="<span class='dot'></span>This device only"+
+      "<button id='sbOn'>🔗 Turn on sync…</button>";
+    $("#sbOn").onclick=()=>{$("#serr").textContent="";$("#stok").value="";$("#sdlg").classList.add("open");$("#stok").focus();};
+  }
+}
 
-/* ---------------- open / preview ---------------- */
-function openItem(it){
+/* ================= open / preview ================= */
+async function openItem(it){
   if(!it)return;
   if(it.isFolder){
     if(view!=="files"){view="files";path=[{id:"root",name:"My files"}];}
     cwd=it.id;path.push({id:it.id,name:it.name});selected.clear();render();return;
   }
-  const t=it.type||"", body=$("#obody");
+  const t=it.type||"",body=$("#obody");
   $("#oname").textContent=it.name;
   $("#oDown").onclick=()=>downloadItem(it);
-  body.innerHTML="";
-  const u=URL.createObjectURL(it.blob);
+  body.innerHTML="<div class='noprev'>Loading…</div>";
+  $("#ovl").classList.add("open");
+  let blob;
+  try{blob=await getBlob(it);}catch(e){oops(e);}
+  if(!blob){body.innerHTML="<div class='noprev'>Couldn't load this file right now.</div>";return;}
+  const u=URL.createObjectURL(blob);
   if(t.startsWith("image/"))body.innerHTML="<img src='"+u+"'>";
   else if(t.startsWith("video/"))body.innerHTML="<video src='"+u+"' controls autoplay></video>";
   else if(t.startsWith("audio/"))body.innerHTML="<audio src='"+u+"' controls autoplay style='width:min(500px,90%)'></audio>";
   else if(t==="application/pdf")body.innerHTML="<iframe src='"+u+"'></iframe>";
   else if(t.startsWith("text/")||/\.(txt|md|json|js|py|css|html|csv|log)$/i.test(it.name)){
-    it.blob.text().then(txt=>{const pre=document.createElement("pre");pre.textContent=txt;body.appendChild(pre);});
+    const txt=await blob.text();const pre=document.createElement("pre");pre.textContent=txt;
+    body.innerHTML="";body.appendChild(pre);
   }else body.innerHTML="<div class='noprev'>No preview for this file type.<br><br>Use Download to open it on your Mac.</div>";
-  $("#ovl").classList.add("open");
+  render();  // refresh thumbnails now the blob is cached
 }
 $("#oClose").onclick=()=>{$("#ovl").classList.remove("open");$("#obody").innerHTML="";};
 
-/* ---------------- events ---------------- */
-document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{
-  view=b.dataset.v; if(view==="files"){cwd="root";path=[{id:"root",name:"My files"}];}
-  selected.clear(); $("#search").value=""; render();
+/* ================= events ================= */
+document.querySelectorAll("nav button.nb").forEach(b=>b.onclick=()=>{
+  view=b.dataset.v;if(view==="files"){cwd="root";path=[{id:"root",name:"My files"}];}
+  selected.clear();$("#search").value="";render();
 });
 $("#bUpload").onclick=()=>$("#fpick").click();
-$("#fpick").onchange=e=>{if(e.target.files.length)addFiles(e.target.files);e.target.value="";};
+$("#fpick").onchange=e=>{if(e.target.files.length)addFiles([...e.target.files]);e.target.value="";};
 $("#bFolder").onclick=newFolder;
 $("#bDoc").onclick=newDoc;
-$("#bRen").onclick=renameSel;
-$("#bDel").onclick=deleteSel;
+$("#bRen").onclick=()=>renameSel();
+$("#bDel").onclick=()=>deleteSel();
 $("#bDown").onclick=()=>downloadItem(one());
 $("#bOpen").onclick=()=>openItem(one());
 $("#bView").onclick=()=>{listMode=!listMode;$("#bView").textContent=listMode?"⊞ Grid":"☰ List";render();};
@@ -381,15 +643,30 @@ $("#search").oninput=e=>{
   if(searchQ){view="search";}else{view="files";cwd="root";path=[{id:"root",name:"My files"}];}
   selected.clear();render();
 };
+$("#sCancel").onclick=()=>$("#sdlg").classList.remove("open");
+$("#sGo").onclick=async()=>{
+  const tok=$("#stok").value.trim();
+  if(!tok){$("#serr").textContent="Paste a token first.";return;}
+  $("#sGo").textContent="Connecting…";$("#sGo").disabled=true;$("#serr").textContent="";
+  try{
+    await connect(tok);
+    $("#sdlg").classList.remove("open");
+  }catch(e){
+    $("#serr").textContent=e.status===401?"GitHub says that token isn't valid — copy it again."
+      :"Couldn't connect ("+(e.message||e)+").";
+  }
+  $("#sGo").textContent="Connect";$("#sGo").disabled=false;
+};
 /* drag & drop upload */
 const fbox=$("#files");
 ["dragover","dragenter"].forEach(ev=>fbox.addEventListener(ev,e=>{e.preventDefault();fbox.classList.add("drag");}));
 ["dragleave","drop"].forEach(ev=>fbox.addEventListener(ev,e=>{e.preventDefault();fbox.classList.remove("drag");}));
-fbox.addEventListener("drop",e=>{if(e.dataTransfer.files.length)addFiles(e.dataTransfer.files);});
-/* click empty space clears selection */
+fbox.addEventListener("drop",e=>{if(e.dataTransfer.files.length)addFiles([...e.dataTransfer.files]);});
 fbox.addEventListener("click",e=>{if(e.target===fbox||e.target.classList.contains("grid")){selected.clear();render();}});
+/* pick up changes made on the other laptop whenever this tab comes back */
+window.addEventListener("focus",()=>{if(syncOn()&&Date.now()-lastPull>10000)reload();});
 
-/* ---------------- boot ---------------- */
+/* ================= boot ================= */
 idb().then(d=>{db=d;reload();});
 })();
 </script>
