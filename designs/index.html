@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MakerVault — 3D Print Designs</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      background: #050510;
+      color: #fff;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow-x: hidden;
+    }
+
+    #stars { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+
+    .container {
+      position: relative; z-index: 1;
+      max-width: 1180px; margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    .home-link {
+      position: fixed; top: 18px; left: 20px; z-index: 50;
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 16px; border-radius: 999px;
+      border: 1px solid #1a1a3a; background: rgba(15,15,32,0.6);
+      color: #8899bb; text-decoration: none; font-size: 13px;
+      backdrop-filter: blur(6px);
+      transition: color .2s, border-color .2s;
+    }
+    .home-link:hover { color: #ffd700; border-color: #ffd700; }
+
+    header { text-align: center; margin-bottom: 36px; }
+    .logo {
+      display: inline-block; font-size: 12px; letter-spacing: 6px;
+      text-transform: uppercase; color: #445; margin-bottom: 16px;
+    }
+    h1 {
+      font-size: clamp(34px, 6vw, 58px); font-weight: 900; letter-spacing: -1px;
+      background: linear-gradient(135deg, #ffd700 0%, #ff8c00 50%, #ff4466 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+      background-clip: text; line-height: 1.1;
+    }
+    .tagline { margin-top: 12px; font-size: 15px; color: #8899bb; }
+    .tagline a { color: #8899bb; }
+
+    /* Controls */
+    .controls {
+      display: flex; flex-wrap: wrap; gap: 12px; align-items: center;
+      justify-content: center; margin-bottom: 18px;
+    }
+    .searchbox {
+      flex: 1 1 320px; max-width: 520px; display: flex; align-items: center; gap: 10px;
+      background: rgba(15,15,32,0.75); border: 1px solid #1a1a3a; border-radius: 999px;
+      padding: 12px 20px; transition: border-color .2s;
+    }
+    .searchbox:focus-within { border-color: #ffd700; }
+    .searchbox input {
+      flex: 1; background: none; border: none; outline: none;
+      color: #fff; font-size: 15px; font-family: inherit;
+    }
+    .searchbox input::placeholder { color: #556; }
+    .searchbox .mag { color: #556; font-size: 15px; }
+
+    select {
+      background: rgba(15,15,32,0.75); border: 1px solid #1a1a3a; color: #cdd6f4;
+      border-radius: 999px; padding: 12px 16px; font-size: 13.5px;
+      font-family: inherit; outline: none; cursor: pointer;
+    }
+    select:hover, select:focus { border-color: #ffd700; }
+
+    /* Tag chips */
+    .chips {
+      display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+      margin-bottom: 28px;
+    }
+    .chip {
+      padding: 7px 14px; border-radius: 999px; font-size: 12.5px; cursor: pointer;
+      border: 1px solid #1a1a3a; background: rgba(15,15,32,0.6); color: #8899bb;
+      transition: color .15s, border-color .15s, background .15s;
+      user-select: none;
+    }
+    .chip:hover { color: #ffd700; border-color: #ffd700; }
+    .chip.active { background: rgba(255,215,0,0.12); color: #ffd700; border-color: #ffd700; }
+
+    .count-line { text-align: center; color: #556; font-size: 13px; margin-bottom: 22px; }
+
+    /* Grid */
+    .grid {
+      display: grid; gap: 18px;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    }
+    .dcard {
+      display: flex; flex-direction: column; text-decoration: none;
+      background: #0a0a1e; border: 1px solid #1a1a3a; border-radius: 16px;
+      overflow: hidden; transition: transform .18s, border-color .18s, box-shadow .18s;
+    }
+    .dcard:hover {
+      transform: translateY(-4px); border-color: #ffd700;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.55);
+    }
+    .dcard .thumb {
+      aspect-ratio: 1 / 1; width: 100%; background: #10102a;
+      display: block; object-fit: cover;
+    }
+    .dcard .body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+    .dcard .title {
+      color: #e8ecf8; font-size: 14px; font-weight: 600; line-height: 1.35;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+      min-height: 2.7em;
+    }
+    .dcard .maker { display: flex; align-items: center; gap: 7px; color: #8899bb; font-size: 12px; }
+    .dcard .maker img { width: 18px; height: 18px; border-radius: 50%; background: #1a1a3a; }
+    .dcard .maker span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dcard .stats {
+      margin-top: auto; display: flex; gap: 12px; color: #667; font-size: 12px;
+    }
+    .dcard .stats b { color: #aab; font-weight: 600; }
+
+    .loadmore-sentinel { height: 10px; }
+    .empty { text-align: center; color: #556; padding: 60px 0; font-size: 15px; }
+
+    footer { margin-top: 60px; text-align: center; color: #445; font-size: 12.5px; line-height: 1.8; }
+    footer a { color: #667; }
+    footer a:hover { color: #ffd700; }
+  </style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+
+<a class="home-link" href="/">← Home</a>
+
+<div class="container">
+  <header>
+    <div class="logo">ARTGEOrge</div>
+    <h1>MAKERVAULT</h1>
+    <p class="tagline">Browse 2,000 popular 3D print designs — snapshot from MakerWorld</p>
+  </header>
+
+  <div class="controls">
+    <div class="searchbox">
+      <span class="mag">🔎</span>
+      <input id="q" type="search" placeholder="Search designs, tags, or makers…" autocomplete="off" />
+    </div>
+    <select id="sort">
+      <option value="l">Most liked</option>
+      <option value="d">Most downloaded</option>
+      <option value="p">Most printed</option>
+      <option value="cl">Most collected</option>
+    </select>
+  </div>
+
+  <div class="chips" id="chips"></div>
+  <div class="count-line" id="countLine"></div>
+
+  <div class="grid" id="grid"></div>
+  <div class="empty" id="empty" style="display:none">No designs match your search.</div>
+  <div class="loadmore-sentinel" id="sentinel"></div>
+
+  <footer>
+    Design data &amp; files belong to their creators on
+    <a href="https://makerworld.com" target="_blank" rel="noopener">MakerWorld</a>.
+    Click any card to open its page and download the 3D files.
+  </footer>
+</div>
+
+<script>
+(function () {
+  /* Starfield (same as homepage) */
+  var canvas = document.getElementById('stars'), ctx = canvas.getContext('2d'), stars = [];
+  function resize() {
+    canvas.width = innerWidth; canvas.height = innerHeight;
+    stars = [];
+    for (var i = 0; i < 120; i++) stars.push({
+      x: Math.random() * canvas.width, y: Math.random() * canvas.height,
+      r: Math.random() * 1.2 + 0.2, a: Math.random(), da: (Math.random() * 0.02 + 0.005) * (Math.random() < 0.5 ? -1 : 1)
+    });
+  }
+  function tick() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (var i = 0; i < stars.length; i++) {
+      var s = stars[i];
+      s.a += s.da; if (s.a <= 0 || s.a >= 1) s.da *= -1;
+      ctx.globalAlpha = Math.max(0, Math.min(1, s.a));
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.fill();
+    }
+    requestAnimationFrame(tick);
+  }
+  addEventListener('resize', resize); resize(); tick();
+})();
+
+(function () {
+  var ALL = [], view = [], shown = 0, PAGE = 60, activeTag = '';
+  var grid = document.getElementById('grid');
+  var q = document.getElementById('q');
+  var sortSel = document.getElementById('sort');
+  var countLine = document.getElementById('countLine');
+  var emptyEl = document.getElementById('empty');
+  var chipsEl = document.getElementById('chips');
+
+  function fmt(n) {
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'k';
+    return '' + n;
+  }
+
+  function apply() {
+    var term = q.value.trim().toLowerCase();
+    view = ALL.filter(function (d) {
+      if (activeTag && d.tg.indexOf(activeTag) === -1) return false;
+      if (!term) return true;
+      return d._hay.indexOf(term) !== -1;
+    });
+    var k = sortSel.value;
+    view.sort(function (a, b) { return b[k] - a[k]; });
+    grid.innerHTML = ''; shown = 0;
+    renderMore();
+    countLine.textContent = view.length === ALL.length
+      ? ALL.length + ' designs'
+      : view.length + ' of ' + ALL.length + ' designs';
+    emptyEl.style.display = view.length ? 'none' : 'block';
+  }
+
+  function renderMore() {
+    var frag = document.createDocumentFragment();
+    var end = Math.min(shown + PAGE, view.length);
+    for (var i = shown; i < end; i++) {
+      var d = view[i];
+      var a = document.createElement('a');
+      a.className = 'dcard';
+      a.href = 'https://makerworld.com/en/models/' + d.id + '-' + d.s;
+      a.target = '_blank'; a.rel = 'noopener';
+      a.innerHTML =
+        '<img class="thumb" loading="lazy" alt="" src="' + d.c + '?image_process=resize,w_360" />' +
+        '<div class="body">' +
+          '<div class="title"></div>' +
+          '<div class="maker"><img loading="lazy" alt="" src="' + d.a + '" /><span></span></div>' +
+          '<div class="stats">' +
+            '<span>❤️ <b>' + fmt(d.l) + '</b></span>' +
+            '<span>⬇️ <b>' + fmt(d.d) + '</b></span>' +
+            '<span>🖨️ <b>' + fmt(d.p) + '</b></span>' +
+          '</div>' +
+        '</div>';
+      a.querySelector('.title').textContent = d.t;
+      a.querySelector('.maker span').textContent = d.u;
+      frag.appendChild(a);
+    }
+    shown = end;
+    grid.appendChild(frag);
+  }
+
+  var io = new IntersectionObserver(function (entries) {
+    if (entries[0].isIntersecting && shown < view.length) renderMore();
+  }, { rootMargin: '800px' });
+  io.observe(document.getElementById('sentinel'));
+
+  function buildChips() {
+    var counts = {};
+    ALL.forEach(function (d) { d.tg.forEach(function (t) { counts[t] = (counts[t] || 0) + 1; }); });
+    var top = Object.keys(counts).sort(function (a, b) { return counts[b] - counts[a]; }).slice(0, 14);
+    top.forEach(function (t) {
+      var c = document.createElement('div');
+      c.className = 'chip'; c.textContent = t;
+      c.addEventListener('click', function () {
+        activeTag = (activeTag === t) ? '' : t;
+        Array.prototype.forEach.call(chipsEl.children, function (el) {
+          el.classList.toggle('active', el.textContent === activeTag);
+        });
+        apply();
+      });
+      chipsEl.appendChild(c);
+    });
+  }
+
+  q.addEventListener('input', apply);
+  sortSel.addEventListener('change', apply);
+
+  fetch('designs.json')
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      ALL = data;
+      ALL.forEach(function (d) {
+        d._hay = (d.t + ' ' + d.tg.join(' ') + ' ' + d.u).toLowerCase();
+      });
+      buildChips();
+      apply();
+    })
+    .catch(function () {
+      emptyEl.textContent = 'Could not load the design catalog.';
+      emptyEl.style.display = 'block';
+    });
+})();
+</script>
+
+</body>
+</html>
