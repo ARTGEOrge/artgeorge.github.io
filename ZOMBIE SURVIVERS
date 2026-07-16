@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zombie Survival</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+        }
+        .game-container {
+            text-align: center;
+        }
+        canvas {
+            border: 4px solid #6d4aff;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(109, 74, 255, 0.5);
+            background: #0f0f23;
+        }
+        .ui-panel {
+            color: white;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+        .instructions {
+            color: #aaa;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        h1 {
+            color: #6d4aff;
+            margin-bottom: 15px;
+            text-shadow: 0 0 10px rgba(109, 74, 255, 0.8);
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🧟 Zombie Survival 🏃</h1>
+        <div class="ui-panel">
+            <span>❤️ Health: <span id="health">100</span></span> | 
+            <span>⭐ Score: <span id="score">0</span></span> | 
+            <span>💀 Zombies: <span id="zombieCount">3</span></span>
+        </div>
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div class="instructions">
+            Use ⬆️⬇️⬅️➡️ Arrow Keys to move | Survive as long as you can!
+        </div>
+    </div>
+
+    <script>
+        // Game Setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const healthEl = document.getElementById('health');
+        const scoreEl = document.getElementById('score');
+        const zombieCountEl = document.getElementById('zombieCount');
+
+        // Game State
+        let gameOver = false;
+        let score = 0;
+        
+        // Player Object
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            width: 30,
+            height: 30,
+            speed: 5,
+            health: 100,
+            invulnerable: false,
+            invulnerabilityTime: 0
+        };
+
+        // Zombie Array
+        let zombies = [];
+        
+        // Key States
+        const keys = {
+            ArrowUp: false,
+            ArrowDown: false,
+            ArrowLeft: false,
+            ArrowRight: false
+        };
+
+        // Initialize Zombies
+        function spawnZombie() {
+            const edge = Math.floor(Math.random() * 4);
+            let x, y;
+            
+            switch(edge) {
+                case 0: x = Math.random() * canvas.width; y = -30; break; // Top
+                case 1: x = canvas.width + 30; y = Math.random() * canvas.height; break; // Right
+                case 2: x = Math.random() * canvas.width; y = canvas.height + 30; break; // Bottom
+                case 3: x = -30; y = Math.random() * canvas.height; break; // Left
+            }
+            
+            zombies.push({
+                x: x,
+                y: y,
+                width: 30,
+                height: 30,
+                speed: 1.5 + (Math.random() * 1),
+                damage: 10
+            });
+        }
+
+        function initGame() {
+            zombies = [];
+            for(let i = 0; i < 3; i++) {
+                spawnZombie();
+            }
+            player.health = 100;
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+            score = 0;
+            gameOver = false;
+            updateUI();
+        }
+
+        // Event Listeners
+        document.addEventListener('keydown', (e) => {
+            if(keys.hasOwnProperty(e.code)) {
+                keys[e.code] = true;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            if(keys.hasOwnProperty(e.code)) {
+                keys[e.code] = false;
+            }
+        });
+
+        // Update Functions
+        function updatePlayer() {
+            if (keys.ArrowUp && player.y > 0) player.y -= player.speed;
+            if (keys.ArrowDown && player.y < canvas.height - player.height) player.y += player.speed;
+            if (keys.ArrowLeft && player.x > 0) player.x -= player.speed;
+            if (keys.ArrowRight && player.x < canvas.width - player.width) player.x += player.speed;
+            
+            // Handle invulnerability timer
+            if (player.invulnerable) {
+                player.invulnerabilityTime--;
+                if (player.invulnerabilityTime <= 0) {
+                    player.invulnerable = false;
+                }
+            }
+        }
+
+        function updateZombies() {
+            zombies.forEach((zombie, index) => {
+                // Move towards player
+                const dx = player.x - zombie.x;
+                const dy = player.y - zombie.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance > 0) {
+                    zombie.x += (dx / distance) * zombie.speed;
+                    zombie.y += (dy / distance) * zombie.speed;
+                }
+                
+                // Check collision with player
+                if (!player.invulnerable && 
+                    rectIntersect(player.x, player.y, player.width, player.height,
+                                 zombie.x, zombie.y, zombie.width, zombie.height)) {
+                    player.health -= zombie.damage;
+                    player.invulnerable = true;
+                    player.invulnerabilityTime = 60; // 1 second at 60fps
+                    
+                    // Push zombie back
+                    zombie.x -= (dx / distance) * 50;
+                    zombie.y -= (dy / distance) * 50;
+                    
+                    updateUI();
+                    
+                    if (player.health <= 0) {
+                        gameOver = true;
+                    }
+                }
+            });
+        }
+
+        function rectIntersect(x1, y1, w1, h1, x2, y2, w2, h2) {
+            return x2 < x1 + w1 && x2 + w2 > x1 && y2 < y1 + h1 && y2 + h2 > y1;
+        }
+
+        function updateUI() {
+            healthEl.textContent = Math.max(0, player.health);
+            scoreEl.textContent = score;
+            zombieCountEl.textContent = zombies.length;
+            
+            // Spawn more zombies based on score
+            if (score > 0 && score % 500 === 0 && zombies.length < 10) {
+                spawnZombie();
+            }
+        }
+
+        // Draw Functions
+        function drawPlayer() {
+            // Flash effect when invulnerable
+            if (player.invulnerable && Math.floor(Date.now() / 100) % 2 === 0) {
+                ctx.fillStyle = '#ffcc00';
+            } else {
+                ctx.fillStyle = '#6d4aff';
+            }
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // Add player face
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(player.x + 8, player.y + 10, 3, 0, Math.PI * 2);
+            ctx.arc(player.x + 22, player.y + 10, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawZombies() {
+            zombies.forEach(zombie => {
+                ctx.fillStyle = '#4caf50';
+                ctx.fillRect(zombie.x, zombie.y, zombie.width, zombie.height);
+                
+                // Zombie eyes
+                ctx.fillStyle = 'red';
+                ctx.beginPath();
+                ctx.arc(zombie.x + 8, zombie.y + 10, 3, 0, Math.PI * 2);
+                ctx.arc(zombie.x + 22, zombie.y + 10, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function drawGame() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background grid
+            ctx.strokeStyle = '#1a1a3e';
+            ctx.lineWidth = 1;
+            for(let i = 0; i < canvas.width; i += 50) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, canvas.height);
+                ctx.stroke();
+            }
+            for(let i = 0; i < canvas.height; i += 50) {
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(canvas.width, i);
+                ctx.stroke();
+            }
+            
+            drawPlayer();
+            drawZombies();
+            
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = 'bold 48px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 50);
+                
+                ctx.font = '24px Arial';
+                ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 10);
+                
+                ctx.font = '18px Arial';
+                ctx.fillStyle = '#6d4aff';
+                ctx.fillText('Press SPACE to restart', canvas.width / 2, canvas.height / 2 + 60);
+            }
+        }
+
+        // Main Game Loop
+        function gameLoop() {
+            if (!gameOver) {
+                updatePlayer();
+                updateZombies();
+                score++;
+                updateUI();
+            }
+            drawGame();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Restart Handler
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && gameOver) {
+                initGame();
+            }
+        });
+
+        // Start Game
+        initGame();
+        gameLoop();
+    </script>
+</body>
+</html>
