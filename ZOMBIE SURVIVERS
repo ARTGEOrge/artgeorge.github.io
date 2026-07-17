@@ -60,7 +60,6 @@ canvas {
     display: inline-flex; margin: 3px; padding: 4px 8px;
     background: #2a2a4a; border-radius: 4px; cursor: pointer; white-space: nowrap;
 }
-.slot.sel { background: #6d4aff; }
 .controls-info {
     position: fixed; top: 20px; left: 20px; z-index: 50;
     background: rgba(0,0,0,0.7); padding: 15px; border-radius: 8px;
@@ -114,28 +113,26 @@ const C = {
     bSpeed: 12, vw: 900, vh: 600
 };
 
-// Expanded weapon list with MORE POWERFUL weapons
 const WEAPONS = [
-    // Original weapons
-    {id:"pistol",name:"Pistol",icon:"🔫",rarity:"common",fireRate:400,damage:25,spread:0.05,ammo:999,projCount:1,vMult:1,color:"#ccc",desc:"Reliable sidearm"},
-    {id:"shotgun",name:"Shotgun",icon:"💥",rarity:"uncommon",fireRate:800,damage:15,spread:0.3,ammo:999,projCount:6,vMult:0.8,color:"#8B4513",desc:"Close range blast"},
-    {id:"smg",name:"SMG",icon:"🔄",rarity:"uncommon",fireRate:100,damage:12,spread:0.15,ammo:999,projCount:1,vMult:0.9,color:"#4a4a4a",desc:"Rapid fire"},
-    {id:"sniper",name:"Sniper",icon:"🎯",rarity:"rare",fireRate:1500,damage:150,spread:0.01,ammo:999,projCount:1,vMult:2,color:"#228B22",desc:"One shot kill"},
-    {id:"rifle",name:"Assault Rifle",icon:"⚡",rarity:"rare",fireRate:150,damage:18,spread:0.12,ammo:999,projCount:1,vMult:1.1,color:"#333",desc:"Balanced auto"},
-    {id:"minigun",name:"Minigun",icon:"🌀",rarity:"epic",fireRate:50,damage:15,spread:0.2,ammo:999,projCount:1,vMult:1.2,color:"#FFD700",desc:"Chaos mode"},
-    {id:"rocket",name:"Rocket Launcher",icon:"🚀",rarity:"epic",fireRate:1200,damage:200,spread:0.05,ammo:999,projCount:1,vMult:0.5,color:"#CD5C5C",special:"explosion",expRad:100,expDmg:100,desc:"Area damage"},
-    {id:"flame",name:"Flamethrower",icon:"🔥",rarity:"rare",fireRate:100,damage:8,spread:0.25,ammo:999,projCount:1,vMult:0.6,color:"#FF4500",special:"burn",burnDur:180,desc:"Burn DOT"},
-    {id:"laser",name:"Plasma Laser",icon":"⚡",rarity:"legendary",fireRate:200,damage:40,spread:0.02,ammo:999,projCount:1,vMult:3,color:"#0FF",special:"pierce",pierce:5,desc:"Piercing beam"},
-    {id:"vampire",name:"Vampire Blaster",icon:"🧛",rarity:"legendary",fireRate:300,damage:30,spread:0.08,ammo:999,projCount:1,vMult:1,color:"#8B0000",special:"lifesteal",lsPct:0.25,desc:"Heals you"},
-    {id:"crossbow",name:"Crossbow",icon:"🏹",rarity:"rare",fireRate:600,damage:80,spread:0.02,ammo:999,projCount:1,vMult:1.5,color:"#8B4513",special:"pierce",pierce:3,desc:"Silent power"},
-    {id:"mp",name:"Machine Pistol",icon:"🔫",rarity:"uncommon",fireRate:80,damage:10,spread:0.18,ammo:999,projCount:1,vMult:0.8,color:"#666",desc:"Ultra rapid"},
-    {id:"railgun",name:"Railgun",icon:"📑",rarity:"legendary",fireRate:2000,damage:500,spread:0,ammo:999,projCount:1,vMult:5,color:"#0F0",special:"pierce",pierce:999,desc:"Destroy all"},
-    {id:"gl",name:"Grenade Launcher",icon:"🍬",rarity:"epic",fireRate:1000,damage:100,spread:0.1,ammo:999,projCount:1,vMult:0.4,color:"#556B2F",special:"explosion",expRad:150,expDmg:100,desc:"Bouncing bombs"},
-    {id:"freezer",name:"Freeze Ray",icon:"❄️",rarity:"epic",fireRate:400,damage:15,spread:0.05,ammo:999,projCount:1,vMult:1.5,color:"#E0FFFF",special:"freeze",freezeDur:120,desc:"Slow enemies"},
+    {id:"pistol",name:"Pistol",icon:"\uD83D\uDD2B",rarity:"common",fireRate:400,damage:25,spread:0.05,ammo:999,projCount:1,vMult:1,color:"#ccc",desc:"Reliable sidearm"},
+    {id:"shotgun",name:"Shotgun",icon:"\uD83D\uDCA5",rarity:"uncommon",fireRate:800,damage:15,spread:0.3,ammo:999,projCount:6,vMult:0.8,color:"#8B4513",desc:"Close range blast"},
+    {id:"smg",name:"SMG",icon:"\uD83D\uDD01",rarity:"uncommon",fireRate:100,damage:12,spread:0.15,ammo:999,projCount:1,vMult:0.9,color:"#4a4a4a",desc:"Rapid fire"},
+    {id:"sniper",name:"Sniper",icon:"\uD83C\uDFAF",rarity:"rare",fireRate:1500,damage:150,spread:0.01,ammo:999,projCount:1,vMult:2,color:"#228B22",desc:"One shot kill"},
+    {id:"rifle",name:"Assault Rifle",icon:"\u26A1",rarity:"rare",fireRate:150,damage:18,spread:0.12,ammo:999,projCount:1,vMult:1.1,color:"#333",desc:"Balanced auto"},
+    {id:"minigun",name:"Minigun",icon:"\uD83C\uDF00",rarity:"epic",fireRate:50,damage:15,spread:0.2,ammo:999,projCount:1,vMult:1.2,color:"#FFD700",desc:"Chaos mode"},
+    {id:"rocket",name:"Rocket Launcher",icon:"\uD83D\uDE80",rarity:"epic",fireRate:1200,damage:200,spread:0.05,ammo:999,projCount:1,vMult:0.5,color:"#CD5C5C",special:"explosion",expRad:100,expDmg:100,desc:"Area damage"},
+    {id:"flame",name:"Flamethrower",icon:"\uD83D\uDD25",rarity:"rare",fireRate:100,damage:8,spread:0.25,ammo:999,projCount:1,vMult:0.6,color:"#FF4500",special:"burn",burnDur:180,desc:"Burn DOT"},
+    {id:"laser",name:"Plasma Laser",icon:"\u26A1",rarity:"legendary",fireRate:200,damage:40,spread:0.02,ammo:999,projCount:1,vMult:3,color:"#0FF",special:"pierce",pierce:5,desc:"Piercing beam"},
+    {id:"vampire",name:"Vampire Blaster",icon:"\uD83E\uDE78",rarity:"legendary",fireRate:300,damage:30,spread:0.08,ammo:999,projCount:1,vMult:1,color:"#8B0000",special:"lifesteal",lsPct:0.25,desc:"Heals you"},
+    {id:"crossbow",name:"Crossbow",icon:"\uD83C\uDFF9",rarity:"rare",fireRate:600,damage:80,spread:0.02,ammo:999,projCount:1,vMult:1.5,color:"#8B4513",special:"pierce",pierce:3,desc:"Silent power"},
+    {id:"mp",name:"Machine Pistol",icon:"\uD83D\uDD2B",rarity:"uncommon",fireRate:80,damage:10,spread:0.18,ammo:999,projCount:1,vMult:0.8,color:"#666",desc:"Ultra rapid"},
+    {id:"railgun",name:"Railgun",icon:"\uD83D\uDCAB",rarity:"legendary",fireRate:2000,damage:500,spread:0,ammo:999,projCount:1,vMult:5,color:"#0F0",special:"pierce",pierce:999,desc:"Destroy all"},
+    {id:"gl",name:"Grenade Launcher",icon:"\uD83C\uDF4C",rarity:"epic",fireRate:1000,damage:100,spread:0.1,ammo:999,projCount:1,vMult:0.4,color:"#556B2F",special:"explosion",expRad:150,expDmg:100,desc:"Bouncing bombs"},
+    {id:"freezer",name:"Freeze Ray",icon:"\u2744",rarity:"epic",fireRate:400,damage:15,spread:0.05,ammo:999,projCount:1,vMult:1.5,color:"#E0FFFF",special:"freeze",freezeDur:120,desc:"Slow enemies"},
     
     // NEW GODLY WEAPONS
-    {id:"nuclear",name:"Nuke Cannon",icon:"☢️",rarity:"godly",fireRate:5000,damage:2000,spread:0.1,ammo:999,projCount:1,vMult:1,color:"#00ff00",special:"nuke",expRad:500,expDmg:2000,desc:"NUCLEAR DESTRUCTION"},
-    {id:"deathray",name:"Death Ray",icon:"💀",rarity:"godly",fireRate:100,damage:200,spread:0.01,ammo:999,projCount:1,vMult:8,color:"#ff0000",special:"pierce",pierce:100,desc:"Unstoppable beam"},
+    {id:"nuclear",name:"Nuke Cannon",icon:"\u2620",rarity:"godly",fireRate:5000,damage:2000,spread:0.1,ammo:999,projCount:1,vMult:1,color:"#00ff00",special:"nuke",expRad:500,expDmg:2000,desc:"NUCLEAR DESTRUCTION"},
+    {id:"deathray",name:"Death Ray",icon:"\uD83D\uDC80",rarity:"godly",fireRate:100,damage:200,spread:0.01,ammo:999,projCount:1,vMult:8,color:"#ff0000",special:"pierce",pierce:100,desc:"Unstoppable beam"},
     {id:"blackhole",name:"Black Hole",icon:"⚫",rarity:"universal",fireRate:3000,damage:500,spread:0,ammo:999,projCount:1,vMult:0,color:"#000000",special:"blackhole",expRad:200,expDmg:1000,desc:"Gravity crush"},
     {id:"omega",name:"Omega Cannon",icon:"Ω",rarity:"universal",fireRate:800,damage:1000,spread:0.05,ammo:999,projCount:5,vMult:3,color:"#ff00ff",special:"multi",expRad:80,expDmg:200,desc:"Dimensional blast"},
     {id:"galaxy",name:"Galaxy Gun",icon:"🌌",rarity:"universal",fireRate:600,damage:500,spread:0.3,ammo:999,projCount:20,vMult:2,color:"#00ffff",special:"storm",expRad:60,expDmg:100,desc:"Star shower"},
@@ -185,7 +182,6 @@ function dist(a,b){let dx=a.x-b.x,dy=a.y-b.y;return Math.sqrt(dx*dx+dy*dy);}
 
 function onScreen(x,y,w,h,m){return x+w+m>cam.x&&x-m<cam.x+C.vw&&y+h+m>cam.y&&y-m<cam.y+C.vh;}
 
-// Spawn zombies
 function spawnZom(){
     let edge=Math.floor(Math.random()*4);
     let x,y,s=C.zSize,m=80;
@@ -200,7 +196,6 @@ function spawnZom(){
     zoms.push({x,y,w:s,h:s,speed:spd*ri(0.8,1.2),dmg:10+gs.level*2,hp,maxHp:hp,frozen:0,burn:0,walk:ri(0,6.28)});
 }
 
-// Spawn powerups
 function spawnPup(){
     let a=ri(0,6.28),d=ri(300,500);
     let x=p.x+Math.cos(a)*d,y=p.y+Math.sin(a)*d;
@@ -222,10 +217,8 @@ function mkBlood(x,y){
     if(splats.length>100)splats.shift();
 }
 
-// Controls - MODIFIED for menu toggle
 document.addEventListener("keydown",function(e){
     keys[e.key]=true;
-    if(e.code==="Space"){/* Auto fire now */}
     if(e.code==="KeyM")toggleWeaponMenu();
     if(e.code==="KeyR"&&gs.over)initGame();
     if(e.code==="Escape")gs.paused=!gs.paused;
@@ -239,12 +232,10 @@ cv.addEventListener("mousemove",function(e){
 
 function curW(){return gs.equipped[p.wIdx];}
 
-// AUTO-FIRE ALL WEAPONS - MODIFIED FUNCTION
 function tryShoot(){
     if(gs.over||gs.paused||gs.waiting||!p.autoFire)return;
     let now=Date.now();
     
-    // Fire ALL equipped weapons automatically
     for(let wi=0;wi<gs.equipped.length;wi++){
         let w=gs.equipped[wi];
         if(!w)continue;
@@ -279,7 +270,7 @@ function updPlayer(){
     if(keys["ArrowUp"]||keys["w"]||keys["W"])dy-=1;
     if(keys["ArrowDown"]||keys["s"]||keys["S"])dy+=1;
     if(keys["ArrowLeft"]||keys["a"]||keys["A"])dx-=1;
-    if(keys["ArrowRight"]||keys["d"]||keys["ArrowRight"])dx+=1;
+    if(keys["ArrowRight"]||keys["d"]||keys["D"])dx+=1;
     let spd=p.speed;
     p.powerups.forEach(function(pp){if(pp.type==="speed")spd*=1.5;});
     if(dx!==0||dy!==0){
@@ -317,13 +308,13 @@ function updBlts(){
             let z=zoms[j];
             if(circRect(b.x,b.y,b.w/2,{x:z.x,y:z.y,w:z.w,h:z.h})){
                 let dmg=b.dmg;
-                if(b.godly)dmg*=10; // Godly weapons hit harder
+                if(b.godly)dmg*=10;
                 
                 z.hp-=dmg;
                 if(b.special==="burn")z.burn=b.burnDur;
                 if(b.special==="freeze")z.frozen=b.freezeDur;
                 if(b.special==="lifesteal")p.hp=Math.min(p.maxHp,p.hp+b.dmg*b.lsPct);
-                if(b.special==="instant"&&b.godly){z.hp=0;} // Instant kill for godslayer
+                if(b.special==="instant"&&b.godly){z.hp=0;}
                 mkParts(b.x,b.y,b.color,5,3);
                 if(b.pierce>0&&b.pierced<b.pierce){b.pierced++;continue;}
                 blts.splice(i,1);
@@ -404,7 +395,6 @@ function checkLvl(){
 
 function trigLvl(){
     gs.waiting=true;
-    // Show ALL weapons to choose from (unlimited selection)
     let c=document.getElementById("wopts");
     c.innerHTML="";
     let rl={common:"Common",uncommon:"Uncommon",rare:"Rare",epic:"Epic",legendary:"Legendary",godly:"GODLY",universal:"UNIVERSAL"};
@@ -427,18 +417,17 @@ function trigLvl(){
 function toggleEquip(w){
     let idx=gs.equipped.indexOf(w);
     if(idx>-1){
-        gs.equipped.splice(idx,1); // Remove if already equipped
+        gs.equipped.splice(idx,1);
     }else{
-        gs.equipped.push(w); // Add to unlimited inventory
+        gs.equipped.push(w);
     }
     p.ammo=999;
-    // Refresh modal to show selection
     trigLvl();
 }
 
 function toggleWeaponMenu(){
     if(gs.equipped.length===0){
-        gs.equipped.push(WEAPONS[0]); // Add pistol if none
+        gs.equipped.push(WEAPONS[0]);
     }
     trigLvl();
 }
@@ -470,10 +459,8 @@ function updSlots(){
         h+="<span class='slot' title='"+w.name+"' style='cursor:pointer;'>"+w.icon+" "+w.name.substr(0,10)+"</span>";
     });
     s.innerHTML=h;
-    cw.textContent=gs.equipped.length+" equipped";
 }
 
-// Drawing functions remain similar...
 function drawBg(){
     let g=ctx.createLinearGradient(0,0,cv.width,cv.height);
     g.addColorStop(0,"#0a0a1a");g.addColorStop(1,"#1a0a2e");
@@ -516,7 +503,6 @@ function drawPlayer(){
     ctx.arc(px+p.w*0.3,py+p.h*0.35,2,0,6.28);
     ctx.arc(px+p.w*0.7,py+p.h*0.35,2,0,6.28);
     ctx.fill();
-    // Show primary weapon icon
     if(gs.equipped.length>0){ctx.font="24px Arial";ctx.fillText(gs.equipped[0].icon,px+p.w-15,py+20);}
     ctx.strokeStyle="rgba(109,74,255,0.3)";ctx.lineWidth=1;
     ctx.setLineDash([5,5]);
@@ -670,7 +656,7 @@ function initGame(){
 function gameLoop(){
     if(!gs.paused&&!gs.over){
         updPlayer();updBlts();updZoms();updPups();updParts();updUI();
-        tryShoot(); // Auto fire all weapons each frame
+        tryShoot();
     }
     updCam();
     drawBg();drawPups();drawBlts();drawZoms();drawPlayer();drawParts();drawOverlay();drawMini();
