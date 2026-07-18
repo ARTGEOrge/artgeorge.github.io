@@ -310,7 +310,8 @@ var GAME_KEYS = {ArrowUp:1,ArrowDown:1,ArrowLeft:1,ArrowRight:1," ":1};
 // keySeen[k] = timestamp of the last keydown (initial OR auto-repeat) for key k.
 // A physically-held key auto-repeats keydown continuously; we use that to detect
 // and clear stuck keys whose keyup was dropped (see releaseStuckKeys).
-var keySeen = {};
+var keySeen = {};      // timestamp of last keydown (initial or auto-repeat)
+var keyRepeated = {};  // true once we've seen an auto-repeat for this key
 document.addEventListener("keydown",function(e){
     // Record key state FIRST so nothing below (audio init, etc.) can lose it.
     // Track by both e.key and e.code so Shift/CapsLock can't strand a WASD key.
@@ -318,6 +319,7 @@ document.addEventListener("keydown",function(e){
     var t=Date.now();
     keys[e.key]=true; keys[e.code]=true;
     keySeen[e.key]=t; keySeen[e.code]=t;
+    if(e.repeat){ keyRepeated[e.key]=true; keyRepeated[e.code]=true; }
     initAudio();
     if(e.code==="KeyR"&&gs.over)initGame();
     if(e.code==="KeyM"){toggleMute();}
@@ -329,25 +331,30 @@ document.addEventListener("keydown",function(e){
 document.addEventListener("keyup",function(e){
     keys[e.key]=false; keys[e.code]=false;
     delete keySeen[e.key]; delete keySeen[e.code];
+    delete keyRepeated[e.key]; delete keyRepeated[e.code];
 });
 // If the window loses focus (alt-tab, notification, clicking away) a held
 // key's keyup never arrives and it stays stuck "true" forever, which cancels
 // its opposite axis and makes two arrow keys look dead. Release everything.
-function releaseAllKeys(){ keys={}; keySeen={}; }
+function releaseAllKeys(){ keys={}; keySeen={}; keyRepeated={}; }
 window.addEventListener("blur",releaseAllKeys);
 
 // Stuck-key watchdog. While a key is physically held, the OS fires keydown
 // repeatedly (auto-repeat), refreshing keySeen. If a key is still flagged
-// "down" but hasn't fired a keydown for STUCK_MS, its keyup was dropped and
-// it's stuck -> release it. This self-heals dropped-keyup from ANY cause
+// "down" but hasn't fired a keydown for its threshold, its keyup was dropped
+// and it's stuck -> release it. This self-heals dropped-keyup from ANY cause
 // (focus edge cases, event loss under load), which is what makes two arrow
-// keys "stop working" mid-game. STUCK_MS is set above the slowest OS
-// key-repeat delay (~1s) so genuinely-held keys are never released early.
-var STUCK_MS = 1200;
+// keys "stop working" mid-game.
+//   - Before we've seen a repeat: use 1200ms (above the slowest OS repeat
+//     DELAY) so a freshly-pressed key is never released during that gap.
+//   - Once a key has auto-repeated: use 700ms (above the slowest OS repeat
+//     RATE) so a stuck key heals more than twice as fast.
 function releaseStuckKeys(){
     var now=Date.now();
     for(var k in keys){
-        if(keys[k] && keySeen[k] && (now-keySeen[k])>STUCK_MS){ keys[k]=false; }
+        if(!keys[k] || !keySeen[k]) continue;
+        var thresh = keyRepeated[k] ? 700 : 1200;
+        if(now-keySeen[k] > thresh){ keys[k]=false; }
     }
 }
 document.addEventListener("visibilitychange",function(){ if(document.hidden)releaseAllKeys(); });
@@ -556,6 +563,7 @@ function equipWeapon(w){
 function trigLvl(){
     if(gs.waiting)return;
     gs.waiting = true;
+    releaseAllKeys();   // you switch to the mouse here; don't let a held move key strand
     selectedWeapon = null;
     rerollsLeft = 3;
     lastClickIdx = -1; lastClickTime = 0;
@@ -901,6 +909,7 @@ function initGame(){
     cam.x=0;cam.y=0;cam.shake=0;
     zoms=[];blts=[];pups=[];parts=[];bloods=[];splats=[];
     fireKeyCounter=0;
+    releaseAllKeys();   // fresh input state each game
     equipWeapon(WEAPONS.find(function(w){return w.id==="pistol";}));
     for(var i=0;i<3;i++)setTimeout(spawnZom,i*800);
     updUI();
