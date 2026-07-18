@@ -304,8 +304,12 @@ function onKill(z){
     checkLvl();
 }
 
+// Keys that control the game; suppress their default browser action (arrow
+// keys and space otherwise scroll the page, which can also drop keyup events).
+var GAME_KEYS = {ArrowUp:1,ArrowDown:1,ArrowLeft:1,ArrowRight:1," ":1};
 document.addEventListener("keydown",function(e){
     initAudio();
+    if(GAME_KEYS[e.key])e.preventDefault();
     keys[e.key]=true;
     if(e.code==="KeyR"&&gs.over)initGame();
     if(e.code==="KeyM"){toggleMute();}
@@ -315,6 +319,12 @@ document.addEventListener("keydown",function(e){
     }
 });
 document.addEventListener("keyup",function(e){keys[e.key]=false;});
+// If the window loses focus (alt-tab, notification, clicking away) a held
+// key's keyup never arrives and it stays stuck "true" forever, which cancels
+// its opposite axis and makes two arrow keys look dead. Release everything.
+function releaseAllKeys(){ keys={}; }
+window.addEventListener("blur",releaseAllKeys);
+document.addEventListener("visibilitychange",function(){ if(document.hidden)releaseAllKeys(); });
 cv.addEventListener("mousedown",initAudio);
 cv.addEventListener("mousemove",function(e){
     var r=cv.getBoundingClientRect();
