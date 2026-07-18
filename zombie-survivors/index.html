@@ -307,11 +307,17 @@ function onKill(z){
 // Keys that control the game; suppress their default browser action (arrow
 // keys and space otherwise scroll the page, which can also drop keyup events).
 var GAME_KEYS = {ArrowUp:1,ArrowDown:1,ArrowLeft:1,ArrowRight:1," ":1};
+// keySeen[k] = timestamp of the last keydown (initial OR auto-repeat) for key k.
+// A physically-held key auto-repeats keydown continuously; we use that to detect
+// and clear stuck keys whose keyup was dropped (see releaseStuckKeys).
+var keySeen = {};
 document.addEventListener("keydown",function(e){
     // Record key state FIRST so nothing below (audio init, etc.) can lose it.
     // Track by both e.key and e.code so Shift/CapsLock can't strand a WASD key.
     if(GAME_KEYS[e.key])e.preventDefault();
+    var t=Date.now();
     keys[e.key]=true; keys[e.code]=true;
+    keySeen[e.key]=t; keySeen[e.code]=t;
     initAudio();
     if(e.code==="KeyR"&&gs.over)initGame();
     if(e.code==="KeyM"){toggleMute();}
@@ -320,12 +326,30 @@ document.addEventListener("keydown",function(e){
         gs.paused=!gs.paused;
     }
 });
-document.addEventListener("keyup",function(e){keys[e.key]=false; keys[e.code]=false;});
+document.addEventListener("keyup",function(e){
+    keys[e.key]=false; keys[e.code]=false;
+    delete keySeen[e.key]; delete keySeen[e.code];
+});
 // If the window loses focus (alt-tab, notification, clicking away) a held
 // key's keyup never arrives and it stays stuck "true" forever, which cancels
 // its opposite axis and makes two arrow keys look dead. Release everything.
-function releaseAllKeys(){ keys={}; }
+function releaseAllKeys(){ keys={}; keySeen={}; }
 window.addEventListener("blur",releaseAllKeys);
+
+// Stuck-key watchdog. While a key is physically held, the OS fires keydown
+// repeatedly (auto-repeat), refreshing keySeen. If a key is still flagged
+// "down" but hasn't fired a keydown for STUCK_MS, its keyup was dropped and
+// it's stuck -> release it. This self-heals dropped-keyup from ANY cause
+// (focus edge cases, event loss under load), which is what makes two arrow
+// keys "stop working" mid-game. STUCK_MS is set above the slowest OS
+// key-repeat delay (~1s) so genuinely-held keys are never released early.
+var STUCK_MS = 1200;
+function releaseStuckKeys(){
+    var now=Date.now();
+    for(var k in keys){
+        if(keys[k] && keySeen[k] && (now-keySeen[k])>STUCK_MS){ keys[k]=false; }
+    }
+}
 document.addEventListener("visibilitychange",function(){ if(document.hidden)releaseAllKeys(); });
 cv.addEventListener("mousedown",initAudio);
 cv.addEventListener("mousemove",function(e){
@@ -376,6 +400,7 @@ function leftHeld(){  return keys["ArrowLeft"]||keys["a"]||keys["A"]||keys["KeyA
 function rightHeld(){ return keys["ArrowRight"]||keys["d"]||keys["D"]||keys["KeyD"]; }
 
 function updPlayer(){
+    releaseStuckKeys();
     // Expire timed powerups (speed / damage) every frame.
     p.powerups=p.powerups.filter(function(pp){return !pp.exp||pp.exp>Date.now();});
     var dx=0,dy=0;
