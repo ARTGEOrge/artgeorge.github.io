@@ -514,6 +514,7 @@ function trigLvl(){
     gs.waiting = true;
     selectedWeapon = null;
     rerollsLeft = 3;
+    lastClickIdx = -1; lastClickTime = 0;
     pickRandomWeapons();
     renderWeaponChoice();
     document.getElementById("wm").classList.add("on");
@@ -529,8 +530,7 @@ function renderWeaponChoice() {
         var isSelected = (selectedWeapon === i) ? " selected" : "";
         var d = document.createElement("div");
         d.className = "wcard " + w.rarity + isSelected;
-        d.onclick = function() { selectChoice(i); };
-        d.ondblclick = function() { selectChoice(i); confirmWeapon(); };
+        d.onclick = function() { clickChoice(i); };
         d.innerHTML = '<div class="wicon">' + w.icon + '</div>' +
             '<div class="wname">' + w.name + '</div>' +
             '<span class="wrar ' + rc[w.rarity] + '">' + rl[w.rarity] + '</span>' +
@@ -564,6 +564,24 @@ function renderWeaponChoice() {
     }
 }
 
+// Manual double-click detection. We can't rely on the browser's native
+// dblclick event: selecting a card re-renders (innerHTML=""), which destroys
+// the clicked element, so the two clicks land on different DOM nodes and
+// dblclick never fires. Timing it ourselves survives the rebuild.
+var lastClickIdx = -1, lastClickTime = 0;
+function clickChoice(i) {
+    var now = Date.now();
+    if (i === lastClickIdx && now - lastClickTime < 500) {
+        // second quick click on the same card -> confirm instantly
+        lastClickIdx = -1; lastClickTime = 0;
+        selectedWeapon = i;
+        confirmWeapon();
+        return;
+    }
+    lastClickIdx = i; lastClickTime = now;
+    selectChoice(i);
+}
+
 function selectChoice(i) {
     selectedWeapon = i;
     renderWeaponChoice();
@@ -573,6 +591,7 @@ function reroll() {
     if (rerollsLeft <= 0) return;
     rerollsLeft--;
     selectedWeapon = null;
+    lastClickIdx = -1; lastClickTime = 0;
     pickRandomWeapons();
     renderWeaponChoice();
 }
