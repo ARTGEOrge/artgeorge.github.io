@@ -715,7 +715,11 @@ function drawBg(){
 }
 
 function drawPlayer(){
-    var px=C.vw/2-p.w/2,py=C.vh/2-p.h/2;
+    // Draw at the true world position (relative to the camera), NOT a fixed
+    // screen center. The camera clamps at world edges, so near an edge the
+    // player is off-center; pinning the sprite to center made bullets/zombies
+    // (which use the real position) appear to come from the wrong spot.
+    var px=p.x-cam.x,py=p.y-cam.y;
     var gc=p.invul?"#ffd700":"#6d4aff";
     var fc=p.invul&&Math.floor(Date.now()/50)%2?"#fff":gc;
     ctx.shadowBlur=20;ctx.shadowColor=gc;
