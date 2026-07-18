@@ -120,6 +120,7 @@
     .card--pong    { --accent: #ff5577; --accent-glow: rgba(255,85,119,0.5); }
     .card--shapes  { --accent: #a855f7; --accent-glow: rgba(168,85,247,0.5); }
     .card--ency    { --accent: #1c6ea4; --accent-glow: rgba(28,110,164,0.5); }
+    .card--zombie  { --accent: #6d4aff; --accent-glow: rgba(109,74,255,0.55); }
 
     .card-body { padding: 20px 22px 24px; }
 
@@ -270,6 +271,56 @@
   </header>
 
   <div class="games">
+
+    <a href="/zombie-survivors/" class="card card--zombie">
+      <div class="play-btn">&#9654; PLAY</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="zombGrad" cx="50%" cy="55%" r="70%">
+              <stop offset="0%" stop-color="#1a0a2e"/>
+              <stop offset="100%" stop-color="#050510"/>
+            </radialGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#zombGrad)"/>
+          <!-- grid floor -->
+          <g stroke="rgba(109,74,255,0.14)" stroke-width="1">
+            <path d="M0,120 H400 M0,145 H400 M0,175 H400"/>
+            <path d="M60,120 L20,180 M140,120 L120,180 M220,120 L230,180 M300,120 L340,180"/>
+          </g>
+          <!-- muzzle flash -->
+          <circle cx="200" cy="92" r="70" fill="none" stroke="rgba(109,74,255,0.18)" stroke-width="16"/>
+          <circle cx="200" cy="92" r="42" fill="none" stroke="rgba(109,74,255,0.3)" stroke-width="10"/>
+          <!-- player -->
+          <rect x="186" y="78" width="28" height="28" rx="4" fill="#6d4aff"/>
+          <circle cx="194" cy="88" r="3" fill="#fff"/><circle cx="206" cy="88" r="3" fill="#fff"/>
+          <!-- tracer -->
+          <line x1="214" y1="92" x2="330" y2="60" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="330" cy="60" r="6" fill="#ffcc33"/>
+          <!-- zombies -->
+          <g fill="#3f8f3f">
+            <rect x="46" y="66" width="24" height="24" rx="3"/>
+            <rect x="92" y="104" width="24" height="24" rx="3"/>
+            <rect x="316" y="106" width="24" height="24" rx="3"/>
+          </g>
+          <g fill="#f33"><circle cx="52" cy="74" r="2.5"/><circle cx="64" cy="74" r="2.5"/><circle cx="98" cy="112" r="2.5"/><circle cx="110" cy="112" r="2.5"/></g>
+          <!-- boss zombie -->
+          <rect x="344" y="60" width="40" height="40" rx="4" fill="#6a0dad"/>
+          <circle cx="354" cy="74" r="3.5" fill="#f33"/><circle cx="374" cy="74" r="3.5" fill="#f33"/>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">New</div>
+        <div class="card-title">Zombie Apocalypse</div>
+        <p class="card-desc">Survive endless zombie hordes in GOD MODE. Auto-fire your growing arsenal, pick a weapon each level from 25 rarities up to Godly &amp; Universal, and crush bosses every 5 levels.</p>
+        <div class="card-tags">
+          <span class="tag">Survival</span>
+          <span class="tag">Shooter</span>
+          <span class="tag">Roguelite</span>
+          <span class="tag">Zombies</span>
+        </div>
+      </div>
+    </a>
 
     <a href="/encyclopedia/" class="card card--ency">
       <div class="play-btn">&#9654; OPEN</div>
