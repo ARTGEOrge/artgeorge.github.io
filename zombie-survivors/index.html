@@ -530,6 +530,7 @@ function renderWeaponChoice() {
         var d = document.createElement("div");
         d.className = "wcard " + w.rarity + isSelected;
         d.onclick = function() { selectChoice(i); };
+        d.ondblclick = function() { selectChoice(i); confirmWeapon(); };
         d.innerHTML = '<div class="wicon">' + w.icon + '</div>' +
             '<div class="wname">' + w.name + '</div>' +
             '<span class="wrar ' + rc[w.rarity] + '">' + rl[w.rarity] + '</span>' +
@@ -545,7 +546,7 @@ function renderWeaponChoice() {
         confirmBtn.style.opacity = "1";
         confirmBtn.style.pointerEvents = "auto";
     } else {
-        counter.innerHTML = "Click a weapon card to select it (arsenal: " + gs.equipped.length + "/" + MAX_WEAPONS + ")";
+        counter.innerHTML = "Click to select, or double-click to add instantly (arsenal: " + gs.equipped.length + "/" + MAX_WEAPONS + ")";
         counter.style.color = "#6d4aff";
         confirmBtn.style.opacity = "0.5";
         confirmBtn.style.pointerEvents = "none";
