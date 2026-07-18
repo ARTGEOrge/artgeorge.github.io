@@ -433,15 +433,6 @@ function updBlts(){
             blts.splice(i,1);continue;
         }
         if(b.special==="explosion"||b.special==="nuke"||b.special==="blackhole"||b.special==="multi"||b.special==="chaos"||b.special==="random"){
-            // Fly like a projectile; detonate only on contact with a zombie or
-            // when the fuse runs out (so it bursts downrange, not at the player).
-            var trigger = b.age>=45;
-            if(!trigger){
-                for(var j=0;j<zoms.length;j++){
-                    if(circRect(b.x,b.y,b.w/2,{x:zoms[j].x,y:zoms[j].y,w:zoms[j].w,h:zoms[j].h})){ trigger=true; break; }
-                }
-            }
-            if(!trigger) continue;   // still flying
             var rad=b.expRad||50;
             for(var j=zoms.length-1;j>=0;j--){
                 var z=zoms[j];
@@ -454,8 +445,6 @@ function updBlts(){
                     if(z.hp<=0){onKill(z);zoms.splice(j,1);}
                 }
             }
-            mkParts(b.x,b.y,b.color,Math.min(40,rad/8),10);   // blast flash at impact
-            cam.shake=Math.min(cam.shake+6,30);
             blts.splice(i,1);
             continue;
         }
@@ -916,7 +905,6 @@ function endGame(){
 function initGame(){
     gs={level:1,score:0,kills:0,totalKills:0,killsNeed:C.killsStart,over:false,paused:false,waiting:false,equipped:[]};
     p.x=C.worldW/2;p.y=C.worldH/2;p.hp=p.maxHp;p.ammo=999;p.invul=false;
-    p.mx=p.x+200;p.my=p.y;   // sensible initial aim (right) until the mouse moves
     p.powerups=[];p.lastFire={};p.autoFire=true;
     cam.x=0;cam.y=0;cam.shake=0;
     zoms=[];blts=[];pups=[];parts=[];bloods=[];splats=[];
