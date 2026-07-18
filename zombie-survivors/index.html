@@ -142,32 +142,34 @@ var fireKeyCounter = 0;
 var highScore = 0;
 try { highScore = parseInt(localStorage.getItem("zs_highscore") || "0", 10) || 0; } catch (e) {}
 
+// NOTE: weapon icons use \uXXXX escapes (pure ASCII) so the code survives
+// copy-paste into editors like code.org Web Lab that mangle raw emoji bytes.
 var WEAPONS = [
-    {id:"pistol",name:"Pistol",icon:"🔫",rarity:"common",fireRate:400,damage:25,spread:0.05,ammo:999,projCount:1,vMult:1,color:"#ccc",desc:"Reliable sidearm"},
-    {id:"shotgun",name:"Shotgun",icon:"💥",rarity:"uncommon",fireRate:800,damage:15,spread:0.3,ammo:999,projCount:6,vMult:0.8,color:"#8B4513",desc:"Close range blast"},
-    {id:"smg",name:"SMG",icon:"🔁",rarity:"uncommon",fireRate:100,damage:12,spread:0.15,ammo:999,projCount:1,vMult:0.9,color:"#4a4a4a",desc:"Rapid fire"},
-    {id:"sniper",name:"Sniper",icon:"🎯",rarity:"rare",fireRate:1500,damage:150,spread:0.01,ammo:999,projCount:1,vMult:2,color:"#228B22",desc:"One shot kill"},
-    {id:"rifle",name:"Assault Rifle",icon:"⚡",rarity:"rare",fireRate:150,damage:18,spread:0.12,ammo:999,projCount:1,vMult:1.1,color:"#333",desc:"Balanced auto"},
-    {id:"minigun",name:"Minigun",icon:"🌀",rarity:"epic",fireRate:50,damage:15,spread:0.2,ammo:999,projCount:1,vMult:1.2,color:"#FFD700",desc:"Chaos mode"},
-    {id:"rocket",name:"Rocket Launcher",icon:"🚀",rarity:"epic",fireRate:1200,damage:200,spread:0.05,ammo:999,projCount:1,vMult:0.5,color:"#CD5C5C",special:"explosion",expRad:100,expDmg:100,desc:"Area damage"},
-    {id:"flame",name:"Flamethrower",icon:"🔥",rarity:"rare",fireRate:100,damage:8,spread:0.25,ammo:999,projCount:1,vMult:0.6,color:"#FF4500",special:"burn",burnDur:180,desc:"Burn DOT"},
-    {id:"laser",name:"Plasma Laser",icon:"⚡",rarity:"legendary",fireRate:200,damage:40,spread:0.02,ammo:999,projCount:1,vMult:3,color:"#0FF",special:"pierce",pierce:5,desc:"Piercing beam"},
-    {id:"vampire",name:"Vampire Blaster",icon:"🩸",rarity:"legendary",fireRate:300,damage:30,spread:0.08,ammo:999,projCount:1,vMult:1,color:"#8B0000",special:"lifesteal",lsPct:0.25,desc:"Heals you"},
-    {id:"crossbow",name:"Crossbow",icon:"🏹",rarity:"rare",fireRate:600,damage:80,spread:0.02,ammo:999,projCount:1,vMult:1.5,color:"#8B4513",special:"pierce",pierce:3,desc:"Silent power"},
-    {id:"mp",name:"Machine Pistol",icon:"🔫",rarity:"uncommon",fireRate:80,damage:10,spread:0.18,ammo:999,projCount:1,vMult:0.8,color:"#666",desc:"Ultra rapid"},
-    {id:"railgun",name:"Railgun",icon:"💫",rarity:"legendary",fireRate:2000,damage:500,spread:0,ammo:999,projCount:1,vMult:5,color:"#0F0",special:"pierce",pierce:999,desc:"Destroy all"},
-    {id:"gl",name:"Grenade Launcher",icon:"🍌",rarity:"epic",fireRate:1000,damage:100,spread:0.1,ammo:999,projCount:1,vMult:0.4,color:"#556B2F",special:"explosion",expRad:150,expDmg:100,desc:"Bouncing bombs"},
-    {id:"freezer",name:"Freeze Ray",icon:"❄",rarity:"epic",fireRate:400,damage:15,spread:0.05,ammo:999,projCount:1,vMult:1.5,color:"#E0FFFF",special:"freeze",freezeDur:120,desc:"Slow enemies"},
-    {id:"nuclear",name:"Nuke Cannon",icon:"☠",rarity:"godly",fireRate:5000,damage:2000,spread:0.1,ammo:999,projCount:1,vMult:1,color:"#00ff00",special:"nuke",expRad:500,expDmg:2000,desc:"NUCLEAR DESTRUCTION"},
-    {id:"deathray",name:"Death Ray",icon:"💀",rarity:"godly",fireRate:100,damage:200,spread:0.01,ammo:999,projCount:1,vMult:8,color:"#ff0000",special:"pierce",pierce:100,desc:"Unstoppable beam"},
-    {id:"blackhole",name:"Black Hole",icon:"⚫",rarity:"universal",fireRate:3000,damage:500,spread:0,ammo:999,projCount:1,vMult:0,color:"#000000",special:"blackhole",expRad:200,expDmg:1000,desc:"Gravity crush"},
-    {id:"omega",name:"Omega Cannon",icon:"Ω",rarity:"universal",fireRate:800,damage:1000,spread:0.05,ammo:999,projCount:5,vMult:3,color:"#ff00ff",special:"multi",expRad:80,expDmg:200,desc:"Dimensional blast"},
-    {id:"galaxy",name:"Galaxy Gun",icon:"🌌",rarity:"universal",fireRate:600,damage:500,spread:0.3,ammo:999,projCount:20,vMult:2,color:"#00ffff",special:"storm",expRad:60,expDmg:100,desc:"Star shower"},
-    {id:"godslayer",name:"Godslayer",icon:"⚔",rarity:"godly",fireRate:400,damage:2500,spread:0,ammo:999,projCount:1,vMult:10,color:"#ffffff",special:"instant",desc:"INSTANT KILL"},
-    {id:"chaos",name:"Chaos Beam",icon:"🌴",rarity:"godly",fireRate:200,damage:300,spread:0.4,ammo:999,projCount:10,vMult:5,color:"#ff6600",special:"chaos",expRad:50,expDmg:150,desc:"Pure chaos"},
-    {id:"infinity",name:"Infinity Lance",icon:"∞",rarity:"universal",fireRate:300,damage:1500,spread:0.02,ammo:999,projCount:3,vMult:15,color:"#00ff00",special:"pierce",pierce:9999,desc:"Infinite pierce"},
-    {id:"time",name:"Time Distorter",icon:"🕰",rarity:"universal",fireRate:1500,damage:800,spread:0.01,ammo:999,projCount:1,vMult:5,color:"#ff00ff",special:"timewarp",freezeDur:999,desc:"Temporal freeze"},
-    {id:"reality",name:"Reality Bender",icon:"🌈",rarity:"universal",fireRate:250,damage:600,spread:0.15,ammo:999,projCount:8,vMult:6,color:"#ff0066",special:"random",desc:"Random devastation"}
+    {id:"pistol",name:"Pistol",icon:"\uD83D\uDD2B",rarity:"common",fireRate:400,damage:25,spread:0.05,ammo:999,projCount:1,vMult:1,color:"#ccc",desc:"Reliable sidearm"},
+    {id:"shotgun",name:"Shotgun",icon:"\uD83D\uDCA5",rarity:"uncommon",fireRate:800,damage:15,spread:0.3,ammo:999,projCount:6,vMult:0.8,color:"#8B4513",desc:"Close range blast"},
+    {id:"smg",name:"SMG",icon:"\uD83D\uDD01",rarity:"uncommon",fireRate:100,damage:12,spread:0.15,ammo:999,projCount:1,vMult:0.9,color:"#4a4a4a",desc:"Rapid fire"},
+    {id:"sniper",name:"Sniper",icon:"\uD83C\uDFAF",rarity:"rare",fireRate:1500,damage:150,spread:0.01,ammo:999,projCount:1,vMult:2,color:"#228B22",desc:"One shot kill"},
+    {id:"rifle",name:"Assault Rifle",icon:"\u26A1",rarity:"rare",fireRate:150,damage:18,spread:0.12,ammo:999,projCount:1,vMult:1.1,color:"#333",desc:"Balanced auto"},
+    {id:"minigun",name:"Minigun",icon:"\uD83C\uDF00",rarity:"epic",fireRate:50,damage:15,spread:0.2,ammo:999,projCount:1,vMult:1.2,color:"#FFD700",desc:"Chaos mode"},
+    {id:"rocket",name:"Rocket Launcher",icon:"\uD83D\uDE80",rarity:"epic",fireRate:1200,damage:200,spread:0.05,ammo:999,projCount:1,vMult:0.5,color:"#CD5C5C",special:"explosion",expRad:100,expDmg:100,desc:"Area damage"},
+    {id:"flame",name:"Flamethrower",icon:"\uD83D\uDD25",rarity:"rare",fireRate:100,damage:8,spread:0.25,ammo:999,projCount:1,vMult:0.6,color:"#FF4500",special:"burn",burnDur:180,desc:"Burn DOT"},
+    {id:"laser",name:"Plasma Laser",icon:"\u26A1",rarity:"legendary",fireRate:200,damage:40,spread:0.02,ammo:999,projCount:1,vMult:3,color:"#0FF",special:"pierce",pierce:5,desc:"Piercing beam"},
+    {id:"vampire",name:"Vampire Blaster",icon:"\uD83E\uDE78",rarity:"legendary",fireRate:300,damage:30,spread:0.08,ammo:999,projCount:1,vMult:1,color:"#8B0000",special:"lifesteal",lsPct:0.25,desc:"Heals you"},
+    {id:"crossbow",name:"Crossbow",icon:"\uD83C\uDFF9",rarity:"rare",fireRate:600,damage:80,spread:0.02,ammo:999,projCount:1,vMult:1.5,color:"#8B4513",special:"pierce",pierce:3,desc:"Silent power"},
+    {id:"mp",name:"Machine Pistol",icon:"\uD83D\uDD2B",rarity:"uncommon",fireRate:80,damage:10,spread:0.18,ammo:999,projCount:1,vMult:0.8,color:"#666",desc:"Ultra rapid"},
+    {id:"railgun",name:"Railgun",icon:"\uD83D\uDCAB",rarity:"legendary",fireRate:2000,damage:500,spread:0,ammo:999,projCount:1,vMult:5,color:"#0F0",special:"pierce",pierce:999,desc:"Destroy all"},
+    {id:"gl",name:"Grenade Launcher",icon:"\uD83C\uDF4C",rarity:"epic",fireRate:1000,damage:100,spread:0.1,ammo:999,projCount:1,vMult:0.4,color:"#556B2F",special:"explosion",expRad:150,expDmg:100,desc:"Bouncing bombs"},
+    {id:"freezer",name:"Freeze Ray",icon:"\u2744",rarity:"epic",fireRate:400,damage:15,spread:0.05,ammo:999,projCount:1,vMult:1.5,color:"#E0FFFF",special:"freeze",freezeDur:120,desc:"Slow enemies"},
+    {id:"nuclear",name:"Nuke Cannon",icon:"\u2620",rarity:"godly",fireRate:5000,damage:2000,spread:0.1,ammo:999,projCount:1,vMult:1,color:"#00ff00",special:"nuke",expRad:500,expDmg:2000,desc:"NUCLEAR DESTRUCTION"},
+    {id:"deathray",name:"Death Ray",icon:"\uD83D\uDC80",rarity:"godly",fireRate:100,damage:200,spread:0.01,ammo:999,projCount:1,vMult:8,color:"#ff0000",special:"pierce",pierce:100,desc:"Unstoppable beam"},
+    {id:"blackhole",name:"Black Hole",icon:"\u26AB",rarity:"universal",fireRate:3000,damage:500,spread:0,ammo:999,projCount:1,vMult:0,color:"#000000",special:"blackhole",expRad:200,expDmg:1000,desc:"Gravity crush"},
+    {id:"omega",name:"Omega Cannon",icon:"\u03A9",rarity:"universal",fireRate:800,damage:1000,spread:0.05,ammo:999,projCount:5,vMult:3,color:"#ff00ff",special:"multi",expRad:80,expDmg:200,desc:"Dimensional blast"},
+    {id:"galaxy",name:"Galaxy Gun",icon:"\uD83C\uDF0C",rarity:"universal",fireRate:600,damage:500,spread:0.3,ammo:999,projCount:20,vMult:2,color:"#00ffff",special:"storm",expRad:60,expDmg:100,desc:"Star shower"},
+    {id:"godslayer",name:"Godslayer",icon:"\u2694",rarity:"godly",fireRate:400,damage:2500,spread:0,ammo:999,projCount:1,vMult:10,color:"#ffffff",special:"instant",desc:"INSTANT KILL"},
+    {id:"chaos",name:"Chaos Beam",icon:"\uD83C\uDF34",rarity:"godly",fireRate:200,damage:300,spread:0.4,ammo:999,projCount:10,vMult:5,color:"#ff6600",special:"chaos",expRad:50,expDmg:150,desc:"Pure chaos"},
+    {id:"infinity",name:"Infinity Lance",icon:"\u221E",rarity:"universal",fireRate:300,damage:1500,spread:0.02,ammo:999,projCount:3,vMult:15,color:"#00ff00",special:"pierce",pierce:9999,desc:"Infinite pierce"},
+    {id:"time",name:"Time Distorter",icon:"\uD83D\uDD70",rarity:"universal",fireRate:1500,damage:800,spread:0.01,ammo:999,projCount:1,vMult:5,color:"#ff00ff",special:"timewarp",freezeDur:999,desc:"Temporal freeze"},
+    {id:"reality",name:"Reality Bender",icon:"\uD83C\uDF08",rarity:"universal",fireRate:250,damage:600,spread:0.15,ammo:999,projCount:8,vMult:6,color:"#ff0066",special:"random",desc:"Random devastation"}
 ];
 
 var gs = { level:1, score:0, kills:0, totalKills:0, killsNeed:C.killsStart, over:false, paused:false, waiting:false, equipped:[] };
@@ -216,7 +218,7 @@ function sfxDeath(){ beep(200, 0.5, "sawtooth", 0.08); setTimeout(function(){ be
 function toggleMute(){
     muted = !muted;
     initAudio();
-    document.getElementById("muteBtn").innerHTML = muted ? "🔇 Sound: OFF" : "🔊 Sound: ON";
+    document.getElementById("muteBtn").innerHTML = muted ? "\uD83D\uDD07 Sound: OFF" : "\uD83D\uDD0A Sound: ON";
 }
 
 function ri(a,b){return Math.random()*(b-a)+a;}
@@ -538,7 +540,7 @@ function renderWeaponChoice() {
     var counter = document.getElementById("selCounter");
     var confirmBtn = document.getElementById("confirmBtn");
     if (selectedWeapon !== null) {
-        counter.innerHTML = "✅ Selected: " + currentChoices[selectedWeapon].name + " — Click Confirm to add it!";
+        counter.innerHTML = "\u2705 Selected: " + currentChoices[selectedWeapon].name + " \u2014 Click Confirm to add it!";
         counter.style.color = "#00ff00";
         confirmBtn.style.opacity = "1";
         confirmBtn.style.pointerEvents = "auto";
