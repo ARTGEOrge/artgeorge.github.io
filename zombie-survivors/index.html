@@ -110,6 +110,9 @@ canvas {
 <div style="color:#aaa;margin-top:8px;font-size:13px;text-align:center;">
     &#128299; CHOOSE 1 OF 3 WEAPONS EACH LEVEL &middot; &#127919; ALL AUTO-FIRE &middot; &#9889; BUILD YOUR ARSENAL
 </div>
+<div id="keydbg" style="margin-top:6px;font-family:monospace;font-size:15px;letter-spacing:2px;color:#556;text-align:center;">
+    KEY TEST: <span data-k="up">&#9650;UP</span> &nbsp; <span data-k="left">&#9664;LEFT</span> &nbsp; <span data-k="down">&#9660;DOWN</span> &nbsp; <span data-k="right">RIGHT&#9654;</span>
+</div>
 <div class="eqbar"><b>Arsenal:</b> <span id="slots"></span></div>
 <div class="wmodal" id="wm">
     <div style="text-align:center;max-width:90%;overflow-y:auto;max-height:80vh;">
@@ -308,9 +311,11 @@ function onKill(z){
 // keys and space otherwise scroll the page, which can also drop keyup events).
 var GAME_KEYS = {ArrowUp:1,ArrowDown:1,ArrowLeft:1,ArrowRight:1," ":1};
 document.addEventListener("keydown",function(e){
-    initAudio();
+    // Record key state FIRST so nothing below (audio init, etc.) can lose it.
+    // Track by both e.key and e.code so Shift/CapsLock can't strand a WASD key.
     if(GAME_KEYS[e.key])e.preventDefault();
-    keys[e.key]=true;
+    keys[e.key]=true; keys[e.code]=true;
+    initAudio();
     if(e.code==="KeyR"&&gs.over)initGame();
     if(e.code==="KeyM"){toggleMute();}
     if(e.code==="Escape"){
@@ -318,7 +323,7 @@ document.addEventListener("keydown",function(e){
         gs.paused=!gs.paused;
     }
 });
-document.addEventListener("keyup",function(e){keys[e.key]=false;});
+document.addEventListener("keyup",function(e){keys[e.key]=false; keys[e.code]=false;});
 // If the window loses focus (alt-tab, notification, clicking away) a held
 // key's keyup never arrives and it stays stuck "true" forever, which cancels
 // its opposite axis and makes two arrow keys look dead. Release everything.
@@ -366,14 +371,36 @@ function tryShoot(){
     if(firedAny)sfxShoot();
 }
 
+// Direction checks read every alias (e.key AND e.code, both cases) so a key
+// can't be missed due to case/layout differences.
+function upHeld(){    return keys["ArrowUp"]||keys["w"]||keys["W"]||keys["KeyW"]; }
+function downHeld(){  return keys["ArrowDown"]||keys["s"]||keys["S"]||keys["KeyS"]; }
+function leftHeld(){  return keys["ArrowLeft"]||keys["a"]||keys["A"]||keys["KeyA"]; }
+function rightHeld(){ return keys["ArrowRight"]||keys["d"]||keys["D"]||keys["KeyD"]; }
+
+// On-screen live key readout for diagnosing "dead key" reports: a direction
+// lights green the instant the browser reports it pressed. If a key you press
+// never lights up, the keyboard isn't sending it (hardware ghosting), not the game.
+function updKeyDbg(){
+    var el=document.getElementById("keydbg");
+    if(!el)return;
+    var st={up:upHeld(),down:downHeld(),left:leftHeld(),right:rightHeld()};
+    var sp=el.querySelectorAll("[data-k]");
+    for(var i=0;i<sp.length;i++){
+        var on=st[sp[i].getAttribute("data-k")];
+        sp[i].style.color=on?"#00ff66":"#556";
+        sp[i].style.fontWeight=on?"bold":"normal";
+    }
+}
+
 function updPlayer(){
     // Expire timed powerups (speed / damage) every frame.
     p.powerups=p.powerups.filter(function(pp){return !pp.exp||pp.exp>Date.now();});
     var dx=0,dy=0;
-    if(keys["ArrowUp"]||keys["w"]||keys["W"])dy-=1;
-    if(keys["ArrowDown"]||keys["s"]||keys["S"])dy+=1;
-    if(keys["ArrowLeft"]||keys["a"]||keys["A"])dx-=1;
-    if(keys["ArrowRight"]||keys["d"]||keys["D"])dx+=1;
+    if(upHeld())dy-=1;
+    if(downHeld())dy+=1;
+    if(leftHeld())dx-=1;
+    if(rightHeld())dx+=1;
     var spd=p.speed;
     p.powerups.forEach(function(pp){if(pp.type==="speed")spd*=1.5;});
     if(dx!==0||dy!==0){
@@ -877,6 +904,7 @@ function gameLoop(){
     }
     updCam();
     drawBg();drawPups();drawBlts();drawZoms();drawPlayer();drawParts();drawOverlay();drawMini();
+    updKeyDbg();
     requestAnimationFrame(gameLoop);
 }
 
