@@ -1,0 +1,7 @@
+*.zip
+*.py
+.git
+.claude
+.netlify
+scholar-ai
+node_modules

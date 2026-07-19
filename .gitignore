@@ -4,3 +4,10 @@ scholar-ai/
 
 # Local tooling
 .claude/
+
+# Local Netlify folder
+.netlify
+.vercel
+
+# Firebase deploy cache
+.firebase

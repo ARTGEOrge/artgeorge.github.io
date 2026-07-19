@@ -1,0 +1,10 @@
+# Big local-only artifacts and non-site files
+*.zip
+*.py
+.git*
+.claude
+.netlify
+scholar-ai
+node_modules
+Nova_mac.py
+browser_mac.py

@@ -1,0 +1,16 @@
+{
+  "hosting": {
+    "site": "artgeorge",
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "*.zip",
+      "*.py",
+      "scholar-ai/**",
+      ".netlify/**",
+      ".vercel/**"
+    ]
+  }
+}
