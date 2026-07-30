@@ -105,6 +105,7 @@
     .card--snow    { --accent: #aaddff; --accent-glow: rgba(170,221,255,0.4); }
     .card--eagle   { --accent: #55cc55; --accent-glow: rgba(85,204,85,0.4); }
     .card--bombs   { --accent: #ff3322; --accent-glow: rgba(255,80,40,0.45); }
+    .card--nyc     { --accent: #f5c518; --accent-glow: rgba(245,197,24,0.45); }
     .card--crossy  { --accent: #ffcc33; --accent-glow: rgba(255,204,51,0.45); }
     .card--blocks  { --accent: #4d7cff; --accent-glow: rgba(77,124,255,0.45); }
     .card--mob     { --accent: #c84dff; --accent-glow: rgba(200,77,255,0.45); }
@@ -270,6 +271,84 @@
   </header>
 
   <div class="games">
+
+    <a href="/nyc-walk/" class="card card--nyc">
+      <div class="play-btn">&#9654; PLAY</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="nycSky" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#0b1430"/>
+              <stop offset="100%" stop-color="#3a5a8c"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#nycSky)"/>
+          <!-- far skyline -->
+          <g fill="#1b2742">
+            <rect x="150" y="70" width="26" height="60"/>
+            <rect x="182" y="52" width="20" height="78"/>
+            <rect x="206" y="78" width="30" height="52"/>
+            <rect x="240" y="60" width="18" height="70"/>
+          </g>
+          <g fill="#ffd66b" opacity=".7">
+            <rect x="186" y="60" width="4" height="5"/><rect x="194" y="72" width="4" height="5"/>
+            <rect x="156" y="84" width="4" height="5"/><rect x="214" y="92" width="4" height="5"/>
+            <rect x="245" y="70" width="4" height="5"/><rect x="168" y="100" width="4" height="5"/>
+          </g>
+          <!-- left tower -->
+          <rect x="0" y="0" width="120" height="150" fill="#2b3550"/>
+          <rect x="108" y="0" width="14" height="150" fill="#20293e"/>
+          <g fill="#ffd27a">
+            <rect x="14" y="16" width="12" height="16"/><rect x="42" y="16" width="12" height="16"/>
+            <rect x="70" y="16" width="12" height="16"/><rect x="14" y="48" width="12" height="16"/>
+            <rect x="70" y="48" width="12" height="16"/><rect x="42" y="80" width="12" height="16"/>
+            <rect x="14" y="112" width="12" height="16"/><rect x="70" y="112" width="12" height="16"/>
+          </g>
+          <g fill="#39445e"><rect x="42" y="48" width="12" height="16"/>
+            <rect x="14" y="80" width="12" height="16"/><rect x="70" y="80" width="12" height="16"/>
+            <rect x="42" y="112" width="12" height="16"/></g>
+          <!-- right tower -->
+          <rect x="300" y="0" width="100" height="150" fill="#33405e"/>
+          <g fill="#ffd27a">
+            <rect x="316" y="24" width="12" height="16"/><rect x="352" y="24" width="12" height="16"/>
+            <rect x="316" y="56" width="12" height="16"/><rect x="376" y="56" width="12" height="16"/>
+            <rect x="352" y="88" width="12" height="16"/><rect x="316" y="120" width="12" height="16"/>
+          </g>
+          <!-- storefront glow -->
+          <rect x="0" y="126" width="120" height="16" fill="#ffcf8a"/>
+          <rect x="300" y="126" width="100" height="16" fill="#ffcf8a"/>
+          <!-- street -->
+          <rect x="0" y="142" width="400" height="38" fill="#20242b"/>
+          <rect x="120" y="130" width="160" height="14" fill="#8e8e88"/>
+          <g fill="#d8d8d0">
+            <rect x="150" y="150" width="8" height="20"/><rect x="170" y="150" width="8" height="20"/>
+            <rect x="190" y="150" width="8" height="20"/><rect x="210" y="150" width="8" height="20"/>
+            <rect x="230" y="150" width="8" height="20"/>
+          </g>
+          <!-- taxi -->
+          <rect x="272" y="146" width="70" height="20" rx="4" fill="#f5c518"/>
+          <rect x="286" y="138" width="40" height="12" rx="3" fill="#1f2a33"/>
+          <rect x="300" y="132" width="14" height="6" rx="2" fill="#f2f2e6"/>
+          <circle cx="288" cy="167" r="6" fill="#14171a"/>
+          <circle cx="328" cy="167" r="6" fill="#14171a"/>
+          <!-- street lamp -->
+          <rect x="128" y="86" width="4" height="60" fill="#161a20"/>
+          <rect x="128" y="86" width="22" height="4" fill="#161a20"/>
+          <circle cx="150" cy="92" r="6" fill="#ffd27a" opacity=".9"/>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">Open World</div>
+        <div class="card-title">NYC Walk</div>
+        <p class="card-desc">Take a first-person stroll through a procedural Manhattan. Cross the avenues, dodge the cabs, find the park and the tower &mdash; then flip the city to night.</p>
+        <div class="card-tags">
+          <span class="tag">3D</span>
+          <span class="tag">Explore</span>
+          <span class="tag">Relaxing</span>
+          <span class="tag">First Person</span>
+        </div>
+      </div>
+    </a>
 
     <a href="/zombie-survivors/" class="card card--zombie">
       <div class="play-btn">&#9654; PLAY</div>
