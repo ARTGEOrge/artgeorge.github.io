@@ -630,6 +630,16 @@ function bwayDist(x, z){
 }
 const onBway = (x, z) => bwayDist(x, z) < BWAY_W;
 
+// Times Square: the bowtie where Broadway cuts across the avenue grid. Sits on
+// the diagonal a little below the park, and is kept clear of buildings so the
+// plaza opens out and the billboards have something to face.
+const TSQ_R = 48;
+const TSQ = (() => {
+  const [x1,z1] = BWAY[2], [x2,z2] = BWAY[3];      // the 16 -> 20 leg
+  return { x: x1 + (x2-x1)*0.62, z: z1 + (z2-z1)*0.62 };
+})();
+const tsqDist = (x, z) => Math.hypot(x - TSQ.x, z - TSQ.z);
+
 // sidewalk texture is sized for a full 64-unit block; keep the texel density
 // the same on the odd-sized pieces the irregular streets leave behind
 function walkUV(geo, w, d, x, z){
@@ -927,6 +937,34 @@ function bowFront(c, cx, cz, w, d, h, variant){
                 f.ax === 'z' ? cz + f.sgn*(d/2) : cz);
   c.roof.push(cap);
 }
+// A real spire is not one cone. It is a stack of narrowing drums, each ringed
+// with a setback, carrying a slender needle with an aircraft light on the tip —
+// the Empire State's mooring mast, the Chrysler's needle, One WTC's antenna.
+function spire(c, cx, cz, y, r0){
+  let ry = y, rad = Math.max(0.9, r0);
+  const steel = [0x9aa0a8, 0xa8aeb6, 0x8f959d];
+  const tiers = ri(3, 4);
+  for(let k=0;k<tiers;k++){
+    const hh = rr(2.4, 4.6);
+    const top = rad*rr(0.62, 0.76);
+    const drum = colored(new THREE.CylinderGeometry(top, rad, hh, 12), steel[k % 3]);
+    drum.translate(cx, ry + hh/2, cz);
+    c.roof.push(drum);
+    // the collar that reads as a setback rather than a smooth taper
+    const ring = colored(new THREE.CylinderGeometry(top*1.28, top*1.28, 0.5, 12), 0x767c84);
+    ring.translate(cx, ry + hh, cz);
+    c.roof.push(ring);
+    ry += hh; rad = top;
+  }
+  const nh = rr(11, 26);              // the needle itself, long and very thin
+  const needle = colored(new THREE.CylinderGeometry(0.10, rad*0.8, nh, 8), 0xb6bcc4);
+  needle.translate(cx, ry + nh/2, cz);
+  c.roof.push(needle);
+  const tip = colored(new THREE.SphereGeometry(0.42, 8, 6), 0x8a2020);
+  tip.translate(cx, ry + nh + 0.3, cz);
+  c.roof.push(tip);
+  return ry + nh;
+}
 // Spire, dome, mast or stepped cap — what you pick a tower out by from blocks away.
 function crown(c, cx, cz, y, w, d, glassy, shape){
   const r = rnd();
@@ -952,12 +990,9 @@ function crown(c, cx, cz, y, w, d, glassy, shape){
       massPush(c.roof, shape, cx, cz, cy, cw, cd, hh, 0x8d8f94);
       cy += hh; cw *= 0.68; cd *= 0.68;
     }
-    const sp = colored(new THREE.ConeGeometry(Math.min(cw,cd)*0.5, rr(6,13), 8), 0x9aa0a8);
-    sp.translate(cx, cy + 6, cz); c.roof.push(sp);
-  } else if(r < 0.62){                // slab crown with a mast
-    const hh = rr(9, 17);
-    const m = colored(new THREE.CylinderGeometry(0.22, 0.5, hh, 6), 0xa2a8b0);
-    m.translate(cx, y + hh/2, cz); c.roof.push(m);
+    spire(c, cx, cz, cy, Math.min(cw, cd)*0.5);
+  } else if(r < 0.62){                // mooring mast straight off the setback
+    spire(c, cx, cz, y, Math.min(w, d)*0.16);
   } else if(!glassy){                 // water tank on the setback
     const rad = Math.min(2.6, Math.min(w,d)*0.16);
     const b = colored(new THREE.CylinderGeometry(rad, rad*0.94, rad*2.7, 10), 0x6b4a35);
@@ -1219,12 +1254,14 @@ function buildCell(i, j){
       const S = BLOCK + WALK*2;
       // Broadway slices the block, so lay that sidewalk as tiles and drop the
       // ones the roadbed runs over. Everywhere else one slab is enough.
-      const cut = bwayDist(midX(i), midZ(j)) < S/2 + BWAY_W + 2;
+      const cut = bwayDist(midX(i), midZ(j)) < S/2 + BWAY_W + 2 ||
+                  tsqDist(midX(i), midZ(j)) < S/2 + TSQ_R;
       if(cut){
         const N = 10, ts = S/N;
         for(let a=0;a<N;a++) for(let b=0;b<N;b++){
           const tx = midX(i) - S/2 + (a+0.5)*ts, tz = midZ(j) - S/2 + (b+0.5)*ts;
           if(bwayDist(tx, tz) < BWAY_W + ts*0.3) continue;
+          if(tsqDist(tx, tz) < TSQ_R - ts*0.3) continue;
           walkSlab(c, tx, tz, ts, ts);
         }
       } else walkSlab(c, midX(i), midZ(j), S, S);
@@ -1255,6 +1292,7 @@ function buildCell(i, j){
         if(lw < 8 || ld < 8) continue;
         const bx = a+gap+lw/2, bz = b+gap+ld/2;
         if(bwayDist(bx, bz) < BWAY_W + Math.min(lw, ld)*0.35) continue;
+        if(tsqDist(bx, bz) < TSQ_R + Math.min(lw, ld)*0.35) continue;
         let h = rr(info.h[0], info.h[1]);
         if(rnd() < info.tall) h *= rr(1.4, 2.2);
         building(bx, bz, lw, ld, h, pick(info.pal));
@@ -1297,6 +1335,104 @@ function buildCell(i, j){
     }
   }
 }
+
+// ---------- Times Square ----------
+// A ring of lit screens facing the plaza. One canvas holds sixteen ad panels
+// and every board takes a cell of it, so the whole square is a single mesh
+// drawn with an unlit material — bright at noon, blinding at midnight.
+const tsqLight = new THREE.PointLight(0xffd9b0, 0, 190, 2);
+tsqLight.position.set(TSQ.x, 34, TSQ.z);
+tsqLight.visible = false;
+scene.add(tsqLight);
+tasks.push(() => {
+  const A = 512, cell = A/4;
+  const ca = document.createElement('canvas'); ca.width = ca.height = A;
+  const g = ca.getContext('2d');
+  const HOT = ['#ff2d55','#ffcc00','#00d2ff','#ff7a00','#7cf03d','#ff4fd8',
+               '#ffffff','#3d7bff','#ff1f3d','#00e5a0','#ffe14d','#b45cff'];
+  for(let k=0;k<16;k++){
+    const ox = (k%4)*cell, oy = Math.floor(k/4)*cell;
+    const base = HOT[Math.floor(rnd()*HOT.length)];
+    const grd = g.createLinearGradient(ox, oy, ox+cell, oy+cell);
+    grd.addColorStop(0, base);
+    grd.addColorStop(1, HOT[Math.floor(rnd()*HOT.length)]);
+    g.fillStyle = grd; g.fillRect(ox, oy, cell, cell);
+    const style = k % 4;
+    if(style === 0){                                  // stacked colour bands
+      for(let b=0;b<5;b++){
+        g.fillStyle = HOT[Math.floor(rnd()*HOT.length)];
+        g.globalAlpha = 0.75;
+        g.fillRect(ox+6, oy + 8 + b*(cell-16)/5, cell-12, (cell-16)/5 - 5);
+      }
+    } else if(style === 1){                           // big letterform
+      g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(ox+8, oy+8, cell-16, cell-16);
+      g.fillStyle = '#fff'; g.font = 'bold ' + Math.floor(cell*0.6) + 'px Helvetica, Arial';
+      g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('ABCDEFGHJKMNPRSTVWXYZ'[Math.floor(rnd()*21)], ox+cell/2, oy+cell/2);
+    } else if(style === 2){                           // grid of pixels
+      for(let a=0;a<8;a++) for(let b=0;b<8;b++){
+        if(rnd() < 0.45) continue;
+        g.fillStyle = HOT[Math.floor(rnd()*HOT.length)];
+        g.globalAlpha = 0.85;
+        g.fillRect(ox + a*cell/8 + 2, oy + b*cell/8 + 2, cell/8 - 4, cell/8 - 4);
+      }
+    } else {                                          // ticker bars
+      g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(ox+4, oy+4, cell-8, cell-8);
+      for(let b=0;b<7;b++){
+        g.fillStyle = HOT[Math.floor(rnd()*HOT.length)];
+        g.globalAlpha = 0.9;
+        g.fillRect(ox+10, oy + 12 + b*(cell-24)/7, rr(0.2,0.95)*(cell-20), (cell-24)/7 - 4);
+      }
+    }
+    g.globalAlpha = 1;
+    g.strokeStyle = 'rgba(0,0,0,.85)'; g.lineWidth = 5;
+    g.strokeRect(ox+2.5, oy+2.5, cell-5, cell-5);
+  }
+  const adTex = new THREE.CanvasTexture(ca);
+  adTex.colorSpace = THREE.SRGBColorSpace;
+
+  const screens = [], frames = [];
+  const N = 15;
+  for(let k=0;k<N;k++){
+    const ang = (k/N)*Math.PI*2 + rr(-0.12, 0.12);
+    const rad = TSQ_R + rr(5, 16);
+    const x = TSQ.x + Math.cos(ang)*rad, z = TSQ.z + Math.sin(ang)*rad;
+    const w = rr(13, 27), h = rr(8, 17), y = rr(7, 34);
+    const face = Math.atan2(TSQ.x - x, TSQ.z - z);     // turn it to the plaza
+    const pl = new THREE.PlaneGeometry(w, h);
+    const uv = pl.attributes.uv, ci = Math.floor(rnd()*16);
+    const ou = (ci%4)/4, ov = Math.floor(ci/4)/4;
+    for(let q=0;q<uv.count;q++) uv.setXY(q, ou + uv.getX(q)/4, ov + uv.getY(q)/4);
+    pl.rotateY(face); pl.translate(x, y + h/2, z);
+    screens.push(colored(pl, 0xffffff));
+    // the scaffold the screen is bolted to
+    const bk = new THREE.BoxGeometry(w + 1.6, h + 1.6, 1.2);
+    bk.rotateY(face);
+    bk.translate(x - Math.sin(face)*0.9, y + h/2, z - Math.cos(face)*0.9);
+    frames.push(colored(bk, 0x14171c));
+    const post = colored(new THREE.BoxGeometry(1.1, y, 1.1), 0x1a1e24);
+    post.translate(x, y/2, z);
+    frames.push(post);
+  }
+  const board = new THREE.Mesh(mergeGeos(screens),
+    new THREE.MeshBasicMaterial({map:adTex, vertexColors:true}));
+  board.frustumCulled = false;
+  cityGroup.add(board, new THREE.Mesh(mergeGeos(frames), vcMat));
+
+  // the red steps, and a painted pedestrian island in the middle of it all
+  const steps = [];
+  for(let k=0;k<5;k++){
+    const s = colored(new THREE.BoxGeometry(26 - k*2, 0.8, 3.4), 0xc0182c);
+    s.translate(TSQ.x, CURB + 0.4 + k*0.8, TSQ.z - TSQ_R*0.62 - k*3.2);
+    steps.push(s);
+  }
+  const isle = colored(new THREE.BoxGeometry(34, CURB, 20), 0x8a8f96);
+  isle.translate(TSQ.x, CURB/2, TSQ.z + 8);
+  steps.push(isle);
+  cityGroup.add(new THREE.Mesh(mergeGeos(steps), vcMat));
+  addPaved(TSQ.x - 17, TSQ.z - 2, TSQ.x + 17, TSQ.z + 18);
+  addSolid(TSQ.x, TSQ.z - TSQ_R*0.62 - 8, 26, 20);      // you can't walk the steps
+});
 
 tasks.push(() => {
   // Broadway's own centre line, laid along the diagonal rather than the grid
@@ -1410,7 +1546,37 @@ tasks.push(() => {
     }
   }
   for(const b of bridges) segs.push({ax:'x', line:b.line, a:b.a-PITCH, b:b.b+PITCH, bridge:b});
+  segs.forEach(segFrame);
+
+  // Broadway runs at its own angle, so its legs are chained rather than
+  // squared off: a car reaching the end of one is handed to the next and
+  // keeps going down the avenue instead of turning around mid-block.
+  const legs = [];
+  let prev = null;
+  for(let k=0;k<BWAY.length-1;k++){
+    const [x1,z1] = BWAY[k], [x2,z2] = BWAY[k+1];
+    const dx = x2-x1, dz = z2-z1, L = Math.hypot(dx, dz);
+    const s = { ax:'d', line:0, a:0, b:L, ox:x1, oz:z1, ux:dx/L, uz:dz/L };
+    segFrame(s);
+    if(prev){ prev.next = s; s.prev = prev; }
+    legs.push(s);
+    prev = s;
+  }
+  // seven legs against ~190 grid streets would leave Broadway nearly empty, so
+  // weight it: the same legs listed three times, picked three times as often
+  for(let r=0;r<3;r++) segs.push(...legs);
 });
+// every segment carries its own frame: origin, unit direction, lane normal
+function segFrame(s){
+  if(s.ux === undefined){
+    if(s.ax === 'x'){ s.ox = 0; s.oz = s.line; s.ux = 1; s.uz = 0; }
+    else            { s.ox = s.line; s.oz = 0; s.ux = 0; s.uz = 1; }
+  }
+  s.nx = -s.uz; s.nz = s.ux;
+  s.ang = Math.atan2(s.ux, s.uz);
+}
+const segAlong = (s, x, z) => (x - s.ox)*s.ux + (z - s.oz)*s.uz;
+const segOff   = (s, x, z) => (x - s.ox)*s.nx + (z - s.oz)*s.nz;
 
 // ---------- vehicles ----------
 const CAR_COLORS = [0xf5c518,0xf5c518,0xf5c518,0xd9dde2,0x2f3a4a,0x8c1f1f,
@@ -1465,9 +1631,7 @@ function placeCar(c, seg, pos){
   c.turn = 0;
   c.parked = false;
 }
-function carLane(c){                    // right-hand side of the road
-  return c.seg.ax === 'x' ? c.dir * 2.7 : -c.dir * 2.7;
-}
+const carLane = c => c.dir * 2.7;      // right-hand side of the road
 function roadY(x, z){
   const b = bridgeAt(x, z);
   return b ? CURB + bridgeY(b, x) + 0.02 : 0.02;
@@ -1475,12 +1639,21 @@ function roadY(x, z){
 
 // ---------- pedestrians ----------
 const peds = [];
-const PED_COUNT = 70;
+const PED_COUNT = 340, PED_KINDS = 10;
+// Everyone is drawn from ten instanced bodies plus two instanced legs, so a
+// crowd this size costs twelve draw calls rather than a thousand.
+const pedBody = [], pedLegs = [];
+const pedHip = new THREE.Object3D();
+const pedLegNode = [new THREE.Object3D(), new THREE.Object3D()];
+pedHip.add(pedLegNode[0], pedLegNode[1]);
+pedLegNode[0].position.set(-0.14, 0.36, 0);
+pedLegNode[1].position.set( 0.14, 0.36, 0);
 tasks.push(() => {
   const SKIN = [0xe8b48c, 0xc98d63, 0x8d5a3a, 0x5f3a24, 0xf0c9a8];
   const CLOTH= [0x2b3550, 0x53324a, 0x2f4a3a, 0x6b3f2a, 0x1f242c, 0x8a2f3a, 0x3a4a6b, 0x2c2c2c];
-  for(let k=0;k<PED_COUNT;k++){
-    const g = new THREE.Group();
+  const LEG  = [0x22262e, 0x3a3f4a, 0x4a4438];
+  const cap = Math.ceil(PED_COUNT / PED_KINDS);
+  for(let k=0;k<PED_KINDS;k++){
     const cloth = pick(CLOTH), skin = pick(SKIN);
     const torso = mergeGeos([
       colored(new THREE.BoxGeometry(0.52,0.9,0.3), cloth).translate(0,1.15,0),
@@ -1488,17 +1661,34 @@ tasks.push(() => {
       colored(new THREE.BoxGeometry(0.15,0.7,0.18), cloth).translate(-0.35,1.12,0),
       colored(new THREE.BoxGeometry(0.15,0.7,0.18), cloth).translate(0.35,1.12,0)
     ]);
-    const body = new THREE.Mesh(torso, vcMat);
-    const legMat = new THREE.MeshLambertMaterial({color:pick([0x22262e,0x3a3f4a,0x4a4438])});
-    const l1 = new THREE.Mesh(new THREE.BoxGeometry(0.2,0.75,0.2), legMat), l2 = l1.clone();
-    l1.position.set(-0.14,0.36,0); l2.position.set(0.14,0.36,0);
-    g.add(body, l1, l2);
-    cityGroup.add(g);
-    const p = { g, l1, l2, i:0, j:0, t:rnd(), speed:0, phase:rnd()*6.28 };
+    const im = new THREE.InstancedMesh(torso, vcMat, cap);
+    im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    im.frustumCulled = false; im.count = 0;
+    cityGroup.add(im); pedBody.push(im);
+  }
+  const legMat = new THREE.MeshLambertMaterial({color:0xffffff});
+  for(let s=0;s<2;s++){
+    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(0.2,0.75,0.2), legMat, PED_COUNT);
+    im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    im.frustumCulled = false; im.count = PED_COUNT;
+    cityGroup.add(im); pedLegs.push(im);
+  }
+  const col = new THREE.Color();
+  for(let k=0;k<PED_COUNT;k++){
+    const kind = k % PED_KINDS;
+    const p = { kind, slot: pedBody[kind].count++, idx:k,
+                i:0, j:0, t:rnd(), speed:0, phase:rnd()*6.28, plaza:0, r:0 };
+    col.setHex(LEG[Math.floor(rnd()*LEG.length)]);
+    pedLegs[0].setColorAt(k, col); pedLegs[1].setColorAt(k, col);
     peds.push(p);
   }
+  pedLegs.forEach(im => im.instanceColor.needsUpdate = true);
 });
 function pedPos(p, t){
+  if(p.plaza){                        // milling around the square
+    const a = t*Math.PI*2;
+    return [TSQ.x + Math.cos(a)*p.r, TSQ.z + Math.sin(a)*p.r*0.78];
+  }
   const cx = midX(p.i), cz = midZ(p.j), r = BLOCK/2 + WALK*0.45;
   const side = Math.floor(t*4) % 4, f = (t*4) % 1;
   if(side===0) return [cx - r + f*2*r, cz - r];
@@ -1507,14 +1697,26 @@ function pedPos(p, t){
   return              [cx - r,         cz + r - f*2*r];
 }
 function relocatePed(p){
+  // the square is packed, so send a good share of anyone nearby into it
+  if(tsqDist(player.x, player.z) < 300 && rnd() < 0.45){
+    p.plaza = 1; p.r = rr(TSQ_R*0.30, TSQ_R*0.92); p.t = rnd();
+    p.speed = rr(0.5, 1.1) / (2*Math.PI*p.r);
+    return;
+  }
+  p.plaza = 0;
   for(let k=0;k<20;k++){
-    const i = idxX(player.x) + ri(-2,2), j = idxZ(player.z) + ri(-2,2);
+    const i = idxX(player.x) + ri(-3,3), j = idxZ(player.z) + ri(-3,3);
     if(i<0||j<0||i>=GX||j>=GZ) continue;
     if(!buildable(grid[i][j])) continue;
     p.i = i; p.j = j; p.t = rnd();
     p.speed = rr(0.9,1.7) / (4*(BLOCK+WALK*1.5));
     return;
   }
+  // never leave one without a walk, or its instance sits at the world origin
+  p.i = Math.max(0, Math.min(GX-1, idxX(player.x)));
+  p.j = Math.max(0, Math.min(GZ-1, idxZ(player.z)));
+  p.t = rnd();
+  p.speed = rr(0.9,1.7) / (4*(BLOCK+WALK*1.5));
 }
 
 // ---------- steam ----------
@@ -1551,12 +1753,14 @@ const EYE = 1.7, RADIUS = 0.55;
 function groundAt(x, z){
   const b = bridgeAt(x, z);
   if(b) return CURB + bridgeY(b, x);
-  if(onBway(x, z)) return 0;                       // Broadway's roadbed
+  // built-over streets and the plaza island are kerb height wherever they are,
+  // so they win over the roadbed test below
+  if(isPaved(x, z)) return CURB;
+  if(onBway(x, z) || tsqDist(x, z) < TSQ_R) return 0;   // Broadway / the square
   const i = idxX(x), j = idxZ(z);
   if(i>=0 && j>=0 && i<GX && j<GZ && grid[i][j] !== WATER){
     if(Math.abs(x - midX(i)) <= BLOCK/2 + WALK && Math.abs(z - midZ(j)) <= BLOCK/2 + WALK)
       return CURB;
-    if(isPaved(x, z)) return CURB;                 // street that was built over
     return 0;
   }
   return 0;
@@ -1781,6 +1985,7 @@ function setNight(v, silent){
   water.material.color.set(night ? 0x2a3d52 : 0x9fc6dd);
   stars.material.opacity = night ? 0.9 : 0;
   lampGlows.forEach(g => g.visible = night);
+  tsqLight.visible = night; tsqLight.intensity = night ? 2.4 : 0;
   roamLights.forEach(l => { l.visible = night; l.intensity = night ? 1.5 : 0; });
   clock24 = night ? 21.4 : 9.5;
   if(!silent) toast(night ? 'Night falls over New York' : 'Daybreak');
@@ -1815,6 +2020,8 @@ const clampPick = (arr, k) => arr[Math.max(0, Math.min(arr.length - 1, k))];
 function locationName(){
   const b = bridgeAt(player.x, player.z);
   if(b) return [b.name, 'over the river'];
+  if(tsqDist(player.x, player.z) < TSQ_R + 16) return ['Times Square', 'the crossroads of the world'];
+  if(onBway(player.x, player.z)) return ['Broadway', 'manhattan'];
   const i = idxX(player.x), j = idxZ(player.z);
   const t = (i<0||j<0||i>=GX||j>=GZ) ? WATER : grid[i][j];
   if(t === WATER)   return ['The Harbor', 'new york bay'];
@@ -2097,7 +2304,16 @@ function updateTraffic(dt){
       continue;
     }
     c.pos += c.speed * c.dir * dt;
-    if(c.pos > c.seg.b - 4 || c.pos < c.seg.a + 4){
+    // on a chained road the car is handed to the next leg and keeps going;
+    // only a real dead end makes it turn around
+    if(c.dir > 0 && c.pos > c.seg.b && c.seg.next){
+      const carry = c.pos - c.seg.b;
+      c.seg = c.seg.next; c.pos = c.seg.a + carry;
+    } else if(c.dir < 0 && c.pos < c.seg.a && c.seg.prev){
+      const carry = c.seg.a - c.pos;
+      c.seg = c.seg.prev; c.pos = c.seg.b - carry;
+    } else if((c.dir > 0 && c.pos > c.seg.b - 4 && !c.seg.next) ||
+              (c.dir < 0 && c.pos < c.seg.a + 4 && !c.seg.prev)){
       c.pos = Math.max(c.seg.a + 4, Math.min(c.seg.b - 4, c.pos));
       c.turn = 1.1;
       continue;
@@ -2130,9 +2346,10 @@ function updateTraffic(dt){
     if(d > 430){
       for(let k=0;k<24;k++){
         const s = segs[ri(0, segs.length-1)];
-        const lo = Math.max(s.a + 6, (s.ax === 'x' ? player.x : player.z) - 260);
-        const hi = Math.min(s.b - 6, (s.ax === 'x' ? player.x : player.z) + 260);
-        const cross = Math.abs(s.line - (s.ax === 'x' ? player.z : player.x));
+        const along = segAlong(s, player.x, player.z);
+        const lo = Math.max(s.a + 6, along - 260);
+        const hi = Math.min(s.b - 6, along + 260);
+        const cross = Math.abs(segOff(s, player.x, player.z));
         if(hi - lo < 20 || cross > 260) continue;
         placeCar(c, s, rr(lo, hi));
         faceCar(c);
@@ -2142,33 +2359,39 @@ function updateTraffic(dt){
   }
 }
 function faceCar(c){
-  const lane = carLane(c);
-  const g = c.g;
-  if(c.seg.ax === 'x'){
-    g.position.set(c.pos, 0, c.seg.line + lane);
-    g.rotation.y = c.dir > 0 ? Math.PI/2 : -Math.PI/2;
-  } else {
-    g.position.set(c.seg.line + lane, 0, c.pos);
-    g.rotation.y = c.dir > 0 ? 0 : Math.PI;
-  }
+  const s = c.seg, lane = carLane(c), g = c.g;
+  g.position.set(s.ox + s.ux*c.pos + s.nx*lane, 0, s.oz + s.uz*c.pos + s.nz*lane);
+  g.rotation.y = c.dir > 0 ? s.ang : s.ang + Math.PI;
   g.position.y = roadY(g.position.x, g.position.z);
 }
 
 function updatePeds(dt, t){
+  if(!pedBody.length) return;
   for(const p of peds){
     if(!p.speed){ relocatePed(p); continue; }
     p.t = (p.t + p.speed * dt) % 1;
     const [px, pz] = pedPos(p, p.t);
     const [ax, az] = pedPos(p, (p.t + 0.004) % 1);
-    p.g.position.set(px, CURB, pz);
-    p.g.rotation.y = Math.atan2(ax-px, az-pz);
+    const y = p.plaza ? 0 : CURB;
+    p.x = px; p.z = pz;
+    pedHip.position.set(px, y, pz);
+    pedHip.rotation.set(0, Math.atan2(ax-px, az-pz), 0);
     const sw = Math.sin(t*5.5 + p.phase) * 0.5;
-    p.l1.rotation.x = sw;  p.l2.rotation.x = -sw;
+    pedLegNode[0].rotation.x = sw; pedLegNode[1].rotation.x = -sw;
+    pedHip.updateMatrixWorld(true);
+    pedBody[p.kind].setMatrixAt(p.slot, pedHip.matrixWorld);
+    pedLegs[0].setMatrixAt(p.idx, pedLegNode[0].matrixWorld);
+    pedLegs[1].setMatrixAt(p.idx, pedLegNode[1].matrixWorld);
   }
-  for(let n=0;n<4;n++){
+  pedBody.forEach(im => im.instanceMatrix.needsUpdate = true);
+  pedLegs.forEach(im => im.instanceMatrix.needsUpdate = true);
+  for(let n=0;n<10;n++){
     pedCursor = (pedCursor + 1) % peds.length;
     const p = peds[pedCursor];
-    if(Math.hypot(p.g.position.x - player.x, p.g.position.z - player.z) > 240) relocatePed(p);
+    if(p.x === undefined) continue;
+    const far = Math.hypot(p.x - player.x, p.z - player.z) > 260;
+    // and pull people back out of the square once you have left it
+    if(far || (p.plaza && tsqDist(player.x, player.z) > 340)) relocatePed(p);
   }
 }
 
@@ -2208,11 +2431,9 @@ function start(){
   cityGroup.traverse(o => { o.updateMatrix(); o.matrixAutoUpdate = false; });
   cityGroup.matrixAutoUpdate = false; cityGroup.updateMatrix();
   for(const c of cars) c.g.matrixAutoUpdate = true;
-  for(const p of peds){
-    p.g.matrixAutoUpdate = true;
-    for(const part of [p.l1, p.l2]) part.matrixAutoUpdate = true;
-  }
   for(const s of steams) s.spr.matrixAutoUpdate = true;
+  // the crowd is instanced: the meshes themselves never move, only the
+  // per-instance matrices, so they can stay static like the rest of the city
 
   peds.forEach(relocatePed);
   steams.forEach(s => { s.x = player.x + rr(-70,70); s.z = player.z + rr(-70,70); });
