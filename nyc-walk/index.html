@@ -831,7 +831,19 @@ function roofExtras(c, cx, cz, top, w, d){
       c.roof.push(leg);
     }
   }
-  for(let k=0,n=ri(1,3);k<n;k++){
+  // the stair bulkhead: every roof has one, and it is the tallest thing up here
+  if(rnd() < 0.72){
+    const bw = rr(3.0, 4.6), bd = rr(2.8, 4.2), bh = rr(2.6, 3.6);
+    const ox = rr(-w/2 + bw, w/2 - bw), oz = rr(-d/2 + bd, d/2 - bd);
+    const bulk = colored(new THREE.BoxGeometry(bw, bh, bd), 0x6f6a62);
+    bulk.translate(cx + ox, top + bh/2, cz + oz);
+    const cap = colored(new THREE.BoxGeometry(bw + 0.4, 0.3, bd + 0.4), 0x4e4a45);
+    cap.translate(cx + ox, top + bh + 0.1, cz + oz);
+    const door = colored(new THREE.BoxGeometry(0.12, bh*0.62, 1.1), 0x2f3b33);
+    door.translate(cx + ox + bw/2, top + bh*0.31, cz + oz);
+    c.roof.push(bulk, cap, door);
+  }
+  for(let k=0,n=ri(1,3);k<n;k++){          // vents and condenser units
     const uw = rr(1.4,2.8), uh = rr(0.8,1.6), ud = rr(1.4,2.6);
     const b = colored(new THREE.BoxGeometry(uw,uh,ud), 0x8a8d92);
     b.translate(cx+rr(-w/2+2,w/2-2), top+uh/2, cz+rr(-d/2+2,d/2-2));
@@ -938,6 +950,46 @@ function building(cx, cz, w, d, h, variant){
   else if(!glassy && h < 30 && shape !== 'round'){
     if(rnd() < 0.28) bowFront(c, cx, cz, w, d, h, variant);
     else if(rnd() < 0.5) fireEscape(c, cx, cz, w, d, h);
+  }
+  // built wall to wall: blank brick where the neighbours abut, and the air
+  // conditioners that hang off every other window of the ones that aren't
+  if(!glassy && shape === 'box'){
+    if(h < 34) partyWalls(c, cx, cz, w, d, h, variant);
+    acUnits(c, cx, cz, w, d, h, ri(2, 7));
+  }
+}
+// Plain brick, one colour per facade — what a party wall is actually made of
+const PARTY = [0x8c4b3c, 0xa8977c, 0x31363d, 0x243039, 0x6b4232, 0xbcb4a4];
+/* New York rowhouses and tenements are built wall to wall, so the sides that
+ * meet the neighbours have no windows at all — they are blank brick, and you
+ * see them everywhere a lot is empty or a low building sits beside a tall one.
+ * Windows wrapping all four faces is the single thing that most gives away a
+ * block of buildings as generated. */
+function partyWalls(c, cx, cz, w, d, h, variant){
+  const f = streetFace(cx, cz);
+  const side = f.ax === 'x' ? 'z' : 'x';       // the two faces at right angles
+  for(const s of [-1, 1]){
+    const pw = side === 'x' ? 0.32 : w + 0.12, pd = side === 'x' ? d + 0.12 : 0.32;
+    const wall = colored(new THREE.BoxGeometry(pw, h - 0.4, pd), PARTY[variant]);
+    wall.translate(cx + (side === 'x' ? s*(w/2 + 0.08) : 0), CURB + h/2 - 0.2,
+                   cz + (side === 'z' ? s*(d/2 + 0.08) : 0));
+    c.roof.push(wall);
+  }
+}
+// Through-the-wall air conditioners, hanging off the front of half the city
+function acUnits(c, cx, cz, w, d, h, n){
+  const f = streetFace(cx, cz);
+  const span = f.ax === 'x' ? d : w;
+  for(let k=0;k<n;k++){
+    const fl = 5.2 + Math.floor(rr(0, Math.max(1, (h - 8)/2.5))) * 2.5;
+    if(fl > h - 2) continue;
+    const along = rr(-span*0.38, span*0.38);
+    const ux = f.ax === 'x' ? f.sgn*(w/2 + 0.22) : along;
+    const uz = f.ax === 'x' ? along : f.sgn*(d/2 + 0.22);
+    const box = colored(new THREE.BoxGeometry(f.ax === 'x' ? 0.5 : 0.78, 0.52,
+                                              f.ax === 'x' ? 0.78 : 0.5), 0x8e9298);
+    box.translate(cx + ux, CURB + fl, cz + uz);
+    c.roof.push(box);
   }
 }
 // Bow-front brownstone: the rounded bay that swells out over the stoop.
@@ -1398,32 +1450,108 @@ function setbackTower(cx, cz, tiers, mastH, variant){
 }
 const beacons = [];
 
+/* The statue is three things stacked, and it only reads right if all three are
+ * there: Fort Wood, the eleven-pointed star the whole thing stands on; Hunt's
+ * granite pedestal above it; and only then Bartholdi's figure -- robed, right
+ * arm up with the torch, left arm down holding the tablet against her, seven
+ * rays on the crown for the seven seas. */
+const COPPER = 0x5f9e8a, COPPER_D = 0x4f8874, GRANITE = 0x8f887a, GRANITE_L = 0xa79f8f;
 function buildStatue(i, j){
   const c = chunkOf(midX(i), midZ(j));
   const x = midX(i), z = midZ(j);
   const isle = new THREE.Mesh(new THREE.CylinderGeometry(26, 30, 1.2, 20), grassMat);
   isle.position.set(x, 0.4, z); cityGroup.add(isle);
-  const bits = [];
-  bits.push(colored(new THREE.CylinderGeometry(9, 11, 10, 8), 0x8d8577).translate(x, 6, z));
-  bits.push(colored(new THREE.CylinderGeometry(6.5, 8, 9, 8), 0xa39a8a).translate(x, 15.5, z));
-  bits.push(colored(new THREE.CylinderGeometry(2.6, 4.6, 20, 10), 0x54b39a).translate(x, 30, z));
-  bits.push(colored(new THREE.SphereGeometry(2.0, 10, 8), 0x54b39a).translate(x, 41, z));
-  for(let k=0;k<7;k++){
-    const a = (k/7)*Math.PI*1.6 - 0.8;
-    bits.push(colored(new THREE.ConeGeometry(0.35, 3.2, 5), 0x54b39a)
-      .translate(x + Math.cos(a)*2.3, 43.4, z + Math.sin(a)*2.3));
+  const B = [];
+  const at = (g, ax, ay, az) => B.push(g.translate(x + (ax||0), ay, z + (az||0)));
+
+  // --- Fort Wood: an eleven-pointed star of granite ---
+  at(colored(new THREE.CylinderGeometry(12.5, 13.5, 4.4, 11), GRANITE), 0, 2.2, 0);
+  for(let k=0;k<11;k++){
+    const a = (k/11)*Math.PI*2;
+    const pt = colored(new THREE.ConeGeometry(2.6, 7.4, 4), GRANITE);
+    pt.rotateZ(-Math.PI/2); pt.rotateY(-a);          // lay it flat, point it out
+    at(pt, Math.cos(a)*15.4, 2.6, Math.sin(a)*15.4); // clear of the island top
   }
-  const arm = colored(new THREE.CylinderGeometry(0.7, 0.85, 12, 6), 0x54b39a);
-  arm.rotateZ(0.35); arm.translate(x + 4.2, 44, z);
-  bits.push(arm);
-  bits.push(colored(new THREE.CylinderGeometry(1.5, 0.9, 2.4, 8), 0xd8c26a).translate(x+6.4, 50.6, z));
-  c.prop.push(...bits);
-  const flame = new THREE.Mesh(new THREE.ConeGeometry(1.3, 3.4, 8),
+  at(colored(new THREE.CylinderGeometry(13.2, 13.2, 0.8, 11), GRANITE_L), 0, 4.6, 0);
+
+  // --- the pedestal: two tapering tiers, a loggia of columns, a cornice ---
+  const FOOT = 32.5;                     // her heel, ~47m up, as it really is
+  at(colored(new THREE.BoxGeometry(15.5, 11, 15.5), GRANITE), 0, 10.5, 0);
+  at(colored(new THREE.BoxGeometry(16.4, 0.9, 16.4), GRANITE_L), 0, 16.4, 0);
+  for(let k=0;k<4;k++){                               // corner pilasters
+    const s = [[1,1],[1,-1],[-1,-1],[-1,1]][k];
+    at(colored(new THREE.BoxGeometry(1.6, 11, 1.6), GRANITE_L), s[0]*7.2, 10.5, s[1]*7.2);
+  }
+  at(colored(new THREE.BoxGeometry(12.6, 13, 12.6), GRANITE), 0, 23.0, 0);
+  for(let k=0;k<16;k++){                              // the colonnade
+    const a = (k/16)*Math.PI*2;
+    at(colored(new THREE.CylinderGeometry(0.5, 0.5, 7.5, 6), GRANITE_L),
+       Math.cos(a)*6.9, 22.0, Math.sin(a)*6.9);
+  }
+  at(colored(new THREE.BoxGeometry(14.2, 1.4, 14.2), GRANITE_L), 0, 30.2, 0);
+  at(colored(new THREE.BoxGeometry(11.0, 1.6, 11.0), GRANITE), 0, 31.6, 0);
+
+  /* The figure is built around her heel at the origin and scaled as a whole at
+   * the end. Bartholdi's proportions are a short figure on a tall pedestal --
+   * built full size against this pedestal she stands a third too tall. */
+  const S = 0.79;
+  const F = [];
+  const fig = (g, ax, ay, az) => F.push(g.translate(ax || 0, ay, az || 0));
+  fig(colored(new THREE.CylinderGeometry(4.4, 5.4, 9, 14), COPPER), 0, 4.5, 0);
+  fig(colored(new THREE.CylinderGeometry(3.3, 4.4, 9, 14), COPPER), 0, 13.5, 0);
+  fig(colored(new THREE.CylinderGeometry(2.7, 3.3, 5.5, 14), COPPER), 0, 20.8, 0);
+  for(let k=0;k<14;k++){                              // folds down the robe
+    const a = (k/14)*Math.PI*2, r = 4.3;
+    const fold = colored(new THREE.BoxGeometry(0.5, 17.5, 0.9), COPPER_D);
+    fold.rotateY(-a);
+    fig(fold, Math.cos(a)*r, 8.7, Math.sin(a)*r);
+  }
+  fig(colored(new THREE.CylinderGeometry(2.5, 2.7, 1.6, 12), COPPER), 0, 24.2, 0);
+  fig(colored(new THREE.CylinderGeometry(0.8, 1.0, 1.4, 8), COPPER), 0, 25.5, 0);
+  // her head is 5.3m across and the arm 12.8m long — big even against her
+  const head = colored(new THREE.SphereGeometry(1.95, 12, 10), COPPER);
+  head.scale(0.86, 1.12, 0.94);
+  fig(head, 0, 27.5, 0);
+  // the crown band and its seven rays, one for each sea
+  fig(colored(new THREE.CylinderGeometry(2.05, 2.12, 0.9, 12), COPPER_D), 0, 28.4, 0);
+  for(let k=0;k<7;k++){
+    const a = (k/7)*Math.PI*2, tilt = 0.55;
+    const ray = colored(new THREE.ConeGeometry(0.32, 4.6, 4), COPPER);
+    ray.rotateZ(-tilt); ray.rotateY(-a);
+    const dx = Math.sin(tilt)*Math.cos(a), dy = Math.cos(tilt), dz = Math.sin(tilt)*Math.sin(a);
+    fig(ray, Math.cos(a)*2.0 + dx*2.3, 29.0 + dy*2.3, Math.sin(a)*2.0 + dz*2.3);
+  }
+  // right arm raised, torch above it
+  const shoulder = 24.0, hand = 34.5, reach = 3.4;
+  const arm = colored(new THREE.CylinderGeometry(0.62, 0.85,
+                        Math.hypot(reach, hand - shoulder), 8), COPPER);
+  arm.rotateZ(-Math.atan2(reach, hand - shoulder));
+  fig(arm, reach/2, (shoulder + hand)/2, 0);
+  fig(colored(new THREE.CylinderGeometry(0.75, 0.75, 1.3, 8), COPPER), reach, hand + 0.5, 0);
+  fig(colored(new THREE.CylinderGeometry(0.4, 0.55, 2.6, 8), COPPER_D), reach, hand + 2.2, 0);
+  fig(colored(new THREE.CylinderGeometry(1.5, 0.75, 1.5, 10), 0xd9c06a), reach, hand + 4.1, 0);
+  fig(colored(new THREE.CylinderGeometry(1.65, 1.5, 0.35, 10), 0xe6d089), reach, hand + 5.0, 0);
+  // left arm down, tablet held clear of the robe or it vanishes inside it
+  const lh = 17.5;
+  const lArm = colored(new THREE.CylinderGeometry(0.6, 0.8,
+                         Math.hypot(1.9, shoulder - lh), 8), COPPER);
+  lArm.rotateZ(Math.atan2(1.9, shoulder - lh));
+  fig(lArm, -3.4, (shoulder + lh)/2, 0.8);
+  const tab = colored(new THREE.BoxGeometry(3.5, 6.1, 1.0), COPPER_D);
+  tab.rotateZ(0.30); tab.rotateY(-0.22);
+  fig(tab, -3.9, lh + 1.2, 1.9);
+  const face = colored(new THREE.BoxGeometry(2.8, 5.1, 0.22), 0x6faa96);
+  face.rotateZ(0.30); face.rotateY(-0.22);
+  fig(face, -4.02, lh + 1.25, 2.45);
+  for(const g of F) B.push(g.scale(S, S, S).translate(x, FOOT, z));
+
+  c.prop.push(...B);
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(1.15*S, 3.0*S, 10),
     new THREE.MeshBasicMaterial({color:0xffd166}));
-  flame.position.set(x+6.4, 53.4, z);
+  flame.position.set(x + 3.0*S, FOOT + (hand + 6.6)*S, z);
   cityGroup.add(flame);
   beacons.push(flame);
-  addSolid(x, z, 20, 20);
+  addSolid(x, z, 26, 26);
 }
 
 // ---------- bridges ----------
