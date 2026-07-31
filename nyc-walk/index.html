@@ -1081,12 +1081,19 @@ function addProps(c, i, j){
  * intersection one street is green while the other is red.
  */
 const SIG_H = 6.0, SIG_ARM = 7.4, SIG_E = ROAD/2 + WALK*0.55;
-// which grid intersections ended up signalised, so traffic can find its stops
-const signalAt = new Set();
-function trafficSignal(c, x, z, armAng, faceAng, ph){
+// which grid intersections ended up signalised, and which are four-way stops,
+// so traffic can find both kinds of stop line
+const signalAt = new Set(), stopAt = new Set();
+function signalPole(c, x, z, faceAng){
   const pole = colored(new THREE.CylinderGeometry(0.12, 0.17, SIG_H, 6), 0x2b3036);
   pole.translate(x, CURB + SIG_H/2, z);
   c.prop.push(pole);
+  const ped = colored(new THREE.BoxGeometry(0.46, 0.54, 0.32), 0x22262b);
+  ped.rotateY(faceAng);
+  ped.translate(x + Math.sin(faceAng)*0.35, CURB + 3.3, z + Math.cos(faceAng)*0.35);
+  c.prop.push(ped);
+}
+function signalHead(c, x, z, armAng, faceAng, ph){
   const arm = colored(new THREE.BoxGeometry(0.15, 0.15, SIG_ARM), 0x2b3036);
   arm.translate(0, 0, SIG_ARM/2); arm.rotateY(armAng);
   arm.translate(x, CURB + SIG_H - 0.35, z);
@@ -1102,10 +1109,17 @@ function trafficSignal(c, x, z, armAng, faceAng, ph){
   c.sig[ph*2].push(lens(0.48, 0xffffff));            // red, top
   c.prop.push(lens(0, 0x4a3a12));                    // amber, dark between phases
   c.sig[ph*2+1].push(lens(-0.48, 0xffffff));         // green, bottom
-  const ped = colored(new THREE.BoxGeometry(0.46, 0.54, 0.32), 0x22262b);
-  ped.rotateY(faceAng);
-  ped.translate(x + fx*1.4, CURB + 3.3, z + fz*1.4);
-  c.prop.push(ped);
+}
+// A real intersection faces every approach. Two poles diagonally opposite,
+// each carrying two arms: one out over the avenue, one out over the street.
+// Miss any of the four and drivers coming that way see the back of a signal.
+function signalSet(c, X, Z){
+  signalPole(c, X - SIG_E, Z - SIG_E, Math.PI*0.25);                  // faces the box
+  signalHead(c, X - SIG_E, Z - SIG_E,  Math.PI/2,  Math.PI,      0);  // southbound
+  signalHead(c, X - SIG_E, Z - SIG_E,  0,         -Math.PI/2,    1);  // eastbound
+  signalPole(c, X + SIG_E, Z + SIG_E, -Math.PI*0.75);
+  signalHead(c, X + SIG_E, Z + SIG_E, -Math.PI/2,  0,            0);  // northbound
+  signalHead(c, X + SIG_E, Z + SIG_E,  Math.PI,    Math.PI/2,    1);  // westbound
 }
 function stopSign(c, x, z, faceAng){
   const pole = colored(new THREE.CylinderGeometry(0.06, 0.07, 2.9, 5), 0x6a6f75);
@@ -1137,13 +1151,15 @@ function crossing(c, i, j){
                   t === VILLAGE || t === PARK;
   const arterial = (i+1) % 3 === 0 || (j+1) % 3 === 0;
   if(gridded || arterial){
-    // avenue head over the north approach, street head over the east approach
-    trafficSignal(c, X - SIG_E, Z - SIG_E, Math.PI/2, Math.PI,   0);
-    trafficSignal(c, X + SIG_E, Z + SIG_E, Math.PI,   Math.PI/2, 1);
+    signalSet(c, X, Z);
     signalAt.add(skey(i, j));
   } else {
+    // four-way stop: a sign on each approach, and traffic really does halt
     stopSign(c, X - SIG_E, Z - SIG_E, Math.PI);
     stopSign(c, X + SIG_E, Z + SIG_E, 0);
+    stopSign(c, X + SIG_E, Z - SIG_E, Math.PI/2);
+    stopSign(c, X - SIG_E, Z + SIG_E, -Math.PI/2);
+    stopAt.add(skey(i, j));
   }
 }
 
@@ -1528,10 +1544,25 @@ tasks.push(() => {
     const ux = Math.sin(bang), uz = Math.cos(bang);       // along Broadway
     const px = Math.cos(bang), pz = -Math.sin(bang);      // across it
     const c = chunkOf(cr.x, cr.z);
-    trafficSignal(c, cr.x + px*SIG_E - ux*15, cr.z + pz*SIG_E - uz*15,
-                  Math.atan2(-px, -pz), bang + Math.PI, 0);
-    if(cr.ax === 'x') trafficSignal(c, cr.x + 15, cr.z + SIG_E, Math.PI, Math.PI/2, 1);
-    else              trafficSignal(c, cr.x + SIG_E, cr.z + 15, -Math.PI/2, 0, 1);
+    // both ways down the diagonal
+    const pa = [cr.x + px*SIG_E - ux*15, cr.z + pz*SIG_E - uz*15];
+    signalPole(c, pa[0], pa[1], bang);                  // crossing is downstream
+    signalHead(c, pa[0], pa[1], Math.atan2(-px, -pz), bang + Math.PI, 0);
+    const pb = [cr.x - px*SIG_E + ux*15, cr.z - pz*SIG_E + uz*15];
+    signalPole(c, pb[0], pb[1], bang + Math.PI);
+    signalHead(c, pb[0], pb[1], Math.atan2(px, pz), bang, 0);
+    // and both ways along the street it cuts
+    if(cr.ax === 'x'){
+      signalPole(c, cr.x + 15, cr.z + SIG_E, -Math.PI*0.75);
+      signalHead(c, cr.x + 15, cr.z + SIG_E,  Math.PI,  Math.PI/2,  1);
+      signalPole(c, cr.x - 15, cr.z - SIG_E,  Math.PI*0.25);
+      signalHead(c, cr.x - 15, cr.z - SIG_E,  0,       -Math.PI/2,  1);
+    } else {
+      signalPole(c, cr.x + SIG_E, cr.z + 15, -Math.PI*0.75);
+      signalHead(c, cr.x + SIG_E, cr.z + 15, -Math.PI/2, 0,         1);
+      signalPole(c, cr.x - SIG_E, cr.z - 15,  Math.PI*0.25);
+      signalHead(c, cr.x - SIG_E, cr.z - 15,  Math.PI/2, Math.PI,   1);
+    }
   }
 });
 tasks.push(() => {
@@ -1682,7 +1713,9 @@ function gridStops(s){
     const j = Math.round((s.line - OFF_Z - BLOCK - STREET/2) / PITCH);
     for(let i=0;i<GX;i++){
       const X = roadX(i);
-      if(X > s.a && X < s.b && signalAt.has(skey(i, j))) out.push({p:X, ph:mine});
+      if(X <= s.a || X >= s.b) continue;
+      if(signalAt.has(skey(i, j))) out.push({p:X, ph:mine});
+      else if(stopAt.has(skey(i, j))) out.push({p:X, ph:-1});   // -1 = stop sign
     }
     for(const cr of BWAY_CROSS)
       if(cr.ax === 'x' && cr.j === j && cr.x > s.a && cr.x < s.b)
@@ -1691,7 +1724,9 @@ function gridStops(s){
     const i = Math.round((s.line - OFF_X - BLOCK - STREET/2) / PITCH);
     for(let j=0;j<GZ;j++){
       const Z = roadZ(j);
-      if(Z > s.a && Z < s.b && signalAt.has(skey(i, j))) out.push({p:Z, ph:mine});
+      if(Z <= s.a || Z >= s.b) continue;
+      if(signalAt.has(skey(i, j))) out.push({p:Z, ph:mine});
+      else if(stopAt.has(skey(i, j))) out.push({p:Z, ph:-1});
     }
     for(const cr of BWAY_CROSS)
       if(cr.ax === 'z' && cr.i === i && cr.z > s.a && cr.z < s.b)
@@ -1766,6 +1801,7 @@ function placeCar(c, seg, pos){
   c.pos = pos !== undefined ? pos : rr(seg.a + 6, seg.b - 6);
   c.turn = 0;
   c.parked = false;
+  c.signWait = SIGN_WAIT; c.signDone = null;
 }
 const carLane = c => c.dir * 2.7;      // right-hand side of the road
 function roadY(x, z){
@@ -2431,6 +2467,7 @@ function updateDriving(dt, mf, ms){
 }
 
 const STOP_LINE = 9;                   // how far short of the crossing to hold
+const SIGN_WAIT = 1.1;                 // seconds halted at a stop sign
 const segCars = new Map();
 function updateTraffic(dt){
   // bucket by segment once so following only looks at cars on the same road
@@ -2448,7 +2485,8 @@ function updateTraffic(dt){
     if(c.turn > 0){                      // three-point turn at a dead end
       c.turn -= dt;
       g.rotation.y += (c.seg.ax === 'x' ? 1 : 1) * Math.PI * dt / 1.1;
-      if(c.turn <= 0){ c.dir *= -1; faceCar(c); }
+      // turned around, so the sign it just served is ahead of it again
+      if(c.turn <= 0){ c.dir *= -1; c.signDone = null; faceCar(c); }
       continue;
     }
     // red light: ease down to the stop line and hold there until it turns
@@ -2458,7 +2496,17 @@ function updateTraffic(dt){
       let ahead = null;
       if(c.dir > 0){ for(let k=0;k<st.length;k++) if(st[k].p > c.pos){ ahead = st[k]; break; } }
       else { for(let k=st.length-1;k>=0;k--) if(st[k].p < c.pos){ ahead = st[k]; break; } }
-      if(ahead && ahead.ph !== greenPhase){
+      if(ahead && ahead.ph === -1 && c.signDone !== ahead.p){
+        // stop sign: come to a halt, wait a beat, then it is done with this one
+        const gap = (ahead.p - c.pos)*c.dir - STOP_LINE;
+        if(gap < 1.4){
+          v = 0;
+          c.signWait -= dt;
+          if(c.signWait <= 0){ c.signDone = ahead.p; c.signWait = SIGN_WAIT; }
+        } else if(gap < 24){
+          v = Math.min(v, Math.max(c.speed*0.10, c.speed * gap/18));
+        }
+      } else if(ahead && ahead.ph >= 0 && ahead.ph !== greenPhase){
         const gap = (ahead.p - c.pos)*c.dir - STOP_LINE;
         // a negative gap means it is already in the box, so let it clear
         if(gap >= 0 && gap < 30) v = gap < 1.2 ? 0 : c.speed * Math.min(1, gap/20);
