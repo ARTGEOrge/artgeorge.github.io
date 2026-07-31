@@ -2120,6 +2120,18 @@ tasks.push(() => {
     carMeshes.push(body);
     cars.push(c);
     placeCar(c, segs[ri(0, segs.length-1)]);
+    faceCar(c);
+  }
+  // and spread any that spawned on top of one another
+  for(const c of cars){
+    cellCars.clear();
+    for(const o of cars){
+      const k = skey(idxX(o.g.position.x), idxZ(o.g.position.z));
+      let b = cellCars.get(k);
+      if(!b){ b = []; cellCars.set(k, b); }
+      b.push(o);
+    }
+    if(carNear(c.g.position.x, c.g.position.z, 9, c)) dropIn(c);
   }
 });
 
@@ -2805,8 +2817,14 @@ function siren(){
   o.start(t); o.stop(t + 0.95);
 }
 
-function addCop(){
-  if(police.length >= 6) return;
+// Send a unit after a car that caused something, so the traffic is held to the
+// same rule as the player rather than getting away with it.
+function dispatchTo(offender){
+  if(police.some(p => p.target === offender) || police.length >= 8) return;
+  addCop(offender);
+}
+function addCop(target){
+  if(police.length >= 8) return;
   const g = new THREE.Group();
   const body = new THREE.Mesh(policeGeo(), vcMat);
   const sg = sirenGeo();
@@ -2815,19 +2833,23 @@ function addCop(){
   g.add(body, lampL, lampR);
   // come in from behind, off to one side, far enough back to be a chase —
   // and on land, or they arrive in the East River
-  const back = drive ? drive.heading + Math.PI : player.yaw;
-  let px = player.x, pz = player.z;
+  const ax = target ? target.g.position.x : player.x;
+  const az = target ? target.g.position.z : player.z;
+  const back = target ? target.g.rotation.y + Math.PI
+                      : (drive ? drive.heading + Math.PI : player.yaw);
+  let px = ax, pz = az;
   for(let k=0;k<12;k++){
     const d = rr(58, 96), off = rr(-26, 26);
-    const cx = player.x + Math.sin(back)*d + Math.cos(back)*off;
-    const cz = player.z + Math.cos(back)*d - Math.sin(back)*off;
+    const cx = ax + Math.sin(back)*d + Math.cos(back)*off;
+    const cz = az + Math.cos(back)*d - Math.sin(back)*off;
     if(isSolidGround(cx, cz)){ px = cx; pz = cz; break; }
   }
   g.position.set(px, 0.02, pz);
   g.rotation.y = back + Math.PI;
   cityGroup.add(g);
   police.push({ g, lampL, lampR, heading: back + Math.PI, speed: 0,
-                top: rr(34, 42), phase: rnd()*6.28 });
+                top: rr(34, 42), phase: rnd()*6.28, target: target || null,
+                life: target ? 40 : 0 });
 }
 function startChase(reason){
   if(!chase.on){
@@ -2838,15 +2860,21 @@ function startChase(reason){
     toast('More units responding.');
   }
   chase.clear = 0;
+  // count only the units on you — ones sent after a car do not protect you
   const want = Math.min(6, chase.level + 1);
-  while(police.length < want) addCop();
+  const onMe = () => police.reduce((n, p) => n + (p.target ? 0 : 1), 0);
+  for(let k=0; onMe() < want && k < 8; k++) addCop();
   elWanted.classList.add('on');
   elWanted.querySelector('.s').textContent = '★'.repeat(chase.level);
   siren();
 }
 function endChase(msg){
-  for(const c of police) cityGroup.remove(c.g);
-  police.length = 0;
+  // only the units on you stand down; anyone chasing a car carries on
+  for(let k=police.length-1; k>=0; k--){
+    if(police[k].target) continue;
+    cityGroup.remove(police[k].g);
+    police.splice(k, 1);
+  }
   chase.on = false; chase.level = 0; chase.clear = 0;
   elWanted.classList.remove('on');
   if(msg) toast(msg);
@@ -2874,14 +2902,18 @@ function updateChase(dt){
   if(!chase.on) return;
   chase.wail -= dt;
   if(chase.wail <= 0){ siren(); chase.wail = rr(2.6, 3.4); }
-  const tx = drive ? drive.c.g.position.x : player.x;
-  const tz = drive ? drive.c.g.position.z : player.z;
+  const px = drive ? drive.c.g.position.x : player.x;
+  const pz = drive ? drive.c.g.position.z : player.z;
   let nearest = 1e9;
-  for(const c of police){
-    const g = c.g;
+  for(let k=police.length-1; k>=0; k--){
+    const c = police[k], g = c.g;
+    // a unit sent after a car gives up eventually rather than circling for ever
+    if(c.target && (c.life -= dt) <= 0){ cityGroup.remove(g); police.splice(k,1); continue; }
+    const tx = c.target ? c.target.g.position.x : px;
+    const tz = c.target ? c.target.g.position.z : pz;
     const dx = tx - g.position.x, dz = tz - g.position.z;
     const dist = Math.hypot(dx, dz);
-    nearest = Math.min(nearest, dist);
+    if(!c.target) nearest = Math.min(nearest, dist);
     // steer toward you, but only turn so fast, so they take the corners
     const want = Math.atan2(dx, dz);
     let turn = want - c.heading;
@@ -2903,6 +2935,15 @@ function updateChase(dt){
     const on = Math.sin(clock.elapsedTime*9 + c.phase) > 0;
     c.lampL.material.color.setHex(on ? 0xff2b2b : 0x3a0e0e);
     c.lampR.material.color.setHex(on ? 0x2b6bff : 0x0e1a3a);
+    if(c.target){
+      if(dist < 6){                            // pulled over and taken away
+        if(Math.hypot(px - g.position.x, pz - g.position.z) < 150)
+          toast('They got them.');
+        dropIn(c.target);
+        cityGroup.remove(g); police.splice(k,1);
+      }
+      continue;
+    }
     if(dist < 3.4){ busted(); return; }        // on foot counts too
   }
   if(nearest > 230){
@@ -2961,7 +3002,9 @@ function shunted(o, dt){
   flash.style.opacity = 0.3;
   setTimeout(() => flash.style.opacity = 0, 150);
   honk(0.2);
-  toast('They drove into you.');
+  // they caused it, so they are the ones who get pulled over
+  toast('They drove into you. A unit is going after them.');
+  dispatchTo(o);
 }
 
 function updateDriving(dt, mf, ms){
@@ -2975,6 +3018,7 @@ function updateDriving(dt, mf, ms){
   drive.speed = Math.max(MAXR, Math.min(MAXF, drive.speed));
   if(Math.abs(drive.speed) < 0.05) drive.speed = 0;
 
+  drive.c.vel = Math.abs(drive.speed);     // so traffic can predict your path
   const grip = Math.min(1, Math.abs(drive.speed) / 12);
   drive.heading -= ms * dt * 1.9 * grip * Math.sign(drive.speed || 1);
 
@@ -3047,6 +3091,50 @@ function blockedBy(c, o){
   const h = c.g.rotation.y, fx = Math.sin(h), fz = Math.cos(h);
   return (dx*fx + dz*fz) > 0.4 * Math.sqrt(d2);          // within a cone ahead
 }
+/* A cone ahead cannot see a car crossing at ninety degrees — neither has the
+ * other in front of it — which is why traffic drove through itself at every
+ * unsignalised junction. So extrapolate both and look for the closest approach
+ * over the next second instead. The prediction is symmetric, so the pair would
+ * both give way; the lower id keeps going. */
+function willHit(c, o){
+  const dx = o.g.position.x - c.g.position.x, dz = o.g.position.z - c.g.position.z;
+  if(dx*dx + dz*dz > 900) return false;
+  const rvx = Math.sin(o.g.rotation.y)*(o.vel||0) - Math.sin(c.g.rotation.y)*(c.vel||0);
+  const rvz = Math.cos(o.g.rotation.y)*(o.vel||0) - Math.cos(c.g.rotation.y)*(c.vel||0);
+  const a = rvx*rvx + rvz*rvz;
+  let t = a > 1e-6 ? -(dx*rvx + dz*rvz)/a : 0;
+  t = t < 0 ? 0 : t > 1.1 ? 1.1 : t;
+  return Math.hypot(dx + rvx*t, dz + rvz*t) < 3.8;
+}
+// is any car other than `self` within `r` of this spot?
+function carNear(x, z, r, self){
+  for(let di=-1; di<=1; di++) for(let dj=-1; dj<=1; dj++){
+    const arr = cellCars.get(skey(idxX(x)+di, idxZ(z)+dj));
+    if(!arr) continue;
+    for(const o of arr){
+      if(o === self) continue;
+      const dx = o.g.position.x - x, dz = o.g.position.z - z;
+      if(dx*dx + dz*dz < r*r) return true;
+    }
+  }
+  return false;
+}
+// Drop a car back into traffic somewhere clear. Placing blind drops it inside
+// whatever is already there, which is how the spawn made overlaps of its own.
+function dropIn(c){
+  for(let k=0;k<14;k++){
+    const s = segs[ri(0, segs.length-1)];
+    if(s.b - s.a < 24) continue;
+    const dir = rnd() < 0.5 ? 1 : -1, pos = rr(s.a + 6, s.b - 6), lane = dir*2.7;
+    const wx = s.ox + s.ux*pos + s.nx*lane, wz = s.oz + s.uz*pos + s.nz*lane;
+    if(carNear(wx, wz, 9, c)) continue;
+    placeCar(c, s, pos);
+    c.dir = dir; c.jam = 0; c.wantTurn = false; c.turn = 0;
+    faceCar(c);
+    return true;
+  }
+  return false;
+}
 function updateTraffic(dt){
   // bucket by segment once so following only looks at cars on the same road
   segCars.clear(); cellCars.clear();
@@ -3054,8 +3142,10 @@ function updateTraffic(dt){
     // the car you are driving is flagged parked, but it is very much on the
     // road: keep it out of the following logic and in the proximity grid
     const mine = drive && c === drive.c;
-    if((c.parked && !mine) || c.turn > 0) continue;
-    if(!mine){
+    if(c.parked && !mine) continue;
+    // a car mid-turn is sitting in the road, so it still has to be visible to
+    // everyone else — leaving it out is how cars drove through it
+    if(!mine && c.turn <= 0){
       let a = segCars.get(c.seg);
       if(!a){ a = []; segCars.set(c.seg, a); }
       a.push(c);
@@ -3073,10 +3163,17 @@ function updateTraffic(dt){
     const g = c.g;
     if(c.turn > 0){                      // three-point turn at a dead end
       c.turn -= dt;
-      g.rotation.y += (c.seg.ax === 'x' ? 1 : 1) * Math.PI * dt / 1.1;
+      g.rotation.y += Math.PI * dt / 1.1;
       c.vel = 0;
-      // turned around, so the sign it just served is ahead of it again
-      if(c.turn <= 0){ c.dir *= -1; c.signDone = null; faceCar(c); }
+      if(c.turn <= 0){
+        // coming out of the turn puts it on the far side of the road, a 5.4
+        // jump sideways: only take it when that spot is empty, or it lands
+        // inside whatever was coming the other way
+        const s = c.seg, lane = -c.dir * 2.7;
+        const wx = s.ox + s.ux*c.pos + s.nx*lane, wz = s.oz + s.uz*c.pos + s.nz*lane;
+        if(carNear(wx, wz, 4.2, c)) c.turn = 0.15;      // hold, try again shortly
+        else { c.dir *= -1; c.signDone = null; faceCar(c); }
+      }
       continue;
     }
     // red light: ease down to the stop line and hold there until it turns
@@ -3109,22 +3206,48 @@ function updateTraffic(dt){
       const d = (o.pos - c.pos)*c.dir;
       if(d > 0 && d < 26) v = Math.min(v, d < 9 ? 0 : c.speed*(d - 9)/17);
     }
-    // yield to anything in the way, including across a junction. If two cars
-    // each have the other in front, only the higher id gives way, or they
-    // would sit nose to nose for ever.
-    let yield_ = false;
+    // yield to anything in the way, including across a junction
     const ci = idxX(c.g.position.x), cj = idxZ(c.g.position.z);
-    for(let di=-1; di<=1 && !yield_; di++) for(let dj=-1; dj<=1 && !yield_; dj++){
+    const nearby = [];
+    for(let di=-1; di<=1; di++) for(let dj=-1; dj<=1; dj++){
       const arr = cellCars.get(skey(ci+di, cj+dj));
-      if(!arr) continue;
-      for(const o of arr){
-        if(o === c || !blockedBy(c, o)) continue;
-        if(!blockedBy(o, c) || o.id < c.id){ yield_ = true; break; }
+      if(arr) for(const o of arr) if(o !== c) nearby.push(o);
+    }
+    let held = false;
+    for(const o of nearby){
+      if(blockedBy(c, o) && (!blockedBy(o, c) || o.id < c.id)){ held = true; break; }
+      if(!(o.seg === c.seg && o.dir === c.dir) && willHit(c, o) && o.id < c.id){
+        held = true; break;
       }
     }
-    // ...unless it has been stuck long enough that something has gone wrong
-    if(yield_ && c.jam < 4){ v = 0; c.jam += dt; }
-    else if(!yield_) c.jam = Math.max(0, c.jam - dt*0.5);
+    if(held) v = 0;
+    // hard clamp: whatever the rules above decided, never step into anyone
+    if(v > 0){
+      const s = c.seg, lane = c.dir*2.7, np = c.pos + v*c.dir*dt;
+      const wx = s.ox + s.ux*np + s.nx*lane, wz = s.oz + s.uz*np + s.nz*lane;
+      for(const o of nearby){
+        const dn = Math.hypot(o.g.position.x - wx, o.g.position.z - wz);
+        if(dn < 3.6 && dn < Math.hypot(o.g.position.x - c.g.position.x,
+                                       o.g.position.z - c.g.position.z)){
+          v = 0; held = true; break;
+        }
+      }
+    }
+    if(held){
+      c.jam += dt;
+      if(c.jam > 5) c.wantTurn = true;
+      // two cars at one dead end can each veto the other's turn for ever, so
+      // anything wedged this long is lifted out and dropped back in elsewhere
+      if(c.jam > 12 && dropIn(c)){ c.vel = 0; continue; }
+    } else c.jam = Math.max(0, c.jam - dt*0.5);
+    // a three-point turn blocks both lanes, so only begin one with room for it
+    if(c.wantTurn){
+      if(!carNear(c.g.position.x, c.g.position.z, 5.0, c)){
+        c.turn = 1.1; c.wantTurn = false; c.jam = 0; c.vel = 0;
+        continue;
+      }
+      v = 0;
+    }
     c.vel = v;                    // what it is actually doing, for fault in a crash
     c.pos += v * c.dir * dt;
     // on a chained road the car is handed to the next leg and keeps going;
@@ -3138,7 +3261,8 @@ function updateTraffic(dt){
     } else if((c.dir > 0 && c.pos > c.seg.b - 4 && !c.seg.next) ||
               (c.dir < 0 && c.pos < c.seg.a + 4 && !c.seg.prev)){
       c.pos = Math.max(c.seg.a + 4, Math.min(c.seg.b - 4, c.pos));
-      c.turn = 1.1;
+      c.wantTurn = true;                 // begun next frame, once there is room
+      faceCar(c);
       continue;
     }
     faceCar(c);
