@@ -2918,7 +2918,7 @@ function addCop(target){
   cityGroup.add(g);
   police.push({ g, lampL, lampR, heading: back + Math.PI, speed: 0,
                 top: rr(34, 42), phase: rnd()*6.28, target: target || null,
-                life: target ? 40 : 0 });
+                life: target ? 40 : 0, realV: 0, stuck: 0 });
 }
 function startChase(reason){
   if(!chase.on){
@@ -2988,7 +2988,14 @@ function updateChase(dt){
     let turn = want - c.heading;
     while(turn >  Math.PI) turn -= Math.PI*2;
     while(turn < -Math.PI) turn += Math.PI*2;
-    c.heading += Math.max(-2.8*dt, Math.min(2.8*dt, turn));
+    /* A car cannot pivot on the spot. Steering at a fixed rate meant a unit
+     * pinned against a building kept turning to face you as you drove round
+     * the block — rotating for ever without going anywhere, which is exactly
+     * what spinning looks like. c.speed is what it WANTS to do and stays high
+     * while it is stuck; realV is what it actually managed last frame, and
+     * that is what the steering is allowed to work with. */
+    const rate = 2.8 * Math.min(1, (c.realV || 0)/12);
+    c.heading += Math.max(-rate*dt, Math.min(rate*dt, turn));
     // Slow into hard turns only. That shrinks the turning circle so a unit
     // closes on its target instead of orbiting it, and it never gives up
     // ground on a runner — easing off near the target meant a car doing 30
@@ -3002,7 +3009,14 @@ function updateChase(dt){
     ignoreKerb = true;
     const [rx, rz] = move(g.position.x, g.position.z, nx, nz, 1.5);
     ignoreKerb = false;
-    if(Math.abs(rx-nx) > 0.05 || Math.abs(rz-nz) > 0.05) c.speed *= 0.55;
+    // what it actually managed, which is what the steering above works from
+    c.realV = Math.hypot(rx - g.position.x, rz - g.position.z) / Math.max(dt, 1e-4);
+    if(Math.abs(rx-nx) > 0.05 || Math.abs(rz-nz) > 0.05){
+      c.speed *= 0.55;
+      // and back out of it, or it sits against the wall for the whole chase
+      c.stuck += dt;
+      if(c.stuck > 0.8){ c.speed = -11; if(c.stuck > 1.9) c.stuck = 0; }
+    } else c.stuck = 0;
     g.position.set(rx, roadY(rx, rz), rz);
     g.rotation.y = c.heading;
     // real bars double-blink one side, then the other, rather than pulsing
