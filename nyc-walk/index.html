@@ -2918,7 +2918,7 @@ function addCop(target){
   cityGroup.add(g);
   police.push({ g, lampL, lampR, heading: back + Math.PI, speed: 0,
                 top: rr(34, 42), phase: rnd()*6.28, target: target || null,
-                life: target ? 40 : 0, realV: 0, stuck: 0 });
+                life: target ? 40 : 0, realV: 0, stuck: 0, wedged: 0 });
 }
 function startChase(reason){
   if(!chase.on){
@@ -3014,9 +3014,16 @@ function updateChase(dt){
     if(Math.abs(rx-nx) > 0.05 || Math.abs(rz-nz) > 0.05){
       c.speed *= 0.55;
       // and back out of it, or it sits against the wall for the whole chase
-      c.stuck += dt;
+      c.stuck += dt; c.wedged += dt;
       if(c.stuck > 0.8){ c.speed = -11; if(c.stuck > 1.9) c.stuck = 0; }
-    } else c.stuck = 0;
+    } else { c.stuck = 0; c.wedged = Math.max(0, c.wedged - dt*0.6); }
+    // four seconds of that and this one is no use where it is: a unit on you
+    // comes back in fresh from behind, one sent after a car gives up
+    if(c.wedged > 4){
+      cityGroup.remove(g); police.splice(k, 1);
+      if(!c.target && chase.on) addCop();
+      continue;
+    }
     g.position.set(rx, roadY(rx, rz), rz);
     g.rotation.y = c.heading;
     // real bars double-blink one side, then the other, rather than pulsing
@@ -3333,12 +3340,15 @@ function updateTraffic(dt){
         }
       }
     }
+    /* Anything wedged is lifted out and dropped back into traffic elsewhere.
+     * It used to try a U-turn at five seconds first — but starting that turn
+     * cleared the jam timer, so a car that was still wedged afterwards simply
+     * built the timer back up and turned again, and again: a full half-turn
+     * every six seconds, for ever, which is what the last few spinners were.
+     * There is no U-turn here now; being stuck is what dropIn is for. */
     if(held){
       c.jam += dt;
-      if(c.jam > 5) c.wantTurn = true;
-      // two cars at one dead end can each veto the other's turn for ever, so
-      // anything wedged this long is lifted out and dropped back in elsewhere
-      if(c.jam > 12 && dropIn(c)){ c.vel = 0; continue; }
+      if(c.jam > 8 && dropIn(c)){ c.vel = 0; continue; }
     } else c.jam = Math.max(0, c.jam - dt*0.5);
     // a three-point turn blocks both lanes, so only begin one with room for it
     if(c.wantTurn){
