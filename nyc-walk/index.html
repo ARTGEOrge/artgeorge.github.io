@@ -49,6 +49,14 @@
   #dash .u{font-size:10px;letter-spacing:.3em;opacity:.6;margin-top:3px}
   #dash .out{font-size:11px;opacity:.7;margin-top:6px}
 
+  #wanted{position:absolute;left:50%;top:22px;transform:translateX(-50%);
+    padding:8px 18px;border-radius:999px;background:rgba(30,4,6,.72);
+    border:1px solid rgba(255,90,90,.45);text-align:center;display:none}
+  #wanted.on{display:block;animation:wpulse 1.1s ease-in-out infinite}
+  #wanted .w{font-size:11px;letter-spacing:.34em;color:#ff8a8a}
+  #wanted .s{font-size:19px;letter-spacing:.16em;color:#ffd84d;margin-top:2px}
+  @keyframes wpulse{0%,100%{opacity:1}50%{opacity:.55}}
+
   #toast{position:absolute;left:50%;top:64%;transform:translateX(-50%);
     padding:10px 18px;border-radius:999px;background:rgba(8,10,18,.7);
     border:1px solid rgba(255,255,255,.14);font-size:14px;opacity:0;
@@ -133,6 +141,7 @@
     <div class="mph">0</div><div class="u">MPH</div>
     <div class="out">right-click to get out</div>
   </div>
+  <div id="wanted"><div class="w">WANTED</div><div class="s">&#9733;</div></div>
   <div id="toast"></div>
 </div>
 
@@ -1148,6 +1157,7 @@ const SIG_ARM = SIG_E - 2.7;
 // which grid intersections ended up signalised, and which are four-way stops,
 // so traffic can find both kinds of stop line
 const signalAt = new Set(), stopAt = new Set();
+const signalXZ = new Map();            // where each signalised crossing sits
 const subwaySpots = [];
 function signalPole(c, x, z, faceAng){
   const pole = colored(new THREE.CylinderGeometry(0.12, 0.17, SIG_H, 6), 0x2b3036);
@@ -1232,6 +1242,7 @@ function crossing(c, i, j){
     signalSet(c, X, Z);
     streetBlades(c, X - SIG_E, Z - SIG_E);
     signalAt.add(skey(i, j));
+    signalXZ.set(skey(i, j), [X, Z]);
     // Manhattan corners are candidates for a subway entrance
     if(gridded && t !== PARK) subwaySpots.push([X, Z]);
   } else {
@@ -2259,6 +2270,7 @@ function isSolidGround(x, z){
   const i = idxX(x), j = idxZ(z);
   return i>=0 && j>=0 && i<GX && j<GZ && grid[i][j] !== WATER;
 }
+let ignoreKerb = false;                // set while moving a pursuing police car
 function pushOut(x, z, rad){
   for(let di=-1; di<=1; di++) for(let dj=-1; dj<=1; dj++){
     const arr = solidGrid.get(skey(idxX(x)+di, idxZ(z)+dj));
@@ -2266,8 +2278,9 @@ function pushOut(x, z, rad){
     for(const s of arr){
       // parked cars stop you on foot, but the kerb lane is close enough to the
       // travel lane that blocking them while driving means scraping the whole
-      // way down the block
-      if(s.kerb && drive) continue;
+      // way down the block. Police get the same pass, or a pursuit beaches
+      // itself on the first parked car it clips.
+      if(s.kerb && (drive || ignoreKerb)) continue;
       if(x > s.x1-rad && x < s.x2+rad && z > s.z1-rad && z < s.z2+rad){
         const pxr = s.x2+rad - x, pxl = x - (s.x1-rad);
         const pzr = s.z2+rad - z, pzl = z - (s.z1-rad);
@@ -2581,6 +2594,12 @@ function drawMap(){
     if(mx<0||my<0||mx>W||my>H) continue;
     mg.fillRect(mx-1.2, my-1.2, 2.4, 2.4);
   }
+  for(const c of police){
+    const [mx,my] = toMap(c.g.position.x, c.g.position.z);
+    if(mx<0||my<0||mx>W||my>H) continue;
+    mg.fillStyle = Math.sin(clock.elapsedTime*9 + c.phase) > 0 ? '#ff3b30' : '#3d7bff';
+    mg.fillRect(mx-2, my-2, 4, 4);
+  }
   mg.save(); mg.translate(W/2, H/2);
   mg.rotate(-(drive ? drive.heading + Math.PI : player.yaw) + Math.PI/2);
   mg.fillStyle = drive ? '#7dd3ff' : '#fff';
@@ -2657,6 +2676,7 @@ function tick(){
   else      updateWalking(dt, mf, ms);
 
   updateTraffic(dt);
+  updateChase(dt);
   updatePeds(dt, t);
   updateSteam(dt);
 
@@ -2739,6 +2759,167 @@ function updateWalking(dt, mf, ms){
   document.body.classList.remove('driving');
 }
 
+/* ---------- running a red, and what follows ------------------------------ */
+const police = [];
+const chase = { on:false, level:0, clear:0, cool:0, wail:0 };
+const elWanted = document.getElementById('wanted');
+let policeGeoCache = null, sirenGeoCache = null;
+
+function policeGeo(){
+  if(policeGeoCache) return policeGeoCache;
+  const p = [];
+  p.push(colored(new THREE.BoxGeometry(2.0, 0.85, 4.4), 0x1b2740).translate(0,0.75,0));
+  p.push(colored(new THREE.BoxGeometry(2.02, 0.5, 1.5), 0xdfe4ea).translate(0,0.78,0.4));
+  p.push(colored(new THREE.BoxGeometry(1.82, 0.8, 2.3), 0x161c26).translate(0,1.5,-0.15));
+  for(const [dx,dz] of [[-0.95,1.4],[0.95,1.4],[-0.95,-1.4],[0.95,-1.4]]){
+    const w = colored(new THREE.CylinderGeometry(0.42,0.42,0.28,8), 0x14171a);
+    w.rotateZ(Math.PI/2); w.translate(dx,0.42,dz); p.push(w);
+  }
+  p.push(colored(new THREE.BoxGeometry(1.5,0.16,0.42), 0x22262b).translate(0,1.94,-0.15));
+  policeGeoCache = mergeGeos(p);
+  return policeGeoCache;
+}
+function sirenGeo(){
+  if(sirenGeoCache) return sirenGeoCache;
+  const l = colored(new THREE.BoxGeometry(0.6,0.26,0.4), 0xffffff).translate(-0.42,2.06,-0.15);
+  const r = colored(new THREE.BoxGeometry(0.6,0.26,0.4), 0xffffff).translate(0.42,2.06,-0.15);
+  sirenGeoCache = { l: mergeGeos([l]), r: mergeGeos([r]) };
+  return sirenGeoCache;
+}
+// two-tone wail, built from the same oscillators as the horn
+function siren(){
+  if(!actx) return;
+  const t = actx.currentTime;
+  const g = actx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.10, t + 0.08);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.92);
+  const o = actx.createOscillator();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(620, t);
+  o.frequency.linearRampToValueAtTime(980, t + 0.45);
+  o.frequency.linearRampToValueAtTime(620, t + 0.9);
+  const f = actx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1100;
+  o.connect(f).connect(g).connect(actx.destination);
+  o.start(t); o.stop(t + 0.95);
+}
+
+function addCop(){
+  if(police.length >= 6) return;
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(policeGeo(), vcMat);
+  const sg = sirenGeo();
+  const lampL = new THREE.Mesh(sg.l, new THREE.MeshBasicMaterial({color:0xff2b2b}));
+  const lampR = new THREE.Mesh(sg.r, new THREE.MeshBasicMaterial({color:0x2b6bff}));
+  g.add(body, lampL, lampR);
+  // come in from behind, off to one side, far enough back to be a chase —
+  // and on land, or they arrive in the East River
+  const back = drive ? drive.heading + Math.PI : player.yaw;
+  let px = player.x, pz = player.z;
+  for(let k=0;k<12;k++){
+    const d = rr(58, 96), off = rr(-26, 26);
+    const cx = player.x + Math.sin(back)*d + Math.cos(back)*off;
+    const cz = player.z + Math.cos(back)*d - Math.sin(back)*off;
+    if(isSolidGround(cx, cz)){ px = cx; pz = cz; break; }
+  }
+  g.position.set(px, 0.02, pz);
+  g.rotation.y = back + Math.PI;
+  cityGroup.add(g);
+  police.push({ g, lampL, lampR, heading: back + Math.PI, speed: 0,
+                top: rr(34, 42), phase: rnd()*6.28 });
+}
+function startChase(){
+  if(!chase.on){
+    chase.on = true; chase.level = 1;
+    toast('You ran a red. NYPD are on you.');
+  } else if(chase.level < 5){
+    chase.level++;
+    toast('Another red. More units responding.');
+  }
+  chase.clear = 0;
+  const want = Math.min(6, chase.level + 1);
+  while(police.length < want) addCop();
+  elWanted.classList.add('on');
+  elWanted.querySelector('.s').textContent = '★'.repeat(chase.level);
+  siren();
+}
+function endChase(msg){
+  for(const c of police) cityGroup.remove(c.g);
+  police.length = 0;
+  chase.on = false; chase.level = 0; chase.clear = 0;
+  elWanted.classList.remove('on');
+  if(msg) toast(msg);
+}
+// You are in the box, moving, and the phase for your direction is red.
+function checkRedLight(px, pz, heading, speed){
+  if(chase.cool > 0 || speed < 6) return;
+  const d = [Math.sin(heading), Math.cos(heading)];
+  const ew = Math.abs(d[0]) > Math.abs(d[1]);     // travelling east-west?
+  if((ew ? 1 : 0) === greenPhase) return;         // your light is green
+  const i = idxX(px), j = idxZ(pz);
+  for(const ii of [i-1, i]) for(const jj of [j-1, j]){
+    const at = signalXZ.get(skey(ii, jj));
+    if(!at) continue;
+    if(Math.abs(px - at[0]) < ROAD/2 + 2.5 && Math.abs(pz - at[1]) < ROAD/2 + 2.5){
+      chase.cool = 2.5;                            // one ticket per junction
+      startChase();
+      return;
+    }
+  }
+}
+
+function updateChase(dt){
+  if(chase.cool > 0) chase.cool -= dt;
+  if(!chase.on) return;
+  chase.wail -= dt;
+  if(chase.wail <= 0){ siren(); chase.wail = rr(2.6, 3.4); }
+  const tx = drive ? drive.c.g.position.x : player.x;
+  const tz = drive ? drive.c.g.position.z : player.z;
+  let nearest = 1e9;
+  for(const c of police){
+    const g = c.g;
+    const dx = tx - g.position.x, dz = tz - g.position.z;
+    const dist = Math.hypot(dx, dz);
+    nearest = Math.min(nearest, dist);
+    // steer toward you, but only turn so fast, so they take the corners
+    const want = Math.atan2(dx, dz);
+    let turn = want - c.heading;
+    while(turn >  Math.PI) turn -= Math.PI*2;
+    while(turn < -Math.PI) turn += Math.PI*2;
+    c.heading += Math.max(-2.3*dt, Math.min(2.3*dt, turn));
+    const target = dist < 9 ? 6 : c.top;
+    c.speed += (target - c.speed) * Math.min(1, dt*1.6);
+    const nx = g.position.x + Math.sin(c.heading)*c.speed*dt;
+    const nz = g.position.z + Math.cos(c.heading)*c.speed*dt;
+    // same collision as the player, so they slide along the buildings and
+    // end up following the streets rather than driving through the block
+    ignoreKerb = true;
+    const [rx, rz] = move(g.position.x, g.position.z, nx, nz, 1.5);
+    ignoreKerb = false;
+    if(Math.abs(rx-nx) > 0.05 || Math.abs(rz-nz) > 0.05) c.speed *= 0.55;
+    g.position.set(rx, roadY(rx, rz), rz);
+    g.rotation.y = c.heading;
+    const on = Math.sin(clock.elapsedTime*9 + c.phase) > 0;
+    c.lampL.material.color.setHex(on ? 0xff2b2b : 0x3a0e0e);
+    c.lampR.material.color.setHex(on ? 0x2b6bff : 0x0e1a3a);
+    if(dist < 3.4){ busted(); return; }        // on foot counts too
+  }
+  if(nearest > 230){
+    chase.clear += dt;
+    if(chase.clear > 11) endChase('You lost them.');
+  } else chase.clear = 0;
+}
+function busted(){
+  flash.style.opacity = 0.65;
+  setTimeout(() => flash.style.opacity = 0, 300);
+  siren();
+  if(drive){ const c = drive.c; drive = null; placeCar(c, c.seg, c.pos); }
+  player.x = SPAWN.x; player.z = SPAWN.z;
+  player.y = groundAt(SPAWN.x, SPAWN.z);
+  player.vy = 0; player.onGround = true; player.pitch = 0;
+  endChase('Busted. Back to the start.');
+}
+
 // Crash the car you are driving and you start over: the wreck goes back into
 // traffic and you are put on your feet where the walk began.
 function crashRestart(){
@@ -2753,6 +2934,7 @@ function crashRestart(){
   setTimeout(() => flash.style.opacity = 0, 260);
   honk(0.3);
   toast('Crashed. Back to the start.');
+  if(chase.on) endChase();          // wrecking it ends the pursuit too
 }
 
 function updateDriving(dt, mf, ms){
@@ -2787,6 +2969,7 @@ function updateDriving(dt, mf, ms){
     const dx = o.g.position.x - rx, dz = o.g.position.z - rz;
     if(dx*dx + dz*dz < 11.5){ crashRestart(); return; }
   }
+  checkRedLight(rx, rz, drive.heading, Math.abs(drive.speed));
   g.position.x = rx; g.position.z = rz;
   const ty = roadY(rx, rz) + (groundAt(rx,rz) > 0.2 && !bridgeAt(rx,rz) ? CURB : 0);
   g.position.y += (ty - g.position.y) * Math.min(1, dt*8);
