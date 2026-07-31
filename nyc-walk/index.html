@@ -3240,6 +3240,10 @@ function updateTraffic(dt){
     // road: keep it out of the following logic and in the proximity grid
     const mine = drive && c === drive.c;
     if(c.parked && !mine) continue;
+    // is it standing on a crossing? everything else needs to know
+    c.inBox = false;
+    if(c.seg) for(const s of c.seg.stops)
+      if(Math.abs(s.p - c.pos) < ROAD/2 + 3){ c.inBox = true; break; }
     // a car mid-turn is sitting in the road, so it still has to be visible to
     // everyone else — leaving it out is how cars drove through it
     if(!mine && !c.turning){
@@ -3285,6 +3289,17 @@ function updateTraffic(dt){
     }
     // red light: ease down to the stop line and hold there until it turns
     let v = c.speed;
+    // nearest car ahead in this lane, and what it is doing — needed before the
+    // stop line is worked out, because whether it can clear the junction
+    // depends on whether there is room on the far side of it
+    let lead = Infinity, leadV = 0;
+    const near = segCars.get(c.seg);
+    if(near) for(const o of near){
+      if(o === c || o.dir !== c.dir) continue;
+      const d = (o.pos - c.pos)*c.dir;
+      if(d > 0 && d < lead){ lead = d; leadV = o.vel || 0; }
+    }
+    if(lead < 26) v = Math.min(v, lead < 7 ? 0 : c.speed*(lead - 7)/19);
     const st = c.seg.stops;
     if(st.length){
       let ahead = null;
@@ -3300,18 +3315,20 @@ function updateTraffic(dt){
         } else if(gap < 24){
           v = Math.min(v, Math.max(c.speed*0.10, c.speed * gap/18));
         }
-      } else if(ahead && ahead.ph >= 0 && ahead.ph !== greenPhase){
+      } else if(ahead && ahead.ph >= 0){
         const gap = (ahead.p - c.pos)*c.dir - STOP_LINE;
+        const red = ahead.ph !== greenPhase;
+        /* Don't block the box. Entering a junction you cannot get out of is
+         * what backs a grid up: you stop across the crossing, the street going
+         * the other way cannot move, and it spreads. So the queue on the far
+         * side has to have left room for the width of the box plus your own
+         * length before you go in. */
+        const need = gap + STOP_LINE + ROAD/2 + 7;
+        const cannotClear = gap < 26 && leadV < 14 && lead < need;
         // a negative gap means it is already in the box, so let it clear
-        if(gap >= 0 && gap < 30) v = gap < 1.2 ? 0 : c.speed * Math.min(1, gap/20);
+        if((red || cannotClear) && gap >= 0 && gap < 30)
+          v = gap < 1.2 ? 0 : c.speed * Math.min(1, gap/20);
       }
-    }
-    // and don't drive into the car queued in front
-    const near = segCars.get(c.seg);
-    if(near) for(const o of near){
-      if(o === c || o.dir !== c.dir) continue;
-      const d = (o.pos - c.pos)*c.dir;
-      if(d > 0 && d < 26) v = Math.min(v, d < 9 ? 0 : c.speed*(d - 9)/17);
     }
     // yield to anything in the way, including across a junction
     const ci = idxX(c.g.position.x), cj = idxZ(c.g.position.z);
@@ -3320,10 +3337,14 @@ function updateTraffic(dt){
       const arr = cellCars.get(skey(ci+di, cj+dj));
       if(arr) for(const o of arr) if(o !== c) nearby.push(o);
     }
+    /* Once you are on the crossing you clear it — giving way belongs before
+     * the line, not across it. And whoever is on it already has the right of
+     * way whatever their id, so nobody drives in on top of them. */
     let held = false;
-    for(const o of nearby){
-      if(blockedBy(c, o) && (!blockedBy(o, c) || o.id < c.id)){ held = true; break; }
-      if(!(o.seg === c.seg && o.dir === c.dir) && willHit(c, o) && o.id < c.id){
+    if(!c.inBox) for(const o of nearby){
+      const theirs = o.inBox || o.id < c.id;
+      if(blockedBy(c, o) && (!blockedBy(o, c) || theirs)){ held = true; break; }
+      if(!(o.seg === c.seg && o.dir === c.dir) && willHit(c, o) && theirs){
         held = true; break;
       }
     }
@@ -3401,14 +3422,17 @@ function updateTraffic(dt){
     const c = cars[carCursor];
     if(c.parked || (drive && c === drive.c)) continue;
     const d = Math.hypot(c.g.position.x - player.x, c.g.position.z - player.z);
-    if(d > 430){
+    // Spread wider than it used to. Every car being kept inside 260 of you put
+    // the whole fleet in a few blocks, which is a jam by construction: give
+    // them 380 and the same traffic flows a good deal better.
+    if(d > 560){
       for(let k=0;k<24;k++){
         const s = segs[ri(0, segs.length-1)];
         const along = segAlong(s, player.x, player.z);
-        const lo = Math.max(s.a + 6, along - 260);
-        const hi = Math.min(s.b - 6, along + 260);
+        const lo = Math.max(s.a + 6, along - 380);
+        const hi = Math.min(s.b - 6, along + 380);
         const cross = Math.abs(segOff(s, player.x, player.z));
-        if(hi - lo < 20 || cross > 260) continue;
+        if(hi - lo < 20 || cross > 380) continue;
         placeCar(c, s, rr(lo, hi));
         faceCar(c);
         break;
