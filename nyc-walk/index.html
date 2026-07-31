@@ -1231,7 +1231,6 @@ addEventListener('keydown', e => {
   keys[e.code] = true;
   if(e.code === 'KeyN') setNight(!night);
   if(e.code === 'KeyM') document.getElementById('bigmap').classList.toggle('on');
-  if(e.code === 'KeyE' || e.code === 'KeyF') toggleCar();
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
 });
 addEventListener('keyup', e => keys[e.code] = false);
@@ -1261,7 +1260,15 @@ document.addEventListener('mousemove', e => {
   player.pitch -= e.movementY * 0.0022;
   player.pitch = Math.max(-1.35, Math.min(1.35, player.pitch));
 });
-addEventListener('contextmenu', e => { e.preventDefault(); toggleCar(); });
+// right-click gets you in / out of a car. Pointer lock swallows `contextmenu`
+// in Chrome, so drive off mousedown and use contextmenu only to kill the menu.
+addEventListener('contextmenu', e => e.preventDefault());
+addEventListener('mousedown', e => {
+  if(e.button !== 2) return;
+  e.preventDefault();
+  if(!locked && !isTouch) return;      // first right-click just dismisses the menu
+  toggleCar();
+});
 
 const touchMove = {x:0, y:0};
 let touchJump = false;
@@ -1376,9 +1383,17 @@ let toastT = 0;
 function toast(msg){ elToast.textContent = msg; elToast.style.opacity = 1; toastT = 2.6; }
 
 const ORD = n => { const s=['th','st','nd','rd'], v=n%100; return n + (s[(v-20)%10] || s[v] || s[0]); };
-const AVES = ['11th Ave','9th Ave','8th Ave','7th Ave','5th Ave','Park Ave','2nd Ave'];
+// One name per grid column / row — walk a block, move exactly one avenue or
+// one street. Manhattan spans columns 8..14 and rows 1..32.
+const AVE_I0 = 8;
+const AVES = ['8th Ave','7th Ave','6th Ave','5th Ave','Madison Ave','Park Ave','Lexington Ave'];
+const FIFTH_I = 11;                                  // 5th Ave splits W from E
+const ST_J0 = 21, ST_AT_J0 = 42;                     // row 21 (Midtown) is 42nd St
 const DOWNTOWN_ST = ['Wall St','Broad St','Pearl St','Water St','Fulton St'];
-const BK_ST = ['Bedford Ave','Flatbush Ave','Atlantic Ave','Nostrand Ave','Myrtle Ave'];
+const BK_I0 = 16;
+const BK_ST = ['Bedford Ave','Nostrand Ave','Flatbush Ave','Franklin Ave','Classon Ave',
+               'Vanderbilt Ave','Rogers Ave','Utica Ave','Ralph Ave','Pennsylvania Ave'];
+const pick = (arr, k) => arr[Math.max(0, Math.min(arr.length - 1, k))];
 
 function locationName(){
   const b = bridgeAt(player.x, player.z);
@@ -1394,16 +1409,16 @@ function locationName(){
   }
   const info = D[t];
   if(t===MID || t===DOWN || t===UPPER || t===HARLEM || t===VILLAGE){
-    const ave = AVES[Math.max(0, Math.min(AVES.length-1, i-8))];
-    const st  = (t === DOWN) ? DOWNTOWN_ST[j % DOWNTOWN_ST.length]
-              : 'W ' + ORD(Math.max(1, 200 - (j-1)*6)) + ' St';
+    const ave = pick(AVES, i - AVE_I0);
+    const st  = (t === DOWN) ? pick(DOWNTOWN_ST, j - 30)
+              : (i <= FIFTH_I ? 'W ' : 'E ') + ORD(Math.max(1, ST_AT_J0 + ST_J0 - j)) + ' St';
     return [ave + ' & ' + st, info.name];
   }
-  if(t === BKLYN)  return [BK_ST[i % BK_ST.length] + ' & ' + ORD(Math.max(1,(j-20)*3)) + ' St', 'Brooklyn'];
-  if(t === QUEENS) return [ORD(Math.max(1,(i-15)*7)) + ' St & ' + ORD(Math.max(1,(j-5)*4)) + ' Ave', 'Queens'];
-  if(t === BRONX)  return ['Grand Concourse & ' + ORD(Math.max(1,(i-13)*8)) + ' St', 'The Bronx'];
-  if(t === JERSEY) return ['Hudson Blvd & ' + ORD(Math.max(1,(j-1)*4)) + ' St', 'New Jersey'];
-  if(t === STATEN) return ['Bay St & ' + ORD(Math.max(1,(i)*5)) + ' Ave', 'Staten Island'];
+  if(t === BKLYN)  return [pick(BK_ST, i - BK_I0) + ' & ' + ORD(Math.max(1, j-22)) + ' St', 'Brooklyn'];
+  if(t === QUEENS) return [ORD(Math.max(1, i-15)) + ' St & ' + ORD(Math.max(1, j-5)) + ' Ave', 'Queens'];
+  if(t === BRONX)  return ['Grand Concourse & ' + ORD(Math.max(1, i-13)) + ' St', 'The Bronx'];
+  if(t === JERSEY) return ['Hudson Blvd & ' + ORD(Math.max(1, j-1)) + ' St', 'New Jersey'];
+  if(t === STATEN) return ['Bay St & ' + ORD(Math.max(1, i)) + ' Ave', 'Staten Island'];
   return [info.name, 'new york city'];
 }
 
