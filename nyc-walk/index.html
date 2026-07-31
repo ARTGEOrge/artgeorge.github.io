@@ -2828,13 +2828,13 @@ function addCop(){
   police.push({ g, lampL, lampR, heading: back + Math.PI, speed: 0,
                 top: rr(34, 42), phase: rnd()*6.28 });
 }
-function startChase(){
+function startChase(reason){
   if(!chase.on){
     chase.on = true; chase.level = 1;
-    toast('You ran a red. NYPD are on you.');
+    toast(reason || 'NYPD are on you.');
   } else if(chase.level < 5){
     chase.level++;
-    toast('Another red. More units responding.');
+    toast('More units responding.');
   }
   chase.clear = 0;
   const want = Math.min(6, chase.level + 1);
@@ -2862,7 +2862,7 @@ function checkRedLight(px, pz, heading, speed){
     if(!at) continue;
     if(Math.abs(px - at[0]) < ROAD/2 + 2.5 && Math.abs(pz - at[1]) < ROAD/2 + 2.5){
       chase.cool = 2.5;                            // one ticket per junction
-      startChase();
+      startChase('You ran a red. NYPD are on you.');
       return;
     }
   }
@@ -2920,21 +2920,17 @@ function busted(){
   endChase('Busted. Back to the start.');
 }
 
-// Crash the car you are driving and you start over: the wreck goes back into
-// traffic and you are put on your feet where the walk began.
-function crashRestart(){
-  const c = drive.c;
-  drive = null;
-  placeCar(c, c.seg, c.pos);
-  player.x = SPAWN.x; player.z = SPAWN.z;
-  player.y = groundAt(SPAWN.x, SPAWN.z);
-  player.vy = 0; player.onGround = true;
-  player.pitch = 0;
-  flash.style.opacity = 0.6;
-  setTimeout(() => flash.style.opacity = 0, 260);
-  honk(0.3);
-  toast('Crashed. Back to the start.');
-  if(chase.on) endChase();          // wrecking it ends the pursuit too
+// Hit another car and you do not lose the game — you bounce off it, and
+// somebody calls it in. The police come to arrest you; getting caught is what
+// actually ends the run.
+function crashIncident(){
+  drive.speed *= -0.25;                       // shunted back off them
+  flash.style.opacity = 0.45;
+  setTimeout(() => flash.style.opacity = 0, 200);
+  honk(0.26);
+  if(chase.cool > 0) return;                  // one call-out per collision
+  chase.cool = 2.5;
+  startChase('You hit a car. Police are coming to arrest you.');
 }
 
 function updateDriving(dt, mf, ms){
@@ -2963,19 +2959,31 @@ function updateDriving(dt, mf, ms){
     }
     drive.speed *= 0.25;
   }
-  // hit another car and the run is over
+  // hit another car and you bounce off it rather than through it; the car
+  // stays where it was this frame so the two never end up overlapping
+  let hit = false;
   for(const o of cars){
     if(o === c || o.parked) continue;
-    const dx = o.g.position.x - rx, dz = o.g.position.z - rz;
-    if(dx*dx + dz*dz < 11.5){ crashRestart(); return; }
+    const dxN = o.g.position.x - rx, dzN = o.g.position.z - rz;
+    const dN = dxN*dxN + dzN*dzN;
+    if(dN >= 11.5) continue;
+    // already touching is not a fresh hit if this move pulls away from them,
+    // or a shunt could wedge you against a car you can never reverse out of
+    const dxC = o.g.position.x - g.position.x, dzC = o.g.position.z - g.position.z;
+    if(dN >= dxC*dxC + dzC*dzC) continue;
+    hit = true; break;
   }
-  checkRedLight(rx, rz, drive.heading, Math.abs(drive.speed));
-  g.position.x = rx; g.position.z = rz;
-  const ty = roadY(rx, rz) + (groundAt(rx,rz) > 0.2 && !bridgeAt(rx,rz) ? CURB : 0);
+  if(hit) crashIncident();
+  else { g.position.x = rx; g.position.z = rz; }
+  checkRedLight(g.position.x, g.position.z, drive.heading, Math.abs(drive.speed));
+  // everything downstream follows where the car actually ended up, which on a
+  // collision is where it already was
+  const rx2 = g.position.x, rz2 = g.position.z;
+  const ty = roadY(rx2, rz2) + (groundAt(rx2,rz2) > 0.2 && !bridgeAt(rx2,rz2) ? CURB : 0);
   g.position.y += (ty - g.position.y) * Math.min(1, dt*8);
   g.rotation.y = drive.heading;
 
-  player.x = rx; player.z = rz; player.y = g.position.y;
+  player.x = rx2; player.z = rz2; player.y = g.position.y;
 
   // chase camera, auto-recentring behind the car
   if(Math.abs(drive.speed) > 6) drive.camOff *= (1 - 1.4*dt);
