@@ -562,8 +562,8 @@ function shopUV(geo, w, d){
 // ---------- collision buckets ----------
 const solidGrid = new Map();
 const skey = (i,j) => i + '|' + j;
-function addSolid(x, z, w, d){
-  const s = {x1:x-w/2, x2:x+w/2, z1:z-d/2, z2:z+d/2};
+function addSolid(x, z, w, d, kerb){
+  const s = {x1:x-w/2, x2:x+w/2, z1:z-d/2, z2:z+d/2, kerb:!!kerb};
   const k = skey(idxX(x), idxZ(z));
   let arr = solidGrid.get(k);
   if(!arr){ arr = []; solidGrid.set(k, arr); }
@@ -690,7 +690,8 @@ function chunkOf(x, z){
   const k = ci + '|' + cj;
   let c = chunks.get(k);
   if(!c){ c = {roof:[], store:[], shop:[], mark:[], prop:[], sig:[[],[],[],[]],
-               tree:[], lamp:[], road:[], walk:[], grass:[], bldg:FACADES.map(() => [])};
+               tree:[], lamp:[], park:[], road:[], walk:[], grass:[],
+               bldg:FACADES.map(() => [])};
     chunks.set(k, c); }
   return c;
 }
@@ -1065,6 +1066,15 @@ function addProps(c, i, j){
   // lamps on two corners
   for(const p of [[cx - BLOCK*0.28, cz - e], [cx + BLOCK*0.28, cz + e]])
     if(clear(p[0], p[1])) c.lamp.push(p);
+  // rubbish out at the kerb, and the sheds
+  for(let k=0, n=ri(0,2); k<n; k++){
+    const along = rr(-BLOCK*0.36, BLOCK*0.36), s = rnd() < 0.5 ? -1 : 1;
+    const [tx, tz] = rnd() < 0.5 ? [cx + along, cz + s*e] : [cx + s*e, cz + along];
+    if(clear(tx, tz)) trashPile(c, tx, tz);
+  }
+  for(const ax of ['x', 'z']) for(const s of [-1, 1])
+    if(rnd() < 0.13) sidewalkShed(c, i, j, ax, s);
+  addParking(c, i, j);
   // street trees
   for(let k=-1;k<=1;k+=2){
     const t1 = [cx + rr(-BLOCK*0.3, BLOCK*0.3), cz + k*(BLOCK/2+WALK*0.55), rr(0.7,1.0)];
@@ -1084,6 +1094,7 @@ const SIG_H = 6.0, SIG_ARM = 7.4, SIG_E = ROAD/2 + WALK*0.55;
 // which grid intersections ended up signalised, and which are four-way stops,
 // so traffic can find both kinds of stop line
 const signalAt = new Set(), stopAt = new Set();
+const subwaySpots = [];
 function signalPole(c, x, z, faceAng){
   const pole = colored(new THREE.CylinderGeometry(0.12, 0.17, SIG_H, 6), 0x2b3036);
   pole.translate(x, CURB + SIG_H/2, z);
@@ -1152,7 +1163,10 @@ function crossing(c, i, j){
   const arterial = (i+1) % 3 === 0 || (j+1) % 3 === 0;
   if(gridded || arterial){
     signalSet(c, X, Z);
+    streetBlades(c, X - SIG_E, Z - SIG_E);
     signalAt.add(skey(i, j));
+    // Manhattan corners are candidates for a subway entrance
+    if(gridded && t !== PARK) subwaySpots.push([X, Z]);
   } else {
     // four-way stop: a sign on each approach, and traffic really does halt
     stopSign(c, X - SIG_E, Z - SIG_E, Math.PI);
@@ -1160,6 +1174,136 @@ function crossing(c, i, j){
     stopSign(c, X + SIG_E, Z - SIG_E, Math.PI/2);
     stopSign(c, X - SIG_E, Z + SIG_E, -Math.PI/2);
     stopAt.add(skey(i, j));
+  }
+}
+
+/* ---------- kerbside ------------------------------------------------------
+ * The things that actually fill a New York street and were missing: a solid
+ * line of parked cars at every kerb, sidewalk sheds, subway stairs, rubbish
+ * out for collection, street-name blades on the signal poles.
+ */
+const PARK_OFF = 4.8;           // parking lane: clear of the travel lanes at 2.7
+const PARKED_COLORS = [0xd9dde2, 0x8f949c, 0x2f3a4a, 0x1d2126, 0x7c1f22, 0x24405e,
+                       0x2f4f3a, 0x4a4f57, 0xb9bcc2, 0x5a4632, 0x36393f];
+function addParking(c, i, j){
+  const x0 = cellX(i), z0 = cellZ(j);
+  const runs = [];
+  if(j > 0 && isLandIJ(i,j-1) && !closedZ[i][j-1])
+    runs.push({ax:'x', line: roadZ(j-1) + PARK_OFF, ang:  Math.PI/2});  // eastbound kerb
+  if(isLandIJ(i,j+1) && !closedZ[i][j])
+    runs.push({ax:'x', line: roadZ(j)   - PARK_OFF, ang: -Math.PI/2});  // westbound
+  if(i > 0 && isLandIJ(i-1,j) && !closedX[i-1][j])
+    runs.push({ax:'z', line: roadX(i-1) + PARK_OFF, ang:  Math.PI});    // northbound
+  if(isLandIJ(i+1,j) && !closedX[i][j])
+    runs.push({ax:'z', line: roadX(i)   - PARK_OFF, ang:  0});          // southbound
+  for(const r of runs){
+    for(let s = 9; s < BLOCK - 9; s += 6.6){
+      if(rnd() < 0.32) continue;                    // hydrants, driveways, gaps
+      const x = r.ax === 'x' ? x0 + s + rr(-0.5,0.5) : r.line;
+      const z = r.ax === 'x' ? r.line : z0 + s + rr(-0.5,0.5);
+      if(onBway(x, z) || tsqDist(x, z) < TSQ_R + 6) continue;
+      c.park.push([x, z, r.ang + rr(-0.035, 0.035)]);
+      if(r.ax === 'x') addSolid(x, z, 4.6, 2.1, true);
+      else             addSolid(x, z, 2.1, 4.6, true);
+    }
+  }
+}
+// Body colour comes from the instance, so the body is white here and the glass
+// and tyres are near-black — multiplied by any colour they stay dark.
+function parkedGeo(){
+  const p = [];
+  p.push(colored(new THREE.BoxGeometry(2.0, 0.8, 4.4), 0xffffff).translate(0,0.72,0));
+  p.push(colored(new THREE.BoxGeometry(1.8, 0.76, 2.2), 0x191d23).translate(0,1.44,-0.15));
+  for(const [dx,dz] of [[-0.94,1.4],[0.94,1.4],[-0.94,-1.4],[0.94,-1.4]])
+    p.push(colored(new THREE.BoxGeometry(0.24, 0.72, 0.72), 0x0e1013).translate(dx,0.36,dz));
+  return mergeGeos(p);
+}
+
+// The green plywood shed over half the sidewalks in this city.
+function sidewalkShed(c, i, j, ax, sgn){
+  // kept inside the kerb line, or its legs stand in the parked cars
+  const len = BLOCK*rr(0.55, 0.95), w = WALK + 1.2;
+  const off = BLOCK/2 + WALK*0.35;
+  const cxm = midX(i), czm = midZ(j);
+  const cx = ax === 'x' ? cxm + rr(-6,6) : cxm + sgn*off;
+  const cz = ax === 'x' ? czm + sgn*off : czm + rr(-6,6);
+  if(onBway(cx, cz) || tsqDist(cx, cz) < TSQ_R + 8) return;
+  const dw = ax === 'x' ? len : w, dd = ax === 'x' ? w : len;
+  const deck = colored(new THREE.BoxGeometry(dw, 0.32, dd), 0x6f7a83);
+  deck.translate(cx, CURB + 4.7, cz);
+  c.prop.push(deck);
+  const fw = ax === 'x' ? len : 0.24, fd = ax === 'x' ? 0.24 : len;
+  const paint = rnd() < 0.75 ? 0x2f6b43 : 0x2a4c8a;
+  for(const s of [-1, 1]){
+    const fascia = colored(new THREE.BoxGeometry(fw, 1.05, fd), paint);
+    fascia.translate(ax === 'x' ? cx : cx + s*w/2, CURB + 5.3,
+                     ax === 'x' ? cz + s*w/2 : cz);
+    c.prop.push(fascia);
+  }
+  for(let s = -len/2 + 1.6; s <= len/2 - 1.6; s += 5.2){
+    for(const q of [-1, 1]){
+      const leg = colored(new THREE.BoxGeometry(0.2, 4.7, 0.2), 0x8a9199);
+      leg.translate(ax === 'x' ? cx + s : cx + q*(w/2 - 0.4), CURB + 2.35,
+                    ax === 'x' ? cz + q*(w/2 - 0.4) : cz + s);
+      c.prop.push(leg);
+    }
+  }
+}
+
+// Stairs down to the platform, twin rails, and the green globe that means the
+// entrance is open all night.
+// `ang` is the direction the stairs run; the well is 3.6 across and 5.0 long,
+// which is exactly a five-wide sidewalk band with a little to spare.
+function subwayEntrance(c, x, z, ang){
+  const ux = Math.sin(ang), uz = Math.cos(ang);          // along the stairs
+  const px = Math.cos(ang), pz = -Math.sin(ang);         // across them
+  const bits = [];
+  const pit = colored(new THREE.BoxGeometry(3.6, 3.0, 5.0), 0x0b0d10);
+  pit.rotateY(ang); pit.translate(x, CURB - 1.42, z);
+  bits.push(pit);
+  for(let k=0;k<4;k++){                                   // treads going down
+    const st = colored(new THREE.BoxGeometry(3.4, 0.24, 0.8), 0x3d4148);
+    st.rotateY(ang);
+    st.translate(x + ux*(1.7 - k*0.85), CURB - 0.32 - k*0.36, z + uz*(1.7 - k*0.85));
+    bits.push(st);
+  }
+  for(const s of [-1, 1]){
+    const rail = colored(new THREE.BoxGeometry(0.13, 1.05, 4.6), 0x2f3439);
+    rail.rotateY(ang);
+    rail.translate(x + px*s*1.85, CURB + 0.55, z + pz*s*1.85);
+    bits.push(rail);
+    const cap = colored(new THREE.BoxGeometry(0.24, 0.14, 4.7), 0x9aa1a8);
+    cap.rotateY(ang);
+    cap.translate(x + px*s*1.85, CURB + 1.13, z + pz*s*1.85);
+    bits.push(cap);
+  }
+  const post = colored(new THREE.CylinderGeometry(0.08, 0.1, 2.9, 6), 0x2b3036);
+  post.translate(x - ux*2.9 + px*1.85, CURB + 1.45, z - uz*2.9 + pz*1.85);
+  bits.push(post);
+  c.prop.push(...bits);
+  const globe = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8),
+    new THREE.MeshBasicMaterial({color:0x35c45f}));
+  globe.position.set(x - ux*2.9 + px*1.85, CURB + 3.05, z - uz*2.9 + pz*1.85);
+  cityGroup.add(globe);
+  addSolid(x, z, Math.abs(px)*3.6 + Math.abs(ux)*5.2 + 0.6,
+                 Math.abs(pz)*3.6 + Math.abs(uz)*5.2 + 0.6);
+}
+
+function trashPile(c, x, z){
+  for(let k=0, n=ri(2,5); k<n; k++){
+    const r = rr(0.34, 0.55);
+    const b = colored(new THREE.SphereGeometry(r, 6, 5), rnd() < 0.8 ? 0x16171a : 0x2a2b30);
+    b.scale(1, 0.75, 1.15);
+    b.translate(x + rr(-0.8,0.8), CURB + r*0.72, z + rr(-0.6,0.6));
+    c.prop.push(b);
+  }
+}
+// The green blades that tell you where you are, on the signal pole
+function streetBlades(c, x, z){
+  for(const [w, d, dx, dz] of [[2.6,0.07,0.9,0], [0.07,2.6,0,0.9]]){
+    const bl = colored(new THREE.BoxGeometry(w, 0.42, d), 0x1e6b3c);
+    bl.translate(x + dx, CURB + 5.15, z + dz);
+    c.prop.push(bl);
   }
 }
 
@@ -1580,6 +1724,20 @@ tasks.push(() => {
   }
 });
 tasks.push(() => {
+  // A station entrance every few corners. It has to sit in the five-wide
+  // sidewalk band beside the kerb, not on the block, or the stairs come up
+  // inside a building: mid-band is ROAD/2 + WALK/2 in from the road centre.
+  const band = ROAD/2 + WALK/2;
+  for(let k=2; k<subwaySpots.length; k+=5){
+    const [X, Z] = subwaySpots[k];
+    const [x, z, ang] = (k % 2)
+      ? [X - band, Z - 14, 0]                  // east band, stairs running north
+      : [X - 14, Z - band, Math.PI/2];         // south band, running west
+    if(onBway(x, z) || tsqDist(x, z) < TSQ_R + 8) continue;
+    subwayEntrance(chunkOf(x, z), x, z, ang);
+  }
+});
+tasks.push(() => {
   // three landmark towers
   setbackTower(midX(11), midZ(22), [[42,42,54],[32,32,56],[22,22,48],[13,13,32]], 34, 5);
   setbackTower(midX(13), midZ(20), [[30,30,60],[22,22,42],[14,14,26]], 26, 3);
@@ -1600,8 +1758,10 @@ tasks.push(() => {
   const lampGeo = mergeGeos([pole,arm,head]);
   const glowGeo = new THREE.SphereGeometry(0.34, 8, 6);
   const glowMat = new THREE.MeshBasicMaterial({color:0xffd27a});
+  const parkGeo = parkedGeo();
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(),
-        v = new THREE.Vector3(), s = new THREE.Vector3(1,1,1);
+        v = new THREE.Vector3(), s = new THREE.Vector3(1,1,1),
+        col = new THREE.Color();
 
   for(const c of chunks.values()){
     for(let v=0; v<c.bldg.length; v++)
@@ -1626,6 +1786,18 @@ tasks.push(() => {
         addSolid(x, z, 0.7, 0.7);
       });
       s.set(1,1,1);
+      cityGroup.add(inst);
+    }
+    if(c.park.length){
+      const inst = new THREE.InstancedMesh(parkGeo, vcMat, c.park.length);
+      c.park.forEach(([x, z, ang], k) => {
+        q.setFromAxisAngle(new THREE.Vector3(0,1,0), ang);
+        v.set(x, CURB - 0.30, z);          // sits on the road, not the kerb
+        inst.setMatrixAt(k, m4.compose(v,q,s));
+        col.setHex(rnd() < 0.13 ? 0xf5c518 : pick(PARKED_COLORS));
+        inst.setColorAt(k, col);
+      });
+      inst.instanceColor.needsUpdate = true;
       cityGroup.add(inst);
     }
     if(c.lamp.length){
@@ -1947,6 +2119,10 @@ function pushOut(x, z, rad){
     const arr = solidGrid.get(skey(idxX(x)+di, idxZ(z)+dj));
     if(!arr) continue;
     for(const s of arr){
+      // parked cars stop you on foot, but the kerb lane is close enough to the
+      // travel lane that blocking them while driving means scraping the whole
+      // way down the block
+      if(s.kerb && drive) continue;
       if(x > s.x1-rad && x < s.x2+rad && z > s.z1-rad && z < s.z2+rad){
         const pxr = s.x2+rad - x, pxl = x - (s.x1-rad);
         const pzr = s.z2+rad - z, pzl = z - (s.z1-rad);
