@@ -1090,7 +1090,9 @@ function addProps(c, i, j){
  * head stops. Phase 0 is the avenues, phase 1 the cross streets, so at any
  * intersection one street is green while the other is red.
  */
-const SIG_H = 6.0, SIG_ARM = 7.4, SIG_E = ROAD/2 + WALK*0.55;
+const SIG_H = 6.0, SIG_E = ROAD/2 + WALK*0.55;
+// reach from a corner pole to a head centred over the far lane, 2.7 off centre
+const SIG_ARM = SIG_E - 2.7;
 // which grid intersections ended up signalised, and which are four-way stops,
 // so traffic can find both kinds of stop line
 const signalAt = new Set(), stopAt = new Set();
@@ -1104,12 +1106,13 @@ function signalPole(c, x, z, faceAng){
   ped.translate(x + Math.sin(faceAng)*0.35, CURB + 3.3, z + Math.cos(faceAng)*0.35);
   c.prop.push(ped);
 }
-function signalHead(c, x, z, armAng, faceAng, ph){
-  const arm = colored(new THREE.BoxGeometry(0.15, 0.15, SIG_ARM), 0x2b3036);
-  arm.translate(0, 0, SIG_ARM/2); arm.rotateY(armAng);
+function signalHead(c, x, z, armAng, faceAng, ph, len){
+  const L = len || SIG_ARM;
+  const arm = colored(new THREE.BoxGeometry(0.15, 0.15, L), 0x2b3036);
+  arm.translate(0, 0, L/2); arm.rotateY(armAng);
   arm.translate(x, CURB + SIG_H - 0.35, z);
   c.prop.push(arm);
-  const hx = x + Math.sin(armAng)*SIG_ARM, hz = z + Math.cos(armAng)*SIG_ARM;
+  const hx = x + Math.sin(armAng)*L, hz = z + Math.cos(armAng)*L;
   const hy = CURB + SIG_H - 1.25;
   const box = colored(new THREE.BoxGeometry(0.52, 1.62, 0.44), 0x1d2126);
   box.rotateY(faceAng); box.translate(hx, hy, hz);
@@ -1121,16 +1124,28 @@ function signalHead(c, x, z, armAng, faceAng, ph){
   c.prop.push(lens(0, 0x4a3a12));                    // amber, dark between phases
   c.sig[ph*2+1].push(lens(-0.48, 0xffffff));         // green, bottom
 }
-// A real intersection faces every approach. Two poles diagonally opposite,
-// each carrying two arms: one out over the avenue, one out over the street.
-// Miss any of the four and drivers coming that way see the back of a signal.
+/* A signal goes on the FAR side of the crossing from the traffic it stops, so
+ * a driver held at the near stop line is looking straight at it, and it hangs
+ * over that traffic's own lane, 2.7 off the centre line. Four approaches, four
+ * corner poles, one head each:
+ *
+ *        NW pole --- head over the westbound lane, facing east
+ *        NE pole --- head over the northbound lane, facing south
+ *        SW pole --- head over the southbound lane, facing north
+ *        SE pole --- head over the eastbound lane, facing west
+ *
+ * Putting them on the near side instead is what made them read backwards, and
+ * a short arm from the corner left them hanging between the two lanes.
+ */
 function signalSet(c, X, Z){
-  signalPole(c, X - SIG_E, Z - SIG_E, Math.PI*0.25);                  // faces the box
-  signalHead(c, X - SIG_E, Z - SIG_E,  Math.PI/2,  Math.PI,      0);  // southbound
-  signalHead(c, X - SIG_E, Z - SIG_E,  0,         -Math.PI/2,    1);  // eastbound
+  signalPole(c, X - SIG_E, Z - SIG_E,  Math.PI*0.25);
+  signalHead(c, X - SIG_E, Z - SIG_E,  0,          Math.PI/2,  1);   // westbound
+  signalPole(c, X + SIG_E, Z - SIG_E, -Math.PI*0.25);
+  signalHead(c, X + SIG_E, Z - SIG_E, -Math.PI/2,  0,          0);   // northbound
+  signalPole(c, X - SIG_E, Z + SIG_E,  Math.PI*0.75);
+  signalHead(c, X - SIG_E, Z + SIG_E,  Math.PI/2,  Math.PI,    0);   // southbound
   signalPole(c, X + SIG_E, Z + SIG_E, -Math.PI*0.75);
-  signalHead(c, X + SIG_E, Z + SIG_E, -Math.PI/2,  0,            0);  // northbound
-  signalHead(c, X + SIG_E, Z + SIG_E,  Math.PI,    Math.PI/2,    1);  // westbound
+  signalHead(c, X + SIG_E, Z + SIG_E,  Math.PI,   -Math.PI/2,  1);   // eastbound
 }
 function stopSign(c, x, z, faceAng){
   const pole = colored(new THREE.CylinderGeometry(0.06, 0.07, 2.9, 5), 0x6a6f75);
@@ -1686,26 +1701,27 @@ tasks.push(() => {
     const [x1,z1] = BWAY[cr.leg], [x2,z2] = BWAY[cr.leg+1];
     const bang = Math.atan2(x2-x1, z2-z1);
     const ux = Math.sin(bang), uz = Math.cos(bang);       // along Broadway
-    const px = Math.cos(bang), pz = -Math.sin(bang);      // across it
     const c = chunkOf(cr.x, cr.z);
-    // both ways down the diagonal
-    const pa = [cr.x + px*SIG_E - ux*15, cr.z + pz*SIG_E - uz*15];
-    signalPole(c, pa[0], pa[1], bang);                  // crossing is downstream
-    signalHead(c, pa[0], pa[1], Math.atan2(-px, -pz), bang + Math.PI, 0);
-    const pb = [cr.x - px*SIG_E + ux*15, cr.z - pz*SIG_E + uz*15];
-    signalPole(c, pb[0], pb[1], bang + Math.PI);
-    signalHead(c, pb[0], pb[1], Math.atan2(px, pz), bang, 0);
+    // Same rule on the diagonal: far side of the crossing, over that
+    // direction's own lane, which sits 2.7 off Broadway's centre line.
+    const nx = -uz, nz = ux;                              // Broadway's lane normal
+    const pa = [cr.x + ux*SIG_E + nx*SIG_E, cr.z + uz*SIG_E + nz*SIG_E];
+    signalPole(c, pa[0], pa[1], bang + Math.PI);
+    signalHead(c, pa[0], pa[1], Math.atan2(-nx, -nz), bang + Math.PI, 0);
+    const pb = [cr.x - ux*SIG_E - nx*SIG_E, cr.z - uz*SIG_E - nz*SIG_E];
+    signalPole(c, pb[0], pb[1], bang);
+    signalHead(c, pb[0], pb[1], Math.atan2(nx, nz), bang, 0);
     // and both ways along the street it cuts
     if(cr.ax === 'x'){
-      signalPole(c, cr.x + 15, cr.z + SIG_E, -Math.PI*0.75);
-      signalHead(c, cr.x + 15, cr.z + SIG_E,  Math.PI,  Math.PI/2,  1);
-      signalPole(c, cr.x - 15, cr.z - SIG_E,  Math.PI*0.25);
-      signalHead(c, cr.x - 15, cr.z - SIG_E,  0,       -Math.PI/2,  1);
+      signalPole(c, cr.x + SIG_E, cr.z + SIG_E, -Math.PI*0.75);
+      signalHead(c, cr.x + SIG_E, cr.z + SIG_E,  Math.PI,   -Math.PI/2, 1);
+      signalPole(c, cr.x - SIG_E, cr.z - SIG_E,  Math.PI*0.25);
+      signalHead(c, cr.x - SIG_E, cr.z - SIG_E,  0,          Math.PI/2, 1);
     } else {
-      signalPole(c, cr.x + SIG_E, cr.z + 15, -Math.PI*0.75);
-      signalHead(c, cr.x + SIG_E, cr.z + 15, -Math.PI/2, 0,         1);
-      signalPole(c, cr.x - SIG_E, cr.z - 15,  Math.PI*0.25);
-      signalHead(c, cr.x - SIG_E, cr.z - 15,  Math.PI/2, Math.PI,   1);
+      signalPole(c, cr.x - SIG_E, cr.z + SIG_E,  Math.PI*0.75);
+      signalHead(c, cr.x - SIG_E, cr.z + SIG_E,  Math.PI/2,  Math.PI,   1);
+      signalPole(c, cr.x + SIG_E, cr.z - SIG_E, -Math.PI*0.25);
+      signalHead(c, cr.x + SIG_E, cr.z - SIG_E, -Math.PI/2,  0,         1);
     }
   }
 });
@@ -1959,7 +1975,8 @@ tasks.push(() => {
     const lights = new THREE.Mesh(lightGeo, carLightMat);
     g.add(body, lights);
     cityGroup.add(g);
-    const c = { g, body, lights, seg:null, dir:1, pos:0, speed:rr(11,20), turn:0, y:0.02 };
+    const c = { g, body, lights, seg:null, dir:1, pos:0, speed:rr(11,20), turn:0,
+                y:0.02, id:k, jam:0 };
     body.userData.car = c;
     carMeshes.push(body);
     cars.push(c);
@@ -2594,6 +2611,22 @@ function updateWalking(dt, mf, ms){
   document.body.classList.remove('driving');
 }
 
+// Crash the car you are driving and you start over: the wreck goes back into
+// traffic and you are put on your feet where the walk began.
+function crashRestart(){
+  const c = drive.c;
+  drive = null;
+  placeCar(c, c.seg, c.pos);
+  player.x = SPAWN.x; player.z = SPAWN.z;
+  player.y = groundAt(SPAWN.x, SPAWN.z);
+  player.vy = 0; player.onGround = true;
+  player.pitch = 0;
+  flash.style.opacity = 0.6;
+  setTimeout(() => flash.style.opacity = 0, 260);
+  honk(0.3);
+  toast('Crashed. Back to the start.');
+}
+
 function updateDriving(dt, mf, ms){
   const c = drive.c, g = c.g;
   const brake = keys.Space;
@@ -2620,6 +2653,12 @@ function updateDriving(dt, mf, ms){
     }
     drive.speed *= 0.25;
   }
+  // hit another car and the run is over
+  for(const o of cars){
+    if(o === c || o.parked) continue;
+    const dx = o.g.position.x - rx, dz = o.g.position.z - rz;
+    if(dx*dx + dz*dz < 11.5){ crashRestart(); return; }
+  }
   g.position.x = rx; g.position.z = rz;
   const ty = roadY(rx, rz) + (groundAt(rx,rz) > 0.2 && !bridgeAt(rx,rz) ? CURB : 0);
   g.position.y += (ty - g.position.y) * Math.min(1, dt*8);
@@ -2644,15 +2683,35 @@ function updateDriving(dt, mf, ms){
 
 const STOP_LINE = 9;                   // how far short of the crossing to hold
 const SIGN_WAIT = 1.1;                 // seconds halted at a stop sign
-const segCars = new Map();
+const segCars = new Map(), cellCars = new Map();
+// Is `o` in front of `c` and close enough to hit? Following only sees cars on
+// the same run, which leaves crossing traffic driving straight through itself.
+function blockedBy(c, o){
+  const dx = o.g.position.x - c.g.position.x, dz = o.g.position.z - c.g.position.z;
+  const d2 = dx*dx + dz*dz;
+  if(d2 > 46 || d2 < 0.01) return false;                 // ~6.8 units
+  const h = c.g.rotation.y, fx = Math.sin(h), fz = Math.cos(h);
+  return (dx*fx + dz*fz) > 0.4 * Math.sqrt(d2);          // within a cone ahead
+}
 function updateTraffic(dt){
   // bucket by segment once so following only looks at cars on the same road
-  segCars.clear();
+  segCars.clear(); cellCars.clear();
   for(const c of cars){
-    if(c.parked || c.turn > 0 || (drive && c === drive.c)) continue;
-    let a = segCars.get(c.seg);
-    if(!a){ a = []; segCars.set(c.seg, a); }
-    a.push(c);
+    // the car you are driving is flagged parked, but it is very much on the
+    // road: keep it out of the following logic and in the proximity grid
+    const mine = drive && c === drive.c;
+    if((c.parked && !mine) || c.turn > 0) continue;
+    if(!mine){
+      let a = segCars.get(c.seg);
+      if(!a){ a = []; segCars.set(c.seg, a); }
+      a.push(c);
+    }
+    // the player's car goes in the proximity grid too, so traffic queues
+    // behind it instead of driving through it
+    const k = skey(idxX(c.g.position.x), idxZ(c.g.position.z));
+    let b = cellCars.get(k);
+    if(!b){ b = []; cellCars.set(k, b); }
+    b.push(c);
   }
   for(const c of cars){
     if(drive && c === drive.c) continue;
@@ -2695,6 +2754,22 @@ function updateTraffic(dt){
       const d = (o.pos - c.pos)*c.dir;
       if(d > 0 && d < 26) v = Math.min(v, d < 9 ? 0 : c.speed*(d - 9)/17);
     }
+    // yield to anything in the way, including across a junction. If two cars
+    // each have the other in front, only the higher id gives way, or they
+    // would sit nose to nose for ever.
+    let yield_ = false;
+    const ci = idxX(c.g.position.x), cj = idxZ(c.g.position.z);
+    for(let di=-1; di<=1 && !yield_; di++) for(let dj=-1; dj<=1 && !yield_; dj++){
+      const arr = cellCars.get(skey(ci+di, cj+dj));
+      if(!arr) continue;
+      for(const o of arr){
+        if(o === c || !blockedBy(c, o)) continue;
+        if(!blockedBy(o, c) || o.id < c.id){ yield_ = true; break; }
+      }
+    }
+    // ...unless it has been stuck long enough that something has gone wrong
+    if(yield_ && c.jam < 4){ v = 0; c.jam += dt; }
+    else if(!yield_) c.jam = Math.max(0, c.jam - dt*0.5);
     c.pos += v * c.dir * dt;
     // on a chained road the car is handed to the next leg and keeps going;
     // only a real dead end makes it turn around
