@@ -1393,7 +1393,7 @@ const DOWNTOWN_ST = ['Wall St','Broad St','Pearl St','Water St','Fulton St'];
 const BK_I0 = 16;
 const BK_ST = ['Bedford Ave','Nostrand Ave','Flatbush Ave','Franklin Ave','Classon Ave',
                'Vanderbilt Ave','Rogers Ave','Utica Ave','Ralph Ave','Pennsylvania Ave'];
-const pick = (arr, k) => arr[Math.max(0, Math.min(arr.length - 1, k))];
+const clampPick = (arr, k) => arr[Math.max(0, Math.min(arr.length - 1, k))];
 
 function locationName(){
   const b = bridgeAt(player.x, player.z);
@@ -1409,12 +1409,12 @@ function locationName(){
   }
   const info = D[t];
   if(t===MID || t===DOWN || t===UPPER || t===HARLEM || t===VILLAGE){
-    const ave = pick(AVES, i - AVE_I0);
-    const st  = (t === DOWN) ? pick(DOWNTOWN_ST, j - 30)
+    const ave = clampPick(AVES, i - AVE_I0);
+    const st  = (t === DOWN) ? clampPick(DOWNTOWN_ST, j - 30)
               : (i <= FIFTH_I ? 'W ' : 'E ') + ORD(Math.max(1, ST_AT_J0 + ST_J0 - j)) + ' St';
     return [ave + ' & ' + st, info.name];
   }
-  if(t === BKLYN)  return [pick(BK_ST, i - BK_I0) + ' & ' + ORD(Math.max(1, j-22)) + ' St', 'Brooklyn'];
+  if(t === BKLYN)  return [clampPick(BK_ST, i - BK_I0) + ' & ' + ORD(Math.max(1, j-22)) + ' St', 'Brooklyn'];
   if(t === QUEENS) return [ORD(Math.max(1, i-15)) + ' St & ' + ORD(Math.max(1, j-5)) + ' Ave', 'Queens'];
   if(t === BRONX)  return ['Grand Concourse & ' + ORD(Math.max(1, i-13)) + ' St', 'The Bronx'];
   if(t === JERSEY) return ['Hudson Blvd & ' + ORD(Math.max(1, j-1)) + ' St', 'New Jersey'];
