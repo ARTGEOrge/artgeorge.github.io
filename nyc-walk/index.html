@@ -630,6 +630,30 @@ function bwayDist(x, z){
 }
 const onBway = (x, z) => bwayDist(x, z) < BWAY_W;
 
+// Every grid line Broadway cuts is a signalised crossing. Solved once here:
+// the world point, which leg it falls on and how far along, and which way the
+// cross street runs. Used for the signal heads and for the traffic stop lines.
+const BWAY_CROSS = (() => {
+  const out = [];
+  for(let k=0;k<BWAY.length-1;k++){
+    const [x1,z1] = BWAY[k], [x2,z2] = BWAY[k+1];
+    const dx = x2-x1, dz = z2-z1, L = Math.hypot(dx, dz);
+    if(Math.abs(dz) > 1e-6) for(let j=0;j<GZ;j++){
+      const u = (roadZ(j) - z1)/dz;
+      if(u < 0 || u > 1) continue;
+      const x = x1 + dx*u;
+      if(isSolidGround(x, roadZ(j))) out.push({x, z:roadZ(j), leg:k, s:u*L, ax:'x', j});
+    }
+    if(Math.abs(dx) > 1e-6) for(let i=0;i<GX;i++){
+      const u = (roadX(i) - x1)/dx;
+      if(u < 0 || u > 1) continue;
+      const z = z1 + dz*u;
+      if(isSolidGround(roadX(i), z)) out.push({x:roadX(i), z, leg:k, s:u*L, ax:'z', i});
+    }
+  }
+  return out;
+})();
+
 // Times Square: the bowtie where Broadway cuts across the avenue grid. Sits on
 // the diagonal a little below the park, and is kept clear of buildings so the
 // plaza opens out and the billboards have something to face.
@@ -1057,6 +1081,8 @@ function addProps(c, i, j){
  * intersection one street is green while the other is red.
  */
 const SIG_H = 6.0, SIG_ARM = 7.4, SIG_E = ROAD/2 + WALK*0.55;
+// which grid intersections ended up signalised, so traffic can find its stops
+const signalAt = new Set();
 function trafficSignal(c, x, z, armAng, faceAng, ph){
   const pole = colored(new THREE.CylinderGeometry(0.12, 0.17, SIG_H, 6), 0x2b3036);
   pole.translate(x, CURB + SIG_H/2, z);
@@ -1114,6 +1140,7 @@ function crossing(c, i, j){
     // avenue head over the north approach, street head over the east approach
     trafficSignal(c, X - SIG_E, Z - SIG_E, Math.PI/2, Math.PI,   0);
     trafficSignal(c, X + SIG_E, Z + SIG_E, Math.PI,   Math.PI/2, 1);
+    signalAt.add(skey(i, j));
   } else {
     stopSign(c, X - SIG_E, Z - SIG_E, Math.PI);
     stopSign(c, X + SIG_E, Z + SIG_E, 0);
@@ -1491,32 +1518,20 @@ tasks.push(() => {
 });
 
 tasks.push(() => {
-  // Every place Broadway cuts a grid street is a real signalised crossing, so
-  // solve the diagonal against each street line and wire both approaches: one
-  // head across the diagonal facing back up it, one on the cross street.
-  for(let k=0;k<BWAY.length-1;k++){
-    const [x1,z1] = BWAY[k], [x2,z2] = BWAY[k+1];
-    const dx = x2-x1, dz = z2-z1;
-    const bang = Math.atan2(dx, dz);
+  // Wire both approaches of every Broadway crossing: one head across the
+  // diagonal facing back up it, one on the cross street. Broadway holds phase
+  // 0 like the avenues it replaces, so the cross street always holds phase 1 —
+  // including where that cross street is itself an avenue.
+  for(const cr of BWAY_CROSS){
+    const [x1,z1] = BWAY[cr.leg], [x2,z2] = BWAY[cr.leg+1];
+    const bang = Math.atan2(x2-x1, z2-z1);
     const ux = Math.sin(bang), uz = Math.cos(bang);       // along Broadway
     const px = Math.cos(bang), pz = -Math.sin(bang);      // across it
-    const hits = [];
-    if(Math.abs(dz) > 1e-6) for(let j=0;j<GZ;j++){
-      const t = (roadZ(j) - z1)/dz;
-      if(t >= 0 && t <= 1) hits.push([x1 + dx*t, roadZ(j), 'x']);
-    }
-    if(Math.abs(dx) > 1e-6) for(let i=0;i<GX;i++){
-      const t = (roadX(i) - x1)/dx;
-      if(t >= 0 && t <= 1) hits.push([roadX(i), z1 + dz*t, 'z']);
-    }
-    for(const [x, z, ax] of hits){
-      if(!isSolidGround(x, z)) continue;
-      const c = chunkOf(x, z);
-      trafficSignal(c, x + px*SIG_E - ux*15, z + pz*SIG_E - uz*15,
-                    Math.atan2(-px, -pz), bang + Math.PI, 0);
-      if(ax === 'x') trafficSignal(c, x + 15, z + SIG_E, Math.PI, Math.PI/2, 1);
-      else           trafficSignal(c, x + SIG_E, z + 15, -Math.PI/2, 0, 1);
-    }
+    const c = chunkOf(cr.x, cr.z);
+    trafficSignal(c, cr.x + px*SIG_E - ux*15, cr.z + pz*SIG_E - uz*15,
+                  Math.atan2(-px, -pz), bang + Math.PI, 0);
+    if(cr.ax === 'x') trafficSignal(c, cr.x + 15, cr.z + SIG_E, Math.PI, Math.PI/2, 1);
+    else              trafficSignal(c, cr.x + SIG_E, cr.z + 15, -Math.PI/2, 0, 1);
   }
 });
 tasks.push(() => {
@@ -1632,6 +1647,7 @@ tasks.push(() => {
   }
   for(const b of bridges) segs.push({ax:'x', line:b.line, a:b.a-PITCH, b:b.b+PITCH, bridge:b});
   segs.forEach(segFrame);
+  segs.forEach(s => s.stops = gridStops(s));
 
   // Broadway runs at its own angle, so its legs are chained rather than
   // squared off: a car reaching the end of one is handed to the next and
@@ -1643,6 +1659,10 @@ tasks.push(() => {
     const dx = x2-x1, dz = z2-z1, L = Math.hypot(dx, dz);
     const s = { ax:'d', line:0, a:0, b:L, ox:x1, oz:z1, ux:dx/L, uz:dz/L };
     segFrame(s);
+    // its crossings, as distances along the leg — exactly the car's `pos`
+    s.stops = BWAY_CROSS.filter(cr => cr.leg === k)
+                        .map(cr => ({p: cr.s, ph: 0}))
+                        .sort((p, q) => p.p - q.p);
     if(prev){ prev.next = s; s.prev = prev; }
     legs.push(s);
     prev = s;
@@ -1651,6 +1671,37 @@ tasks.push(() => {
   // weight it: the same legs listed three times, picked three times as often
   for(let r=0;r<3;r++) segs.push(...legs);
 });
+// On a grid segment `pos` is simply the world x (or z), so a stop line sits at
+// the road coordinate of each signalised crossing the run passes through. Each
+// stop carries the phase that has to be green there, rather than inheriting one
+// from the street: where Broadway cuts an avenue, that avenue waits on phase 1
+// even though its own lights everywhere else are phase 0.
+function gridStops(s){
+  const out = [], mine = segPhase(s);
+  if(s.ax === 'x'){
+    const j = Math.round((s.line - OFF_Z - BLOCK - STREET/2) / PITCH);
+    for(let i=0;i<GX;i++){
+      const X = roadX(i);
+      if(X > s.a && X < s.b && signalAt.has(skey(i, j))) out.push({p:X, ph:mine});
+    }
+    for(const cr of BWAY_CROSS)
+      if(cr.ax === 'x' && cr.j === j && cr.x > s.a && cr.x < s.b)
+        out.push({p:cr.x, ph:1});
+  } else {
+    const i = Math.round((s.line - OFF_X - BLOCK - STREET/2) / PITCH);
+    for(let j=0;j<GZ;j++){
+      const Z = roadZ(j);
+      if(Z > s.a && Z < s.b && signalAt.has(skey(i, j))) out.push({p:Z, ph:mine});
+    }
+    for(const cr of BWAY_CROSS)
+      if(cr.ax === 'z' && cr.i === i && cr.z > s.a && cr.z < s.b)
+        out.push({p:cr.z, ph:1});
+  }
+  return out.sort((a, b) => a.p - b.p);
+}
+// Avenues run north-south and hold phase 0; the cross streets hold phase 1.
+// Broadway is an avenue. This is the same split the signal heads were built on.
+const segPhase = s => s.ax === 'x' ? 1 : 0;
 // every segment carries its own frame: origin, unit direction, lane normal
 function segFrame(s){
   if(s.ux === undefined){
@@ -2227,11 +2278,13 @@ addEventListener('resize', () => {
 const clock = new THREE.Clock();
 let fpsT = 0, fpsN = 0, fps = 0, clock24 = 9.5, bumpCool = 0, mapT = 0;
 let carCursor = 0, pedCursor = 0;
+let greenPhase = 0;                    // 0 = avenues green, 1 = cross streets
 
 function tick(){
   requestAnimationFrame(tick);
   const dt = Math.min(0.05, clock.getDelta());
   const t  = clock.elapsedTime;
+  greenPhase = Math.floor(t / 6) % 2;  // set before traffic reads it
   const paused = !locked && !isTouch;
 
   let mf = 0, ms = 0;
@@ -2250,8 +2303,8 @@ function tick(){
   updatePeds(dt, t);
   updateSteam(dt);
 
-  // signals + beacons
-  const gph = Math.floor(t / 6) % 2;
+  // signals + beacons — greenPhase is what the lenses show and what traffic obeys
+  const gph = greenPhase;
   for(let p=0;p<2;p++){
     sigMat[p*2].color.setHex(gph === p ? 0x8a1414 : 0xff3b30);      // red bulb
     sigMat[p*2+1].color.setHex(gph === p ? 0x2fe06a : 0x14682a);    // green bulb
@@ -2377,7 +2430,17 @@ function updateDriving(dt, mf, ms){
   elMph.textContent = Math.round(Math.abs(drive.speed) * MPH);
 }
 
+const STOP_LINE = 9;                   // how far short of the crossing to hold
+const segCars = new Map();
 function updateTraffic(dt){
+  // bucket by segment once so following only looks at cars on the same road
+  segCars.clear();
+  for(const c of cars){
+    if(c.parked || c.turn > 0 || (drive && c === drive.c)) continue;
+    let a = segCars.get(c.seg);
+    if(!a){ a = []; segCars.set(c.seg, a); }
+    a.push(c);
+  }
   for(const c of cars){
     if(drive && c === drive.c) continue;
     if(c.parked) continue;
@@ -2388,7 +2451,27 @@ function updateTraffic(dt){
       if(c.turn <= 0){ c.dir *= -1; faceCar(c); }
       continue;
     }
-    c.pos += c.speed * c.dir * dt;
+    // red light: ease down to the stop line and hold there until it turns
+    let v = c.speed;
+    const st = c.seg.stops;
+    if(st.length){
+      let ahead = null;
+      if(c.dir > 0){ for(let k=0;k<st.length;k++) if(st[k].p > c.pos){ ahead = st[k]; break; } }
+      else { for(let k=st.length-1;k>=0;k--) if(st[k].p < c.pos){ ahead = st[k]; break; } }
+      if(ahead && ahead.ph !== greenPhase){
+        const gap = (ahead.p - c.pos)*c.dir - STOP_LINE;
+        // a negative gap means it is already in the box, so let it clear
+        if(gap >= 0 && gap < 30) v = gap < 1.2 ? 0 : c.speed * Math.min(1, gap/20);
+      }
+    }
+    // and don't drive into the car queued in front
+    const near = segCars.get(c.seg);
+    if(near) for(const o of near){
+      if(o === c || o.dir !== c.dir) continue;
+      const d = (o.pos - c.pos)*c.dir;
+      if(d > 0 && d < 26) v = Math.min(v, d < 9 ? 0 : c.speed*(d - 9)/17);
+    }
+    c.pos += v * c.dir * dt;
     // on a chained road the car is handed to the next leg and keeps going;
     // only a real dead end makes it turn around
     if(c.dir > 0 && c.pos > c.seg.b && c.seg.next){
