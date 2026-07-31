@@ -570,6 +570,84 @@ function addSolid(x, z, w, d){
   arr.push(s);
 }
 
+/* ---------- streets that are not a grid ----------------------------------
+ * Above Houston, Manhattan really is the 1811 commissioners' grid, so it stays
+ * one. The rest of the city grew out of farm lanes and village roads, where
+ * streets stop dead, jog around a block, or never run through at all — and
+ * Broadway ignores the whole scheme, cutting diagonally down the island.
+ * closedX[i][j] = no street east of cell (i,j).  closedZ[i][j] = none south.
+ */
+const closedX = [], closedZ = [];
+for(let i=0;i<GX;i++){ closedX.push([]); closedZ.push([]); }
+{
+  const IRREG = { [DOWN]:0.42, [VILLAGE]:0.32, [BKLYN]:0.22, [QUEENS]:0.18,
+                  [BRONX]:0.20, [STATEN]:0.26, [JERSEY]:0.20 };
+  for(let j=0;j<GZ;j++) for(let i=0;i<GX;i++){
+    const t = grid[i][j], p = IRREG[t] || 0;
+    if(!p) continue;
+    // never two in a row, or the block runs three cells wide and reads wrong
+    if(i+1 < GX && grid[i+1][j] === t && rnd() < p &&
+       !(i > 0 && closedX[i-1][j])) closedX[i][j] = true;
+    if(j+1 < GZ && grid[i][j+1] === t && rnd() < p && !closedX[i][j] &&
+       !(j > 0 && closedZ[i][j-1])) closedZ[i][j] = true;
+  }
+}
+
+// paved-over roadbed: sidewalk where the street used to be
+const pavedGrid = new Map();
+function addPaved(x1, z1, x2, z2){
+  const r = {x1, z1, x2, z2};
+  for(let i=idxX(x1); i<=idxX(x2); i++) for(let j=idxZ(z1); j<=idxZ(z2); j++){
+    const k = skey(i,j);
+    let a = pavedGrid.get(k);
+    if(!a){ a = []; pavedGrid.set(k, a); }
+    a.push(r);
+  }
+}
+function isPaved(x, z){
+  const a = pavedGrid.get(skey(idxX(x), idxZ(z)));
+  if(!a) return false;
+  for(const r of a) if(x >= r.x1 && x <= r.x2 && z >= r.z1 && z <= r.z2) return true;
+  return false;
+}
+
+// Broadway — the old Wickquasgeck trail, down the west side, across the grid
+// at the squares, then back west through SoHo. Cell coordinates, i then j.
+const BWAY_W = 13;                                       // half the roadbed
+const bwayPt = (fi, fj) => [OFF_X + fi*PITCH + BLOCK/2, OFF_Z + fj*PITCH + BLOCK/2];
+const BWAY = [[8.7,6.5],[9.1,12],[9.5,16],[10.0,20],[10.8,24],
+              [11.4,26.5],[10.9,30],[10.5,32.4]].map(p => bwayPt(p[0], p[1]));
+function bwayDist(x, z){
+  let best = 1e9;
+  for(let k=0;k<BWAY.length-1;k++){
+    const [x1,z1] = BWAY[k], [x2,z2] = BWAY[k+1];
+    const dx = x2-x1, dz = z2-z1, L = dx*dx + dz*dz;
+    let t = L ? ((x-x1)*dx + (z-z1)*dz) / L : 0;
+    t = t < 0 ? 0 : t > 1 ? 1 : t;
+    best = Math.min(best, Math.hypot(x1 + t*dx - x, z1 + t*dz - z));
+  }
+  return best;
+}
+const onBway = (x, z) => bwayDist(x, z) < BWAY_W;
+
+// sidewalk texture is sized for a full 64-unit block; keep the texel density
+// the same on the odd-sized pieces the irregular streets leave behind
+function walkUV(geo, w, d, x, z){
+  const uv = geo.attributes.uv, S = BLOCK + WALK*2;
+  // mod 1 keeps the offsets small without breaking alignment — the paving
+  // pattern repeats an exact number of times across S
+  const ou = ((x - OFF_X)/S) % 1, ov = ((z - OFF_Z)/S) % 1;
+  for(let i=0;i<uv.count;i++)
+    uv.setXY(i, ou + uv.getX(i)*(w/S), ov + uv.getY(i)*(d/S));
+  uv.needsUpdate = true;
+}
+function walkSlab(c, x, z, w, d){
+  const g = new THREE.BoxGeometry(w, CURB, d);
+  walkUV(g, w, d, x - w/2, z - d/2);
+  g.translate(x, CURB/2, z);
+  c.walk.push(colored(g, 0xffffff));
+}
+
 // ---------- chunked scene assembly ----------
 const CHUNK = 4;                       // cells per chunk
 const chunks = new Map();
@@ -617,6 +695,7 @@ const grassTex = flatTex('#3f6b33', 34); grassTex.repeat.set(6,6);
 const grassMat = new THREE.MeshLambertMaterial({map:grassTex});
 
 function addMark(c, w, l, x, z, turn, color){
+  if(onBway(x, z)) return;              // Broadway carries its own markings
   const g = new THREE.PlaneGeometry(w, l);
   g.rotateX(-Math.PI/2);
   if(turn) g.rotateY(Math.PI/2);
@@ -901,31 +980,42 @@ function splitLot(x1,z1,x2,z2,depth,out){
 // ---------- props ----------
 function addProps(c, i, j){
   const cx = midX(i), cz = midZ(j), e = BLOCK/2 + WALK*0.6;
+  const clear = (x, z) => !onBway(x, z);       // nothing stands in the roadbed
   if(rnd()<0.7){
     const x = cx + rr(-BLOCK*0.35, BLOCK*0.35), z = cz + (rnd()<0.5?-e:e);
-    const b = colored(new THREE.CylinderGeometry(0.28,0.32,0.95,8), 0xc23b2f); b.translate(x,CURB+0.48,z);
-    const t = colored(new THREE.SphereGeometry(0.28,8,6), 0xc23b2f); t.translate(x,CURB+0.95,z);
-    c.prop.push(b,t);
+    if(clear(x,z)){
+      const b = colored(new THREE.CylinderGeometry(0.28,0.32,0.95,8), 0xc23b2f); b.translate(x,CURB+0.48,z);
+      const t = colored(new THREE.SphereGeometry(0.28,8,6), 0xc23b2f); t.translate(x,CURB+0.95,z);
+      c.prop.push(b,t);
+    }
   }
   if(rnd()<0.6){
     const z = cz + rr(-BLOCK*0.35, BLOCK*0.35), x = cx + (rnd()<0.5?-e:e);
-    const b = colored(new THREE.CylinderGeometry(0.45,0.38,1.1,10), 0x3e4b3e); b.translate(x,CURB+0.55,z);
-    c.prop.push(b);
+    if(clear(x,z)){
+      const b = colored(new THREE.CylinderGeometry(0.45,0.38,1.1,10), 0x3e4b3e); b.translate(x,CURB+0.55,z);
+      c.prop.push(b);
+    }
   }
   if(rnd()<0.35){
     const x = cx + rr(-BLOCK*0.3, BLOCK*0.3), z = cz + (rnd()<0.5?-e:e);
-    const b = colored(new THREE.BoxGeometry(0.6,1.1,0.5), pick([0x2f5fa8,0xa83a3a,0x2c2c2c]));
-    b.translate(x,CURB+0.55,z); c.prop.push(b);
+    if(clear(x,z)){
+      const b = colored(new THREE.BoxGeometry(0.6,1.1,0.5), pick([0x2f5fa8,0xa83a3a,0x2c2c2c]));
+      b.translate(x,CURB+0.55,z); c.prop.push(b);
+    }
   }
   // lamps on two corners
-  c.lamp.push([cx - BLOCK*0.28, cz - e], [cx + BLOCK*0.28, cz + e]);
+  for(const p of [[cx - BLOCK*0.28, cz - e], [cx + BLOCK*0.28, cz + e]])
+    if(clear(p[0], p[1])) c.lamp.push(p);
   // street trees
   for(let k=-1;k<=1;k+=2){
-    if(rnd()<0.6) c.tree.push([cx + rr(-BLOCK*0.3, BLOCK*0.3), cz + k*(BLOCK/2+WALK*0.55), rr(0.7,1.0)]);
-    if(rnd()<0.6) c.tree.push([cx + k*(BLOCK/2+WALK*0.55), cz + rr(-BLOCK*0.3, BLOCK*0.3), rr(0.7,1.0)]);
+    const t1 = [cx + rr(-BLOCK*0.3, BLOCK*0.3), cz + k*(BLOCK/2+WALK*0.55), rr(0.7,1.0)];
+    const t2 = [cx + k*(BLOCK/2+WALK*0.55), cz + rr(-BLOCK*0.3, BLOCK*0.3), rr(0.7,1.0)];
+    if(rnd()<0.6 && clear(t1[0], t1[1])) c.tree.push(t1);
+    if(rnd()<0.6 && clear(t2[0], t2[1])) c.tree.push(t2);
   }
   // traffic signal on the SE corner when it is a real intersection
-  if(isLandIJ(i+1,j) && isLandIJ(i,j+1) && isLandIJ(i+1,j+1)){
+  if(isLandIJ(i+1,j) && isLandIJ(i,j+1) && isLandIJ(i+1,j+1)
+     && !closedX[i][j] && !closedZ[i][j] && !onBway(roadX(i), roadZ(j))){
     const x = roadX(i) - ROAD/2 - WALK*0.5, z = roadZ(j) - ROAD/2 - WALK*0.5;
     const pole = colored(new THREE.CylinderGeometry(0.1,0.13,5.4,6), 0x2b3036); pole.translate(x,CURB+2.7,z);
     const arm  = colored(new THREE.BoxGeometry(3.2,0.14,0.14), 0x2b3036); arm.translate(x+1.6,CURB+5.2,z);
@@ -1126,35 +1216,77 @@ function buildCell(i, j){
 
     if(t === PARK){ buildPark(i, j); }
     else {
-      const wg = new THREE.BoxGeometry(BLOCK + WALK*2, CURB, BLOCK + WALK*2);
-      wg.translate(midX(i), CURB/2, midZ(j));
-      c.walk.push(colored(wg, 0xffffff));
+      const S = BLOCK + WALK*2;
+      // Broadway slices the block, so lay that sidewalk as tiles and drop the
+      // ones the roadbed runs over. Everywhere else one slab is enough.
+      const cut = bwayDist(midX(i), midZ(j)) < S/2 + BWAY_W + 2;
+      if(cut){
+        const N = 10, ts = S/N;
+        for(let a=0;a<N;a++) for(let b=0;b<N;b++){
+          const tx = midX(i) - S/2 + (a+0.5)*ts, tz = midZ(j) - S/2 + (b+0.5)*ts;
+          if(bwayDist(tx, tz) < BWAY_W + ts*0.3) continue;
+          walkSlab(c, tx, tz, ts, ts);
+        }
+      } else walkSlab(c, midX(i), midZ(j), S, S);
+
+      // a closed street is paved over and built on — the block runs through
+      if(closedX[i][j]){
+        const gx = roadX(i);
+        walkSlab(c, gx, midZ(j), STREET, S);
+        addPaved(gx - STREET/2, midZ(j) - S/2, gx + STREET/2, midZ(j) + S/2);
+      }
+      if(closedZ[i][j]){
+        const gz = roadZ(j);
+        walkSlab(c, midX(i), gz, S, STREET);
+        addPaved(midX(i) - S/2, gz - STREET/2, midX(i) + S/2, gz + STREET/2);
+      }
+      if(closedX[i][j] && closedZ[i][j]){
+        walkSlab(c, roadX(i), roadZ(j), STREET, STREET);
+        addPaved(roadX(i) - STREET/2, roadZ(j) - STREET/2,
+                 roadX(i) + STREET/2, roadZ(j) + STREET/2);
+      }
+
       const info = D[t];
       const lots = [];
-      splitLot(cellX(i), cellZ(j), cellX(i)+BLOCK, cellZ(j)+BLOCK, info.lots, lots);
+      splitLot(cellX(i), cellZ(j), cellX(i)+BLOCK, cellZ(j)+BLOCK,
+               cut ? info.lots + 1 : info.lots, lots);
       for(const [a,b,cc,e] of lots){
         const gap = 0.7, lw = cc-a-gap*2, ld = e-b-gap*2;
         if(lw < 8 || ld < 8) continue;
+        const bx = a+gap+lw/2, bz = b+gap+ld/2;
+        if(bwayDist(bx, bz) < BWAY_W + Math.min(lw, ld)*0.35) continue;
         let h = rr(info.h[0], info.h[1]);
         if(rnd() < info.tall) h *= rr(1.4, 2.2);
-        building(a+gap+lw/2, b+gap+ld/2, lw, ld, h, pick(info.pal));
+        building(bx, bz, lw, ld, h, pick(info.pal));
+      }
+      // fill the old roadbed so the street visibly stops here
+      if(info.h && closedX[i][j] && !onBway(roadX(i), midZ(j))){
+        const bd = S * rr(0.45, 0.8);
+        building(roadX(i), midZ(j) + rr(-5,5), STREET - 2.6, bd,
+                 rr(info.h[0], info.h[1]) * 0.85, pick(info.pal));
+      }
+      if(info.h && closedZ[i][j] && !onBway(midX(i), roadZ(j))){
+        const bw = S * rr(0.45, 0.8);
+        building(midX(i) + rr(-5,5), roadZ(j), bw, STREET - 2.6,
+                 rr(info.h[0], info.h[1]) * 0.85, pick(info.pal));
       }
       addProps(c, i, j);
     }
     seawall(c, i, j);
 
-    // lane markings where the neighbouring cell is land too
-    if(isLandIJ(i+1, j)){
+    // lane markings where the neighbouring cell is land and a street survives
+    if(isLandIJ(i+1, j) && !closedX[i][j]){
       const r = roadX(i);
       for(let v = cellZ(j) - STREET/2; v < cellZ(j) + BLOCK + STREET/2; v += 7)
         addMark(c, 0.32, 3.4, r, v, false, 0xcaa72c);
     }
-    if(isLandIJ(i, j+1)){
+    if(isLandIJ(i, j+1) && !closedZ[i][j]){
       const r = roadZ(j);
       for(let v = cellX(i) - STREET/2; v < cellX(i) + BLOCK + STREET/2; v += 7)
         addMark(c, 0.32, 3.4, v, r, true, 0xcaa72c);
     }
-    if(isLandIJ(i+1,j) && isLandIJ(i,j+1) && isLandIJ(i+1,j+1)){
+    if(isLandIJ(i+1,j) && isLandIJ(i,j+1) && isLandIJ(i+1,j+1)
+       && !closedX[i][j] && !closedZ[i][j]){
       const rx = roadX(i), rz = roadZ(j), off = ROAD/2 + 2.6;
       for(let k=-2;k<=2;k++){
         addMark(c, 0.85, 3.6, rx + k*2.4, rz - off, false, 0xcfd2cc);
@@ -1167,10 +1299,24 @@ function buildCell(i, j){
 }
 
 tasks.push(() => {
+  // Broadway's own centre line, laid along the diagonal rather than the grid
+  for(let k=0;k<BWAY.length-1;k++){
+    const [x1,z1] = BWAY[k], [x2,z2] = BWAY[k+1];
+    const dx = x2-x1, dz = z2-z1, len = Math.hypot(dx, dz), ang = Math.atan2(dx, dz);
+    for(let s=2; s<len-2; s+=7){
+      const t = s/len, x = x1 + dx*t, z = z1 + dz*t;
+      if(!isSolidGround(x, z)) continue;
+      const g = new THREE.PlaneGeometry(0.32, 3.4);
+      g.rotateX(-Math.PI/2); g.rotateY(ang); g.translate(x, 0.02, z);
+      chunkOf(x, z).mark.push(colored(g, 0xcaa72c));
+    }
+  }
+});
+tasks.push(() => {
   // three landmark towers
   setbackTower(midX(11), midZ(22), [[42,42,54],[32,32,56],[22,22,48],[13,13,32]], 34, 5);
   setbackTower(midX(13), midZ(20), [[30,30,60],[22,22,42],[14,14,26]], 26, 3);
-  setbackTower(midX(11), midZ(31), [[34,34,74],[26,26,46]], 40, 3);
+  setbackTower(midX(12), midZ(31), [[34,34,74],[26,26,46]], 40, 3);   // clear of Broadway
 });
 tasks.push(() => bridges.forEach(buildBridge));
 
@@ -1244,7 +1390,7 @@ tasks.push(() => {
   for(let j=0;j<GZ-1;j++){          // roads running along X, south of row j
     let start = -1;
     for(let i=0;i<=GX;i++){
-      const ok = i < GX && isLandIJ(i,j) && isLandIJ(i,j+1);
+      const ok = i < GX && isLandIJ(i,j) && isLandIJ(i,j+1) && !closedZ[i][j];
       if(ok && start < 0) start = i;
       if(!ok && start >= 0){
         if(i - start >= 2) segs.push({ax:'x', line:roadZ(j), a:cellX(start)-STREET/2, b:cellX(i-1)+BLOCK+STREET/2});
@@ -1255,7 +1401,7 @@ tasks.push(() => {
   for(let i=0;i<GX-1;i++){          // roads running along Z, east of column i
     let start = -1;
     for(let j=0;j<=GZ;j++){
-      const ok = j < GZ && isLandIJ(i,j) && isLandIJ(i+1,j);
+      const ok = j < GZ && isLandIJ(i,j) && isLandIJ(i+1,j) && !closedX[i][j];
       if(ok && start < 0) start = j;
       if(!ok && start >= 0){
         if(j - start >= 2) segs.push({ax:'z', line:roadX(i), a:cellZ(start)-STREET/2, b:cellZ(j-1)+BLOCK+STREET/2});
@@ -1405,10 +1551,12 @@ const EYE = 1.7, RADIUS = 0.55;
 function groundAt(x, z){
   const b = bridgeAt(x, z);
   if(b) return CURB + bridgeY(b, x);
+  if(onBway(x, z)) return 0;                       // Broadway's roadbed
   const i = idxX(x), j = idxZ(z);
   if(i>=0 && j>=0 && i<GX && j<GZ && grid[i][j] !== WATER){
     if(Math.abs(x - midX(i)) <= BLOCK/2 + WALK && Math.abs(z - midZ(j)) <= BLOCK/2 + WALK)
       return CURB;
+    if(isPaved(x, z)) return CURB;                 // street that was built over
     return 0;
   }
   return 0;
@@ -1716,6 +1864,12 @@ function drawMap(){
       mg.fillStyle = DCOL[grid[i][j]] || '#39404d';
       mg.fillRect(bx, by, BLOCK*s, BLOCK*s);
     }
+  mg.strokeStyle = '#20242b'; mg.lineWidth = BWAY_W*2*s; mg.lineJoin = 'round';
+  mg.beginPath();
+  BWAY.forEach((p, k) => { const [mx,my] = toMap(p[0], p[1]);
+                           k ? mg.lineTo(mx,my) : mg.moveTo(mx,my); });
+  mg.stroke();
+  mg.lineWidth = 1;
   for(const b of bridges){
     const [x0,y0] = toMap(b.a, b.line - DECK_HALF);
     mg.fillStyle = '#4a5058';
@@ -1746,6 +1900,15 @@ function drawBigMap(){
     bg.fillStyle = DCOL[grid[i][j]] || '#39404d';
     bg.fillRect(ox + i*PITCH*s, oy + j*PITCH*s, PITCH*s, PITCH*s);
   }
+  bg.strokeStyle = '#20242b'; bg.lineWidth = Math.max(1.5, BWAY_W*2*s);
+  bg.lineJoin = 'round';
+  bg.beginPath();
+  BWAY.forEach((p, k) => {
+    const mx = ox + (p[0] - OFF_X)*s, my = oy + (p[1] - OFF_Z)*s;
+    k ? bg.lineTo(mx, my) : bg.moveTo(mx, my);
+  });
+  bg.stroke();
+  bg.lineWidth = 1;
   bg.fillStyle = '#8d949f';
   for(const b of bridges)
     bg.fillRect(ox + (b.a - OFF_X)*s, oy + (b.line - OFF_Z - DECK_HALF)*s,
