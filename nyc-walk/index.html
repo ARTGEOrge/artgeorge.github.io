@@ -2610,7 +2610,7 @@ function drawMap(){
   for(const c of police){
     const [mx,my] = toMap(c.g.position.x, c.g.position.z);
     if(mx<0||my<0||mx>W||my>H) continue;
-    mg.fillStyle = Math.sin(clock.elapsedTime*9 + c.phase) > 0 ? '#ff3b30' : '#3d7bff';
+    mg.fillStyle = ((clock.elapsedTime*2.1 + c.phase) % 1) < 0.5 ? '#ff3b30' : '#3d7bff';
     mg.fillRect(mx-2, my-2, 4, 4);
   }
   mg.save(); mg.translate(W/2, H/2);
@@ -2778,26 +2778,95 @@ const chase = { on:false, level:0, clear:0, cool:0, wail:0 };
 const elWanted = document.getElementById('wanted');
 let policeGeoCache = null, sirenGeoCache = null;
 
+/* An RMP, not a blue box: white over a blue belt, a low-profile bar across the
+ * roof, a push bumper on the front, mirrors, spotlight on the A-pillar and a
+ * whip aerial on the boot. */
+const NYPD_WHITE = 0xe9edf1, NYPD_BLUE = 0x18337d, TRIMDK = 0x1a1e24;
 function policeGeo(){
   if(policeGeoCache) return policeGeoCache;
   const p = [];
-  p.push(colored(new THREE.BoxGeometry(2.0, 0.85, 4.4), 0x1b2740).translate(0,0.75,0));
-  p.push(colored(new THREE.BoxGeometry(2.02, 0.5, 1.5), 0xdfe4ea).translate(0,0.78,0.4));
-  p.push(colored(new THREE.BoxGeometry(1.82, 0.8, 2.3), 0x161c26).translate(0,1.5,-0.15));
-  for(const [dx,dz] of [[-0.95,1.4],[0.95,1.4],[-0.95,-1.4],[0.95,-1.4]]){
-    const w = colored(new THREE.CylinderGeometry(0.42,0.42,0.28,8), 0x14171a);
-    w.rotateZ(Math.PI/2); w.translate(dx,0.42,dz); p.push(w);
+  const add = (g, y, z, x) => p.push(g.translate(x || 0, y, z || 0));
+  // body: sill, the blue belt, then white above it. The belt spans 0.59-0.97
+  // and the door decal is laid over exactly that band.
+  add(colored(new THREE.BoxGeometry(2.02, 0.32, 4.5), TRIMDK), 0.44);
+  add(colored(new THREE.BoxGeometry(2.06, 0.38, 4.3), NYPD_BLUE), 0.78);   // belt
+  add(colored(new THREE.BoxGeometry(2.00, 0.40, 4.5), NYPD_WHITE), 1.17);
+  add(colored(new THREE.BoxGeometry(1.94, 0.18, 1.5), NYPD_WHITE), 1.44, 1.5);   // bonnet
+  add(colored(new THREE.BoxGeometry(1.94, 0.18, 1.1), NYPD_WHITE), 1.44, -1.7);  // boot
+  // greenhouse: glass all round, white pillars, white roof
+  add(colored(new THREE.BoxGeometry(1.80, 0.60, 2.25), 0x11161d), 1.67, -0.1);
+  add(colored(new THREE.BoxGeometry(1.70, 0.13, 2.0), NYPD_WHITE), 2.02, -0.15);
+  for(const s of [-1, 1])
+    add(colored(new THREE.BoxGeometry(0.1, 0.60, 0.12), NYPD_WHITE), 1.67, 1.0, s*0.86);
+  // wheels, with a hub that catches the light
+  for(const [dx,dz] of [[-0.97,1.42],[0.97,1.42],[-0.97,-1.42],[0.97,-1.42]]){
+    const w = colored(new THREE.CylinderGeometry(0.44,0.44,0.3,10), 0x101215);
+    w.rotateZ(Math.PI/2); add(w, 0.44, dz, dx);
+    const h = colored(new THREE.CylinderGeometry(0.22,0.22,0.34,8), 0x8f959c);
+    h.rotateZ(Math.PI/2); add(h, 0.44, dz, dx);
   }
-  p.push(colored(new THREE.BoxGeometry(1.5,0.16,0.42), 0x22262b).translate(0,1.94,-0.15));
+  // push bumper on the nose
+  add(colored(new THREE.BoxGeometry(1.86, 0.12, 0.12), 0x2a2f36), 0.62, 2.34);
+  add(colored(new THREE.BoxGeometry(1.86, 0.12, 0.12), 0x2a2f36), 1.02, 2.34);
+  for(const s of [-1, 1])
+    add(colored(new THREE.BoxGeometry(0.13, 0.62, 0.13), 0x2a2f36), 0.82, 2.34, s*0.72);
+  // grille, lamps, plates
+  add(colored(new THREE.BoxGeometry(1.4, 0.20, 0.1), 0x0d0f12), 1.20, 2.27);
+  for(const s of [-1, 1]){
+    add(colored(new THREE.BoxGeometry(0.42, 0.16, 0.1), 0xfff4d6), 1.22, 2.27, s*0.74);
+    add(colored(new THREE.BoxGeometry(0.42, 0.18, 0.1), 0x8e1414), 1.20, -2.27, s*0.72);
+    add(colored(new THREE.BoxGeometry(0.16, 0.24, 0.3), TRIMDK), 1.52, 1.05, s*1.02); // mirror
+  }
+  add(colored(new THREE.BoxGeometry(0.5, 0.16, 0.06), 0xd8dce2), 0.72, 2.32);
+  // A-pillar spotlight and the aerial
+  add(colored(new THREE.CylinderGeometry(0.11, 0.11, 0.2, 8).rotateX(Math.PI/2),
+              0xc9ced4), 1.70, 1.16, -0.92);
+  add(colored(new THREE.CylinderGeometry(0.03, 0.04, 0.9, 5), 0x2a2f36), 2.00, -1.9);
+  // light bar: dark base on two feet, spanning the roof
+  add(colored(new THREE.BoxGeometry(1.62, 0.08, 0.36), 0x15181d), 2.12, -0.15);
+  for(const s of [-1, 1])
+    add(colored(new THREE.BoxGeometry(0.16, 0.07, 0.3), 0x15181d), 2.07, -0.15, s*0.6);
   policeGeoCache = mergeGeos(p);
   return policeGeoCache;
 }
+// the lit segments of the bar, kept separate so they can be flashed
 function sirenGeo(){
   if(sirenGeoCache) return sirenGeoCache;
-  const l = colored(new THREE.BoxGeometry(0.6,0.26,0.4), 0xffffff).translate(-0.42,2.06,-0.15);
-  const r = colored(new THREE.BoxGeometry(0.6,0.26,0.4), 0xffffff).translate(0.42,2.06,-0.15);
-  sirenGeoCache = { l: mergeGeos([l]), r: mergeGeos([r]) };
+  const seg = (x, w) => colored(new THREE.BoxGeometry(w, 0.18, 0.32), 0xffffff)
+                          .translate(x, 2.24, -0.15);
+  sirenGeoCache = {
+    l: mergeGeos([seg(-0.52, 0.52), seg(-0.02, 0.2)]),
+    r: mergeGeos([seg( 0.52, 0.52), seg( 0.24, 0.2)])
+  };
   return sirenGeoCache;
+}
+// NYPD on both doors, one shared texture
+let nypdMat = null;
+function policeDecal(){
+  if(!nypdMat){
+    const ca = document.createElement('canvas'); ca.width = 256; ca.height = 64;
+    const g = ca.getContext('2d');
+    g.fillStyle = '#18337d'; g.fillRect(0,0,256,64);
+    g.fillStyle = '#ffffff'; g.fillRect(0,3,256,3); g.fillRect(0,58,256,3);
+    g.font = 'bold 34px Helvetica, Arial';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('NYPD', 128, 33);
+    const t = new THREE.CanvasTexture(ca);
+    t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+    nypdMat = new THREE.MeshLambertMaterial({map:t, vertexColors:true});
+  }
+  const parts = [];
+  for(const s of [-1, 1]){
+    const pl = new THREE.PlaneGeometry(2.5, 0.38);
+    if(s < 0){                                  // mirror it so it reads forwards
+      const uv = pl.attributes.uv;
+      for(let i=0;i<uv.count;i++) uv.setX(i, 1 - uv.getX(i));
+    }
+    pl.rotateY(s * Math.PI/2);
+    pl.translate(s * 1.035, 0.78, -0.1);       // dead on the blue belt
+    parts.push(colored(pl, 0xffffff));
+  }
+  return new THREE.Mesh(mergeGeos(parts), nypdMat);
 }
 // two-tone wail, built from the same oscillators as the horn
 function siren(){
@@ -2830,7 +2899,7 @@ function addCop(target){
   const sg = sirenGeo();
   const lampL = new THREE.Mesh(sg.l, new THREE.MeshBasicMaterial({color:0xff2b2b}));
   const lampR = new THREE.Mesh(sg.r, new THREE.MeshBasicMaterial({color:0x2b6bff}));
-  g.add(body, lampL, lampR);
+  g.add(body, lampL, lampR, policeDecal());
   // come in from behind, off to one side, far enough back to be a chase —
   // and on land, or they arrive in the East River
   const ax = target ? target.g.position.x : player.x;
@@ -2932,9 +3001,12 @@ function updateChase(dt){
     if(Math.abs(rx-nx) > 0.05 || Math.abs(rz-nz) > 0.05) c.speed *= 0.55;
     g.position.set(rx, roadY(rx, rz), rz);
     g.rotation.y = c.heading;
-    const on = Math.sin(clock.elapsedTime*9 + c.phase) > 0;
-    c.lampL.material.color.setHex(on ? 0xff2b2b : 0x3a0e0e);
-    c.lampR.material.color.setHex(on ? 0x2b6bff : 0x0e1a3a);
+    // real bars double-blink one side, then the other, rather than pulsing
+    const ph = (clock.elapsedTime*2.1 + c.phase) % 1;
+    const lOn = ph < 0.09 || (ph > 0.15 && ph < 0.24);
+    const rOn = (ph > 0.5 && ph < 0.59) || (ph > 0.65 && ph < 0.74);
+    c.lampL.material.color.setHex(lOn ? 0xff3020 : 0x3a0e0e);
+    c.lampR.material.color.setHex(rOn ? 0x3060ff : 0x0e1a3a);
     if(c.target){
       if(dist < 6){                            // pulled over and taken away
         if(Math.hypot(px - g.position.x, pz - g.position.z) < 150)
