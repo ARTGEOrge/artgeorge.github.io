@@ -2988,9 +2988,13 @@ function updateChase(dt){
     let turn = want - c.heading;
     while(turn >  Math.PI) turn -= Math.PI*2;
     while(turn < -Math.PI) turn += Math.PI*2;
-    c.heading += Math.max(-2.3*dt, Math.min(2.3*dt, turn));
-    const target = dist < 9 ? 6 : c.top;
-    c.speed += (target - c.speed) * Math.min(1, dt*1.6);
+    c.heading += Math.max(-2.8*dt, Math.min(2.8*dt, turn));
+    // Slow into hard turns only. That shrinks the turning circle so a unit
+    // closes on its target instead of orbiting it, and it never gives up
+    // ground on a runner — easing off near the target meant a car doing 30
+    // could sit 8 units in front of the police indefinitely.
+    const wantV = c.top * Math.max(0.28, Math.cos(turn));
+    c.speed += (wantV - c.speed) * Math.min(1, dt*2.2);
     const nx = g.position.x + Math.sin(c.heading)*c.speed*dt;
     const nz = g.position.z + Math.cos(c.heading)*c.speed*dt;
     // same collision as the player, so they slide along the buildings and
