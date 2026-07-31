@@ -2139,7 +2139,7 @@ function placeCar(c, seg, pos){
   c.seg = seg;
   c.dir = rnd() < 0.5 ? 1 : -1;
   c.pos = pos !== undefined ? pos : rr(seg.a + 6, seg.b - 6);
-  c.turn = 0;
+  c.turn = 0; c.turning = false; c.crossWait = 0;
   c.parked = false;
   c.vel = 0;
   c.signWait = SIGN_WAIT; c.signDone = null;
@@ -3201,7 +3201,7 @@ function dropIn(c){
     const wx = s.ox + s.ux*pos + s.nx*lane, wz = s.oz + s.uz*pos + s.nz*lane;
     if(carNear(wx, wz, 9, c)) continue;
     placeCar(c, s, pos);
-    c.dir = dir; c.jam = 0; c.wantTurn = false; c.turn = 0;
+    c.dir = dir; c.jam = 0; c.wantTurn = false; c.turn = 0; c.turning = false;
     faceCar(c);
     return true;
   }
@@ -3217,7 +3217,7 @@ function updateTraffic(dt){
     if(c.parked && !mine) continue;
     // a car mid-turn is sitting in the road, so it still has to be visible to
     // everyone else — leaving it out is how cars drove through it
-    if(!mine && c.turn <= 0){
+    if(!mine && !c.turning){
       let a = segCars.get(c.seg);
       if(!a){ a = []; segCars.set(c.seg, a); }
       a.push(c);
@@ -3233,19 +3233,29 @@ function updateTraffic(dt){
     if(drive && c === drive.c) continue;
     if(c.parked) continue;
     const g = c.g;
-    if(c.turn > 0){                      // three-point turn at a dead end
-      c.turn -= dt;
-      g.rotation.y += Math.PI * dt / 1.1;
+    /* Three-point turn at a dead end, in two phases. Half a turn of rotation
+     * and NO MORE: the rotation is metered out over exactly 1.1s, and the wait
+     * afterwards for the far lane to clear adds none of it. Rotating while
+     * waiting is what had them spinning on the spot — a blocked car kept being
+     * given another fraction of a turn, for ever. */
+    if(c.turning){
       c.vel = 0;
-      if(c.turn <= 0){
-        // coming out of the turn puts it on the far side of the road, a 5.4
-        // jump sideways: only take it when that spot is empty, or it lands
-        // inside whatever was coming the other way
-        const s = c.seg, lane = -c.dir * 2.7;
-        const wx = s.ox + s.ux*c.pos + s.nx*lane, wz = s.oz + s.uz*c.pos + s.nz*lane;
-        if(carNear(wx, wz, 4.2, c)) c.turn = 0.15;      // hold, try again shortly
-        else { c.dir *= -1; c.signDone = null; faceCar(c); }
+      if(c.turn > 0){                                   // still coming round
+        const step = Math.min(dt, c.turn);
+        g.rotation.y += Math.PI * step / 1.1;
+        c.turn -= dt;
+        continue;
       }
+      // round already: cross to the far lane the moment it is empty
+      const s = c.seg, lane = -c.dir * 2.7;
+      const wx = s.ox + s.ux*c.pos + s.nx*lane, wz = s.oz + s.uz*c.pos + s.nz*lane;
+      if(carNear(wx, wz, 4.2, c)){
+        c.crossWait = (c.crossWait || 0) + dt;
+        if(c.crossWait > 3){ c.turning = false; c.crossWait = 0; dropIn(c); }
+        continue;
+      }
+      c.turning = false; c.crossWait = 0;
+      c.dir *= -1; c.signDone = null; faceCar(c);
       continue;
     }
     // red light: ease down to the stop line and hold there until it turns
@@ -3315,7 +3325,8 @@ function updateTraffic(dt){
     // a three-point turn blocks both lanes, so only begin one with room for it
     if(c.wantTurn){
       if(!carNear(c.g.position.x, c.g.position.z, 5.0, c)){
-        c.turn = 1.1; c.wantTurn = false; c.jam = 0; c.vel = 0;
+        c.turn = 1.1; c.turning = true; c.wantTurn = false;
+        c.jam = 0; c.crossWait = 0; c.vel = 0;
         continue;
       }
       v = 0;
