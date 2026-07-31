@@ -2129,6 +2129,7 @@ function placeCar(c, seg, pos){
   c.pos = pos !== undefined ? pos : rr(seg.a + 6, seg.b - 6);
   c.turn = 0;
   c.parked = false;
+  c.vel = 0;
   c.signWait = SIGN_WAIT; c.signDone = null;
 }
 const carLane = c => c.dir * 2.7;      // right-hand side of the road
@@ -2920,17 +2921,47 @@ function busted(){
   endChase('Busted. Back to the start.');
 }
 
-// Hit another car and you do not lose the game — you bounce off it, and
-// somebody calls it in. The police come to arrest you; getting caught is what
-// actually ends the run.
-function crashIncident(){
+/* Hit another car and you do not lose the game — you bounce off it, and
+ * somebody calls it in. But only if it was your doing: work out how fast each
+ * car was closing on the point of contact, and if they were driving into you
+ * rather than you into them, it is their fault and no one calls anybody. A car
+ * running across a junction on its green can T-bone you while you sit still,
+ * and you should not be arrested for that. */
+function crashIncident(o){
+  const g = drive.c.g;
+  const dx = o.g.position.x - g.position.x, dz = o.g.position.z - g.position.z;
+  const d = Math.hypot(dx, dz) || 1;
+  const nx = dx/d, nz = dz/d;                                  // you -> them
+  const mine  =  (Math.sin(drive.heading)*nx + Math.cos(drive.heading)*nz) * drive.speed;
+  const yours = -(Math.sin(o.g.rotation.y)*nx + Math.cos(o.g.rotation.y)*nz) * (o.vel || 0);
   drive.speed *= -0.25;                       // shunted back off them
   flash.style.opacity = 0.45;
   setTimeout(() => flash.style.opacity = 0, 200);
   honk(0.26);
+  if(mine + yours < 7) return;                // a bumper tap, not a collision
+  if(mine <= yours + 1.5){                    // they closed on you, not you on them
+    if(yours > 4) toast('They drove into you.');
+    return;
+  }
   if(chase.cool > 0) return;                  // one call-out per collision
   chase.cool = 2.5;
   startChase('You hit a car. Police are coming to arrest you.');
+}
+// Someone runs into you while you are stopped or pulling away. Never your
+// fault, so it is a knock and a horn and nothing else.
+let shuntFx = 0;
+function shunted(o, dt){
+  shuntFx -= dt;
+  if(shuntFx > 0 || (o.vel || 0) < 5) return;
+  shuntFx = 2.0;
+  const g = drive.c.g;
+  const dx = g.position.x - o.g.position.x, dz = g.position.z - o.g.position.z;
+  const d = Math.hypot(dx, dz) || 1;
+  drive.speed += ((Math.sin(drive.heading)*dx + Math.cos(drive.heading)*dz)/d) * o.vel * 0.3;
+  flash.style.opacity = 0.3;
+  setTimeout(() => flash.style.opacity = 0, 150);
+  honk(0.2);
+  toast('They drove into you.');
 }
 
 function updateDriving(dt, mf, ms){
@@ -2961,20 +2992,24 @@ function updateDriving(dt, mf, ms){
   }
   // hit another car and you bounce off it rather than through it; the car
   // stays where it was this frame so the two never end up overlapping
-  let hit = false;
+  let hit = null, touch = null;
   for(const o of cars){
     if(o === c || o.parked) continue;
     const dxN = o.g.position.x - rx, dzN = o.g.position.z - rz;
     const dN = dxN*dxN + dzN*dzN;
     if(dN >= 11.5) continue;
+    touch = o;
     // already touching is not a fresh hit if this move pulls away from them,
     // or a shunt could wedge you against a car you can never reverse out of
     const dxC = o.g.position.x - g.position.x, dzC = o.g.position.z - g.position.z;
-    if(dN >= dxC*dxC + dzC*dzC) continue;
-    hit = true; break;
+    if(dN < dxC*dxC + dzC*dzC){ hit = o; break; }
   }
-  if(hit) crashIncident();
-  else { g.position.x = rx; g.position.z = rz; }
+  if(hit) crashIncident(hit);
+  else {
+    g.position.x = rx; g.position.z = rz;
+    // sitting still and someone runs into you: you feel it, nobody blames you
+    if(touch) shunted(touch, dt);
+  }
   checkRedLight(g.position.x, g.position.z, drive.heading, Math.abs(drive.speed));
   // everything downstream follows where the car actually ended up, which on a
   // collision is where it already was
@@ -3039,6 +3074,7 @@ function updateTraffic(dt){
     if(c.turn > 0){                      // three-point turn at a dead end
       c.turn -= dt;
       g.rotation.y += (c.seg.ax === 'x' ? 1 : 1) * Math.PI * dt / 1.1;
+      c.vel = 0;
       // turned around, so the sign it just served is ahead of it again
       if(c.turn <= 0){ c.dir *= -1; c.signDone = null; faceCar(c); }
       continue;
@@ -3089,6 +3125,7 @@ function updateTraffic(dt){
     // ...unless it has been stuck long enough that something has gone wrong
     if(yield_ && c.jam < 4){ v = 0; c.jam += dt; }
     else if(!yield_) c.jam = Math.max(0, c.jam - dt*0.5);
+    c.vel = v;                    // what it is actually doing, for fault in a crash
     c.pos += v * c.dir * dt;
     // on a chained road the car is handed to the next leg and keeps going;
     // only a real dead end makes it turn around
