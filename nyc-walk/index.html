@@ -543,6 +543,14 @@ function uvScale(geo, w, h, d){
   set(0, rx, ry); set(4, rx, ry); set(16, rz, ry); set(20, rz, ry);
   uv.needsUpdate = true;
 }
+const RSEG = 20;                       // segments around a full round tier
+function cylUV(geo, r, h){
+  const uv = geo.attributes.uv;
+  const ru = Math.max(2, Math.round(2*Math.PI*r / TILE)),
+        rv = Math.max(1, Math.round(h / TILE));
+  for(let i=0;i<uv.count;i++) uv.setXY(i, uv.getX(i)*ru, uv.getY(i)*rv);
+  uv.needsUpdate = true;
+}
 function shopUV(geo, w, d){
   const uv = geo.attributes.uv;
   const ru = Math.max(1, Math.round(d/SHOP_TILE)), rw = Math.max(1, Math.round(w/SHOP_TILE));
@@ -617,7 +625,26 @@ function addMark(c, w, l, x, z, turn, color){
 }
 
 // ---------- buildings ----------
-function addStorefront(c, cx, cz, w, d){
+function addStorefront(c, cx, cz, w, d, shape){
+  if(shape === 'round'){                 // a drum gets a drum-shaped shopfront
+    const r = Math.min(w, d)/2;
+    const ring = (rad, hh, yy, col) => {
+      const g = colored(new THREE.CylinderGeometry(rad, rad, hh, RSEG), col);
+      g.translate(cx, yy, cz); return g;
+    };
+    c.store.push(ring(r+0.15, 3.5,  CURB+1.75, pick(SHOP_BASE)),
+                 ring(r+0.33, 0.34, CURB+3.62, 0x1a1d21),
+                 ring(r+0.58, 0.24, CURB+3.02, pick(AWNING)));
+    const gg = new THREE.CylinderGeometry(r+0.23, r+0.23, 1.7, RSEG, 1, true);
+    const uv = gg.attributes.uv;
+    const ru = Math.max(2, Math.round(2*Math.PI*(r+0.23) / SHOP_TILE));
+    for(let i=0;i<uv.count;i++) uv.setXY(i, uv.getX(i)*ru, uv.getY(i));
+    uv.needsUpdate = true;
+    const glass = colored(gg, 0xffffff);
+    glass.translate(cx, CURB+1.72, cz);
+    c.shop.push(glass);
+    return;
+  }
   const base = colored(new THREE.BoxGeometry(w+0.3, 3.5, d+0.3), pick(SHOP_BASE));
   base.translate(cx, CURB + 1.75, cz);
   const corn = colored(new THREE.BoxGeometry(w+0.66, 0.34, d+0.66), 0x1a1d21);
@@ -631,15 +658,18 @@ function addStorefront(c, cx, cz, w, d){
   glass.translate(cx, CURB + 1.72, cz);
   c.shop.push(glass);
 }
+// Which wall of this lot looks out at a street, so the things that only ever
+// go on the front — fire escapes, bay windows — end up on the front.
+function streetFace(cx, cz){
+  const dx = cx - midX(idxX(cx)), dz = cz - midZ(idxZ(cz));
+  if(Math.abs(dx) < 1.5 && Math.abs(dz) < 1.5)
+    return { ax: rnd() < 0.5 ? 'x' : 'z', sgn: rnd() < 0.5 ? -1 : 1 };
+  if(Math.abs(dx) >= Math.abs(dz)) return { ax:'x', sgn: Math.sign(dx) || 1 };
+  return { ax:'z', sgn: Math.sign(dz) || 1 };
+}
 // The zigzag of steel down the front of every pre-war walk-up.
 function fireEscape(c, cx, cz, w, d, h){
-  const ci = idxX(cx), cj = idxZ(cz);
-  const dx = cx - midX(ci), dz = cz - midZ(cj);
-  let ax, sgn;
-  if(Math.abs(dx) < 1.5 && Math.abs(dz) < 1.5){
-    ax = rnd() < 0.5 ? 'x' : 'z'; sgn = rnd() < 0.5 ? -1 : 1;
-  } else if(Math.abs(dx) >= Math.abs(dz)){ ax = 'x'; sgn = Math.sign(dx) || 1; }
-  else { ax = 'z'; sgn = Math.sign(dz) || 1; }
+  const { ax, sgn } = streetFace(cx, cz);
   const span  = ax === 'x' ? d : w;
   const bw    = Math.min(5.2, span*0.45);
   if(bw < 2) return;
@@ -700,6 +730,45 @@ function roofExtras(c, cx, cz, top, w, d){
     c.roof.push(a);
   }
 }
+// A tier as a square prism, a rounded-corner prism, or a full drum. New York
+// has all three: ordinary lots, the streamline-moderne corners that wrap an
+// avenue, and the round towers (the Lipstick Building, 200 Central Park South).
+// Returns raw geometry so the caller can colour it and file it in a bucket.
+function massGeo(shape, cx, cz, y, w, d, h, textured){
+  const out = [];
+  if(shape === 'round'){
+    const r = Math.min(w, d)/2;
+    const g = new THREE.CylinderGeometry(r, r, h, RSEG, 1, true);
+    if(textured) cylUV(g, r, h);
+    g.translate(cx, y + h/2, cz);
+    out.push(g);
+  } else if(shape === 'soft'){
+    const r = Math.min(5.5, Math.min(w, d)*0.24);
+    const a = new THREE.BoxGeometry(w - 2*r, h, d),
+          b = new THREE.BoxGeometry(w, h, d - 2*r);
+    if(textured){ uvScale(a, w - 2*r, h, d); uvScale(b, w, h, d - 2*r); }
+    a.translate(cx, y + h/2, cz); b.translate(cx, y + h/2, cz);
+    out.push(a, b);
+    // theta 0 faces +Z and runs toward +X, so each corner gets its own quarter
+    const corners = [[1,1,0], [1,-1,Math.PI/2], [-1,-1,Math.PI], [-1,1,Math.PI*1.5]];
+    for(const [sx, sz, t0] of corners){
+      const q = new THREE.CylinderGeometry(r, r, h, 7, 1, true, t0, Math.PI/2);
+      if(textured) cylUV(q, r, h);
+      q.translate(cx + sx*(w/2 - r), y + h/2, cz + sz*(d/2 - r));
+      out.push(q);
+    }
+  } else {
+    const g = new THREE.BoxGeometry(w, h, d);
+    if(textured) uvScale(g, w, h, d);
+    g.translate(cx, y + h/2, cz);
+    out.push(g);
+  }
+  return out;
+}
+function massPush(list, shape, cx, cz, y, w, d, h, color){
+  for(const g of massGeo(shape, cx, cz, y, w, d, h, false)) list.push(colored(g, color));
+}
+
 // 1916 zoning gave New York its wedding-cake skyline: the taller the tower,
 // the more times it has to step back off the lot line on the way up.
 function tierMass(w, d, h){
@@ -719,47 +788,89 @@ function tierMass(w, d, h){
 function building(cx, cz, w, d, h, variant){
   const c = chunkOf(cx, cz);
   const glassy = GLASSY.has(variant);
+  const squarish = Math.abs(w - d) < Math.min(w, d)*0.3;
+  // a round tower needs a squarish lot; rounded corners suit anything wide enough
+  let shape = 'box';
+  if(squarish && h > 44 && Math.min(w, d) > 15 && rnd() < (glassy ? 0.22 : 0.10)) shape = 'round';
+  else if(Math.min(w, d) > 13 && rnd() < 0.20) shape = 'soft';
+
   const tiers = tierMass(w, d, h);
   let y = CURB;
   for(let k=0;k<tiers.length;k++){
     const [tw, td, th] = tiers[k];
-    const geo = new THREE.BoxGeometry(tw, th, td);
-    uvScale(geo, tw, th, td);
-    const g = colored(geo, 0xffffff);
-    g.translate(cx, y + th/2, cz);
-    c.bldg[variant].push(g);
+    for(const g of massGeo(shape, cx, cz, y, tw, td, th, true))
+      c.bldg[variant].push(colored(g, 0xffffff));
     // masonry gets a heavy projecting cornice, glass a thin parapet band
     const lip = glassy ? 0.34 : 0.92, ch = glassy ? 0.55 : 1.25;
-    const p = colored(new THREE.BoxGeometry(tw + lip*2, ch, td + lip*2), TRIM[variant]);
-    p.translate(cx, y + th - ch*0.15, cz);
-    c.roof.push(p);
-    if(!glassy && th > 14){        // string course partway up the shaft
-      const s = colored(new THREE.BoxGeometry(tw + 0.5, 0.45, td + 0.5), TRIM[variant]);
-      s.translate(cx, y + 4.6, cz);
-      c.roof.push(s);
-    }
+    massPush(c.roof, shape, cx, cz, y + th - ch*0.65, tw + lip*2, td + lip*2, ch, TRIM[variant]);
+    if(!glassy && th > 14)         // string course partway up the shaft
+      massPush(c.roof, shape, cx, cz, y + 4.6, tw + 0.5, td + 0.5, 0.45, TRIM[variant]);
     y += th;
   }
-  addSolid(cx, cz, w, d);
-  addStorefront(c, cx, cz, w, d);
+  addSolid(cx, cz, shape === 'round' ? w*0.9 : w, shape === 'round' ? d*0.9 : d);
+  addStorefront(c, cx, cz, w, d, shape);
   const [tw, td] = tiers[tiers.length-1];
-  // flat tar roof inside the parapet
-  const slab = colored(new THREE.BoxGeometry(tw - 0.6, 0.5, td - 0.6), 0x3c3f44);
+  // flat tar roof inside the parapet — capped, so a drum needs a real disc
+  const slab = shape === 'round'
+    ? colored(new THREE.CylinderGeometry(Math.min(tw,td)/2 - 0.4, Math.min(tw,td)/2 - 0.4,
+                                         0.5, RSEG), 0x3c3f44)
+    : colored(new THREE.BoxGeometry(tw - 0.6, 0.5, td - 0.6), 0x3c3f44);
   slab.translate(cx, y - 0.1, cz);
   c.roof.push(slab);
-  roofExtras(c, cx, cz, y + 0.2, tw, td);
-  if(h > 58) crown(c, cx, cz, y, tw, td, glassy);
-  else if(!glassy && h < 30 && rnd() < 0.5) fireEscape(c, cx, cz, w, d, h);
+  // keep tanks and bulkheads inside the drum rather than out over thin air
+  const rk = shape === 'round' ? 0.7 : 1;
+  roofExtras(c, cx, cz, y + 0.2, tw*rk, td*rk);
+  if(h > 58) crown(c, cx, cz, y, tw, td, glassy, shape);
+  else if(!glassy && h < 30 && shape !== 'round'){
+    if(rnd() < 0.28) bowFront(c, cx, cz, w, d, h, variant);
+    else if(rnd() < 0.5) fireEscape(c, cx, cz, w, d, h);
+  }
 }
-// Spire, mast or stepped cap — the thing you pick a tower out by from blocks away.
-function crown(c, cx, cz, y, w, d, glassy){
+// Bow-front brownstone: the rounded bay that swells out over the stoop.
+function bowFront(c, cx, cz, w, d, h, variant){
+  const f = streetFace(cx, cz);
+  const span = f.ax === 'x' ? d : w;
+  const r = Math.min(3.4, span*0.30);
+  if(r < 1.6) return;
+  const bh = h - 4.4;
+  if(bh < 6) return;
+  // half drum, opening rotated to face out of the wall we picked
+  const face = f.ax === 'x' ? (f.sgn > 0 ? Math.PI/2 : Math.PI*1.5)
+                            : (f.sgn > 0 ? 0 : Math.PI);
+  const g = new THREE.CylinderGeometry(r, r, bh, 12, 1, true, face - Math.PI/2, Math.PI);
+  cylUV(g, r, bh);
+  g.translate(f.ax === 'x' ? cx + f.sgn*(w/2) : cx, CURB + 4.4 + bh/2,
+              f.ax === 'z' ? cz + f.sgn*(d/2) : cz);
+  c.bldg[variant].push(colored(g, 0xffffff));
+  const cap = colored(new THREE.CylinderGeometry(r + 0.5, r + 0.5, 0.7, 12, 1, false,
+                                                 face - Math.PI/2, Math.PI), TRIM[variant]);
+  cap.translate(f.ax === 'x' ? cx + f.sgn*(w/2) : cx, CURB + 4.4 + bh + 0.2,
+                f.ax === 'z' ? cz + f.sgn*(d/2) : cz);
+  c.roof.push(cap);
+}
+// Spire, dome, mast or stepped cap — what you pick a tower out by from blocks away.
+function crown(c, cx, cz, y, w, d, glassy, shape){
   const r = rnd();
+  if(!glassy && r < 0.30){
+    // Beaux-Arts drum and copper dome, gone green — the Helmsley, the Municipal
+    const rad = Math.min(w, d)*0.30;
+    if(rad > 1.4){
+      const drumH = rr(3, 6.5);
+      const drum = colored(new THREE.CylinderGeometry(rad, rad, drumH, 14), 0xb9b1a0);
+      drum.translate(cx, y + drumH/2, cz); c.roof.push(drum);
+      const dome = colored(new THREE.SphereGeometry(rad*1.06, 14, 8, 0, Math.PI*2,
+                                                    0, Math.PI/2), 0x4f7d6a);
+      dome.translate(cx, y + drumH, cz); c.roof.push(dome);
+      const fin = colored(new THREE.ConeGeometry(rad*0.14, rr(2.5, 5), 6), 0x8d9a86);
+      fin.translate(cx, y + drumH + rad*1.06 + 1.4, cz); c.roof.push(fin);
+      return;
+    }
+  }
   if(r < 0.34){                       // stepped art-deco cap
     let cw = w*0.7, cd = d*0.7, cy = y;
     for(let k=0;k<3;k++){
       const hh = rr(1.6, 3.0);
-      const b = colored(new THREE.BoxGeometry(cw, hh, cd), 0x8d8f94);
-      b.translate(cx, cy + hh/2, cz); c.roof.push(b);
+      massPush(c.roof, shape, cx, cz, cy, cw, cd, hh, 0x8d8f94);
       cy += hh; cw *= 0.68; cd *= 0.68;
     }
     const sp = colored(new THREE.ConeGeometry(Math.min(cw,cd)*0.5, rr(6,13), 8), 0x9aa0a8);
