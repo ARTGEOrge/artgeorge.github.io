@@ -2032,9 +2032,12 @@ function shopFronts(){
     const w = rr(9, 15), h = w/4;
     const cell = k % cells;
     const pl = new THREE.PlaneGeometry(w, h);
+    // Panel `cell` is drawn at canvas y = cell*H, and a canvas texture is
+    // flipped on load, so its V band is measured from the top, not the bottom.
+    // Getting this backwards showed the wrong panel, upside down.
     const uv = pl.attributes.uv;
     for(let q=0;q<uv.count;q++)
-      uv.setXY(q, uv.getX(q), (cell + 1 - uv.getY(q))/cells);
+      uv.setXY(q, uv.getX(q), (cells - 1 - cell + uv.getY(q))/cells);
     pl.rotateY(face); pl.translate(x, CURB + 5.4, z);
     signs.push(colored(pl, 0xffffff));
     // the shop below it: dark glazing under an awning
@@ -2118,79 +2121,158 @@ tasks.push(() => {
     }
     cityGroup.add(new THREE.Mesh(mergeGeos(floor), plazaMat));
   }
-  const A = 512, cell = A/4;
+  /* Real advertising, not coloured noise: wordmarks, taglines, a market board,
+   * a news ticker, show posters. The brands are invented -- putting a real
+   * company's name and livery on a billboard is their trademark, not mine to
+   * hang on a building -- but the look is what fills the square. */
+  const A = 1024, cell = A/4;
   const ca = document.createElement('canvas'); ca.width = ca.height = A;
   const g = ca.getContext('2d');
-  const HOT = ['#ff2d55','#ffcc00','#00d2ff','#ff7a00','#7cf03d','#ff4fd8',
-               '#ffffff','#3d7bff','#ff1f3d','#00e5a0','#ffe14d','#b45cff'];
+  const fit = (txt, px, max) => {            // shrink until it fits the panel
+    let s2 = px;
+    do { g.font = 'bold ' + s2 + 'px Helvetica, Arial'; s2 -= 4; }
+    while(g.measureText(txt).width > max && s2 > 10);
+  };
+  const AD = [
+    ['NOVARA',      'AUTUMN COLLECTION',   '#0d0d10', '#f4f0e8', '#c8a45c'],
+    ['ZEPHYR',      'ICE COLD SINCE 1904', '#c3122e', '#ffffff', '#ffd84d'],
+    ['LUMEN 12',    'SEE IN THE DARK',     '#0a1424', '#e8f2ff', '#3d9bff'],
+    ['STRIDE',      'RUN THE CITY',        '#101010', '#ffffff', '#7cf03d'],
+    ['MERIDIAN',    'BANK ON THE CORNER',  '#0b2f4a', '#ffffff', '#5fc8ff'],
+    ['SKYLARK',     'FLY NONSTOP',         '#123a2c', '#ffffff', '#ffd166'],
+    ['OPTIK',       'EVERY FRAME COUNTS',  '#1a1420', '#f0e6ff', '#b45cff'],
+    ['BIG APPLE',   'BURGERS ALL NIGHT',   '#7a1410', '#ffe14d', '#ffffff'],
+    ['STREAMLINE',  'WATCH ANYTHING',      '#12131a', '#ff2d55', '#ffffff'],
+    ['VOLT',        'ENERGY, BOTTLED',     '#0f1a0c', '#a8ff3d', '#ffffff'],
+  ];
   for(let k=0;k<16;k++){
     const ox = (k%4)*cell, oy = Math.floor(k/4)*cell;
-    const base = HOT[Math.floor(rnd()*HOT.length)];
-    const grd = g.createLinearGradient(ox, oy, ox+cell, oy+cell);
-    grd.addColorStop(0, base);
-    grd.addColorStop(1, HOT[Math.floor(rnd()*HOT.length)]);
-    g.fillStyle = grd; g.fillRect(ox, oy, cell, cell);
-    const style = k % 4;
-    if(style === 0){                                  // stacked colour bands
-      for(let b=0;b<5;b++){
-        g.fillStyle = HOT[Math.floor(rnd()*HOT.length)];
-        g.globalAlpha = 0.75;
-        g.fillRect(ox+6, oy + 8 + b*(cell-16)/5, cell-12, (cell-16)/5 - 5);
+    g.save(); g.beginPath(); g.rect(ox, oy, cell, cell); g.clip();
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    if(k === 3){                              // the market board
+      g.fillStyle = '#05070a'; g.fillRect(ox, oy, cell, cell);
+      g.textAlign = 'left';
+      const rows = ['NVRA','ZPHR','LMN','STRD','MRDN','SKY','OPTK','VOLT'];
+      for(let r=0;r<rows.length;r++){
+        const y = oy + 26 + r*(cell-40)/rows.length, up = rnd() < 0.55;
+        g.fillStyle = '#8e9aa8'; g.font = 'bold 26px Helvetica, Arial';
+        g.fillText(rows[r], ox + 18, y);
+        g.fillStyle = up ? '#2fe06a' : '#ff3b30';
+        g.font = 'bold 26px Helvetica, Arial';
+        g.fillText((up?'+':'-') + rr(0.1,9.9).toFixed(2) + '%', ox + 118, y);
+        g.fillText(up ? '\u25b2' : '\u25bc', ox + cell - 40, y);
       }
-    } else if(style === 1){                           // big letterform
-      g.fillStyle = 'rgba(0,0,0,.55)'; g.fillRect(ox+8, oy+8, cell-16, cell-16);
-      g.fillStyle = '#fff'; g.font = 'bold ' + Math.floor(cell*0.6) + 'px Helvetica, Arial';
-      g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText('ABCDEFGHJKMNPRSTVWXYZ'[Math.floor(rnd()*21)], ox+cell/2, oy+cell/2);
-    } else if(style === 2){                           // grid of pixels
-      for(let a=0;a<8;a++) for(let b=0;b<8;b++){
-        if(rnd() < 0.45) continue;
-        g.fillStyle = HOT[Math.floor(rnd()*HOT.length)];
-        g.globalAlpha = 0.85;
-        g.fillRect(ox + a*cell/8 + 2, oy + b*cell/8 + 2, cell/8 - 4, cell/8 - 4);
+      g.textAlign = 'center';
+      g.fillStyle = '#ffd84d'; g.font = 'bold 22px Helvetica, Arial';
+      g.fillText('MARKET LIVE', ox + cell/2, oy + cell - 16);
+    } else if(k === 7){                       // news ticker
+      g.fillStyle = '#0a0a0c'; g.fillRect(ox, oy, cell, cell);
+      g.fillStyle = '#c3122e'; g.fillRect(ox, oy + cell*0.38, cell, cell*0.24);
+      g.fillStyle = '#fff'; g.font = 'bold 30px Helvetica, Arial';
+      g.fillText('BREAKING NEWS', ox + cell/2, oy + cell*0.5);
+      g.fillStyle = '#8e9aa8'; g.font = '22px Helvetica, Arial';
+      g.fillText('CITY SETS RECORD FOR', ox + cell/2, oy + cell*0.72);
+      g.fillText('VISITORS THIS SUMMER',  ox + cell/2, oy + cell*0.80);
+      g.fillStyle = '#ffd84d'; g.font = 'bold 26px Helvetica, Arial';
+      g.fillText('7:41 PM   68\u00b0F', ox + cell/2, oy + cell*0.20);
+    } else if(k === 11 || k === 14){          // a show poster
+      const grd = g.createLinearGradient(ox, oy, ox, oy+cell);
+      grd.addColorStop(0, '#2b0a3d'); grd.addColorStop(1, '#0a0a12');
+      g.fillStyle = grd; g.fillRect(ox, oy, cell, cell);
+      for(let b=0;b<18;b++){                  // marquee bulbs
+        g.fillStyle = b % 2 ? '#ffd84d' : '#fff6cc';
+        g.beginPath(); g.arc(ox + 14 + b*(cell-28)/17, oy + 14, 6, 0, 6.3); g.fill();
+        g.beginPath(); g.arc(ox + 14 + b*(cell-28)/17, oy + cell - 14, 6, 0, 6.3); g.fill();
       }
-    } else {                                          // ticker bars
-      g.fillStyle = 'rgba(0,0,0,.6)'; g.fillRect(ox+4, oy+4, cell-8, cell-8);
-      for(let b=0;b<7;b++){
-        g.fillStyle = HOT[Math.floor(rnd()*HOT.length)];
-        g.globalAlpha = 0.9;
-        g.fillRect(ox+10, oy + 12 + b*(cell-24)/7, rr(0.2,0.95)*(cell-20), (cell-24)/7 - 4);
+      const title = k === 11 ? 'THE LAST TRAIN' : 'HARLEM NIGHTS';
+      fit(title, 54, cell - 60);
+      g.fillStyle = '#ffd84d'; g.fillText(title, ox + cell/2, oy + cell*0.42);
+      g.fillStyle = '#f0e6ff'; g.font = '24px Helvetica, Arial';
+      g.fillText('A NEW MUSICAL', ox + cell/2, oy + cell*0.56);
+      g.fillStyle = '#ffffff'; g.font = 'bold 22px Helvetica, Arial';
+      g.fillText('NOW PLAYING', ox + cell/2, oy + cell*0.70);
+    } else {                                  // a brand advertisement
+      const [name, line, bg, fg, accent] = AD[k % AD.length];
+      const grd = g.createLinearGradient(ox, oy, ox + cell, oy + cell);
+      grd.addColorStop(0, bg);
+      grd.addColorStop(1, '#000');
+      g.fillStyle = grd; g.fillRect(ox, oy, cell, cell);
+      g.fillStyle = accent;
+      g.fillRect(ox + cell*0.10, oy + cell*0.60, cell*0.80, 5);
+      if(k % 3 === 0){                        // a product block
+        g.fillStyle = accent; g.globalAlpha = 0.22;
+        g.fillRect(ox + cell*0.16, oy + cell*0.10, cell*0.68, cell*0.34);
+        g.globalAlpha = 1;
       }
+      fit(name, 76, cell - 48);
+      g.fillStyle = fg; g.fillText(name, ox + cell/2, oy + cell*0.52);
+      g.fillStyle = accent; g.font = 'bold 24px Helvetica, Arial';
+      g.fillText(line, ox + cell/2, oy + cell*0.72);
     }
-    g.globalAlpha = 1;
-    g.strokeStyle = 'rgba(0,0,0,.85)'; g.lineWidth = 5;
-    g.strokeRect(ox+2.5, oy+2.5, cell-5, cell-5);
+    g.restore();
+    g.strokeStyle = 'rgba(0,0,0,.85)'; g.lineWidth = 6;
+    g.strokeRect(ox+3, oy+3, cell-6, cell-6);
   }
   const adTex = new THREE.CanvasTexture(ca);
   adTex.colorSpace = THREE.SRGBColorSpace;
 
   const screens = [], frames = [];
-  const N = 15;
-  for(let k=0;k<N;k++){
-    const ang = (k/N)*Math.PI*2 + rr(-0.12, 0.12);
-    const rad = TSQ_R + rr(5, 16);
-    const x = TSQ.x + Math.cos(ang)*rad, z = TSQ.z + Math.sin(ang)*rad;
-    const w = rr(13, 27), h = rr(8, 17), y = rr(7, 34);
-    const face = Math.atan2(TSQ.x - x, TSQ.z - z);     // turn it to the plaza
+  // one screen, facing the plaza, showing atlas cell `ci`
+  const board = (x, z, y, w, h, face, ci, post) => {
     const pl = new THREE.PlaneGeometry(w, h);
-    const uv = pl.attributes.uv, ci = Math.floor(rnd()*16);
-    const ou = (ci%4)/4, ov = Math.floor(ci/4)/4;
-    for(let q=0;q<uv.count;q++) uv.setXY(q, ou + uv.getX(q)/4, ov + uv.getY(q)/4);
+    const uv = pl.attributes.uv;
+    const col = ci % 4, row = Math.floor(ci / 4);
+    // the canvas is flipped on load, so the V band counts down from the top
+    for(let q=0;q<uv.count;q++)
+      uv.setXY(q, (col + uv.getX(q))/4, (3 - row + uv.getY(q))/4);
     pl.rotateY(face); pl.translate(x, y + h/2, z);
     screens.push(colored(pl, 0xffffff));
-    // the scaffold the screen is bolted to
-    const bk = new THREE.BoxGeometry(w + 1.6, h + 1.6, 1.2);
+    const bk = new THREE.BoxGeometry(w + 1.4, h + 1.4, 1.0);
     bk.rotateY(face);
-    bk.translate(x - Math.sin(face)*0.9, y + h/2, z - Math.cos(face)*0.9);
+    bk.translate(x - Math.sin(face)*0.8, y + h/2, z - Math.cos(face)*0.8);
     frames.push(colored(bk, 0x14171c));
-    const post = colored(new THREE.BoxGeometry(1.1, y, 1.1), 0x1a1e24);
-    post.translate(x, y/2, z);
-    frames.push(post);
+    if(post){
+      const p2 = colored(new THREE.BoxGeometry(1.1, y, 1.1), 0x1a1e24);
+      p2.translate(x, y/2, z);
+      frames.push(p2);
+    }
+  };
+  /* Real Times Square is screens stacked on screens, floor over floor, right
+   * up the buildings — one ring of them reads as a plaza with signs, not as
+   * the square. So each face gets a column of two to four. */
+  const N = 16;
+  for(let k=0;k<N;k++){
+    const ang = (k/N)*Math.PI*2 + rr(-0.09, 0.09);
+    const rad = TSQ_R + rr(4, 15);
+    const x = TSQ.x + Math.cos(ang)*rad, z = TSQ.z + Math.sin(ang)*rad;
+    const face = Math.atan2(TSQ.x - x, TSQ.z - z);
+    const w = rr(14, 26);
+    let y = rr(6.5, 11);
+    for(let s = 0, n = ri(2, 4); s < n; s++){       // stacked up the facade
+      const h = rr(7, 13) * (s === 0 ? 1 : rr(0.7, 1.0));
+      board(x, z, y, w * (s === 0 ? 1 : rr(0.72, 1.0)), h, face,
+            Math.floor(rnd()*16), s === 0);
+      y += h + rr(1.2, 3.4);
+      if(y > 62) break;
+    }
+    // a tall portrait ribbon beside some of them
+    if(rnd() < 0.45){
+      const off = (rnd() < 0.5 ? -1 : 1) * (w/2 + rr(3, 6));
+      const rx = x + Math.cos(face)*off, rz = z - Math.sin(face)*off;
+      board(rx, rz, rr(8, 14), rr(5, 8), rr(16, 26), face, Math.floor(rnd()*16), true);
+    }
   }
-  const board = new THREE.Mesh(mergeGeos(screens),
+  // and the ticker band wrapping the corner at eye level
+  for(let k=0;k<9;k++){
+    const ang = -0.5 + (k/9)*1.7;
+    const rad = TSQ_R + 3.2;
+    const x = TSQ.x + Math.cos(ang)*rad, z = TSQ.z + Math.sin(ang)*rad;
+    board(x, z, 5.6, 9.2, 2.0, Math.atan2(TSQ.x - x, TSQ.z - z), 7, false);
+  }
+  const boards = new THREE.Mesh(mergeGeos(screens),
     new THREE.MeshBasicMaterial({map:adTex, vertexColors:true}));
-  board.frustumCulled = false;
-  cityGroup.add(board, new THREE.Mesh(mergeGeos(frames), vcMat));
+  boards.frustumCulled = false;
+  cityGroup.add(boards, new THREE.Mesh(mergeGeos(frames), vcMat));
 
   // the red steps, and a painted pedestrian island in the middle of it all
   const steps = [];
@@ -3311,11 +3393,10 @@ function policeDecal(){
   }
   const parts = [];
   for(const s of [-1, 1]){
+    // No mirroring. rotateY turns the plane's U axis and the viewer's own
+    // "right" through the same angle, so lettering reads forwards from either
+    // side on its own — flipping one side is what made that side backwards.
     const pl = new THREE.PlaneGeometry(2.5, 0.38);
-    if(s < 0){                                  // mirror it so it reads forwards
-      const uv = pl.attributes.uv;
-      for(let i=0;i<uv.count;i++) uv.setX(i, 1 - uv.getX(i));
-    }
     pl.rotateY(s * Math.PI/2);
     pl.translate(s * 1.035, 0.78, -0.1);       // dead on the blue belt
     parts.push(colored(pl, 0xffffff));
