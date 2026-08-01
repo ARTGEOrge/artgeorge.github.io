@@ -701,6 +701,26 @@ const TSQ = (() => {
   return { x: x1 + (x2-x1)*0.62, z: z1 + (z2-z1)*0.62 };
 })();
 const tsqDist = (x, z) => Math.hypot(x - TSQ.x, z - TSQ.z);
+/* Times Square is a pedestrian plaza — it has been closed to traffic since
+ * 2009. Any street whose line runs through it is shut, so the middle of the
+ * square is one paved surface rather than a crossroads with a plaza painted
+ * round it. Traffic routes around the outside. */
+// how close a road actually comes, over its whole run past the square, not
+// just at the cell centre — a boundary can clip the plaza well off centre
+const segDist = (px, pz, x0, z0, x1, z1) => {
+  const dx = x1-x0, dz = z1-z0, L = dx*dx + dz*dz;
+  let t = L ? ((px-x0)*dx + (pz-z0)*dz)/L : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return Math.hypot(x0 + dx*t - px, z0 + dz*t - pz);
+};
+for(let i=0;i<GX;i++) for(let j=0;j<GZ;j++){
+  if(segDist(TSQ.x, TSQ.z, roadX(i), cellZ(j) - STREET/2,
+                           roadX(i), cellZ(j) + BLOCK + STREET/2) < TSQ_R + ROAD/2)
+    closedX[i][j] = true;
+  if(segDist(TSQ.x, TSQ.z, cellX(i) - STREET/2, roadZ(j),
+                           cellX(i) + BLOCK + STREET/2, roadZ(j)) < TSQ_R + ROAD/2)
+    closedZ[i][j] = true;
+}
 
 // sidewalk texture is sized for a full 64-unit block; keep the texel density
 // the same on the odd-sized pieces the irregular streets leave behind
@@ -769,6 +789,7 @@ const grassMat = new THREE.MeshLambertMaterial({map:grassTex});
 
 function addMark(c, w, l, x, z, turn, color){
   if(onBway(x, z)) return;              // Broadway carries its own markings
+  if(tsqDist(x, z) < TSQ_R) return;     // and nothing is painted on the plaza
   const g = new THREE.PlaneGeometry(w, l);
   g.rotateX(-Math.PI/2);
   if(turn) g.rotateY(Math.PI/2);
@@ -1872,18 +1893,21 @@ function buildCell(i, j){
         }
       } else walkSlab(c, midX(i), midZ(j), S, S);
 
-      // a closed street is paved over and built on — the block runs through
-      if(closedX[i][j]){
+      // A closed street is paved over and built on, so the block runs through.
+      // Not inside the square though: the plaza lays its own floor there, and
+      // a building on the old roadbed would be standing in the middle of it.
+      const inSq = (x, z) => tsqDist(x, z) < TSQ_R + 10;
+      if(closedX[i][j] && !inSq(roadX(i), midZ(j))){
         const gx = roadX(i);
         walkSlab(c, gx, midZ(j), STREET, S);
         addPaved(gx - STREET/2, midZ(j) - S/2, gx + STREET/2, midZ(j) + S/2);
       }
-      if(closedZ[i][j]){
+      if(closedZ[i][j] && !inSq(midX(i), roadZ(j))){
         const gz = roadZ(j);
         walkSlab(c, midX(i), gz, S, STREET);
         addPaved(midX(i) - S/2, gz - STREET/2, midX(i) + S/2, gz + STREET/2);
       }
-      if(closedX[i][j] && closedZ[i][j]){
+      if(closedX[i][j] && closedZ[i][j] && !inSq(roadX(i), roadZ(j))){
         walkSlab(c, roadX(i), roadZ(j), STREET, STREET);
         addPaved(roadX(i) - STREET/2, roadZ(j) - STREET/2,
                  roadX(i) + STREET/2, roadZ(j) + STREET/2);
@@ -1904,12 +1928,12 @@ function buildCell(i, j){
         building(bx, bz, lw, ld, h, pick(info.pal));
       }
       // fill the old roadbed so the street visibly stops here
-      if(info.h && closedX[i][j] && !onBway(roadX(i), midZ(j))){
+      if(info.h && closedX[i][j] && !onBway(roadX(i), midZ(j)) && !inSq(roadX(i), midZ(j))){
         const bd = S * rr(0.45, 0.8);
         building(roadX(i), midZ(j) + rr(-5,5), STREET - 2.6, bd,
                  rr(info.h[0], info.h[1]) * 0.85, pick(info.pal));
       }
-      if(info.h && closedZ[i][j] && !onBway(midX(i), roadZ(j))){
+      if(info.h && closedZ[i][j] && !onBway(midX(i), roadZ(j)) && !inSq(midX(i), roadZ(j))){
         const bw = S * rr(0.45, 0.8);
         building(midX(i) + rr(-5,5), roadZ(j), bw, STREET - 2.6,
                  rr(info.h[0], info.h[1]) * 0.85, pick(info.pal));
@@ -1952,6 +1976,24 @@ tsqLight.position.set(TSQ.x, 34, TSQ.z);
 tsqLight.visible = false;
 scene.add(tsqLight);
 tasks.push(() => {
+  // the plaza floor: paving right across the square, including over the
+  // roadbeds that used to run through it, so it reads as one surface
+  {
+    const ts = 6.4, n = Math.ceil(TSQ_R/ts);
+    for(let a=-n; a<=n; a++){
+      let lo = null, hi = null;
+      for(let b=-n; b<=n; b++){
+        const tx = TSQ.x + a*ts, tz = TSQ.z + b*ts;
+        if(tsqDist(tx, tz) > TSQ_R - ts*0.2) continue;
+        walkSlab(chunkOf(tx, tz), tx, tz, ts, ts);
+        if(lo === null) lo = tz;
+        hi = tz;
+      }
+      // one paved strip per column, so walking on it is a handful of tests
+      if(lo !== null)
+        addPaved(TSQ.x + a*ts - ts/2, lo - ts/2, TSQ.x + a*ts + ts/2, hi + ts/2);
+    }
+  }
   const A = 512, cell = A/4;
   const ca = document.createElement('canvas'); ca.width = ca.height = A;
   const g = ca.getContext('2d');
@@ -2431,6 +2473,12 @@ function relocatePed(p){
     const i = idxX(player.x) + ri(-3,3), j = idxZ(player.z) + ri(-3,3);
     if(i<0||j<0||i>=GX||j>=GZ) continue;
     if(!buildable(grid[i][j])) continue;
+    // A block that Broadway or the square has cut through no longer has a
+    // pavement all the way round it, and walking the old perimeter would put
+    // people out in the roadbed. Leave those blocks alone.
+    const S = BLOCK + WALK*2;
+    if(bwayDist(midX(i), midZ(j)) < S/2 + BWAY_W + 2) continue;
+    if(tsqDist(midX(i), midZ(j)) < S/2 + TSQ_R) continue;
     p.i = i; p.j = j; p.t = rnd();
     p.speed = rr(0.9,1.7) / (4*(BLOCK+WALK*1.5));
     return;
@@ -3295,6 +3343,18 @@ function crashIncident(o){
   chase.cool = 2.5;
   startChase('You hit a car. Police are coming to arrest you.');
 }
+// Driving into someone on foot. Always your fault, and the one thing here the
+// police will not overlook — they come whatever else is going on.
+function struckPedestrian(p){
+  drive.speed *= 0.35;
+  flash.style.opacity = 0.55;
+  setTimeout(() => flash.style.opacity = 0, 260);
+  honk(0.3);
+  relocatePed(p);                      // they pick themselves up elsewhere
+  if(chase.cool > 0) return;
+  chase.cool = 2.5;
+  startChase('You hit someone. Police are coming to arrest you.');
+}
 // Someone runs into you while you are stopped or pulling away. Never your
 // fault, so it is a knock and a horn and nothing else.
 let shuntFx = 0;
@@ -3360,6 +3420,12 @@ function updateDriving(dt, mf, ms){
     g.position.x = rx; g.position.z = rz;
     // sitting still and someone runs into you: you feel it, nobody blames you
     if(touch) shunted(touch, dt);
+  }
+  // and you cannot drive through people
+  if(Math.abs(drive.speed) > 3) for(const p of peds){
+    if(p.x === undefined) continue;
+    const dx = p.x - g.position.x, dz = p.z - g.position.z;
+    if(dx*dx + dz*dz < 3.6){ struckPedestrian(p); break; }
   }
   checkRedLight(g.position.x, g.position.z, drive.heading, Math.abs(drive.speed));
   // everything downstream follows where the car actually ended up, which on a
