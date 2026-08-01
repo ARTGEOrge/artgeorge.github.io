@@ -1967,6 +1967,90 @@ function buildCell(i, j){
   }
 }
 
+/* The lit shopfronts round the square at street level — the coffee place, the
+ * pizza counter, the souvenir shop, a theatre marquee. Generic trades rather
+ * than real chains: a green roundel over a COFFEE sign reads as what it is
+ * without putting somebody's trademark on a building. */
+function shopFronts(){
+  const W = 512, H = 128, cells = 4;
+  const ca = document.createElement('canvas'); ca.width = W; ca.height = H*cells;
+  const g = ca.getContext('2d');
+  const panel = (k, bg, draw) => {
+    const y = k*H;
+    g.fillStyle = bg; g.fillRect(0, y, W, H);
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    draw(y);
+    g.strokeStyle = 'rgba(0,0,0,.7)'; g.lineWidth = 6;
+    g.strokeRect(3, y+3, W-6, H-6);
+  };
+  panel(0, '#0b3d2c', y => {                     // the coffee place
+    g.fillStyle = '#1c7f57';
+    g.beginPath(); g.arc(96, y+H/2, 44, 0, 6.3); g.fill();
+    g.fillStyle = '#f2f7f4';
+    g.beginPath(); g.arc(96, y+H/2, 33, 0, 6.3); g.fill();
+    g.fillStyle = '#1c7f57';
+    g.beginPath(); g.arc(96, y+H/2, 24, 0, 6.3); g.fill();
+    g.fillStyle = '#f2f7f4'; g.font = 'bold 54px Helvetica, Arial';
+    g.fillText('COFFEE', 320, y+H/2);
+  });
+  panel(1, '#7d1418', y => {                     // pizza by the slice
+    g.fillStyle = '#ffd84d'; g.font = 'bold 62px Helvetica, Arial';
+    g.fillText('PIZZA', 200, y+H/2 - 6);
+    g.fillStyle = '#fff'; g.font = 'bold 26px Helvetica, Arial';
+    g.fillText('BY THE SLICE', 200, y+H/2 + 36);
+    g.fillStyle = '#ffd84d';
+    g.beginPath(); g.moveTo(400, y+26); g.lineTo(470, y+H-26); g.lineTo(330, y+H-26);
+    g.closePath(); g.fill();
+  });
+  panel(2, '#14213d', y => {                     // souvenirs
+    g.fillStyle = '#fff'; g.font = 'bold 50px Helvetica, Arial';
+    g.fillText('SOUVENIRS', 256, y+H/2 - 14);
+    g.fillStyle = '#ff4d6d'; g.font = 'bold 30px Helvetica, Arial';
+    g.fillText('I ♥ NY', 256, y+H/2 + 32);
+  });
+  panel(3, '#1a1a1a', y => {                     // a theatre marquee
+    for(let k=0;k<26;k++){                       // bulbs round the edge
+      g.fillStyle = k % 2 ? '#ffd84d' : '#fff6cc';
+      g.beginPath(); g.arc(14 + k*19.5, y+14, 5, 0, 6.3); g.fill();
+      g.beginPath(); g.arc(14 + k*19.5, y+H-14, 5, 0, 6.3); g.fill();
+    }
+    g.fillStyle = '#ffd84d'; g.font = 'bold 46px Helvetica, Arial';
+    g.fillText('ON BROADWAY', 256, y+H/2 - 10);
+    g.fillStyle = '#fff'; g.font = '24px Helvetica, Arial';
+    g.fillText('TONIGHT 8PM', 256, y+H/2 + 32);
+  });
+  const tex = new THREE.CanvasTexture(ca);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+
+  const signs = [], hoods = [];
+  const N = 11;
+  for(let k=0;k<N;k++){
+    const a = (k/N)*Math.PI*2 + 0.22;
+    const r = TSQ_R + rr(2.5, 5.5);
+    const x = TSQ.x + Math.cos(a)*r, z = TSQ.z + Math.sin(a)*r;
+    const face = Math.atan2(TSQ.x - x, TSQ.z - z);
+    const w = rr(9, 15), h = w/4;
+    const cell = k % cells;
+    const pl = new THREE.PlaneGeometry(w, h);
+    const uv = pl.attributes.uv;
+    for(let q=0;q<uv.count;q++)
+      uv.setXY(q, uv.getX(q), (cell + 1 - uv.getY(q))/cells);
+    pl.rotateY(face); pl.translate(x, CURB + 5.4, z);
+    signs.push(colored(pl, 0xffffff));
+    // the shop below it: dark glazing under an awning
+    const glass = colored(new THREE.BoxGeometry(w + 1, 4.4, 1.0), 0x11161c);
+    glass.rotateY(face); glass.translate(x, CURB + 2.4, z);
+    const awn = colored(new THREE.BoxGeometry(w + 2.4, 0.3, 2.2),
+                        [0x1c7f57, 0x7d1418, 0x14213d, 0x2a2a2a][cell]);
+    awn.rotateY(face);
+    awn.translate(x + Math.sin(face)*1.0, CURB + 4.5, z + Math.cos(face)*1.0);
+    hoods.push(glass, awn);
+  }
+  cityGroup.add(new THREE.Mesh(mergeGeos(signs),
+    new THREE.MeshBasicMaterial({map:tex, vertexColors:true})));
+  cityGroup.add(new THREE.Mesh(mergeGeos(hoods), vcMat));
+}
+
 // ---------- Times Square ----------
 // A ring of lit screens facing the plaza. One canvas holds sixteen ad panels
 // and every board takes a cell of it, so the whole square is a single mesh
@@ -1976,16 +2060,55 @@ tsqLight.position.set(TSQ.x, 34, TSQ.z);
 tsqLight.visible = false;
 scene.add(tsqLight);
 tasks.push(() => {
-  // the plaza floor: paving right across the square, including over the
-  // roadbeds that used to run through it, so it reads as one surface
+  /* The plaza has its own paving, not the pavement texture: dark charcoal
+   * pavers in a running bond with pale joints and the little steel discs set
+   * into them that catch the light. */
   {
-    const ts = 6.4, n = Math.ceil(TSQ_R/ts);
+    const P = 256;
+    const ca = document.createElement('canvas'); ca.width = ca.height = P;
+    const g = ca.getContext('2d');
+    g.fillStyle = '#33363c'; g.fillRect(0,0,P,P);
+    const rows = 8, rh = P/rows, cw = P/4;
+    for(let r=0;r<rows;r++){
+      const off = (r % 2) * cw/2;                 // running bond
+      for(let cI=-1;cI<5;cI++){
+        const x = cI*cw + off, y = r*rh;
+        const v = 0.9 + rnd()*0.2;
+        g.fillStyle = `rgb(${Math.round(46*v)},${Math.round(49*v)},${Math.round(55*v)})`;
+        g.fillRect(x+1.2, y+1.2, cw-2.4, rh-2.4);
+      }
+    }
+    g.strokeStyle = 'rgba(150,158,168,.30)'; g.lineWidth = 1.4;
+    for(let r=0;r<=rows;r++){
+      g.beginPath(); g.moveTo(0, r*rh); g.lineTo(P, r*rh); g.stroke();
+      const off = (r % 2) * cw/2;
+      for(let cI=-1;cI<5;cI++){
+        g.beginPath(); g.moveTo(cI*cw+off, r*rh); g.lineTo(cI*cw+off, r*rh+rh); g.stroke();
+      }
+    }
+    for(let k=0;k<70;k++){                        // the steel discs
+      const x = rnd()*P, y = rnd()*P, r = rr(1.1, 2.2);
+      g.fillStyle = 'rgba(196,206,216,.85)';
+      g.beginPath(); g.arc(x, y, r, 0, 6.3); g.fill();
+      g.fillStyle = 'rgba(255,255,255,.5)';
+      g.beginPath(); g.arc(x - r*0.3, y - r*0.3, r*0.4, 0, 6.3); g.fill();
+    }
+    noise(g, P, 10);
+    const tex = mkTex(ca); tex.repeat.set(1, 1);
+    const plazaMat = new THREE.MeshLambertMaterial({map:tex, vertexColors:true});
+
+    const ts = 6.4, n = Math.ceil(TSQ_R/ts), floor = [];
     for(let a=-n; a<=n; a++){
       let lo = null, hi = null;
       for(let b=-n; b<=n; b++){
         const tx = TSQ.x + a*ts, tz = TSQ.z + b*ts;
         if(tsqDist(tx, tz) > TSQ_R - ts*0.2) continue;
-        walkSlab(chunkOf(tx, tz), tx, tz, ts, ts);
+        const sl = new THREE.BoxGeometry(ts, CURB + 0.02, ts);
+        const uv = sl.attributes.uv;               // paving runs on across tiles
+        for(let q=0;q<uv.count;q++)
+          uv.setXY(q, (tx - ts/2 + uv.getX(q)*ts)/9, (tz - ts/2 + uv.getY(q)*ts)/9);
+        sl.translate(tx, (CURB + 0.02)/2, tz);
+        floor.push(colored(sl, 0xffffff));
         if(lo === null) lo = tz;
         hi = tz;
       }
@@ -1993,6 +2116,7 @@ tasks.push(() => {
       if(lo !== null)
         addPaved(TSQ.x + a*ts - ts/2, lo - ts/2, TSQ.x + a*ts + ts/2, hi + ts/2);
     }
+    cityGroup.add(new THREE.Mesh(mergeGeos(floor), plazaMat));
   }
   const A = 512, cell = A/4;
   const ca = document.createElement('canvas'); ca.width = ca.height = A;
@@ -2078,9 +2202,59 @@ tasks.push(() => {
   const isle = colored(new THREE.BoxGeometry(34, CURB, 20), 0x8a8f96);
   isle.translate(TSQ.x, CURB/2, TSQ.z + 8);
   steps.push(isle);
+
+  /* What actually fills the square at street level: the café tables and
+   * chairs people sit at all day, the long benches, and bollards keeping the
+   * traffic that no longer comes off the paving. */
+  const CHAIR = [0x2f3a44, 0x3d4a3a, 0x53342f, 0x35404d];
+  const free = (x, z) => tsqDist(x, z) < TSQ_R - 7 &&
+                         !(Math.abs(x - TSQ.x) < 20 && z < TSQ.z - TSQ_R*0.5) &&
+                         !(Math.abs(x - TSQ.x) < 19 && Math.abs(z - TSQ.z - 8) < 12);
+  for(let k=0;k<26;k++){
+    const a = rnd()*6.283, r = rr(TSQ_R*0.30, TSQ_R*0.86);
+    const tx = TSQ.x + Math.cos(a)*r, tz = TSQ.z + Math.sin(a)*r*0.85;
+    if(!free(tx, tz)) continue;
+    const col = pick(CHAIR);
+    const top = colored(new THREE.CylinderGeometry(0.62, 0.62, 0.1, 12), 0x8d939b);
+    top.translate(tx, CURB + 0.98, tz);
+    const stem = colored(new THREE.CylinderGeometry(0.07, 0.16, 0.95, 8), 0x2b2f35);
+    stem.translate(tx, CURB + 0.48, tz);
+    steps.push(top, stem);
+    for(let q=0, m=ri(2,4); q<m; q++){            // chairs round it
+      const ca2 = rnd()*6.283, cr = rr(1.15, 1.5);
+      const cx2 = tx + Math.cos(ca2)*cr, cz2 = tz + Math.sin(ca2)*cr;
+      const seat = colored(new THREE.BoxGeometry(0.52, 0.09, 0.52), col);
+      seat.translate(cx2, CURB + 0.5, cz2);
+      const back = colored(new THREE.BoxGeometry(0.52, 0.62, 0.08), col);
+      back.rotateY(ca2);
+      back.translate(cx2 + Math.sin(ca2)*0.24, CURB + 0.82, cz2 + Math.cos(ca2)*0.24);
+      steps.push(seat, back);
+    }
+  }
+  for(let k=0;k<7;k++){                            // the long granite benches
+    const a = (k/7)*6.283 + 0.4, r = TSQ_R*0.72;
+    const bx = TSQ.x + Math.cos(a)*r, bz = TSQ.z + Math.sin(a)*r*0.85;
+    if(!free(bx, bz)) continue;
+    const bench = colored(new THREE.BoxGeometry(6.2, 0.45, 1.1), 0x9aa0a6);
+    bench.rotateY(a);
+    bench.translate(bx, CURB + 0.46, bz);
+    const plinth = colored(new THREE.BoxGeometry(5.6, 0.42, 0.7), 0x7d838a);
+    plinth.rotateY(a);
+    plinth.translate(bx, CURB + 0.21, bz);
+    steps.push(bench, plinth);
+    addSolid(bx, bz, 6.2, 6.2);
+  }
+  for(let k=0;k<30;k++){                           // bollards round the rim
+    const a = (k/30)*6.283;
+    const bx = TSQ.x + Math.cos(a)*(TSQ_R - 2.5), bz = TSQ.z + Math.sin(a)*(TSQ_R - 2.5);
+    const bo = colored(new THREE.CylinderGeometry(0.19, 0.22, 1.05, 8), 0x3b4149);
+    bo.translate(bx, CURB + 0.52, bz);
+    steps.push(bo);
+  }
   cityGroup.add(new THREE.Mesh(mergeGeos(steps), vcMat));
   addPaved(TSQ.x - 17, TSQ.z - 2, TSQ.x + 17, TSQ.z + 18);
   addSolid(TSQ.x, TSQ.z - TSQ_R*0.62 - 8, 26, 20);      // you can't walk the steps
+  shopFronts();
 });
 
 tasks.push(() => {
