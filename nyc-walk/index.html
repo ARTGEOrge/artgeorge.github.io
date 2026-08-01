@@ -608,6 +608,15 @@ function addSolid(x, z, w, d, kerb){
  */
 const closedX = [], closedZ = [];
 for(let i=0;i<GX;i++){ closedX.push([]); closedZ.push([]); }
+/* A park is one piece of ground, not blocks with streets between them. No
+ * avenue crosses Central Park at all, and only a handful of transverse roads
+ * cut east to west. So every street between two park cells is closed, except
+ * every other east-west one, which stands in for the transverses. */
+for(let i=0;i<GX;i++) for(let j=0;j<GZ;j++){
+  if(grid[i][j] !== PARK) continue;
+  if(i+1 < GX && grid[i+1][j] === PARK) closedX[i][j] = true;
+  if(j+1 < GZ && grid[i][j+1] === PARK && j % 2 === 0) closedZ[i][j] = true;
+}
 {
   const IRREG = { [DOWN]:0.42, [VILLAGE]:0.32, [BKLYN]:0.22, [QUEENS]:0.18,
                   [BRONX]:0.20, [STATEN]:0.26, [JERSEY]:0.20 };
@@ -1245,6 +1254,9 @@ function crossing(c, i, j){
   if(!(isLandIJ(i+1,j) && isLandIJ(i,j+1) && isLandIJ(i+1,j+1))) return;
   const X = roadX(i), Z = roadZ(j);
   if(onBway(X, Z)) return;                    // Broadway wires its own crossings
+  // a corner surrounded by parkland is inside the park, not a junction
+  if(grid[i][j] === PARK && typeAt(i+1,j) === PARK &&
+     typeAt(i,j+1) === PARK && typeAt(i+1,j+1) === PARK) return;
   const cx = closedX[i][j], cz = closedZ[i][j];
   if(cx && cz) return;                        // nothing crosses here at all
   if(cx || cz){
@@ -1437,9 +1449,19 @@ function seawall(c, i, j){
 function buildPark(i, j){
   const c = chunkOf(midX(i), midZ(j));
   const px = midX(i), pz = midZ(j);
-  const grass = new THREE.BoxGeometry(BLOCK + WALK*2, CURB+0.06, BLOCK + WALK*2);
-  grass.translate(px, (CURB+0.06)/2, pz);
-  c.grass.push(colored(grass, 0xffffff));
+  const S = BLOCK + WALK*2, H = CURB + 0.06;
+  const lawn = (x, z, w, d) => {
+    const g = new THREE.BoxGeometry(w, H, d);
+    g.translate(x, H/2, z);
+    c.grass.push(colored(g, 0xffffff));
+    addPaved(x - w/2, z - d/2, x + w/2, z + d/2);
+  };
+  lawn(px, pz, S, S);
+  // grass straight over any street that was closed, so the park runs on
+  // unbroken instead of being cut into blocks
+  if(closedX[i][j]) lawn(roadX(i), pz, STREET, S);
+  if(closedZ[i][j]) lawn(px, roadZ(j), S, STREET);
+  if(closedX[i][j] && closedZ[i][j]) lawn(roadX(i), roadZ(j), STREET, STREET);
   if(rnd() < 0.35){
     const pond = new THREE.Mesh(new THREE.CircleGeometry(rr(7,11), 24),
       new THREE.MeshLambertMaterial({color:0x2a5f7a}));
@@ -1453,6 +1475,13 @@ function buildPark(i, j){
   cityGroup.add(path);
   for(let k=0;k<18;k++)
     c.tree.push([px + rr(-BLOCK/2, BLOCK/2), pz + rr(-BLOCK/2, BLOCK/2), rr(0.9,1.4)]);
+  // and trees over the grassed-over streets, or the seams show as bare lanes
+  if(closedX[i][j]) for(let k=0;k<6;k++)
+    c.tree.push([roadX(i) + rr(-STREET/2, STREET/2),
+                 pz + rr(-BLOCK/2, BLOCK/2), rr(0.9,1.4)]);
+  if(closedZ[i][j]) for(let k=0;k<6;k++)
+    c.tree.push([px + rr(-BLOCK/2, BLOCK/2),
+                 roadZ(j) + rr(-STREET/2, STREET/2), rr(0.9,1.4)]);
 }
 
 // ---------- landmarks ----------
