@@ -2262,20 +2262,42 @@ tasks.push(() => {
   // Broadway runs at its own angle, so its legs are chained rather than
   // squared off: a car reaching the end of one is handed to the next and
   // keeps going down the avenue instead of turning around mid-block.
+  /* Broadway runs straight through Times Square, and its legs are diagonals
+   * that the closedX/closedZ machinery never touches — so shutting the grid
+   * streets around the square did nothing to stop Broadway traffic driving
+   * across the plaza. Each leg is clipped to the stretches OUTSIDE the square,
+   * and the chain is broken there, so no car has a route over it. */
   const legs = [];
-  let prev = null;
+  let prev = null, prevRanTo = false;
   for(let k=0;k<BWAY.length-1;k++){
     const [x1,z1] = BWAY[k], [x2,z2] = BWAY[k+1];
     const dx = x2-x1, dz = z2-z1, L = Math.hypot(dx, dz);
-    const s = { ax:'d', line:0, a:0, b:L, ox:x1, oz:z1, ux:dx/L, uz:dz/L };
-    segFrame(s);
-    // its crossings, as distances along the leg — exactly the car's `pos`
-    s.stops = BWAY_CROSS.filter(cr => cr.leg === k)
-                        .map(cr => ({p: cr.s, ph: 0}))
-                        .sort((p, q) => p.p - q.p);
-    if(prev){ prev.next = s; s.prev = prev; }
-    legs.push(s);
-    prev = s;
+    const ux = dx/L, uz = dz/L;
+    let inA = null, inB = null;                 // the stretch inside the square
+    for(let d=0; d<=L; d += 2){
+      if(tsqDist(x1 + ux*d, z1 + uz*d) < TSQ_R + 5){
+        if(inA === null) inA = d;
+        inB = d;
+      }
+    }
+    const ranges = inA === null ? [[0, L]] : [];
+    if(inA !== null){
+      if(inA > 26) ranges.push([0, inA]);
+      if(L - inB > 26) ranges.push([inB, L]);
+    }
+    for(const [ra, rb] of ranges){
+      const s = { ax:'d', line:0, a:ra, b:rb, ox:x1, oz:z1, ux, uz };
+      segFrame(s);
+      // its crossings, as distances along the leg — exactly the car's `pos`
+      s.stops = BWAY_CROSS.filter(cr => cr.leg === k && cr.s > ra && cr.s < rb)
+                          .map(cr => ({p: cr.s, ph: 0}))
+                          .sort((p, q) => p.p - q.p);
+      // only join up where the run is genuinely continuous
+      if(prev && prevRanTo && ra === 0){ prev.next = s; s.prev = prev; }
+      legs.push(s);
+      prev = s; prevRanTo = (rb === L);
+    }
+    if(!ranges.length){ prev = null; prevRanTo = false; }
   }
   // seven legs against ~190 grid streets would leave Broadway nearly empty, so
   // weight it: the same legs listed three times, picked three times as often
