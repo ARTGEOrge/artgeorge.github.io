@@ -382,6 +382,60 @@ let stars;
   scene.add(stars);
 }
 
+/* ---------- weather overhead ---------------------------------------------
+ * From a street this deep you spend a lot of time looking at a slot of sky
+ * between two cornices, and an empty gradient is the one thing that never
+ * appears over a real city. Cloud bases drift across well above the tallest
+ * roof, tinted toward the horizon as they go away so distance reads, and the
+ * sun is an actual disc up there rather than a light with no source.
+ */
+const CLOUD_N = 34, CLOUD_FIELD = 2400;
+const cloudTex = (() => {
+  const S = 256, ca = document.createElement('canvas'); ca.width = ca.height = S;
+  const g = ca.getContext('2d');
+  for(let k=0;k<18;k++){
+    const x = rr(S*0.16, S*0.84), y = rr(S*0.30, S*0.70), r = rr(S*0.09, S*0.25);
+    const grd = g.createRadialGradient(x, y, 0, x, y, r);
+    grd.addColorStop(0,    'rgba(255,255,255,.52)');
+    grd.addColorStop(0.55, 'rgba(255,255,255,.26)');
+    grd.addColorStop(1,    'rgba(255,255,255,0)');
+    g.fillStyle = grd; g.beginPath(); g.arc(x, y, r, 0, 6.283); g.fill();
+  }
+  const t = new THREE.CanvasTexture(ca);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+const cloudMat = new THREE.MeshBasicMaterial({map:cloudTex, transparent:true,
+  depthWrite:false, fog:false, opacity:0.9, side:THREE.DoubleSide});
+const cloudGeo = new THREE.PlaneGeometry(1,1); cloudGeo.rotateX(Math.PI/2);
+const cloudMesh = new THREE.InstancedMesh(cloudGeo, cloudMat, CLOUD_N);
+cloudMesh.frustumCulled = false; cloudMesh.renderOrder = -2;
+scene.add(cloudMesh);
+const clouds = [];
+for(let k=0;k<CLOUD_N;k++)
+  clouds.push({ x: rr(-CLOUD_FIELD/2, CLOUD_FIELD/2), z: rr(-CLOUD_FIELD/2, CLOUD_FIELD/2),
+                y: rr(300, 470), s: rr(190, 460), a: rnd()*6.283, drift: rr(0.8, 2.2) });
+const cloudLit = new THREE.Color(), cloudFar = new THREE.Color(), cloudTmp = new THREE.Color();
+
+const SUN_DIR = new THREE.Vector3(140, 300, 110).normalize();
+const sunTex = (() => {
+  const S = 128, ca = document.createElement('canvas'); ca.width = ca.height = S;
+  const g = ca.getContext('2d');
+  const grd = g.createRadialGradient(S/2, S/2, 0, S/2, S/2, S/2);
+  grd.addColorStop(0,    'rgba(255,255,255,1)');
+  grd.addColorStop(0.16, 'rgba(255,248,224,.92)');
+  grd.addColorStop(0.34, 'rgba(255,228,168,.32)');
+  grd.addColorStop(1,    'rgba(255,214,140,0)');
+  g.fillStyle = grd; g.fillRect(0,0,S,S);
+  const t = new THREE.CanvasTexture(ca);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+const sunDisc = new THREE.Sprite(new THREE.SpriteMaterial({map:sunTex, transparent:true,
+  depthWrite:false, fog:false, blending:THREE.AdditiveBlending, opacity:0.95}));
+sunDisc.scale.set(170, 170, 1);
+scene.add(sunDisc);
+
 // ---------- textures ----------
 function noise(g, S, alpha){
   const img = g.getImageData(0,0,S,S), d = img.data;
@@ -558,6 +612,9 @@ function mergeGeos(list){
   return out;
 }
 const vcMat  = new THREE.MeshLambertMaterial({ vertexColors:true });
+// anything that emits its own light — a screen, a lit sign, a bulb — is unlit
+// geometry, so it stays bright in a shaded canyon and burns at night
+const litMat = new THREE.MeshBasicMaterial({ vertexColors:true });
 // [red@phase0, green@phase0, red@phase1, green@phase1]
 const sigMat = [ new THREE.MeshBasicMaterial({color:0xff3b30}),
                  new THREE.MeshBasicMaterial({color:0x14682a}),
@@ -748,7 +805,7 @@ function chunkOf(x, z){
   const k = ci + '|' + cj;
   let c = chunks.get(k);
   if(!c){ c = {roof:[], store:[], shop:[], mark:[], prop:[], sig:[[],[],[],[]],
-               tree:[], lamp:[], park:[], road:[], walk:[], grass:[],
+               tree:[], lamp:[], park:[], road:[], walk:[], grass:[], glow:[],
                bldg:FACADES.map(() => [])};
     chunks.set(k, c); }
   return c;
@@ -769,19 +826,113 @@ scene.add(cityGroup);
 }
 
 // ---------- ground / sidewalks / markings per cell ----------
-const asphaltTex = flatTex('#26282d', 22); asphaltTex.repeat.set(PITCH/8, PITCH/8);
+/* New York asphalt is never one shade. Every street is a quilt of cut-and-patch
+ * repairs in different vintages of mix, the joints between them poured full of
+ * tar, pale aggregate showing through wherever the bitumen has worn off, and a
+ * dark smear of oil down the middle of the lane. A flat grey plane is the one
+ * thing a road never looks like, and you are staring at it the whole game. */
+const ROAD_TILE = 26;
+const asphaltTex = (() => {
+  const S = 256, ca = document.createElement('canvas'); ca.width = ca.height = S;
+  const g = ca.getContext('2d');
+  g.fillStyle = '#2a2c31'; g.fillRect(0,0,S,S);
+  // patch repairs: a saw-cut rectangle of newer or older mix, edges sealed
+  const PATCH = ['#232529','#31343b','#26282c','#363943','#202226'];
+  for(let k=0;k<8;k++){
+    const w = rr(26,88), h = rr(22,72), x = rr(-24, S-16), y = rr(-24, S-16);
+    g.fillStyle = PATCH[ri(0, PATCH.length-1)];
+    g.fillRect(x, y, w, h);
+    g.strokeStyle = 'rgba(11,11,13,.6)'; g.lineWidth = rr(1.6, 3);
+    g.strokeRect(x, y, w, h);
+  }
+  noise(g, S, 24);
+  // exposed aggregate — the stone in the mix, catching the light
+  for(let k=0;k<2400;k++){
+    g.fillStyle = 'rgba(' + ri(130,196) + ',' + ri(126,190) + ',' + ri(122,184)
+                + ',' + rr(0.05,0.20).toFixed(3) + ')';
+    g.fillRect(rr(0,S), rr(0,S), rr(0.7,1.9), rr(0.7,1.9));
+  }
+  // crack seal: a bead of tar wandering across the surface, proud of it
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  for(let k=0;k<10;k++){
+    let x = rr(0,S), y = rr(0,S), a = rr(0,6.283);
+    g.strokeStyle = 'rgba(13,13,15,.8)'; g.lineWidth = rr(1.5,3.6);
+    g.beginPath(); g.moveTo(x,y);
+    for(let s=0;s<8;s++){
+      a += rr(-0.85,0.85);
+      x += Math.cos(a)*rr(7,26); y += Math.sin(a)*rr(7,26);
+      g.lineTo(x,y);
+    }
+    g.stroke();
+  }
+  // oil and rubber, and the pale bloom of a poured concrete patch
+  for(let k=0;k<14;k++){
+    const x = rr(0,S), y = rr(0,S), r = rr(6,26);
+    const grd = g.createRadialGradient(x,y,0,x,y,r);
+    const dark = rnd() < 0.7;
+    grd.addColorStop(0, dark ? 'rgba(10,10,12,.32)' : 'rgba(150,148,142,.13)');
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = grd; g.beginPath(); g.arc(x,y,r,0,6.283); g.fill();
+  }
+  const t = mkTex(ca);
+  t.repeat.set(PITCH/ROAD_TILE, PITCH/ROAD_TILE);
+  return t;
+})();
 const asphaltMat = new THREE.MeshLambertMaterial({map:asphaltTex});
 
+/* Four flags to a tile rather than one, so no two neighbouring slabs are quite
+ * the same grey and the pavement stops reading as one printed pattern. Each one
+ * gets its own age: a poured patch, a hairline crack, the black coins of old
+ * chewing gum that never come off a New York sidewalk. */
 const walkTex = (() => {
-  const ca = document.createElement('canvas'); ca.width = ca.height = 128;
+  const S = 256, half = S/2;
+  const ca = document.createElement('canvas'); ca.width = ca.height = S;
   const g = ca.getContext('2d');
-  g.fillStyle = '#9b9b95'; g.fillRect(0,0,128,128);
-  noise(g, 128, 16);
-  g.strokeStyle = 'rgba(30,30,28,.30)'; g.lineWidth = 2.5;
-  g.beginPath(); g.moveTo(0,1); g.lineTo(128,1); g.moveTo(1,0); g.lineTo(1,128); g.stroke();
-  g.strokeStyle = 'rgba(255,255,255,.16)'; g.lineWidth = 1.5;
-  g.beginPath(); g.moveTo(0,4); g.lineTo(128,4); g.moveTo(4,0); g.lineTo(4,128); g.stroke();
-  const t = mkTex(ca); t.repeat.set(16,16); return t;
+  g.fillStyle = '#9b9b95'; g.fillRect(0,0,S,S);
+  for(const [sx, sy] of [[0,0],[half,0],[0,half],[half,half]]){
+    const v = ri(-11, 9);
+    g.fillStyle = 'rgb(' + (155+v) + ',' + (155+v) + ',' + (149+v) + ')';
+    g.fillRect(sx, sy, half, half);
+    if(rnd() < 0.4){                                     // a newer poured patch
+      const pw = rr(half*0.3, half*0.8), ph = rr(half*0.3, half*0.8);
+      g.fillStyle = 'rgba(' + ri(158,186) + ',' + ri(156,184) + ',' + ri(150,176) + ',.5)';
+      g.fillRect(sx + rr(0, half-pw), sy + rr(0, half-ph), pw, ph);
+    }
+  }
+  noise(g, S, 15);
+  for(let k=0;k<3000;k++){                               // aggregate in the mix
+    g.fillStyle = 'rgba(' + ri(96,215) + ',' + ri(96,212) + ',' + ri(92,206)
+                + ',' + rr(0.05,0.16).toFixed(3) + ')';
+    g.fillRect(rr(0,S), rr(0,S), rr(0.7,1.7), rr(0.7,1.7));
+  }
+  g.lineCap = 'round';
+  for(let k=0;k<5;k++){                                  // hairline cracks
+    let x = rr(0,S), y = rr(0,S), a = rr(0,6.283);
+    g.strokeStyle = 'rgba(60,60,58,.4)'; g.lineWidth = rr(0.7,1.4);
+    g.beginPath(); g.moveTo(x,y);
+    for(let s=0;s<5;s++){
+      a += rr(-0.9,0.9);
+      x += Math.cos(a)*rr(6,20); y += Math.sin(a)*rr(6,20);
+      g.lineTo(x,y);
+    }
+    g.stroke();
+  }
+  for(let k=0;k<26;k++){                                 // gum, and old stains
+    g.fillStyle = rnd() < 0.55 ? 'rgba(38,38,36,.42)' : 'rgba(84,78,66,.20)';
+    g.beginPath(); g.arc(rr(0,S), rr(0,S), rr(0.9,3.4), 0, 6.283); g.fill();
+  }
+  // the joints: a scored line between flags, with the light catching one lip
+  g.strokeStyle = 'rgba(30,30,28,.32)'; g.lineWidth = 3;
+  g.beginPath();
+  g.moveTo(0,1.5); g.lineTo(S,1.5); g.moveTo(1.5,0); g.lineTo(1.5,S);
+  g.moveTo(0,half+1.5); g.lineTo(S,half+1.5); g.moveTo(half+1.5,0); g.lineTo(half+1.5,S);
+  g.stroke();
+  g.strokeStyle = 'rgba(255,255,255,.15)'; g.lineWidth = 1.6;
+  g.beginPath();
+  g.moveTo(0,5); g.lineTo(S,5); g.moveTo(5,0); g.lineTo(5,S);
+  g.moveTo(0,half+5); g.lineTo(S,half+5); g.moveTo(half+5,0); g.lineTo(half+5,S);
+  g.stroke();
+  const t = mkTex(ca); t.repeat.set(8,8); return t;
 })();
 const walkMat = new THREE.MeshLambertMaterial({map:walkTex});
 const grassTex = flatTex('#3f6b33', 34); grassTex.repeat.set(6,6);
@@ -1148,31 +1299,304 @@ function splitLot(x1,z1,x2,z2,depth,out){
     splitLot(x1,z1,x2,t,depth-1,out); splitLot(x1,t,x2,z2,depth-1,out); }
 }
 
+/* ---------- sidewalk furniture -------------------------------------------
+ * A block reads as New York because of what stands on it, not what is built
+ * behind it. These are the pieces every real one has and this city did not: a
+ * hydrant at the kerb, cast-iron manhole covers in the roadbed, the orange and
+ * white steam stack standing over one of them, a newsstand on the corner, a
+ * halal cart under its umbrella, bus shelters, bike racks, the blue relay box,
+ * the lit kiosks that took over from the payphones, and the litter basket that
+ * is always full.
+ */
+const ventSpots = [];
+// build a prop at the origin, then swing it round and drop it where it goes
+function place(parts, ang, x, y, z){
+  for(const g of parts){ if(ang) g.rotateY(ang); g.translate(x, y, z); }
+  return parts;
+}
+
+function hydrant(c, x, z){
+  const silver = rnd() < 0.3;
+  const body = silver ? 0xb4b8bc : 0xb5342b;
+  const cap  = silver ? 0xd6c23a : (rnd() < 0.5 ? 0xd6c23a : 0x2f6fae);
+  const P = [
+    colored(new THREE.CylinderGeometry(0.29, 0.33, 0.14, 10), 0x50545a).translate(0, 0.07, 0),
+    colored(new THREE.CylinderGeometry(0.19, 0.23, 0.60, 10), body).translate(0, 0.44, 0),
+    colored(new THREE.SphereGeometry(0.20, 10, 6), body).translate(0, 0.75, 0),
+    colored(new THREE.CylinderGeometry(0.15, 0.15, 0.10, 10), cap).translate(0, 0.88, 0),
+    colored(new THREE.CylinderGeometry(0.055, 0.055, 0.12, 6), cap).translate(0, 0.96, 0)
+  ];
+  for(const s of [-1, 1]){                        // the two side outlets
+    const n = colored(new THREE.CylinderGeometry(0.105, 0.105, 0.17, 8), cap);
+    n.rotateZ(Math.PI/2); n.translate(s*0.24, 0.54, 0);
+    P.push(n);
+  }
+  place(P, rr(0, 6.283), x, CURB, z);
+  c.prop.push(...P);
+  addSolid(x, z, 0.7, 0.7);
+}
+
+// Cast iron in the roadbed. Sits a hair proud of the asphalt, like the real
+// ones that make a taxi thump as it goes over.
+function manhole(c, x, z, square){
+  const P = square
+    ? [colored(new THREE.BoxGeometry(1.5, 0.06, 0.95), 0x3a3b40).translate(0, 0.03, 0),
+       colored(new THREE.BoxGeometry(1.32, 0.07, 0.78), 0x2b2c30).translate(0, 0.035, 0)]
+    : [colored(new THREE.CylinderGeometry(0.68, 0.68, 0.05, 18), 0x34353a).translate(0, 0.025, 0),
+       colored(new THREE.CylinderGeometry(0.56, 0.56, 0.07, 18), 0x484950).translate(0, 0.035, 0),
+       colored(new THREE.CylinderGeometry(0.19, 0.19, 0.08, 12), 0x3c3d42).translate(0, 0.04, 0)];
+  place(P, square ? rr(0, 6.283) : 0, x, 0, z);
+  c.prop.push(...P);
+}
+
+// The Con Ed steam stack: an orange and white tube over an open manhole, put
+// there to take the plume up above head height. Nothing says this city faster.
+function steamStack(c, x, z){
+  manhole(c, x, z);
+  const H = 2.8, n = 5, sh = H/n;
+  for(let k=0;k<n;k++){
+    const seg = colored(new THREE.CylinderGeometry(0.44, 0.44, sh, 12, 1, true),
+                        k % 2 ? 0xe6e3dc : 0xd4581f);
+    seg.translate(x, 0.1 + sh/2 + k*sh, z);
+    c.prop.push(seg);
+  }
+  const skirt = colored(new THREE.CylinderGeometry(0.66, 0.66, 0.14, 12), 0xc94f1a);
+  skirt.translate(x, 0.07, z);
+  const rim = colored(new THREE.TorusGeometry(0.44, 0.05, 5, 12), 0xb8b4ac);
+  rim.rotateX(Math.PI/2); rim.translate(x, 0.1 + H, z);
+  const throat = colored(new THREE.CylinderGeometry(0.42, 0.42, 0.04, 12), 0x14161a);
+  throat.translate(x, 0.1 + H - 0.16, z);       // so it is not see-through from above
+  c.prop.push(skirt, rim, throat);
+  ventSpots.push([x, z, H]);
+  addSolid(x, z, 0.9, 0.9);
+}
+
+// The green corner newsstand, papers and magazines lit behind glass.
+function newsstand(c, x, z, ang){
+  const W = 3.2, D = 2.0, H = 2.6;
+  const P = [
+    colored(new THREE.BoxGeometry(W, H, D), 0x1f4a36).translate(0, H/2, 0),
+    colored(new THREE.BoxGeometry(W + 0.55, 0.22, D + 0.55), 0x163023).translate(0, H + 0.11, 0),
+    colored(new THREE.BoxGeometry(W + 1.5, 0.14, 1.0), 0x8a2b2b).translate(0, H - 0.35, D/2 + 0.5)
+  ];
+  const G = [
+    colored(new THREE.BoxGeometry(W - 0.5, 1.25, 0.05), 0xf4e3b2).translate(0, 1.55, D/2 + 0.03),
+    colored(new THREE.BoxGeometry(W - 2.0, 0.30, 0.05), 0xf2f0e6).translate(0, 2.32, D/2 + 0.03)
+  ];
+  place(P, ang, x, CURB, z); place(G, ang, x, CURB, z);
+  c.prop.push(...P); c.glow.push(...G);
+  addSolid(x, z, W + 0.4, D + 0.4);
+}
+
+// Halal cart, hot dogs, pretzels — a stainless box on two wheels under a big
+// striped umbrella, with the griddle steaming away.
+function foodCart(c, x, z, ang){
+  const P = [
+    colored(new THREE.BoxGeometry(1.9, 0.95, 1.05), 0xc4c9cd).translate(0, 0.95, 0),
+    colored(new THREE.BoxGeometry(2.0, 0.10, 1.15), 0xdfe3e6).translate(0, 1.45, 0),
+    colored(new THREE.BoxGeometry(0.55, 0.34, 0.55), 0x9aa0a4).translate(0.55, 1.62, 0),
+    colored(new THREE.CylinderGeometry(0.045, 0.045, 1.5, 6), 0x8d9296).translate(0, 2.2, 0)
+  ];
+  for(const s of [-1, 1]){
+    const w = colored(new THREE.CylinderGeometry(0.36, 0.36, 0.12, 10), 0x1b1e22);
+    w.rotateZ(Math.PI/2); w.translate(s*0.72, 0.36, 0.34);
+    P.push(w);
+  }
+  const shade = pick([0xd8b02a, 0x2f66a8, 0xb03a32, 0xdedcd4]);
+  for(let k=0;k<8;k++){                            // the umbrella, panel by panel
+    // capped, not open — you stand under one of these and look straight up it
+    const seg = colored(new THREE.ConeGeometry(1.6, 0.55, 4, 1, false,
+                        (k/8)*6.283, 6.283/8), k % 2 ? shade : 0xf0eee6);
+    seg.translate(0, 2.8, 0);
+    P.push(seg);
+  }
+  const G = [colored(new THREE.BoxGeometry(1.5, 0.36, 0.03), 0xffd166).translate(0, 1.05, 0.55)];
+  place(P, ang, x, CURB, z); place(G, ang, x, CURB, z);
+  c.prop.push(...P); c.glow.push(...G);
+  addSolid(x, z, 2.2, 1.6);
+}
+
+// Glass bus shelter with a lit advertising panel at one end.
+function busShelter(c, x, z, ang){
+  const L = 4.6, D = 1.5, H = 2.5;
+  const P = [
+    colored(new THREE.BoxGeometry(L + 0.4, 0.14, D + 0.5), 0x2a2e33).translate(0, H, 0),
+    colored(new THREE.BoxGeometry(L, 1.9, 0.07), 0x9fb4bd).translate(0, 1.3, -D/2),  // back glass
+    colored(new THREE.BoxGeometry(L, 0.4, 0.35), 0x3a3f45).translate(0, 0.85, -D/2 + 0.3) // bench
+  ];
+  for(const s of [-1, 1]){
+    P.push(colored(new THREE.BoxGeometry(0.14, H, 0.14), 0x2a2e33).translate(s*L/2, H/2, -D/2));
+    P.push(colored(new THREE.BoxGeometry(0.14, H, 0.14), 0x2a2e33).translate(s*L/2, H/2,  D/2));
+  }
+  P.push(colored(new THREE.BoxGeometry(0.10, 2.2, D), 0x22262b).translate(L/2 + 0.16, 1.2, 0));
+  const G = [colored(new THREE.BoxGeometry(0.03, 1.9, D - 0.25), 0xf6efe0)
+               .translate(L/2 + 0.23, 1.25, 0)];
+  place(P, ang, x, CURB, z); place(G, ang, x, CURB, z);
+  c.prop.push(...P); c.glow.push(...G);
+  const w = Math.abs(Math.cos(ang)) > 0.5 ? L : D;
+  addSolid(x, z, w + 0.4, (w === L ? D : L) + 0.4);
+}
+
+// The lit kiosks that replaced the payphones — a dark slab with a screen on
+// each face, at every other corner in Manhattan.
+function linkKiosk(c, x, z, ang){
+  const P = [
+    colored(new THREE.BoxGeometry(0.85, 2.8, 0.30), 0x1a1d21).translate(0, 1.4, 0),
+    colored(new THREE.BoxGeometry(0.95, 0.10, 0.42), 0x25292e).translate(0, 0.05, 0)
+  ];
+  const tint = pick([0x2f6fae, 0x8a2f6b, 0x2f8a6b, 0xc2762a]);
+  const G = [
+    colored(new THREE.BoxGeometry(0.66, 1.9, 0.03), tint).translate(0, 1.6,  0.16),
+    colored(new THREE.BoxGeometry(0.66, 1.9, 0.03), tint).translate(0, 1.6, -0.16)
+  ];
+  place(P, ang, x, CURB, z); place(G, ang, x, CURB, z);
+  c.prop.push(...P); c.glow.push(...G);
+  addSolid(x, z, 0.9, 0.5);
+}
+
+// Blue USPS relay box, and the newspaper boxes chained up beside it.
+function relayBox(c, x, z, ang){
+  const P = [
+    colored(new THREE.BoxGeometry(0.78, 0.95, 0.66), 0x1f4f8a).translate(0, 0.68, 0),
+    // the domed lid: a half drum lying along the box, open side down
+    colored(new THREE.CylinderGeometry(0.33, 0.33, 0.78, 12, 1, false, 0, Math.PI), 0x1f4f8a)
+      .rotateZ(Math.PI/2).translate(0, 1.155, 0),
+    colored(new THREE.BoxGeometry(0.60, 0.30, 0.06), 0x14345c).translate(0, 0.98, 0.34)
+  ];
+  for(const s of [-1, 1])
+    P.push(colored(new THREE.BoxGeometry(0.12, 0.42, 0.12), 0x2a2e33).translate(s*0.28, 0.21, 0));
+  place(P, ang, x, CURB, z);
+  c.prop.push(...P);
+  addSolid(x, z, 0.9, 0.8);
+}
+function newsBoxes(c, x, z, ang){
+  const P = [];
+  const N = ri(2, 3);
+  for(let k=0;k<N;k++){
+    const col = pick([0x2f5fa8, 0xa83a3a, 0x2c2c2c, 0x1f7a4a, 0xc2762a]);
+    const ox = (k - (N-1)/2) * 0.62;
+    P.push(colored(new THREE.BoxGeometry(0.56, 0.72, 0.48), col).translate(ox, 0.78, 0));
+    P.push(colored(new THREE.BoxGeometry(0.44, 0.30, 0.05), 0x15181c).translate(ox, 0.95, 0.25));
+    P.push(colored(new THREE.BoxGeometry(0.10, 0.42, 0.10), 0x33383d).translate(ox, 0.21, 0));
+  }
+  place(P, ang, x, CURB, z);
+  c.prop.push(...P);
+  addSolid(x, z, N*0.62 + 0.3, 0.6);
+}
+
+// The wire litter basket, and it is never empty.
+function litterBasket(c, x, z){
+  const P = [
+    colored(new THREE.CylinderGeometry(0.46, 0.40, 1.0, 12, 1, true), 0x2f4a33)
+      .translate(0, 0.5, 0),
+    colored(new THREE.TorusGeometry(0.46, 0.045, 5, 12), 0x22331f)
+      .rotateX(Math.PI/2).translate(0, 1.0, 0),
+    colored(new THREE.CylinderGeometry(0.40, 0.40, 0.06, 12), 0x1e2a1c).translate(0, 0.06, 0)
+  ];
+  if(rnd() < 0.7){                                  // sacks piled over the rim
+    for(let k=0, n=ri(1,3); k<n; k++)
+      P.push(colored(new THREE.SphereGeometry(rr(0.18, 0.3), 6, 5), pick([0x22262b, 0x3b3f45]))
+               .translate(rr(-0.3, 0.3), rr(1.0, 1.25), rr(-0.3, 0.3)));
+  }
+  place(P, 0, x, CURB, z);
+  c.prop.push(...P);
+  addSolid(x, z, 0.95, 0.95);
+}
+
+// A row of inverted-U hoops with a couple of bikes locked to them.
+function bikeRack(c, x, z, ang){
+  const P = [];
+  for(let k=0;k<3;k++){
+    const ox = (k - 1) * 0.9;
+    P.push(colored(new THREE.TorusGeometry(0.36, 0.05, 5, 9, Math.PI), 0x4a5057)
+             .translate(ox, 0.66, 0));
+    for(const s of [-1, 1])
+      P.push(colored(new THREE.CylinderGeometry(0.05, 0.05, 0.68, 6), 0x4a5057)
+               .translate(ox + s*0.36, 0.34, 0));
+    if(rnd() < 0.5){                                 // a bike, seen end on
+      const col = pick([0x1f6f8a, 0xb03a32, 0x2a2e33, 0xd8b02a]);
+      P.push(colored(new THREE.TorusGeometry(0.32, 0.035, 5, 12), 0x15181c)
+               .translate(ox, 0.35, 0.3));
+      P.push(colored(new THREE.BoxGeometry(0.06, 0.5, 0.55), col).translate(ox, 0.62, 0.3));
+      P.push(colored(new THREE.BoxGeometry(0.08, 0.05, 0.34), 0x22262b).translate(ox, 0.95, 0.3));
+    }
+  }
+  place(P, ang, x, CURB, z);
+  c.prop.push(...P);
+  addSolid(x, z, 2.6, 0.9);
+}
+
+function trafficCone(c, x, z, onRoad){
+  const y = onRoad ? 0 : CURB;
+  c.prop.push(colored(new THREE.BoxGeometry(0.42, 0.05, 0.42), 0x1e2126).translate(x, y+0.025, z),
+              colored(new THREE.ConeGeometry(0.18, 0.62, 8), 0xd8551f).translate(x, y+0.33, z),
+              colored(new THREE.CylinderGeometry(0.115, 0.135, 0.10, 8), 0xe8e6e0)
+                .translate(x, y+0.36, z));
+}
+
 // ---------- props ----------
 function addProps(c, i, j){
   const cx = midX(i), cz = midZ(j), e = BLOCK/2 + WALK*0.6;
-  const clear = (x, z) => !onBway(x, z);       // nothing stands in the roadbed
-  if(rnd()<0.7){
-    const x = cx + rr(-BLOCK*0.35, BLOCK*0.35), z = cz + (rnd()<0.5?-e:e);
-    if(clear(x,z)){
-      const b = colored(new THREE.CylinderGeometry(0.28,0.32,0.95,8), 0xc23b2f); b.translate(x,CURB+0.48,z);
-      const t = colored(new THREE.SphereGeometry(0.28,8,6), 0xc23b2f); t.translate(x,CURB+0.95,z);
-      c.prop.push(b,t);
-    }
+  const clear = (x, z) => !onBway(x, z) && tsqDist(x, z) > TSQ_R + 4;
+  /* Pick a spot on one of the four kerbs of this block and hand back where it
+   * is and which way is out toward the street, so anything with a front — a
+   * newsstand, a shelter, a kiosk — ends up facing the traffic rather than the
+   * wall behind it. `along` is how far down the block, 0 at the middle. */
+  const kerb = (along, side) => {
+    const s = side !== undefined ? side : ri(0, 3);
+    if(s === 0) return [cx + along, cz - e, Math.PI];       // north kerb, faces -Z
+    if(s === 1) return [cx + along, cz + e, 0];             // south kerb
+    if(s === 2) return [cx - e, cz + along, -Math.PI/2];    // west kerb
+    return              [cx + e, cz + along, Math.PI/2];    // east kerb
+  };
+  const span = () => rr(-BLOCK*0.36, BLOCK*0.36);
+
+  // a hydrant on most blocks — there is one every couple of hundred feet
+  for(let k=0, n = rnd() < 0.75 ? ri(1, 2) : 0; k<n; k++){
+    const [x, z] = kerb(span());
+    if(clear(x, z)) hydrant(c, x, z);
   }
-  if(rnd()<0.6){
-    const z = cz + rr(-BLOCK*0.35, BLOCK*0.35), x = cx + (rnd()<0.5?-e:e);
-    if(clear(x,z)){
-      const b = colored(new THREE.CylinderGeometry(0.45,0.38,1.1,10), 0x3e4b3e); b.translate(x,CURB+0.55,z);
-      c.prop.push(b);
-    }
+  if(rnd() < 0.75){
+    const [x, z] = kerb(span());
+    if(clear(x, z)) litterBasket(c, x, z);
   }
-  if(rnd()<0.35){
-    const x = cx + rr(-BLOCK*0.3, BLOCK*0.3), z = cz + (rnd()<0.5?-e:e);
-    if(clear(x,z)){
-      const b = colored(new THREE.BoxGeometry(0.6,1.1,0.5), pick([0x2f5fa8,0xa83a3a,0x2c2c2c]));
-      b.translate(x,CURB+0.55,z); c.prop.push(b);
-    }
+  if(rnd() < 0.34){
+    const [x, z, a] = kerb(span());
+    if(clear(x, z)) newsBoxes(c, x, z, a);
+  }
+  if(rnd() < 0.16){
+    const [x, z, a] = kerb(span());
+    if(clear(x, z)) relayBox(c, x, z, a);
+  }
+  if(rnd() < 0.20){
+    const [x, z, a] = kerb(span());
+    if(clear(x, z)) linkKiosk(c, x, z, a);
+  }
+  if(rnd() < 0.22){
+    const [x, z, a] = kerb(rr(-BLOCK*0.28, BLOCK*0.28));
+    if(clear(x, z)) foodCart(c, x, z, a);
+  }
+  if(rnd() < 0.13){
+    // a newsstand goes on the corner, where the footfall is
+    const [x, z, a] = kerb((rnd() < 0.5 ? -1 : 1) * BLOCK*0.36);
+    if(clear(x, z)) newsstand(c, x, z, a);
+  }
+  if(rnd() < 0.16){
+    const [x, z, a] = kerb(rr(-BLOCK*0.2, BLOCK*0.2));
+    if(clear(x, z)) busShelter(c, x, z, a);
+  }
+  if(rnd() < 0.22){
+    const [x, z, a] = kerb(span());
+    if(clear(x, z)) bikeRack(c, x, z, a);
+  }
+  // manhole covers, and now and then the steam stack standing over one
+  for(let k=0, n=ri(1,3); k<n; k++){
+    const along = rr(-BLOCK*0.42, BLOCK*0.42), s = rnd() < 0.5 ? -1 : 1;
+    const off = BLOCK/2 + WALK + rr(3, ROAD/2 + 1);         // out in the roadbed
+    const [mx, mz] = rnd() < 0.5 ? [cx + along, cz + s*off] : [cx + s*off, cz + along];
+    if(!clear(mx, mz) || isPaved(mx, mz)) continue;
+    if(rnd() < 0.11) steamStack(c, mx, mz);
+    else             manhole(c, mx, mz, rnd() < 0.3);
   }
   // lamps on two corners
   for(const p of [[cx - BLOCK*0.28, cz - e], [cx + BLOCK*0.28, cz + e]])
@@ -1378,6 +1802,25 @@ function sidewalkShed(c, i, j, ax, sgn){
                     ax === 'x' ? cz + q*(w/2 - 0.4) : cz + s);
       c.prop.push(leg);
     }
+  }
+  // and the job that put it there: cones down the kerb line, pipe and plywood
+  // stacked against the legs
+  const koff = BLOCK/2 + WALK - 0.8;
+  for(let s = -len/2 + 2; s <= len/2 - 2; s += rr(3.2, 5.4)){
+    const kx = ax === 'x' ? cx + s : cxm + sgn*koff;
+    const kz = ax === 'x' ? czm + sgn*koff : cz + s;
+    if(onBway(kx, kz)) continue;
+    trafficCone(c, kx, kz);
+  }
+  if(rnd() < 0.5){
+    const s = rr(-len/4, len/4);
+    const sx = ax === 'x' ? cx + s : cx - sgn*0.9;
+    const sz = ax === 'x' ? cz - sgn*0.9 : cz + s;
+    const sw = ax === 'x' ? 3.2 : 0.7, sd = ax === 'x' ? 0.7 : 3.2;
+    for(let k=0;k<3;k++)
+      c.prop.push(colored(new THREE.BoxGeometry(sw, 0.16, sd), k === 2 ? 0x8a6a3f : 0x6f7a83)
+                    .translate(sx, CURB + 0.09 + k*0.17, sz));
+    addSolid(sx, sz, sw, sd);
   }
 }
 
@@ -1954,6 +2397,25 @@ function buildCell(i, j){
       for(let v = cellX(i) - STREET/2; v < cellX(i) + BLOCK + STREET/2; v += 7)
         addMark(c, 0.32, 3.4, v, r, true, 0xcaa72c);
     }
+    /* The gutter. Asphalt against a kerb is always darker than the crown of
+     * the road — it is where the water stands and where the sweeper never
+     * quite reaches — and without it the roadbed does not end anywhere, it
+     * just changes texture. Laid in short lengths so Broadway and the plaza
+     * can cut through it like they cut through everything else. */
+    {
+      const S = BLOCK + WALK*2, GW = 1.15, gOff = S/2 + GW/2, step = S/5;
+      const strip = (x, z, turn) => addMark(c, turn ? GW : step, turn ? step : GW,
+                                            x, z, false, 0x1b1d21);
+      for(let k=0;k<5;k++){
+        const s = -S/2 + step*(k + 0.5);
+        if(isLandIJ(i,j-1) && !(closedZ[i][j-1])) strip(midX(i)+s, midZ(j)-gOff, false);
+        if(isLandIJ(i,j+1) && !closedZ[i][j])     strip(midX(i)+s, midZ(j)+gOff, false);
+        if(isLandIJ(i-1,j) && !(closedX[i-1] && closedX[i-1][j]))
+                                                  strip(midX(i)-gOff, midZ(j)+s, true);
+        if(isLandIJ(i+1,j) && !closedX[i][j])     strip(midX(i)+gOff, midZ(j)+s, true);
+      }
+    }
+
     if(isLandIJ(i+1,j) && isLandIJ(i,j+1) && isLandIJ(i+1,j+1)
        && !closedX[i][j] && !closedZ[i][j]){
       const rx = roadX(i), rz = roadZ(j), off = ROAD/2 + 2.6;
@@ -2435,6 +2897,7 @@ tasks.push(() => {
     if(c.roof.length)  cityGroup.add(new THREE.Mesh(mergeGeos(c.roof),  vcMat));
     if(c.store.length) cityGroup.add(new THREE.Mesh(mergeGeos(c.store), vcMat));
     if(c.prop.length)  cityGroup.add(new THREE.Mesh(mergeGeos(c.prop),  vcMat));
+    if(c.glow.length)  cityGroup.add(new THREE.Mesh(mergeGeos(c.glow),  litMat));
     if(c.mark.length)  cityGroup.add(new THREE.Mesh(mergeGeos(c.mark),  vcMat));
     if(c.shop.length)  cityGroup.add(new THREE.Mesh(mergeGeos(c.shop),  shopMat));
     for(let p=0;p<4;p++)
@@ -2480,7 +2943,7 @@ tasks.push(() => {
       lampGlows.push(glow);
     }
     c.roof = c.store = c.prop = c.mark = c.shop = c.sig = c.tree = c.lamp = c.bldg =
-      c.road = c.walk = c.grass = null;
+      c.road = c.walk = c.grass = c.glow = null;
   }
   chunks.clear();
 });
@@ -2612,6 +3075,12 @@ const CAR_COLORS = [0xf5c518,0xf5c518,0xf5c518,0xd9dde2,0x2f3a4a,0x8c1f1f,
 const cars = [], carMeshes = [];
 const CAR_COUNT = 210;
 
+function wheels(parts, hw, r, ...zs){
+  for(const z of zs) for(const s of [-1, 1]){
+    const w = colored(new THREE.CylinderGeometry(r, r, 0.3, 8), 0x14171a);
+    w.rotateZ(Math.PI/2); w.translate(s*hw, r, z); parts.push(w);
+  }
+}
 function carGeo(bodyColor, taxi){
   const parts = [];
   parts.push(colored(new THREE.BoxGeometry(2.0, 0.85, 4.4), bodyColor).translate(0,0.75,0));
@@ -2623,29 +3092,82 @@ function carGeo(bodyColor, taxi){
   if(taxi) parts.push(colored(new THREE.BoxGeometry(0.9,0.28,0.35), 0xf2f2e6).translate(0,1.98,-0.15));
   return mergeGeos(parts);
 }
-function lampsGeo(){
+/* A street of nothing but sedans is what gives a model city away. Real traffic
+ * on an avenue here is cabs, a box truck double-parked with its hazards on, a
+ * courier van, and a bus pulling out of the stop ahead of you — all of them
+ * longer than a car, which is why the following distance is worked out from
+ * each vehicle's own length rather than a flat seven metres. */
+function busGeo(){
+  const P = [], L = 11.4, W = 2.62;
+  P.push(colored(new THREE.BoxGeometry(W, 2.05, L), 0xdadde2).translate(0, 1.55, 0));
+  P.push(colored(new THREE.BoxGeometry(W+0.04, 0.62, L-0.5), 0x1d4a7e).translate(0, 1.05, 0));
+  P.push(colored(new THREE.BoxGeometry(W+0.05, 0.9, L-2.2), 0x1b2b38).translate(0, 2.16, -0.4));
+  P.push(colored(new THREE.BoxGeometry(W-0.3, 1.0, 0.08), 0x22394a).translate(0, 2.1, L/2));
+  P.push(colored(new THREE.BoxGeometry(W-0.3, 0.9, 0.08), 0x22394a).translate(0, 2.1, -L/2));
+  P.push(colored(new THREE.BoxGeometry(W+0.06, 0.22, 3.4), 0x0f1216).translate(0, 2.62, 1.2));
+  P.push(colored(new THREE.BoxGeometry(W-1.0, 0.3, 0.06), 0xf2e6a8).translate(0, 2.72, L/2)); // route blind
+  P.push(colored(new THREE.BoxGeometry(W-0.5, 0.28, 1.6), 0xbfc3c8).translate(0, 2.7, -2.6)); // roof pod
+  wheels(P, W/2 - 0.14, 0.5, L/2 - 1.8, -L/2 + 3.6, -L/2 + 2.0);
+  return { geo: mergeGeos(P), len: L, speed: rr(8, 13) };
+}
+function truckGeo(){
+  const P = [], W = 2.4, L = 7.6, cab = pick([0xd8dbe0, 0x8c1f1f, 0x2f4a7a, 0x2b2b2b]);
+  P.push(colored(new THREE.BoxGeometry(W, 2.4, 5.0), 0xe6e4de).translate(0, 2.1, -1.2));
+  P.push(colored(new THREE.BoxGeometry(W-0.06, 0.06, 5.0), 0xb8b5ad).translate(0, 3.28, -1.2));
+  P.push(colored(new THREE.BoxGeometry(W-0.05, 1.55, 2.5), cab).translate(0, 1.55, 2.55));
+  P.push(colored(new THREE.BoxGeometry(W-0.22, 0.85, 0.08), 0x1f2a33).translate(0, 2.05, 3.8));
+  P.push(colored(new THREE.BoxGeometry(W+0.06, 0.34, 0.5), 0x33383f).translate(0, 0.72, 3.7));
+  wheels(P, W/2 - 0.12, 0.48, 2.5, -2.2, -3.4);
+  return { geo: mergeGeos(P), len: L, speed: rr(9, 15) };
+}
+function vanGeo(){
+  const P = [], W = 2.1, L = 5.8, col = pick([0xd9dde2, 0x8a5a2a, 0x2f6b43, 0x9a9ea4, 0x4a3f8f]);
+  P.push(colored(new THREE.BoxGeometry(W, 1.85, 4.2), col).translate(0, 1.35, -0.7));
+  P.push(colored(new THREE.BoxGeometry(W-0.04, 1.3, 1.8), col).translate(0, 1.1, 2.0));
+  P.push(colored(new THREE.BoxGeometry(W-0.03, 0.72, 1.2), 0x1f2a33).translate(0, 1.72, 1.6));
+  P.push(colored(new THREE.BoxGeometry(W-0.2, 0.7, 0.08), 0x1f2a33).translate(0, 1.5, 2.9));
+  wheels(P, W/2 - 0.1, 0.42, 1.8, -2.0);
+  return { geo: mergeGeos(P), len: L, speed: rr(10, 17) };
+}
+function pickVehicle(){
+  const r = rnd();
+  if(r < 0.055) return busGeo();
+  if(r < 0.135) return truckGeo();
+  if(r < 0.225) return vanGeo();
+  if(r < 0.60)  return { geo: carGeo(0xf5c518, true),           len: 4.4, speed: rr(12, 21) };
+  return              { geo: carGeo(pick(CAR_COLORS), false),   len: 4.4, speed: rr(11, 20) };
+}
+// headlights and tail lights sit at the ends of whatever this vehicle is
+function lampsGeo(L, hw, y){
   const parts = [];
   const hs = () => new THREE.SphereGeometry(0.18, 6, 5);
-  parts.push(colored(hs(), 0xfff3d0).translate(-0.62,0.72,2.2));
-  parts.push(colored(hs(), 0xfff3d0).translate(0.62,0.72,2.2));
-  const t1 = colored(hs(), 0xff3a2a); t1.scale(0.7,0.5,0.5); t1.translate(-0.68,0.8,-2.2);
-  const t2 = colored(hs(), 0xff3a2a); t2.scale(0.7,0.5,0.5); t2.translate(0.68,0.8,-2.2);
+  parts.push(colored(hs(), 0xfff3d0).translate(-hw, y, L/2));
+  parts.push(colored(hs(), 0xfff3d0).translate( hw, y, L/2));
+  const t1 = colored(hs(), 0xff3a2a); t1.scale(0.7,0.5,0.5); t1.translate(-hw-0.06, y+0.08, -L/2);
+  const t2 = colored(hs(), 0xff3a2a); t2.scale(0.7,0.5,0.5); t2.translate( hw+0.06, y+0.08, -L/2);
   parts.push(t1, t2);
   return mergeGeos(parts);
 }
 const carLightMat = new THREE.MeshBasicMaterial({vertexColors:true});
 
 tasks.push(() => {
-  const lightGeo = lampsGeo();
+  const lightCache = new Map();
+  const lampsFor = L => {
+    let g = lightCache.get(L);
+    if(!g){ g = lampsGeo(L, L > 9 ? 0.95 : L > 5 ? 0.85 : 0.62,
+                            L > 9 ? 0.9 : L > 5 ? 0.8 : 0.72);
+            lightCache.set(L, g); }
+    return g;
+  };
   for(let k=0;k<CAR_COUNT;k++){
-    const taxi = rnd() < 0.42;
+    const v = pickVehicle();
     const g = new THREE.Group();
-    const body = new THREE.Mesh(carGeo(taxi ? 0xf5c518 : pick(CAR_COLORS), taxi), vcMat);
-    const lights = new THREE.Mesh(lightGeo, carLightMat);
+    const body = new THREE.Mesh(v.geo, vcMat);
+    const lights = new THREE.Mesh(lampsFor(v.len), carLightMat);
     g.add(body, lights);
     cityGroup.add(g);
-    const c = { g, body, lights, seg:null, dir:1, pos:0, speed:rr(11,20), turn:0,
-                y:0.02, id:k, jam:0 };
+    const c = { g, body, lights, seg:null, dir:1, pos:0, speed:v.speed, turn:0,
+                y:0.02, id:k, jam:0, len:v.len, gap:v.len/2 + 4.2 };
     body.userData.car = c;
     carMeshes.push(body);
     cars.push(c);
@@ -2766,6 +3288,160 @@ function relocatePed(p){
   p.j = Math.max(0, Math.min(GZ-1, idxZ(player.z)));
   p.t = rnd();
   p.speed = rr(0.9,1.7) / (4*(BLOCK+WALK*1.5));
+}
+
+/* ---------- contact shadows ----------------------------------------------
+ * Nothing in a street reads as standing on the ground until there is something
+ * dark under it. Real shadow maps over a city this size are not affordable, so
+ * every vehicle and every pedestrian gets one soft blob thrown the way the sun
+ * is pointing — two instanced meshes, so five hundred and fifty shadows cost
+ * two draw calls. At night the sun is gone and they all but vanish.
+ */
+const shadowTex = (() => {
+  const S = 64, ca = document.createElement('canvas'); ca.width = ca.height = S;
+  const g = ca.getContext('2d');
+  const grd = g.createRadialGradient(S/2, S/2, 0, S/2, S/2, S/2);
+  grd.addColorStop(0,    'rgba(0,0,0,1)');
+  grd.addColorStop(0.42, 'rgba(0,0,0,.80)');
+  grd.addColorStop(1,    'rgba(0,0,0,0)');
+  g.fillStyle = grd; g.fillRect(0,0,S,S);
+  const t = new THREE.CanvasTexture(ca);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+const shadowMat = new THREE.MeshBasicMaterial({map:shadowTex, transparent:true,
+  opacity:0.40, depthWrite:false});
+const SH_X = -0.55, SH_Z = -0.43;              // the way the sun throws them
+const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(),
+      _v3 = new THREE.Vector3(), _s3 = new THREE.Vector3(),
+      _yUp = new THREE.Vector3(0,1,0), _qI = new THREE.Quaternion();
+const shadowGeo = new THREE.PlaneGeometry(1,1); shadowGeo.rotateX(-Math.PI/2);
+const carShadow = new THREE.InstancedMesh(shadowGeo, shadowMat, CAR_COUNT);
+const pedShadow = new THREE.InstancedMesh(shadowGeo, shadowMat, PED_COUNT);
+for(const im of [carShadow, pedShadow]){
+  im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  im.frustumCulled = false;
+  im.renderOrder = -1;
+  cityGroup.add(im);
+}
+function updateCarShadows(){
+  for(let k=0;k<cars.length;k++){
+    const c = cars[k], p = c.g.position;
+    _q.setFromAxisAngle(_yUp, c.g.rotation.y);
+    // clear of the road markings and the manhole covers, both of which sit
+    // proud of the asphalt and would otherwise punch holes in the shadow
+    _v3.set(p.x + SH_X, p.y + 0.10, p.z + SH_Z);
+    _s3.set(c.len > 9 ? 3.5 : c.len > 5 ? 3.2 : 2.9, 1, (c.len || 4.4) + 1.7);
+    carShadow.setMatrixAt(k, _m4.compose(_v3, _q, _s3));
+  }
+  carShadow.instanceMatrix.needsUpdate = true;
+}
+
+// ---------- sky in motion ----------
+function updateSky(dt){
+  const px = camera.position.x, pz = camera.position.z, half = CLOUD_FIELD/2;
+  cloudLit.setHex(night ? 0x2b3552 : 0xffffff);
+  cloudFar.setHex(night ? SKY.night.bot : SKY.day.bot);
+  for(let k=0;k<clouds.length;k++){
+    const c = clouds[k];
+    c.x += dt * c.drift; c.z += dt * c.drift * 0.35;
+    if(c.x - px >  half) c.x -= CLOUD_FIELD;
+    if(c.x - px < -half) c.x += CLOUD_FIELD;
+    if(c.z - pz >  half) c.z -= CLOUD_FIELD;
+    if(c.z - pz < -half) c.z += CLOUD_FIELD;
+    _q.setFromAxisAngle(_yUp, c.a);
+    _v3.set(c.x, c.y, c.z); _s3.set(c.s, 1, c.s*0.7);
+    cloudMesh.setMatrixAt(k, _m4.compose(_v3, _q, _s3));
+    // wash out toward the horizon colour with distance, so one that wraps
+    // round behind you is already invisible by the time it does it
+    const f = Math.min(1, Math.hypot(c.x - px, c.z - pz) / half);
+    cloudTmp.copy(cloudLit).lerp(cloudFar, f*f*0.96);
+    cloudMesh.setColorAt(k, cloudTmp);
+  }
+  cloudMesh.instanceMatrix.needsUpdate = true;
+  if(cloudMesh.instanceColor) cloudMesh.instanceColor.needsUpdate = true;
+  sunDisc.position.set(px + SUN_DIR.x*820, SUN_DIR.y*820, pz + SUN_DIR.z*820);
+}
+
+/* ---------- pigeons -------------------------------------------------------
+ * They stand about on the pavement in ones and twos until you get within a few
+ * feet, and then the whole lot goes up at once and comes down half a block
+ * away. It is a small thing and it is the difference between a street with
+ * people walking down it and a street that is alive.
+ */
+const BIRD_N = 44;
+const birds = [];
+let birdMesh = null;
+function relocateBird(b){
+  for(let k=0;k<16;k++){
+    const i = idxX(player.x) + ri(-2, 2), j = idxZ(player.z) + ri(-2, 2);
+    if(i < 0 || j < 0 || i >= GX || j >= GZ) continue;
+    const t = grid[i][j];
+    if(!buildable(t) && t !== PARK) continue;
+    const r = BLOCK/2 + rr(1.0, WALK - 1.0), along = rr(-BLOCK*0.45, BLOCK*0.45);
+    const side = ri(0, 3);
+    const x = side < 2 ? midX(i) + along : midX(i) + (side === 2 ? -r : r);
+    const z = side < 2 ? midZ(j) + (side === 0 ? -r : r) : midZ(j) + along;
+    if(onBway(x, z)) continue;
+    b.x = x; b.z = z; b.y = groundAt(x, z) + 0.02;
+    b.fly = 0; b.vy = 0; b.hop = rnd()*2; b.ang = rnd()*6.283;
+    return;
+  }
+  b.x = player.x + rr(-34, 34); b.z = player.z + rr(-34, 34);
+  b.y = groundAt(b.x, b.z) + 0.02; b.fly = 0; b.vy = 0;
+}
+tasks.push(() => {
+  const P = [
+    colored(new THREE.SphereGeometry(0.12, 7, 5), 0xffffff).scale(1, 0.86, 1.5).translate(0, 0.13, 0),
+    colored(new THREE.SphereGeometry(0.07, 6, 5), 0xe4e9ee).translate(0, 0.24, 0.11),
+    colored(new THREE.ConeGeometry(0.022, 0.07, 4), 0xb98a4a)
+      .rotateX(Math.PI/2).translate(0, 0.235, 0.185),
+    colored(new THREE.BoxGeometry(0.09, 0.02, 0.15), 0xd0d6dc).translate(0, 0.10, -0.20),
+    colored(new THREE.BoxGeometry(0.30, 0.02, 0.13), 0xdde2e7).translate(0, 0.16, -0.01),
+    colored(new THREE.BoxGeometry(0.03, 0.07, 0.03), 0xc4763a).translate(-0.04, 0.035, 0.02),
+    colored(new THREE.BoxGeometry(0.03, 0.07, 0.03), 0xc4763a).translate( 0.04, 0.035, 0.02)
+  ];
+  birdMesh = new THREE.InstancedMesh(mergeGeos(P), vcMat, BIRD_N);
+  birdMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  birdMesh.frustumCulled = false;
+  cityGroup.add(birdMesh);
+  const col = new THREE.Color();
+  for(let k=0;k<BIRD_N;k++){
+    const b = { x:0, y:0, z:0, ang:0, fly:0, vy:0, hop:rnd()*2 };
+    birds.push(b); relocateBird(b);
+    col.setHex(pick([0x9aa2ab, 0xbcc2c9, 0x6f7681, 0x8a7f74, 0xd8dbdf, 0x5c626b]));
+    birdMesh.setColorAt(k, col);
+  }
+  birdMesh.instanceColor.needsUpdate = true;
+});
+function updateBirds(dt, tt){
+  if(!birdMesh) return;
+  for(let k=0;k<birds.length;k++){
+    const b = birds[k];
+    let flap = 0;
+    if(b.fly > 0){
+      b.fly -= dt;
+      b.vy -= dt*2.2; b.y += b.vy*dt;
+      if(b.y < 0.2){ b.y = 0.2; b.vy = 2.2; }
+      b.x += Math.sin(b.ang)*dt*12; b.z += Math.cos(b.ang)*dt*12;
+      flap = Math.sin(tt*24 + k);
+      if(b.fly <= 0) relocateBird(b);
+    } else {
+      b.hop -= dt;
+      if(b.hop <= 0){ b.hop = rr(0.7, 2.6); b.ang += rr(-1.5, 1.5); }
+      b.x += Math.sin(b.ang)*dt*0.45; b.z += Math.cos(b.ang)*dt*0.45;
+      const d2 = (b.x - player.x)**2 + (b.z - player.z)**2;
+      if(d2 < 30){                                  // you walked straight at them
+        b.fly = rr(2.0, 3.4); b.vy = rr(5.0, 7.0);
+        b.ang = Math.atan2(b.x - player.x, b.z - player.z) + rr(-0.6, 0.6);
+      } else if(d2 > 16000) relocateBird(b);
+    }
+    _q.setFromAxisAngle(_yUp, b.ang);
+    _v3.set(b.x, b.y, b.z);
+    _s3.set(1 + Math.abs(flap)*1.1, 1, 1);
+    birdMesh.setMatrixAt(k, _m4.compose(_v3, _q, _s3));
+  }
+  birdMesh.instanceMatrix.needsUpdate = true;
 }
 
 // ---------- steam ----------
@@ -3039,6 +3715,12 @@ function setNight(v, silent){
   shopMat.emissive.set(night ? 0xffffff : 0x35291c);
   water.material.color.set(night ? 0x2a3d52 : 0x9fc6dd);
   stars.material.opacity = night ? 0.9 : 0;
+  // no sun, no shadows: what is left after dark is the faint pool a streetlight
+  // throws, not a hard one from overhead
+  shadowMat.opacity = night ? 0.13 : 0.40;
+  sunDisc.material.color.set(night ? 0x93a8c8 : 0xffffff);
+  sunDisc.material.opacity = night ? 0.5 : 0.95;
+  sunDisc.scale.setScalar(night ? 70 : 170);
   lampGlows.forEach(g => g.visible = night);
   tsqLight.visible = night; tsqLight.intensity = night ? 2.4 : 0;
   roamLights.forEach(l => { l.visible = night; l.intensity = night ? 1.5 : 0; });
@@ -3225,9 +3907,12 @@ function tick(){
   else      updateWalking(dt, mf, ms);
 
   updateTraffic(dt);
+  updateCarShadows();
   updateChase(dt);
   updatePeds(dt, t);
   updateSteam(dt);
+  updateBirds(dt, t);
+  updateSky(dt);
 
   // signals + beacons — greenPhase is what the lenses show and what traffic obeys
   const gph = greenPhase;
@@ -3717,7 +4402,9 @@ function updateDriving(dt, mf, ms){
   // chase camera, auto-recentring behind the car
   if(Math.abs(drive.speed) > 6) drive.camOff *= (1 - 1.4*dt);
   const yaw = drive.heading + Math.PI + drive.camOff;
-  const back = 12.5, up = 5.4;
+  // sit the camera back off whatever you climbed into — a bus is not a taxi
+  const over = ((drive.c.len || 4.4) - 4.4) * 0.75;
+  const back = 12.5 + over, up = 5.4 + over*0.28;
   const cx = g.position.x - Math.sin(yaw + Math.PI) * back;
   const cz = g.position.z - Math.cos(yaw + Math.PI) * back;
   camera.position.set(cx, g.position.y + up, cz);
@@ -3852,7 +4539,9 @@ function updateTraffic(dt){
       const d = (o.pos - c.pos)*c.dir;
       if(d > 0 && d < lead){ lead = d; leadV = o.vel || 0; }
     }
-    if(lead < 26) v = Math.min(v, lead < 7 ? 0 : c.speed*(lead - 7)/19);
+    // a bus needs more room in front of it than a taxi does
+    const gap = c.gap || 7;
+    if(lead < 26) v = Math.min(v, lead < gap ? 0 : c.speed*(lead - gap)/(26 - gap));
     const st = c.seg.stops;
     if(st.length){
       let ahead = null;
@@ -4017,9 +4706,13 @@ function updatePeds(dt, t){
     pedBody[p.kind].setMatrixAt(p.slot, pedHip.matrixWorld);
     pedLegs[0].setMatrixAt(p.idx, pedLegNode[0].matrixWorld);
     pedLegs[1].setMatrixAt(p.idx, pedLegNode[1].matrixWorld);
+    _v3.set(px + SH_X*0.35, y + 0.035, pz + SH_Z*0.35);
+    _s3.set(0.95, 1, 0.95);
+    pedShadow.setMatrixAt(p.idx, _m4.compose(_v3, _qI, _s3));
   }
   pedBody.forEach(im => im.instanceMatrix.needsUpdate = true);
   pedLegs.forEach(im => im.instanceMatrix.needsUpdate = true);
+  pedShadow.instanceMatrix.needsUpdate = true;
   for(let n=0;n<10;n++){
     pedCursor = (pedCursor + 1) % peds.length;
     const p = peds[pedCursor];
@@ -4030,14 +4723,28 @@ function updatePeds(dt, t){
   }
 }
 
+// Steam comes out of something. Where there is a stack or an open cover in
+// sight the plume starts at the top of it; otherwise it drifts up off a grate
+// somewhere down the block, as before.
+const nearVents = [];
 function updateSteam(dt){
   for(const s of steams){
     s.t += dt * 0.32;
     if(s.t >= 1){
       s.t = 0;
-      s.x = player.x + rr(-70,70); s.z = player.z + rr(-70,70);
+      nearVents.length = 0;
+      for(let k=0;k<ventSpots.length;k++){
+        const v = ventSpots[k];
+        if((v[0]-player.x)**2 + (v[1]-player.z)**2 < 8100) nearVents.push(v);
+      }
+      if(nearVents.length){
+        const v = nearVents[Math.floor(rnd()*nearVents.length)];
+        s.x = v[0] + rr(-0.3, 0.3); s.z = v[1] + rr(-0.3, 0.3); s.y0 = v[2];
+      } else {
+        s.x = player.x + rr(-70,70); s.z = player.z + rr(-70,70); s.y0 = 1.2;
+      }
     }
-    s.spr.position.set(s.x, 1.2 + s.t * 7, s.z);
+    s.spr.position.set(s.x, (s.y0 || 1.2) + s.t * 7, s.z);
     s.spr.material.opacity = 0.20 * (1 - s.t) * (night ? 0.9 : 0.55);
     s.spr.scale.set(4 + s.t*7, 5 + s.t*8, 1);
   }
