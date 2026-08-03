@@ -260,7 +260,10 @@ for(let i=0;i<GX;i++){
     let t = WATER;
     const ms = manSpan(j);
     if(ms && i >= ms[0] && i <= ms[1]) t = manType(j);
-    if(i >= 10 && i <= 12 && j >= 13 && j <= 17) t = PARK;          // Central Park
+    // Central Park: 59th to 110th is a fifth of the length of Manhattan, and
+    // five rows was nowhere near it — the park came out almost square when
+    // the real one is two and a half times longer than it is wide
+    if(i >= 10 && i <= 12 && j >= 12 && j <= 18) t = PARK;          // Central Park
     if(i >= 16 && j >= 6  && j <= 22) t = QUEENS;
     if(i >= 16 && j >= 23 && j <= 34) t = BKLYN;
     if(i >= 20 && i <= 22 && j >= 27 && j <= 29) t = PARK;          // Prospect Park
@@ -646,6 +649,10 @@ function shopUV(geo, w, d){
 }
 
 // ---------- collision buckets ----------
+// Central Park's water and the bridge decks over it, declared up here because
+// the very first thing that runs — working out where Broadway crosses the
+// grid — already asks what counts as solid ground.
+const parkWater = [], parkDeck = [];
 const solidGrid = new Map();
 const skey = (i,j) => i + '|' + j;
 function addSolid(x, z, w, d, kerb){
@@ -1926,6 +1933,9 @@ function buildPark(i, j){
   if(closedX[i][j]) lawn(roadX(i), pz, STREET, S);
   if(closedZ[i][j]) lawn(px, roadZ(j), S, STREET);
   if(closedX[i][j] && closedZ[i][j]) lawn(roadX(i), roadZ(j), STREET, STREET);
+  // Central Park is laid out as one designed landscape further down rather
+  // than scattered cell by cell — all it wants from here is the ground
+  if(inCentral(i, j)) return;
   if(rnd() < 0.35){
     const pond = new THREE.Mesh(new THREE.CircleGeometry(rr(7,11), 24),
       new THREE.MeshLambertMaterial({color:0x2a5f7a}));
@@ -1946,6 +1956,506 @@ function buildPark(i, j){
   if(closedZ[i][j]) for(let k=0;k<6;k++)
     c.tree.push([px + rr(-BLOCK/2, BLOCK/2),
                  roadZ(j) + rr(-STREET/2, STREET/2), rr(0.9,1.4)]);
+}
+
+/* ---------- Central Park --------------------------------------------------
+ * Olmsted and Vaux won the 1858 competition with the Greensward plan, and
+ * almost nothing inside the wall is accidental: the ground was drained,
+ * blasted, graded and planted into a picture, and the picture is still the
+ * one you walk through. So a green rectangle with trees thrown at it is
+ * precisely what the park is not.
+ *
+ * North to south it goes: the North Woods and the Harlem Meer, the Pool on
+ * the west side, then the Reservoir across nearly the whole width, the Great
+ * Lawn and its ballfields, Belvedere Castle standing on its outcrop over
+ * Turtle Pond, the Ramble, the Lake with Bow Bridge over its neck, Bethesda
+ * Terrace and the Angel of the Waters, the Mall running south from it under
+ * four rows of elms, Sheep Meadow to the west, and the Pond in the south-east
+ * corner under Gapstow Bridge. The Metropolitan Museum sits in the park on
+ * the Fifth Avenue side and the Obelisk stands behind it.
+ *
+ * Round the whole of it runs a low schist wall with a bluestone cap, and just
+ * inside that the loop drive — which carries no traffic, because the real one
+ * has carried none since 2018. Four streets cross the park and nothing else
+ * does; everything else is footpath, and footpaths here curve.
+ */
+const CP = { i0:10, i1:12, j0:12, j1:18 };
+const inCentral = (i, j) => i >= CP.i0 && i <= CP.i1 && j >= CP.j0 && j <= CP.j1;
+const CPS  = BLOCK + WALK*2;
+const CPX0 = midX(CP.i0) - CPS/2, CPX1 = midX(CP.i1) + CPS/2;
+const CPZ0 = midZ(CP.j0) - CPS/2, CPZ1 = midZ(CP.j1) + CPS/2;
+const CPW  = CPX1 - CPX0, CPL = CPZ1 - CPZ0;
+const pu = u => CPX0 + u*CPW;        // 0 = Central Park West, 1 = Fifth Avenue
+const pv = v => CPZ0 + v*CPL;        // 0 = 110th Street, 1 = 59th Street
+const GY = CURB + 0.06;              // the top of the lawn
+
+// (parkWater / parkDeck are declared with the collision buckets, above)
+const cpOpen = [], cpTrans = [], cpDrive = [];
+const cpPlaces = [];                 // named ground, for the location readout
+function inParkWater(x, z){
+  for(let k=0;k<parkDeck.length;k++){
+    const d = parkDeck[k];
+    if(x > d.x1 && x < d.x2 && z > d.z1 && z < d.z2) return false;
+  }
+  for(let k=0;k<parkWater.length;k++){
+    const w = parkWater[k];
+    const dx = (x - w.x)/w.rx, dz = (z - w.z)/w.rz;
+    if(dx*dx + dz*dz < 1) return true;
+  }
+  return false;
+}
+// Where a tree may go: not in the water, not on an open lawn (the whole point
+// of Sheep Meadow is that it is empty), not on a road, not on the drive.
+function cpClear(x, z){
+  if(x < CPX0 + WALK + 2 || x > CPX1 - WALK - 2) return false;
+  if(z < CPZ0 + WALK + 2 || z > CPZ1 - WALK - 2) return false;
+  if(inParkWater(x, z)) return false;
+  for(let k=0;k<cpTrans.length;k++)
+    if(z > cpTrans[k][0] && z < cpTrans[k][1]) return false;
+  for(let k=0;k<cpOpen.length;k++){
+    const o = cpOpen[k];
+    const dx = (x - o.x)/o.rx, dz = (z - o.z)/o.rz;
+    if(dx*dx + dz*dz < 1) return false;
+  }
+  for(let k=0;k<cpDrive.length-1;k++)
+    if(segDist(x, z, cpDrive[k][0], cpDrive[k][1],
+                     cpDrive[k+1][0], cpDrive[k+1][1]) < 5.5) return false;
+  return true;
+}
+
+const cpAt = (x, z) => chunkOf(x, z);
+const parkWaterTex = flatTex('#2e5c72', 15, 128);
+parkWaterTex.repeat.set(5, 5);
+const parkWaterMat = new THREE.MeshLambertMaterial({map:parkWaterTex, color:0x9ec4d8});
+
+function cpDisc(bucket, x, z, rx, rz, y, col, seg){
+  const g = new THREE.CircleGeometry(1, seg || 34);
+  g.rotateX(-Math.PI/2); g.scale(rx, 1, rz); g.translate(x, y, z);
+  cpAt(x, z)[bucket].push(colored(g, col));
+}
+function cpRing(bucket, x, z, rx, rz, t, y, col){
+  const g = new THREE.RingGeometry(1 - t, 1, 48);
+  g.rotateX(-Math.PI/2); g.scale(rx, 1, rz); g.translate(x, y, z);
+  cpAt(x, z)[bucket].push(colored(g, col));
+}
+// a strip of path or roadway laid along a run of points
+function cpRibbon(bucket, pts, w, y, col){
+  for(let k=0;k<pts.length-1;k++){
+    const [x0,z0] = pts[k], [x1,z1] = pts[k+1];
+    const dx = x1-x0, dz = z1-z0, len = Math.hypot(dx,dz);
+    if(len < 0.2) continue;
+    const g = new THREE.PlaneGeometry(w, len + w*0.6);
+    g.rotateX(-Math.PI/2); g.rotateY(Math.atan2(dx, dz));
+    const mx = (x0+x1)/2, mz = (z0+z1)/2;
+    g.translate(mx, y, mz);
+    cpAt(mx, mz)[bucket].push(colored(g, col));
+  }
+}
+// A path that wanders. Olmsted did not draw a straight line anywhere in here
+// except the Mall, and he meant it — you are never supposed to see where a
+// path is going to come out.
+function cpWander(x0, z0, x1, z1, amp, n){
+  const pts = [], dx = x1-x0, dz = z1-z0, L = Math.hypot(dx,dz) || 1;
+  const nx = -dz/L, nz = dx/L, ph = rnd()*6.283, w2 = rr(1.2, 2.6);
+  for(let k=0;k<=n;k++){
+    const t = k/n, bend = Math.sin(ph + t*w2*Math.PI) * amp * Math.sin(Math.PI*t);
+    pts.push([x0 + dx*t + nx*bend, z0 + dz*t + nz*bend]);
+  }
+  return pts;
+}
+
+function cpWallSeg(x0, z0, x1, z1){
+  const horiz = Math.abs(x1 - x0) >= Math.abs(z1 - z0);
+  const len = Math.hypot(x1 - x0, z1 - z0);
+  if(len < 1.2) return;
+  const w = horiz ? len : 1.05, d = horiz ? 1.05 : len;
+  const mx = (x0+x1)/2, mz = (z0+z1)/2;
+  cpAt(mx, mz).prop.push(
+    colored(new THREE.BoxGeometry(w, 0.94, d), 0x6d6659).translate(mx, GY + 0.47, mz),
+    colored(new THREE.BoxGeometry(w + 0.28, 0.16, d + 0.28), 0x918977).translate(mx, GY + 1.02, mz));
+  addSolid(mx, mz, w, d);
+}
+// run a wall between `a` and `b`, leaving the listed ranges open for the
+// transverse roads and the entrances
+function cpWallRun(axis, fixed, a, b, gaps){
+  const emit = (p, q) => {
+    for(let t = p; t < q - 0.6; t += 22){
+      const t2 = Math.min(q, t + 22);
+      if(axis === 'x') cpWallSeg(t, fixed, t2, fixed);
+      else             cpWallSeg(fixed, t, fixed, t2);
+    }
+  };
+  let s = a;
+  for(const [g0, g1] of gaps.slice().sort((p, q) => p[0] - q[0])){
+    if(g1 <= s) continue;
+    if(g0 > s) emit(s, Math.min(g0, b));
+    s = Math.max(s, g1);
+    if(s >= b) break;
+  }
+  if(s < b) emit(s, b);
+}
+// The pavement outside the wall. It sits on top of the lawn slab rather than
+// cutting into it — start it at grass level, or the two share an outer face
+// and the whole perimeter flickers.
+function cpWalkEdge(x, z, w, d){
+  const g = new THREE.BoxGeometry(w, 0.07, d);
+  walkUV(g, w, d, x - w/2, z - d/2);
+  g.translate(x, GY + 0.035, z);
+  cpAt(x, z).walk.push(colored(g, 0xffffff));
+}
+
+function cpWaterBody(x, z, rx, rz, name){
+  parkWater.push({x, z, rx, rz});
+  cpDisc('mark', x, z, rx + 2.8, rz + 2.8, GY + 0.012, 0x5b5747, 36);   // the bank
+  const g = new THREE.CircleGeometry(1, 36);
+  g.rotateX(-Math.PI/2); g.scale(rx, 1, rz); g.translate(x, GY + 0.022, z);
+  cityGroup.add(new THREE.Mesh(g, parkWaterMat));
+  if(name) cpPlaces.push({x, z, r: Math.max(rx, rz) * 1.15, name});
+}
+function cpTrees(n, x, z, rx, rz, s0, s1){
+  for(let k=0;k<n;k++){
+    const a = rnd()*6.283, r = Math.sqrt(rnd());
+    const tx = x + Math.cos(a)*r*rx, tz = z + Math.sin(a)*r*rz;
+    if(!cpClear(tx, tz)) continue;
+    cpAt(tx, tz).tree.push([tx, tz, rr(s0, s1)]);
+  }
+}
+function cpBench(x, z, ang){
+  const P = [
+    colored(new THREE.BoxGeometry(2.4, 0.11, 0.58), 0x7d5c39).translate(0, 0.44, 0),
+    colored(new THREE.BoxGeometry(2.4, 0.58, 0.10), 0x7d5c39).translate(0, 0.74, -0.27)
+  ];
+  for(const s of [-1, 1])
+    P.push(colored(new THREE.BoxGeometry(0.11, 0.44, 0.56), 0x2d3237).translate(s*1.04, 0.22, 0));
+  place(P, ang, x, GY, z);
+  cpAt(x, z).prop.push(...P);
+  addSolid(x, z, 2.6, 1.0);
+}
+function cpLamp(x, z){
+  const c = cpAt(x, z);
+  c.prop.push(colored(new THREE.CylinderGeometry(0.09, 0.15, 4.3, 8), 0x22272c).translate(x, GY+2.15, z),
+              colored(new THREE.CylinderGeometry(0.27, 0.20, 0.32, 8), 0x22272c).translate(x, GY+4.45, z));
+  c.glow.push(colored(new THREE.SphereGeometry(0.27, 8, 6), 0xffe4ac).translate(x, GY+4.76, z));
+  addSolid(x, z, 0.4, 0.4);
+}
+// Manhattan schist. The park was quarried out of it and it still breaks the
+// surface everywhere — the one thing that says this ground is not flat.
+function cpRock(x, z, s){
+  const g = colored(new THREE.IcosahedronGeometry(s, 0), 0x70737a);
+  g.scale(1, 0.44, rr(0.8, 1.35)); g.rotateY(rnd()*6.283);
+  g.translate(x, GY + s*0.14, z);
+  cpAt(x, z).prop.push(g);
+  addSolid(x, z, s*1.5, s*1.5);
+}
+// A low arched crossing. The deck stays at grade so you can actually walk it;
+// the arch is in the spandrel underneath, which is the part you look at.
+function cpArchBridge(x0, z0, x1, z1, w, rise, deckCol, archCol){
+  const dx = x1-x0, dz = z1-z0, L = Math.hypot(dx,dz), ang = Math.atan2(dx, dz);
+  const ux = dx/L, uz = dz/L, nx = -uz, nz = ux;
+  const mx = (x0+x1)/2, mz = (z0+z1)/2, c = cpAt(mx, mz);
+  const deck = new THREE.PlaneGeometry(w, L);
+  deck.rotateX(-Math.PI/2); deck.rotateY(ang); deck.translate(mx, GY + 0.16, mz);
+  c.mark.push(colored(deck, deckCol));
+  const N = 14, seg = L/N;
+  for(let k=0;k<N;k++){
+    const t = (k + 0.5)/N;
+    const soffit = GY - 0.6 + Math.sin(Math.PI*t)*rise;    // the arch underneath
+    const h = Math.max(0.12, GY + 0.16 - soffit);
+    const px = x0 + ux*L*t, pz = z0 + uz*L*t;
+    for(const s of [-1, 1]){
+      const g = colored(new THREE.BoxGeometry(0.34, h, seg + 0.14), archCol);
+      g.rotateY(ang);
+      g.translate(px + nx*s*(w/2 - 0.1), soffit + h/2, pz + nz*s*(w/2 - 0.1));
+      c.prop.push(g);
+      const rail = colored(new THREE.BoxGeometry(0.14, 0.9, seg + 0.14), archCol);
+      rail.rotateY(ang);
+      rail.translate(px + nx*s*(w/2 - 0.1), GY + 0.66, pz + nz*s*(w/2 - 0.1));
+      c.prop.push(rail);
+    }
+  }
+  parkDeck.push({ x1: Math.min(x0,x1) - w, x2: Math.max(x0,x1) + w,
+                  z1: Math.min(z0,z1) - w, z2: Math.max(z0,z1) + w });
+}
+
+function buildCentralPark(){
+  // --- the four streets that cross, so nothing gets planted on them --------
+  for(let j = CP.j0; j < CP.j1; j++)
+    if(!closedZ[CP.i0][j]) cpTrans.push([roadZ(j) - STREET/2 - 1.5, roadZ(j) + STREET/2 + 1.5]);
+
+  // --- the loop drive: a rounded rectangle just inside the wall ------------
+  {
+    const inset = 15, N = 72;
+    const cx = (CPX0 + CPX1)/2, cz = (CPZ0 + CPZ1)/2;
+    const rx = CPW/2 - inset, rz = CPL/2 - inset;
+    for(let k=0;k<=N;k++){
+      const a = (k/N)*6.283, ca = Math.cos(a), sa = Math.sin(a), p = 3.4;
+      const f = Math.pow(Math.pow(Math.abs(ca), p) + Math.pow(Math.abs(sa), p), -1/p);
+      cpDrive.push([cx + rx*ca*f, cz + rz*sa*f]);
+    }
+    cpRibbon('mark', cpDrive, 8.2, GY + 0.014, 0x34373c);
+    for(let k=0;k<cpDrive.length-1;k+=6) cpLamp(cpDrive[k][0], cpDrive[k][1]);
+  }
+
+  // --- perimeter: sidewalk outside, schist wall inside ---------------------
+  {
+    const gapsZ = cpTrans.map(t => [t[0] - 3, t[1] + 3]);
+    // and an entrance every couple of hundred feet, which is how the real
+    // wall is broken up
+    for(let v = 0.08; v < 1; v += 0.13) gapsZ.push([pv(v) - 5, pv(v) + 5]);
+    const gapsX = [];
+    for(let u = 0.12; u < 1; u += 0.2) gapsX.push([pu(u) - 5, pu(u) + 5]);
+    cpWallRun('z', CPX0 + WALK + 0.6, CPZ0 + WALK, CPZ1 - WALK, gapsZ);
+    cpWallRun('z', CPX1 - WALK - 0.6, CPZ0 + WALK, CPZ1 - WALK, gapsZ);
+    cpWallRun('x', CPZ0 + WALK + 0.6, CPX0 + WALK, CPX1 - WALK, gapsX);
+    cpWallRun('x', CPZ1 - WALK - 0.6, CPX0 + WALK, CPX1 - WALK, gapsX);
+    for(let z = CPZ0; z < CPZ1; z += 26){
+      const d = Math.min(26, CPZ1 - z);
+      cpWalkEdge(CPX0 + WALK/2, z + d/2, WALK, d);
+      cpWalkEdge(CPX1 - WALK/2, z + d/2, WALK, d);
+    }
+    // the east and west runs already own the corners, so start inside them
+    for(let x = CPX0 + WALK; x < CPX1 - WALK; x += 26){
+      const w = Math.min(26, CPX1 - WALK - x);
+      cpWalkEdge(x + w/2, CPZ0 + WALK/2, w, WALK);
+      cpWalkEdge(x + w/2, CPZ1 - WALK/2, w, WALK);
+    }
+  }
+
+  // --- water --------------------------------------------------------------
+  cpWaterBody(pu(0.74), pv(0.055), CPW*0.15, CPL*0.036, 'Harlem Meer');
+  cpWaterBody(pu(0.15), pv(0.135), CPW*0.10, CPL*0.020, 'The Pool');
+  cpWaterBody(pu(0.50), pv(0.395), CPW*0.38, CPL*0.058, 'The Reservoir');
+  cpWaterBody(pu(0.46), pv(0.625), CPW*0.13, CPL*0.014, 'Turtle Pond');
+  cpWaterBody(pu(0.24), pv(0.705), CPW*0.15, CPL*0.020, 'The Lake');
+  cpWaterBody(pu(0.46), pv(0.708), CPW*0.13, CPL*0.018, 'The Lake');
+  cpWaterBody(pu(0.80), pv(0.935), CPW*0.14, CPL*0.028, 'The Pond');
+
+  // the running track and the fence that ring the Reservoir
+  {
+    const x = pu(0.50), z = pv(0.395), rx = CPW*0.38, rz = CPL*0.058;
+    cpRing('mark', x, z, rx + 7.5, rz + 7.5, 0.075, GY + 0.016, 0x8a5f3e);
+    for(const y of [0.55, 1.15]){
+      const g = colored(new THREE.TorusGeometry(1, 0.05, 4, 80), 0x2f353b);
+      g.rotateX(Math.PI/2); g.scale(rx + 3.2, 1, rz + 3.2); g.translate(x, GY + y, z);
+      cpAt(x, z).prop.push(g);
+    }
+    for(let k=0;k<64;k++){
+      const a = (k/64)*6.283;
+      const px = x + Math.cos(a)*(rx + 3.2), pz = z + Math.sin(a)*(rz + 3.2);
+      cpAt(px, pz).prop.push(
+        colored(new THREE.CylinderGeometry(0.06, 0.06, 1.4, 5), 0x2f353b)
+          .translate(px, GY + 0.7, pz));
+    }
+  }
+
+  // --- the open lawns: nothing is planted on them --------------------------
+  const greatLawn = { x:pu(0.50), z:pv(0.508), rx:CPW*0.29, rz:CPL*0.034 };
+  const sheep     = { x:pu(0.27), z:pv(0.790), rx:CPW*0.19, rz:CPL*0.026 };
+  for(const L of [greatLawn, sheep]){
+    cpOpen.push(L);
+    cpDisc('mark', L.x, L.z, L.rx, L.rz, GY + 0.008, 0x5d8a3c, 40);
+  }
+  cpPlaces.push({x:greatLawn.x, z:greatLawn.z, r:greatLawn.rx, name:'The Great Lawn'});
+  cpPlaces.push({x:sheep.x, z:sheep.z, r:sheep.rx, name:'Sheep Meadow'});
+
+  // two ballfields on the Great Lawn, skinned infields and a backstop
+  for(const bu of [0.34, 0.66]){
+    const bx = pu(bu), bz = pv(0.508);
+    cpOpen.push({x:bx, z:bz, rx:11, rz:11});
+    cpDisc('mark', bx, bz, 10.5, 10.5, GY + 0.011, 0x9c7a4e, 26);
+    cpDisc('mark', bx, bz + 2.2, 6.8, 6.8, GY + 0.013, 0x5d8a3c, 22);
+    for(const [ox, oz] of [[0,-6.8],[6.8,0],[0,6.8],[-6.8,0]])
+      cpAt(bx, bz).prop.push(colored(new THREE.BoxGeometry(0.7, 0.06, 0.7), 0xf0eee6)
+        .translate(bx + ox, GY + 0.04, bz + oz));
+    for(let k=-3;k<=3;k++)                                  // backstop
+      cpAt(bx, bz).prop.push(colored(new THREE.CylinderGeometry(0.07, 0.07, 3.2, 5), 0x4a5057)
+        .translate(bx + k*1.4, GY + 1.6, bz - 9.2));
+  }
+
+  // --- Belvedere Castle, on its outcrop over Turtle Pond -------------------
+  {
+    const bx = pu(0.395), bz = pv(0.650), STONE = 0x8a8378, ROOF = 0x4d4a45;
+    const c = cpAt(bx, bz);
+    cpOpen.push({x:bx, z:bz, rx:13, rz:11});
+    for(let k=0;k<7;k++){                                   // the schist it stands on
+      const a = (k/7)*6.283;
+      cpRock(bx + Math.cos(a)*rr(4, 9), bz + Math.sin(a)*rr(4, 9), rr(1.6, 3.2));
+    }
+    c.prop.push(colored(new THREE.BoxGeometry(11, 1.6, 8), 0x77716a).translate(bx, GY + 0.8, bz));
+    c.prop.push(colored(new THREE.BoxGeometry(8.5, 5.2, 6.2), STONE).translate(bx + 1.2, GY + 4.2, bz));
+    c.prop.push(colored(new THREE.BoxGeometry(9.1, 0.4, 6.8), ROOF).translate(bx + 1.2, GY + 7.0, bz));
+    c.prop.push(colored(new THREE.BoxGeometry(4.4, 11.5, 4.4), STONE).translate(bx - 3.6, GY + 7.35, bz));
+    c.prop.push(colored(new THREE.BoxGeometry(5.0, 0.45, 5.0), ROOF).translate(bx - 3.6, GY + 13.3, bz));
+    for(let k=0;k<4;k++)                                    // crenellations
+      for(const s of [-1, 1]){
+        c.prop.push(colored(new THREE.BoxGeometry(0.7, 0.9, 0.7), STONE)
+          .translate(bx - 3.6 + (k - 1.5)*1.2, GY + 13.9, bz + s*1.9));
+      }
+    c.prop.push(colored(new THREE.ConeGeometry(1.5, 3.2, 4), ROOF).translate(bx - 3.6, GY + 15.4, bz));
+    for(let k=0;k<3;k++)                                    // the tall gothic openings
+      c.glow.push(colored(new THREE.BoxGeometry(0.7, 1.8, 0.06), 0x2a2f36)
+        .translate(bx + 1.2 + (k-1)*2.4, GY + 4.4, bz + 3.13));
+    addSolid(bx + 1.2, bz, 8.5, 6.2);
+    addSolid(bx - 3.6, bz, 4.4, 4.4);
+    cpPlaces.push({x:bx, z:bz, r:26, name:'Belvedere Castle'});
+  }
+
+  // --- Bethesda Terrace and the Angel of the Waters ------------------------
+  {
+    const bx = pu(0.52), bz = pv(0.752), c = cpAt(bx, bz);
+    cpOpen.push({x:bx, z:bz, rx:24, rz:20});
+    cpDisc('mark', bx, bz, 21, 15, GY + 0.015, 0xa1937b, 36);      // the plaza
+    for(let k=0;k<3;k++)                                            // steps down to it
+      c.prop.push(colored(new THREE.BoxGeometry(26 - k*1.6, 0.16, 1.5), 0x9a9078)
+        .translate(bx, GY + 0.08 + k*0.16, bz - 15.5 - k*1.5));
+    for(const s of [-1, 1]){                                        // the balustrades
+      for(let k=0;k<9;k++)
+        c.prop.push(colored(new THREE.CylinderGeometry(0.22, 0.26, 0.85, 7), 0xa79c85)
+          .translate(bx + s*13 + 0, GY + 0.45, bz - 12 + k*3));
+      c.prop.push(colored(new THREE.BoxGeometry(0.7, 0.18, 25), 0xb2a68e)
+        .translate(bx + s*13, GY + 0.95, bz - 0));
+    }
+    // the fountain: an octagonal basin, a pier, and the bronze angel on it
+    c.prop.push(colored(new THREE.CylinderGeometry(6.2, 6.5, 0.75, 8), 0x9c9280).translate(bx, GY + 0.38, bz));
+    const bowl = new THREE.CircleGeometry(5.6, 8);
+    bowl.rotateX(-Math.PI/2); bowl.translate(bx, GY + 0.68, bz);
+    cityGroup.add(new THREE.Mesh(bowl, parkWaterMat));
+    c.prop.push(colored(new THREE.CylinderGeometry(1.5, 1.9, 1.5, 8), 0x8e846f).translate(bx, GY + 1.45, bz));
+    c.prop.push(colored(new THREE.CylinderGeometry(2.6, 2.6, 0.28, 8), 0x7e7a62).translate(bx, GY + 2.3, bz));
+    c.prop.push(colored(new THREE.CylinderGeometry(0.55, 0.75, 2.0, 8), 0x6d7a63).translate(bx, GY + 3.4, bz));
+    c.prop.push(colored(new THREE.SphereGeometry(0.42, 8, 6), 0x6d7a63).translate(bx, GY + 4.7, bz));
+    for(const s of [-1, 1]){
+      const wing = colored(new THREE.BoxGeometry(0.16, 1.9, 0.9), 0x748169);
+      wing.rotateX(-0.35); wing.rotateZ(s*0.3);
+      wing.translate(bx + s*0.5, GY + 4.2, bz - 0.4);
+      c.prop.push(wing);
+    }
+    addSolid(bx, bz, 12, 12);
+    cpPlaces.push({x:bx, z:bz, r:26, name:'Bethesda Terrace'});
+  }
+
+  // --- the Mall: the one straight line in the park, under four rows of elms
+  {
+    const mx = pu(0.52), z0 = pv(0.786), z1 = pv(0.836);
+    cpOpen.push({x:mx, z:(z0+z1)/2, rx:13, rz:(z1-z0)/2 + 4});
+    cpRibbon('mark', [[mx, z0], [mx, z1]], 11, GY + 0.014, 0xa89a80);
+    for(let z = z0 + 4; z < z1 - 3; z += 9.5){
+      for(const s of [-1, 1]){
+        cpAt(mx + s*6.6, z).tree.push([mx + s*6.6, z, rr(1.7, 2.1)]);
+        cpAt(mx + s*10.5, z).tree.push([mx + s*10.5, z, rr(1.6, 2.0)]);
+        cpBench(mx + s*4.6, z + 4.7, s > 0 ? -Math.PI/2 : Math.PI/2);
+      }
+      cpLamp(mx - 5.6, z + 2);
+    }
+    // Literary Walk: the writers on their plinths down the southern end
+    for(let k=0;k<4;k++){
+      const s = k % 2 ? 1 : -1, z = z1 - 8 - Math.floor(k/2)*13;
+      const sx = mx + s*4.4, c = cpAt(sx, z);
+      c.prop.push(colored(new THREE.BoxGeometry(1.3, 2.1, 1.3), 0x8d8779).translate(sx, GY + 1.05, z),
+                  colored(new THREE.BoxGeometry(1.6, 0.2, 1.6), 0x77716a).translate(sx, GY + 2.2, z),
+                  colored(new THREE.CylinderGeometry(0.3, 0.42, 1.6, 7), 0x4d5a48).translate(sx, GY + 3.1, z),
+                  colored(new THREE.SphereGeometry(0.28, 8, 6), 0x4d5a48).translate(sx, GY + 4.05, z));
+      addSolid(sx, z, 1.7, 1.7);
+    }
+    cpPlaces.push({x:mx, z:(z0 + z1)/2, r:34, name:'The Mall'});
+  }
+
+  // --- Bow Bridge over the neck of the Lake, Gapstow over the Pond ---------
+  cpArchBridge(pu(0.345), pv(0.688), pu(0.345), pv(0.724), 3.4, 1.9, 0xa89a80, 0x8e9488);
+  cpArchBridge(pu(0.700), pv(0.910), pu(0.700), pv(0.950), 3.0, 1.7, 0xa89a80, 0x77706a);
+
+  // --- Strawberry Fields, and the rink by the Pond -------------------------
+  {
+    const sx = pu(0.075), sz = pv(0.775);
+    cpOpen.push({x:sx, z:sz, rx:8, rz:8});
+    cpDisc('mark', sx, sz, 6.5, 6.5, GY + 0.015, 0xb9ae97, 28);
+    cpDisc('mark', sx, sz, 3.4, 3.4, GY + 0.018, 0x3a3f45, 24);
+    cpDisc('mark', sx, sz, 1.5, 1.5, GY + 0.021, 0xd8d2c2, 20);
+    for(let k=0;k<5;k++){
+      const a = (k/5)*6.283 + 0.4;
+      cpBench(sx + Math.cos(a)*9, sz + Math.sin(a)*9, -a + Math.PI/2);
+    }
+    cpPlaces.push({x:sx, z:sz, r:20, name:'Strawberry Fields'});
+  }
+  {
+    const rx = pu(0.50), rz = pv(0.912);
+    cpOpen.push({x:rx, z:rz, rx:19, rz:12});
+    cpDisc('mark', rx, rz, 16, 9, GY + 0.016, 0xd3dee4, 30);
+    cpRing('mark', rx, rz, 17.2, 10.2, 0.09, GY + 0.02, 0x8d949b);
+  }
+
+  // --- the Metropolitan Museum, which stands in the park ------------------
+  {
+    const mx = pu(0.86), mz = pv(0.66), c = cpAt(mx, mz);
+    const W = 26, D = 52, H = 22;
+    cpOpen.push({x:mx, z:mz, rx:W/2 + 12, rz:D/2 + 6});
+    const body = new THREE.BoxGeometry(W, H, D); uvScale(body, W, H, D);
+    c.bldg[5].push(colored(body, 0xffffff).translate(mx, GY + H/2, mz));
+    c.roof.push(colored(new THREE.BoxGeometry(W + 1.6, 1.6, D + 1.6), 0xa9a191)
+                  .translate(mx, GY + H + 0.4, mz));
+    // the colonnade and the steps face Fifth Avenue, which is east of here
+    for(let k=0;k<8;k++)
+      c.prop.push(colored(new THREE.CylinderGeometry(0.9, 1.0, 17, 10), 0xbcb4a4)
+        .translate(mx + W/2 + 1.4, GY + 8.5, mz - D/2 + 5 + k*6));
+    c.prop.push(colored(new THREE.BoxGeometry(4.5, 2.2, D - 6), 0xbcb4a4)
+                  .translate(mx + W/2 + 1.4, GY + 18.1, mz));
+    for(let k=0;k<3;k++)
+      c.prop.push(colored(new THREE.BoxGeometry(2.0, 0.22, D - 10), 0xb4ac9c)
+        .translate(mx + W/2 + 4.5 + k*2, GY + 0.11 + k*0.22, mz));
+    addSolid(mx, mz, W + 4, D);
+    cpPlaces.push({x:mx, z:mz, r:40, name:'The Metropolitan Museum'});
+  }
+
+  // --- Cleopatra's Needle, behind the museum ------------------------------
+  {
+    const ox = pu(0.775), oz = pv(0.655), c = cpAt(ox, oz);
+    c.prop.push(colored(new THREE.BoxGeometry(3.0, 0.9, 3.0), 0x8a8377).translate(ox, GY + 0.45, oz),
+                colored(new THREE.CylinderGeometry(0.62, 0.85, 12.5, 4), 0x9c8f72).translate(ox, GY + 7.1, oz),
+                colored(new THREE.ConeGeometry(0.88, 1.5, 4), 0x9c8f72).translate(ox, GY + 14.1, oz));
+    addSolid(ox, oz, 3.2, 3.2);
+    cpPlaces.push({x:ox, z:oz, r:16, name:"Cleopatra's Needle"});
+  }
+
+  // --- footpaths: they curve, and they cross the whole park ---------------
+  const paths = [
+    cpWander(pu(0.10), pv(0.05), pu(0.88), pv(0.16), 16, 12),
+    cpWander(pu(0.12), pv(0.20), pu(0.90), pv(0.24), 14, 12),
+    cpWander(pu(0.14), pv(0.46), pu(0.88), pv(0.53), 13, 12),
+    cpWander(pu(0.12), pv(0.62), pu(0.90), pv(0.72), 15, 12),
+    cpWander(pu(0.10), pv(0.76), pu(0.44), pv(0.82), 12, 10),
+    cpWander(pu(0.60), pv(0.78), pu(0.92), pv(0.82), 12, 10),
+    cpWander(pu(0.10), pv(0.92), pu(0.92), pv(0.96), 12, 12),
+    cpWander(pu(0.28), pv(0.06), pu(0.34), pv(0.98), 22, 22),
+    cpWander(pu(0.70), pv(0.05), pu(0.66), pv(0.97), 24, 22),
+    cpWander(pu(0.50), pv(0.55), pu(0.52), pv(0.75), 12, 10)
+  ];
+  for(const p of paths) cpRibbon('mark', p, 3.6, GY + 0.013, 0xa3977f);
+
+  // --- planting ------------------------------------------------------------
+  cpTrees(320, pu(0.50), pv(0.130), CPW*0.52, CPL*0.115, 1.1, 1.9);   // the North Woods
+  cpTrees(170, pu(0.62), pv(0.672), CPW*0.24, CPL*0.045, 1.0, 1.7);   // the Ramble
+  cpTrees(130, pu(0.50), pv(0.500), CPW*0.52, CPL*0.09,  0.9, 1.5);
+  cpTrees(180, pu(0.50), pv(0.790), CPW*0.52, CPL*0.09,  0.9, 1.6);
+  cpTrees(140, pu(0.50), pv(0.930), CPW*0.52, CPL*0.06,  0.9, 1.5);
+  cpTrees(90,  pu(0.50), pv(0.300), CPW*0.52, CPL*0.05,  0.9, 1.4);
+  cpPlaces.push({x:pu(0.62), z:pv(0.672), r:36, name:'The Ramble'});
+  cpPlaces.push({x:pu(0.50), z:pv(0.13),  r:64, name:'The North Woods'});
+
+  // outcrops, and the benches and lamps along the paths
+  for(let k=0;k<70;k++){
+    const x = rr(CPX0 + 12, CPX1 - 12), z = rr(CPZ0 + 12, CPZ1 - 12);
+    if(cpClear(x, z)) cpRock(x, z, rr(1.2, 3.4));
+  }
+  for(const p of paths){
+    for(let k=2;k<p.length-2;k+=3){
+      const [x, z] = p[k], [nx2, nz2] = p[k+1];
+      const ang = Math.atan2(nx2 - x, nz2 - z);
+      const s = rnd() < 0.5 ? 1 : -1;
+      const bx = x + Math.cos(ang)*s*3.4, bz = z - Math.sin(ang)*s*3.4;
+      if(cpClear(bx, bz)) cpBench(bx, bz, ang + (s > 0 ? Math.PI/2 : -Math.PI/2));
+      if(k % 6 === 2 && cpClear(x, z)) cpLamp(x - 2.6, z);
+    }
+  }
 }
 
 // ---------- landmarks ----------
@@ -2868,6 +3378,9 @@ tasks.push(() => {
   setbackTower(midX(13), midZ(20), [[30,30,60],[22,22,42],[14,14,26]], 26, 3);
   setbackTower(midX(12), midZ(31), [[34,34,74],[26,26,46]], 40, 3);   // clear of Broadway
 });
+// the park is laid out whole, after every cell has put its grass down and
+// before the chunks are welded shut
+tasks.push(buildCentralPark);
 tasks.push(() => bridges.forEach(buildBridge));
 
 // finalise every chunk into a handful of draw calls
@@ -3492,6 +4005,8 @@ function groundAt(x, z){
 }
 function isSolidGround(x, z){
   if(bridgeAt(x, z)) return true;
+  // you do not walk across the Reservoir; Bow Bridge is there for a reason
+  if(inParkWater(x, z)) return false;
   const i = idxX(x), j = idxZ(z);
   return i>=0 && j>=0 && i<GX && j<GZ && grid[i][j] !== WATER;
 }
@@ -3764,7 +4279,17 @@ function locationName(){
   if(t === WATER)   return ['The Harbor', 'new york bay'];
   if(t === LIBERTY) return ['Liberty Island', 'new york harbor'];
   if(t === PARK){
-    if(i <= 13) return ['Central Park', 'manhattan'];
+    if(i <= 13){
+      // name the piece of it you are standing in — the park is a set of
+      // places, and nobody in New York says "Central Park" when they mean
+      // Sheep Meadow
+      let best = null, bd = 1e9;
+      for(let k=0;k<cpPlaces.length;k++){
+        const p = cpPlaces[k], d = Math.hypot(player.x - p.x, player.z - p.z);
+        if(d < p.r && d < bd){ bd = d; best = p; }
+      }
+      return best ? [best.name, 'central park'] : ['Central Park', 'manhattan'];
+    }
     if(j >= 26) return ['Prospect Park', 'brooklyn'];
     return ['Flushing Meadows', 'queens'];
   }
@@ -3819,6 +4344,14 @@ function drawMap(){
     mg.fillStyle = '#4a5058';
     mg.fillRect(x0, y0, (b.b-b.a)*s, DECK_HALF*2*s);
   }
+  // park water, so you can see what you are about to walk into
+  mg.fillStyle = '#1d4a63';
+  for(const w of parkWater){
+    if(Math.abs(w.x - player.x) > MAP_R + w.rx) continue;
+    if(Math.abs(w.z - player.z) > MAP_R + w.rz) continue;
+    const [mx,my] = toMap(w.x, w.z);
+    mg.beginPath(); mg.ellipse(mx, my, w.rx*s, w.rz*s, 0, 0, 6.283); mg.fill();
+  }
   mg.fillStyle = '#f5c518';
   for(const c of cars){
     const [mx,my] = toMap(c.g.position.x, c.g.position.z);
@@ -3863,11 +4396,28 @@ function drawBigMap(){
   for(const b of bridges)
     bg.fillRect(ox + (b.a - OFF_X)*s, oy + (b.line - OFF_Z - DECK_HALF)*s,
                 (b.b-b.a)*s, DECK_HALF*2*s);
+  // the park's water, so the Reservoir and the Lake read on the map the way
+  // they do on a real one
+  bg.fillStyle = '#1d4a63';
+  for(const w of parkWater){
+    bg.beginPath();
+    bg.ellipse(ox + (w.x - OFF_X)*s, oy + (w.z - OFF_Z)*s, w.rx*s, w.rz*s, 0, 0, 6.283);
+    bg.fill();
+  }
   bg.fillStyle = 'rgba(255,255,255,.75)';
   bg.font = '10px Helvetica, Arial';
   const label = (txt, i, j) => bg.fillText(txt, ox + i*PITCH*s, oy + j*PITCH*s);
-  label('THE BRONX', 17, 3); label('MANHATTAN', 8.4, 16); label('QUEENS', 19, 14);
+  label('THE BRONX', 17, 3); label('MANHATTAN', 8.2, 24); label('QUEENS', 19, 14);
   label('BROOKLYN', 19, 30); label('N.J.', 1.4, 14); label('STATEN I.', 1.4, 34);
+  // the park is tall and narrow, so its name runs down it
+  bg.save();
+  bg.translate(ox + ((CPX0 + CPX1)/2 - OFF_X)*s, oy + ((CPZ0 + CPZ1)/2 - OFF_Z)*s);
+  bg.rotate(-Math.PI/2);
+  bg.textAlign = 'center';
+  bg.fillStyle = 'rgba(226,240,222,.85)';
+  bg.fillText('CENTRAL PARK', 0, 3);
+  bg.restore();
+  bg.textAlign = 'start';
   const px = ox + (player.x - OFF_X)*s, py = oy + (player.z - OFF_Z)*s;
   bg.fillStyle = '#ffd84d';
   bg.beginPath(); bg.arc(px, py, 4.5, 0, 6.3); bg.fill();
