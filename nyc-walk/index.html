@@ -759,12 +759,53 @@ const BWAY_CROSS = (() => {
 // Times Square: the bowtie where Broadway cuts across the avenue grid. Sits on
 // the diagonal a little below the park, and is kept clear of buildings so the
 // plaza opens out and the billboards have something to face.
+/* The square is a bowtie and it is a bowtie for a reason: Broadway runs on the
+ * diagonal, Seventh Avenue runs straight, and where they cross at 45th Street
+ * the leftover ground on either side is two long triangles apex to apex —
+ * Duffy Square going north, Times Square proper going south. That shape is the
+ * whole character of the place. It is five blocks long, narrow, and pinched in
+ * the middle, so from the ground it is a canyon of light you walk down, not a
+ * roundabout you walk across, and a circular plaza was never going to read as
+ * it however many screens got hung round the rim.
+ *
+ * TSQ_R stays 48 and tsqDist is redefined as 48 plus the signed distance to
+ * the plaza edge, so every existing test still means what it says: inside the
+ * square is `< TSQ_R`, and within m of it is `< TSQ_R + m`.
+ */
 const TSQ_R = 48;
+const TSQ_HALF = 84;             // half the length, measured along Broadway
+const TSQ_WAIST = 12;            // half-width at the pinch, where the avenues cross
+const TSQ_FLARE = 29;            // half-width out at the ends
+const TSQ_LEAN = 0.17;           // how far the wedge slides across as it runs
+/* It sits further down Broadway than it used to. A square five blocks long
+ * reaching up the diagonal put its north end inside Central Park, which now
+ * comes down to 59th — and 47th Street is not in the park. */
 const TSQ = (() => {
-  const [x1,z1] = BWAY[2], [x2,z2] = BWAY[3];      // the 16 -> 20 leg
-  return { x: x1 + (x2-x1)*0.62, z: z1 + (z2-z1)*0.62 };
+  const [x1,z1] = BWAY[3], [x2,z2] = BWAY[4];      // the 20 -> 24 leg
+  const L = Math.hypot(x2-x1, z2-z1);
+  return { x: x1 + (x2-x1)*0.22, z: z1 + (z2-z1)*0.22,
+           ux: (x2-x1)/L, uz: (z2-z1)/L };          // the way Broadway runs here
 })();
-const tsqDist = (x, z) => Math.hypot(x - TSQ.x, z - TSQ.z);
+// (along, across) in the square's own frame — `a` runs up Broadway, `b` across
+const tsqAB = (x, z) => {
+  const dx = x - TSQ.x, dz = z - TSQ.z;
+  return [dx*TSQ.ux + dz*TSQ.uz, -dx*TSQ.uz + dz*TSQ.ux];
+};
+const tsqHalfW = a => TSQ_WAIST + (TSQ_FLARE - TSQ_WAIST)*Math.min(1, Math.abs(a)/TSQ_HALF);
+const tsqDist = (x, z) => {
+  const [a, b] = tsqAB(x, z);
+  const across = Math.abs(b - TSQ_LEAN*a) - tsqHalfW(a);
+  const along  = Math.abs(a) - TSQ_HALF;
+  // a box distance is close enough: every caller wants "inside" or "within m"
+  const out = Math.hypot(Math.max(across, 0), Math.max(along, 0));
+  return TSQ_R + (out > 0 ? out : Math.max(across, along));
+};
+// back out of the square's frame into the world
+const tsqXZ = (a, b) => [TSQ.x + TSQ.ux*a - TSQ.uz*b, TSQ.z + TSQ.uz*a + TSQ.ux*b];
+// the way something on side `s` of the plaza has to turn to look across it
+const tsqFace = s => Math.atan2(s*TSQ.uz, -s*TSQ.ux);
+// the building line on side s at position a, and a little further out again
+const tsqEdge = (a, s, out) => TSQ_LEAN*a + s*(tsqHalfW(a) + (out || 0));
 /* Times Square is a pedestrian plaza — it has been closed to traffic since
  * 2009. Any street whose line runs through it is shut, so the middle of the
  * square is one paved surface rather than a crossroads with a plaza painted
@@ -777,12 +818,21 @@ const segDist = (px, pz, x0, z0, x1, z1) => {
   t = t < 0 ? 0 : t > 1 ? 1 : t;
   return Math.hypot(x0 + dx*t - px, z0 + dz*t - pz);
 };
+// Walk each street segment and shut it if the plaza actually lies on top of
+// it. A single distance from the middle of the square worked while the square
+// was a disc; a long thin one has to be tested along its length or it either
+// closes half of Midtown or leaves a road running down the middle of itself.
+const tsqCuts = (x0, z0, x1, z1) => {
+  for(let k=0;k<=12;k++){
+    const t = k/12;
+    if(tsqDist(x0 + (x1-x0)*t, z0 + (z1-z0)*t) < TSQ_R + ROAD/2) return true;
+  }
+  return false;
+};
 for(let i=0;i<GX;i++) for(let j=0;j<GZ;j++){
-  if(segDist(TSQ.x, TSQ.z, roadX(i), cellZ(j) - STREET/2,
-                           roadX(i), cellZ(j) + BLOCK + STREET/2) < TSQ_R + ROAD/2)
+  if(tsqCuts(roadX(i), cellZ(j) - STREET/2, roadX(i), cellZ(j) + BLOCK + STREET/2))
     closedX[i][j] = true;
-  if(segDist(TSQ.x, TSQ.z, cellX(i) - STREET/2, roadZ(j),
-                           cellX(i) + BLOCK + STREET/2, roadZ(j)) < TSQ_R + ROAD/2)
+  if(tsqCuts(cellX(i) - STREET/2, roadZ(j), cellX(i) + BLOCK + STREET/2, roadZ(j)))
     closedZ[i][j] = true;
 }
 
@@ -2849,7 +2899,7 @@ function buildCell(i, j){
       // A closed street is paved over and built on, so the block runs through.
       // Not inside the square though: the plaza lays its own floor there, and
       // a building on the old roadbed would be standing in the middle of it.
-      const inSq = (x, z) => tsqDist(x, z) < TSQ_R + 10;
+      const inSq = (x, z) => tsqDist(x, z) < TSQ_R + 34;   // clears a filled-in lot
       if(closedX[i][j] && !inSq(roadX(i), midZ(j))){
         const gx = roadX(i);
         walkSlab(c, gx, midZ(j), STREET, S);
@@ -2874,8 +2924,12 @@ function buildCell(i, j){
         const gap = 0.7, lw = cc-a-gap*2, ld = e-b-gap*2;
         if(lw < 8 || ld < 8) continue;
         const bx = a+gap+lw/2, bz = b+gap+ld/2;
-        if(bwayDist(bx, bz) < BWAY_W + Math.min(lw, ld)*0.35) continue;
-        if(tsqDist(bx, bz) < TSQ_R + Math.min(lw, ld)*0.35) continue;
+        // Keep a lot out if any *corner* of it would land in the roadbed or on
+        // the plaza, not just its middle: measuring from the short side let a
+        // wide lot near the waist of the square put its end inside the square.
+        const reach = Math.hypot(lw, ld)*0.5;
+        if(bwayDist(bx, bz) < BWAY_W + reach) continue;
+        if(tsqDist(bx, bz) < TSQ_R + reach) continue;
         let h = rr(info.h[0], info.h[1]);
         if(rnd() < info.tall) h *= rr(1.4, 2.2);
         building(bx, bz, lw, ld, h, pick(info.pal));
@@ -2995,12 +3049,12 @@ function shopFronts(){
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
 
   const signs = [], hoods = [];
-  const N = 11;
-  for(let k=0;k<N;k++){
-    const a = (k/N)*Math.PI*2 + 0.22;
-    const r = TSQ_R + rr(2.5, 5.5);
-    const x = TSQ.x + Math.cos(a)*r, z = TSQ.z + Math.sin(a)*r;
-    const face = Math.atan2(TSQ.x - x, TSQ.z - z);
+  // strung down both walls of the square rather than round a rim
+  let k = 0;
+  for(const side of [-1, 1])
+  for(let a = -TSQ_HALF + 12; a < TSQ_HALF - 14; a += rr(15, 24), k++){
+    const [x, z] = tsqXZ(a, tsqEdge(a, side, rr(1.0, 3.5)));
+    const face = tsqFace(side);
     const w = rr(9, 15), h = w/4;
     const cell = k % cells;
     const pl = new THREE.PlaneGeometry(w, h);
@@ -3027,9 +3081,11 @@ function shopFronts(){
 }
 
 // ---------- Times Square ----------
-// A ring of lit screens facing the plaza. One canvas holds sixteen ad panels
-// and every board takes a cell of it, so the whole square is a single mesh
-// drawn with an unlit material — bright at noon, blinding at midnight.
+// Two walls of lit screens down a bowtie-shaped canyon. One canvas holds
+// sixteen ad panels and every board takes a cell of it, so the whole square is
+// a single mesh drawn with an unlit material — bright at noon, blinding at
+// midnight.
+let tsqBall = null;                  // the one on the mast, which turns all year
 const tsqLight = new THREE.PointLight(0xffd9b0, 0, 190, 2);
 tsqLight.position.set(TSQ.x, 34, TSQ.z);
 tsqLight.visible = false;
@@ -3072,24 +3128,34 @@ tasks.push(() => {
     const tex = mkTex(ca); tex.repeat.set(1, 1);
     const plazaMat = new THREE.MeshLambertMaterial({map:tex, vertexColors:true});
 
-    const ts = 6.4, n = Math.ceil(TSQ_R/ts), floor = [];
+    /* Tiled over the bowtie's world-axis bounding box. The shape is pinched in
+     * the middle and Broadway runs across the grid at an angle, so a column of
+     * tiles can leave the plaza and come back into it — the paved runs are
+     * registered one contiguous stretch at a time rather than lo-to-hi, or the
+     * gap between the two triangles would be walkable air. */
+    // small tiles, and laid a shade past the edge rather than a shade inside
+    // it: at the waist the plaza is only twenty-four across and running at an
+    // angle to the tile grid, and a coarse inset grid left holes in the floor
+    const ts = 4.0, n = Math.ceil((TSQ_HALF + TSQ_FLARE + 10)/ts), floor = [];
     for(let a=-n; a<=n; a++){
-      let lo = null, hi = null;
-      for(let b=-n; b<=n; b++){
-        const tx = TSQ.x + a*ts, tz = TSQ.z + b*ts;
-        if(tsqDist(tx, tz) > TSQ_R - ts*0.2) continue;
-        const sl = new THREE.BoxGeometry(ts, CURB + 0.02, ts);
-        const uv = sl.attributes.uv;               // paving runs on across tiles
-        for(let q=0;q<uv.count;q++)
-          uv.setXY(q, (tx - ts/2 + uv.getX(q)*ts)/9, (tz - ts/2 + uv.getY(q)*ts)/9);
-        sl.translate(tx, (CURB + 0.02)/2, tz);
-        floor.push(colored(sl, 0xffffff));
-        if(lo === null) lo = tz;
-        hi = tz;
+      let run = null;
+      const tx = TSQ.x + a*ts;
+      for(let b=-n; b<=n+1; b++){
+        const tz = TSQ.z + b*ts;
+        const inside = b <= n && tsqDist(tx, tz) < TSQ_R + ts*0.35;
+        if(inside){
+          const sl = new THREE.BoxGeometry(ts, CURB + 0.02, ts);
+          const uv = sl.attributes.uv;             // paving runs on across tiles
+          for(let q=0;q<uv.count;q++)
+            uv.setXY(q, (tx - ts/2 + uv.getX(q)*ts)/9, (tz - ts/2 + uv.getY(q)*ts)/9);
+          sl.translate(tx, (CURB + 0.02)/2, tz);
+          floor.push(colored(sl, 0xffffff));
+          if(run === null) run = tz;
+        } else if(run !== null){
+          addPaved(tx - ts/2, run - ts/2, tx + ts/2, tz - ts/2);
+          run = null;
+        }
       }
-      // one paved strip per column, so walking on it is a handful of tests
-      if(lo !== null)
-        addPaved(TSQ.x + a*ts - ts/2, lo - ts/2, TSQ.x + a*ts + ts/2, hi + ts/2);
     }
     cityGroup.add(new THREE.Mesh(mergeGeos(floor), plazaMat));
   }
@@ -3209,105 +3275,237 @@ tasks.push(() => {
       frames.push(p2);
     }
   };
-  /* Real Times Square is screens stacked on screens, floor over floor, right
-   * up the buildings — one ring of them reads as a plaza with signs, not as
-   * the square. So each face gets a column of two to four. */
-  const N = 16;
-  for(let k=0;k<N;k++){
-    const ang = (k/N)*Math.PI*2 + rr(-0.09, 0.09);
-    const rad = TSQ_R + rr(4, 15);
-    const x = TSQ.x + Math.cos(ang)*rad, z = TSQ.z + Math.sin(ang)*rad;
-    const face = Math.atan2(TSQ.x - x, TSQ.z - z);
-    const w = rr(14, 26);
-    let y = rr(6.5, 11);
-    for(let s = 0, n = ri(2, 4); s < n; s++){       // stacked up the facade
-      const h = rr(7, 13) * (s === 0 ? 1 : rr(0.7, 1.0));
-      board(x, z, y, w * (s === 0 ? 1 : rr(0.72, 1.0)), h, face,
-            Math.floor(rnd()*16), s === 0);
-      y += h + rr(1.2, 3.4);
-      if(y > 62) break;
-    }
-    // a tall portrait ribbon beside some of them
-    if(rnd() < 0.45){
-      const off = (rnd() < 0.5 ? -1 : 1) * (w/2 + rr(3, 6));
-      const rx = x + Math.cos(face)*off, rz = z - Math.sin(face)*off;
-      board(rx, rz, rr(8, 14), rr(5, 8), rr(16, 26), face, Math.floor(rnd()*16), true);
+  const glow = [];                                  // anything lit from within
+  const north = Math.atan2(-TSQ.ux, -TSQ.uz);       // looking up the square
+  const south = Math.atan2(TSQ.ux, TSQ.uz);
+
+  /* Screens stacked on screens, floor over floor, all the way up both walls
+   * for the whole length of the canyon. A ring of them round a circle reads as
+   * a plaza with signs on it; a wall of them running two hundred metres reads
+   * as the square. */
+  for(const side of [-1, 1]){
+    for(let a = -TSQ_HALF + 5; a < TSQ_HALF - 8; a += rr(13, 19)){
+      const [x, z] = tsqXZ(a, tsqEdge(a, side, rr(1.4, 6.5)));
+      const face = tsqFace(side);
+      const w = rr(12, 23);
+      let y = rr(5.5, 10);
+      for(let s = 0, n = ri(3, 5); s < n; s++){     // stacked up the facade
+        const h = rr(7, 13) * (s === 0 ? 1 : rr(0.7, 1.0));
+        board(x, z, y, w * (s === 0 ? 1 : rr(0.7, 1.0)), h, face,
+              Math.floor(rnd()*16), s === 0);
+        y += h + rr(1.0, 3.0);
+        if(y > 66) break;
+      }
+      // a tall portrait ribbon alongside, the way half of them are
+      if(rnd() < 0.5){
+        const off = (rnd() < 0.5 ? -1 : 1) * (w/2 + rr(3, 6));
+        const [rx, rz] = tsqXZ(a + off, tsqEdge(a, side, rr(1.4, 5)));
+        board(rx, rz, rr(8, 14), rr(5, 8), rr(16, 28), face, Math.floor(rnd()*16), true);
+      }
+      // the ticker band at eye level under the lowest screen
+      if(rnd() < 0.4){
+        const [tx, tz] = tsqXZ(a, tsqEdge(a, side, 1.0));
+        board(tx, tz, 5.4, rr(9, 14), 2.0, face, 7, false);
+      }
     }
   }
-  // and the ticker band wrapping the corner at eye level
-  for(let k=0;k<9;k++){
-    const ang = -0.5 + (k/9)*1.7;
-    const rad = TSQ_R + 3.2;
-    const x = TSQ.x + Math.cos(ang)*rad, z = TSQ.z + Math.sin(ang)*rad;
-    board(x, z, 5.6, 9.2, 2.0, Math.atan2(TSQ.x - x, TSQ.z - z), 7, false);
+
+  /* ---- One Times Square -------------------------------------------------
+   * The narrow tower in the gore at the south end, which everybody knows and
+   * almost nobody could name. It has been empty above the second floor for
+   * decades — the building is a billboard now, wrapped in screens on every
+   * face — and the ball comes down the mast on the roof. */
+  const OTS_A = TSQ_HALF - 12, OTS_W = 15, OTS_D = 24, OTS_H = 58;
+  {
+    const b0 = TSQ_LEAN*OTS_A;
+    const [tx, tz] = tsqXZ(OTS_A, b0);
+    const body = colored(new THREE.BoxGeometry(OTS_W, OTS_H, OTS_D), 0x17191d);
+    body.rotateY(south); body.translate(tx, CURB + OTS_H/2, tz);
+    frames.push(body);
+    // screens up the north face, which is the one the whole square looks at
+    let y = CURB + 3.5;
+    while(y < OTS_H - 6){
+      const h = rr(5, 9);
+      const [fx, fz] = tsqXZ(OTS_A - OTS_D/2 - 0.6, b0);
+      board(fx, fz, y, OTS_W - 1.2, h, north, Math.floor(rnd()*16), false);
+      y += h + 0.8;
+    }
+    // and down both flanks
+    for(const s of [-1, 1]){
+      let yy = CURB + 8;
+      while(yy < OTS_H - 8){
+        const h = rr(6, 11);
+        const [fx, fz] = tsqXZ(OTS_A + rr(-5, 5), b0 + s*(OTS_W/2 + 0.6));
+        board(fx, fz, yy, rr(9, 16), h, tsqFace(s), Math.floor(rnd()*16), false);
+        yy += h + rr(1.5, 4);
+      }
+    }
+    // the zipper: a news band wrapping the base right the way round
+    for(let k=0;k<14;k++){
+      const t = k/14, ang = t*6.283;
+      const ex = Math.cos(ang)*(OTS_W/2 + 0.5), ez = Math.sin(ang)*(OTS_D/2 + 0.5);
+      const [zx, zz] = tsqXZ(OTS_A + ez, b0 + ex);
+      board(zx, zz, 9.4, 5.4, 1.9, Math.atan2(ex, ez) + south, 7, false);
+    }
+    // the mast, the ball, and the numerals under it
+    const mast = colored(new THREE.CylinderGeometry(0.5, 0.9, 20, 8), 0x30363d);
+    mast.translate(tx, CURB + OTS_H + 10, tz);
+    frames.push(mast);
+    for(let k=0;k<4;k++)
+      frames.push(colored(new THREE.BoxGeometry(OTS_W - k*3, 0.6, OTS_D - k*4.5), 0x22262c)
+        .rotateY(south).translate(tx, CURB + OTS_H + 0.4 + k*1.5, tz));
+    const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(2.3, 1),
+      new THREE.MeshBasicMaterial({color:0xf2e9c8}));
+    ball.position.set(tx, CURB + OTS_H + 21.5, tz);
+    cityGroup.add(ball);
+    tsqBall = ball;
+    addSolid(tx, tz, OTS_W + 2, OTS_D + 2);
   }
+
+  /* ---- Duffy Square: the red steps at the north end ---------------------
+   * Twenty-seven tiers of red glass over the ticket booth, everybody sitting
+   * on them facing back down the square, and Father Duffy behind with his
+   * celtic cross. */
+  const steps = [];
+  {
+    const A0 = -TSQ_HALF + 10, TIERS = 11, RISE = 0.44, TREAD = 1.5;
+    for(let k=0;k<TIERS;k++){
+      const a = A0 + k*TREAD, w = 30 - k*0.5;
+      const [sx, sz] = tsqXZ(a, TSQ_LEAN*a);
+      steps.push(colored(new THREE.BoxGeometry(w, RISE, TREAD + 0.1), 0xc0182c)
+        .rotateY(south).translate(sx, CURB + RISE/2 + k*RISE, sz));
+      glow.push(colored(new THREE.BoxGeometry(w - 0.6, RISE*0.5, 0.06), 0xff2f4a)
+        .rotateY(south)
+        .translate(...(() => { const [gx, gz] = tsqXZ(a - TREAD/2 - 0.05, TSQ_LEAN*a);
+                               return [gx, CURB + RISE*0.5 + k*RISE, gz]; })()));
+    }
+    // you look at the grandstand, you do not walk through it
+    const [gx0, gz0] = tsqXZ(A0 + TIERS*TREAD/2, TSQ_LEAN*A0);
+    addSolid(gx0, gz0, 28, TIERS*TREAD + 6);
+    const [bx, bz] = tsqXZ(A0 + TIERS*TREAD + 4, TSQ_LEAN*A0);
+    steps.push(colored(new THREE.BoxGeometry(22, 4.2, 7), 0x1b1f25)
+      .rotateY(south).translate(bx, CURB + 2.1, bz));          // the booth under it
+    glow.push(colored(new THREE.BoxGeometry(18, 1.1, 0.08), 0xffd84d)
+      .rotateY(south).translate(...(() => {
+        const [gx, gz] = tsqXZ(A0 + TIERS*TREAD + 0.4, TSQ_LEAN*A0);
+        return [gx, CURB + 3.1, gz]; })()));
+    addSolid(bx, bz, 24, 12);
+    const [dx, dz] = tsqXZ(A0 + TIERS*TREAD + 13, TSQ_LEAN*A0 + 4);
+    steps.push(colored(new THREE.BoxGeometry(2.2, 2.6, 2.2), 0x7d7466).translate(dx, CURB + 1.3, dz),
+               colored(new THREE.CylinderGeometry(0.42, 0.55, 2.6, 8), 0x4a5548).translate(dx, CURB + 3.9, dz),
+               colored(new THREE.SphereGeometry(0.38, 8, 6), 0x4a5548).translate(dx, CURB + 5.4, dz),
+               colored(new THREE.BoxGeometry(0.5, 9, 0.5), 0x6f675a).translate(dx, CURB + 4.5, dz - 2.6),
+               colored(new THREE.BoxGeometry(3.2, 0.5, 0.5), 0x6f675a).translate(dx, CURB + 7.2, dz - 2.6),
+               colored(new THREE.TorusGeometry(1.1, 0.16, 4, 12), 0x6f675a)
+                 .rotateY(Math.PI/2).translate(dx, CURB + 7.2, dz - 2.6));
+    addSolid(dx, dz, 2.6, 2.6);
+  }
+
+  /* ---- the marquees on the side streets --------------------------------- */
+  for(const [ma, side] of [[-46, -1], [-24, 1], [16, -1], [44, 1]]){
+    const face = tsqFace(side);
+    const [x, z] = tsqXZ(ma, tsqEdge(ma, side, 0.6));
+    const fx = Math.sin(face), fz = Math.cos(face);
+    frames.push(colored(new THREE.BoxGeometry(11, 1.9, 4.2), 0x14171b)
+      .rotateY(face).translate(x + fx*2.1, CURB + 6.4, z + fz*2.1));
+    frames.push(colored(new THREE.BoxGeometry(1.5, 8.5, 1.5), 0x14171b)
+      .rotateY(face).translate(x + fx*0.4, CURB + 11.4, z + fz*0.4));
+    board(x + fx*4.25, z + fz*4.25, CURB + 4.3, 10.4, 2.0, face, rnd() < 0.5 ? 11 : 14, false);
+    board(x + fx*1.0,  z + fz*1.0,  CURB + 7.6, 1.4, 7.6, face, rnd() < 0.5 ? 11 : 14, false);
+    for(let k=0;k<14;k++){                                     // the bulbs
+      const o = (k/13 - 0.5)*10.4;
+      glow.push(colored(new THREE.SphereGeometry(0.16, 6, 5), 0xffe9a8)
+        .translate(x + fx*4.3 + Math.cos(face)*o, CURB + 7.3, z + fz*4.3 - Math.sin(face)*o));
+      glow.push(colored(new THREE.SphereGeometry(0.16, 6, 5), 0xffe9a8)
+        .translate(x + fx*4.3 + Math.cos(face)*o, CURB + 5.5, z + fz*4.3 - Math.sin(face)*o));
+    }
+  }
+
   const boards = new THREE.Mesh(mergeGeos(screens),
     new THREE.MeshBasicMaterial({map:adTex, vertexColors:true}));
   boards.frustumCulled = false;
   cityGroup.add(boards, new THREE.Mesh(mergeGeos(frames), vcMat));
 
-  // the red steps, and a painted pedestrian island in the middle of it all
-  const steps = [];
-  for(let k=0;k<5;k++){
-    const s = colored(new THREE.BoxGeometry(26 - k*2, 0.8, 3.4), 0xc0182c);
-    s.translate(TSQ.x, CURB + 0.4 + k*0.8, TSQ.z - TSQ_R*0.62 - k*3.2);
-    steps.push(s);
-  }
-  const isle = colored(new THREE.BoxGeometry(34, CURB, 20), 0x8a8f96);
-  isle.translate(TSQ.x, CURB/2, TSQ.z + 8);
-  steps.push(isle);
-
-  /* What actually fills the square at street level: the café tables and
-   * chairs people sit at all day, the long benches, and bollards keeping the
-   * traffic that no longer comes off the paving. */
+  /* What actually fills the square at street level: café tables and chairs
+   * people sit in all day facing the screens, the long granite benches, the
+   * planters and the steel barriers that keep the traffic that no longer comes
+   * off the paving, and the carts feeding the whole thing. */
   const CHAIR = [0x2f3a44, 0x3d4a3a, 0x53342f, 0x35404d];
-  const free = (x, z) => tsqDist(x, z) < TSQ_R - 7 &&
-                         !(Math.abs(x - TSQ.x) < 20 && z < TSQ.z - TSQ_R*0.5) &&
-                         !(Math.abs(x - TSQ.x) < 19 && Math.abs(z - TSQ.z - 8) < 12);
-  for(let k=0;k<26;k++){
-    const a = rnd()*6.283, r = rr(TSQ_R*0.30, TSQ_R*0.86);
-    const tx = TSQ.x + Math.cos(a)*r, tz = TSQ.z + Math.sin(a)*r*0.85;
-    if(!free(tx, tz)) continue;
+  // room to stand: inside the plaza, clear of the tower and clear of the steps
+  const free = (a, b) => Math.abs(a) < TSQ_HALF - 8 &&
+                         Math.abs(b - TSQ_LEAN*a) < tsqHalfW(a) - 4.5 &&
+                         Math.abs(a - OTS_A) > OTS_D/2 + 5 &&
+                         a > -TSQ_HALF + 34;
+  for(let k=0;k<44;k++){
+    const a = rr(-TSQ_HALF, TSQ_HALF), b = TSQ_LEAN*a + rr(-1, 1)*tsqHalfW(a);
+    if(!free(a, b)) continue;
+    const [tx, tz] = tsqXZ(a, b);
     const col = pick(CHAIR);
-    const top = colored(new THREE.CylinderGeometry(0.62, 0.62, 0.1, 12), 0x8d939b);
-    top.translate(tx, CURB + 0.98, tz);
-    const stem = colored(new THREE.CylinderGeometry(0.07, 0.16, 0.95, 8), 0x2b2f35);
-    stem.translate(tx, CURB + 0.48, tz);
-    steps.push(top, stem);
+    steps.push(colored(new THREE.CylinderGeometry(0.62, 0.62, 0.1, 12), 0x8d939b)
+                 .translate(tx, CURB + 0.98, tz),
+               colored(new THREE.CylinderGeometry(0.07, 0.16, 0.95, 8), 0x2b2f35)
+                 .translate(tx, CURB + 0.48, tz));
     for(let q=0, m=ri(2,4); q<m; q++){            // chairs round it
       const ca2 = rnd()*6.283, cr = rr(1.15, 1.5);
       const cx2 = tx + Math.cos(ca2)*cr, cz2 = tz + Math.sin(ca2)*cr;
-      const seat = colored(new THREE.BoxGeometry(0.52, 0.09, 0.52), col);
-      seat.translate(cx2, CURB + 0.5, cz2);
+      steps.push(colored(new THREE.BoxGeometry(0.52, 0.09, 0.52), col)
+                   .translate(cx2, CURB + 0.5, cz2));
       const back = colored(new THREE.BoxGeometry(0.52, 0.62, 0.08), col);
       back.rotateY(ca2);
       back.translate(cx2 + Math.sin(ca2)*0.24, CURB + 0.82, cz2 + Math.cos(ca2)*0.24);
-      steps.push(seat, back);
+      steps.push(back);
     }
   }
-  for(let k=0;k<7;k++){                            // the long granite benches
-    const a = (k/7)*6.283 + 0.4, r = TSQ_R*0.72;
-    const bx = TSQ.x + Math.cos(a)*r, bz = TSQ.z + Math.sin(a)*r*0.85;
-    if(!free(bx, bz)) continue;
-    const bench = colored(new THREE.BoxGeometry(6.2, 0.45, 1.1), 0x9aa0a6);
-    bench.rotateY(a);
-    bench.translate(bx, CURB + 0.46, bz);
-    const plinth = colored(new THREE.BoxGeometry(5.6, 0.42, 0.7), 0x7d838a);
-    plinth.rotateY(a);
-    plinth.translate(bx, CURB + 0.21, bz);
-    steps.push(bench, plinth);
+  for(let k=0;k<16;k++){                           // the long granite benches
+    const a = -TSQ_HALF + 30 + k*9.5, b = TSQ_LEAN*a + (k % 2 ? 1 : -1)*tsqHalfW(a)*0.62;
+    if(!free(a, b)) continue;
+    const [bx, bz] = tsqXZ(a, b);
+    steps.push(colored(new THREE.BoxGeometry(1.1, 0.45, 6.2), 0x9aa0a6)
+                 .rotateY(south).translate(bx, CURB + 0.46, bz),
+               colored(new THREE.BoxGeometry(0.7, 0.42, 5.6), 0x7d838a)
+                 .rotateY(south).translate(bx, CURB + 0.21, bz));
     addSolid(bx, bz, 6.2, 6.2);
   }
-  for(let k=0;k<30;k++){                           // bollards round the rim
-    const a = (k/30)*6.283;
-    const bx = TSQ.x + Math.cos(a)*(TSQ_R - 2.5), bz = TSQ.z + Math.sin(a)*(TSQ_R - 2.5);
-    const bo = colored(new THREE.CylinderGeometry(0.19, 0.22, 1.05, 8), 0x3b4149);
-    bo.translate(bx, CURB + 0.52, bz);
-    steps.push(bo);
+  for(const side of [-1, 1]){                      // bollards down both edges
+    for(let a = -TSQ_HALF + 4; a < TSQ_HALF - 4; a += 4.2){
+      const [bx, bz] = tsqXZ(a, tsqEdge(a, side, -1.6));
+      steps.push(colored(new THREE.CylinderGeometry(0.19, 0.22, 1.05, 8), 0x3b4149)
+                   .translate(bx, CURB + 0.52, bz));
+    }
+    // planters and NYPD barriers at the mouths, where the traffic stops
+    for(const a of [-TSQ_HALF + 6, TSQ_HALF - 6]){
+      const [px, pz] = tsqXZ(a, tsqEdge(a, side, -6));
+      steps.push(colored(new THREE.BoxGeometry(2.4, 1.1, 2.4), 0x6f7378)
+                   .rotateY(south).translate(px, CURB + 0.55, pz),
+                 colored(new THREE.SphereGeometry(1.0, 8, 6), 0x3d6b34)
+                   .translate(px, CURB + 1.4, pz));
+      addSolid(px, pz, 2.6, 2.6);
+      for(let k=0;k<3;k++){
+        const [qx, qz] = tsqXZ(a + (k-1)*2.6, tsqEdge(a, side, -10));
+        steps.push(colored(new THREE.BoxGeometry(0.1, 0.08, 2.4), 0xa9aeb4)
+                     .rotateY(south).translate(qx, CURB + 1.05, qz),
+                   colored(new THREE.BoxGeometry(0.1, 0.08, 2.4), 0xa9aeb4)
+                     .rotateY(south).translate(qx, CURB + 0.6, qz),
+                   colored(new THREE.BoxGeometry(0.08, 1.05, 0.08), 0x8d9299)
+                     .translate(qx, CURB + 0.53, qz));
+      }
+    }
   }
   cityGroup.add(new THREE.Mesh(mergeGeos(steps), vcMat));
-  addPaved(TSQ.x - 17, TSQ.z - 2, TSQ.x + 17, TSQ.z + 18);
-  addSolid(TSQ.x, TSQ.z - TSQ_R*0.62 - 8, 26, 20);      // you can't walk the steps
+  if(glow.length) cityGroup.add(new THREE.Mesh(mergeGeos(glow), litMat));
+
+  // carts, and the stairs down to the busiest station in the system
+  for(let k=0;k<5;k++){
+    const a = rr(-TSQ_HALF + 36, TSQ_HALF - 20);
+    const b = TSQ_LEAN*a + (rnd() < 0.5 ? -1 : 1)*(tsqHalfW(a) - 3.4);
+    if(!free(a, b)) continue;
+    const [cx2, cz2] = tsqXZ(a, b);
+    foodCart(chunkOf(cx2, cz2), cx2, cz2, tsqFace(b > TSQ_LEAN*a ? 1 : -1));
+  }
+  for(const a of [TSQ_HALF - 26, -TSQ_HALF + 40]){
+    const [sx, sz] = tsqXZ(a, TSQ_LEAN*a + tsqHalfW(a) - 4);
+    subwayEntrance(chunkOf(sx, sz), sx, sz, south);
+  }
   shopFronts();
 });
 
@@ -3763,9 +3961,12 @@ tasks.push(() => {
   pedLegs.forEach(im => im.instanceColor.needsUpdate = true);
 });
 function pedPos(p, t){
-  if(p.plaza){                        // milling around the square
-    const a = t*Math.PI*2;
-    return [TSQ.x + Math.cos(a)*p.r, TSQ.z + Math.sin(a)*p.r*0.78];
+  if(p.plaza){
+    // up and down the square rather than round it — the crowd in Times Square
+    // moves along the canyon, and each one keeps to their own line across it
+    const tt = t < 0.5 ? t*2 : 2 - t*2;
+    const a = (tt*2 - 1) * (TSQ_HALF - 12);
+    return tsqXZ(a, TSQ_LEAN*a + p.r*(tsqHalfW(a) - 3));
   }
   const cx = midX(p.i), cz = midZ(p.j), r = BLOCK/2 + WALK*0.45;
   const side = Math.floor(t*4) % 4, f = (t*4) % 1;
@@ -3777,8 +3978,9 @@ function pedPos(p, t){
 function relocatePed(p){
   // the square is packed, so send a good share of anyone nearby into it
   if(tsqDist(player.x, player.z) < 300 && rnd() < 0.45){
-    p.plaza = 1; p.r = rr(TSQ_R*0.30, TSQ_R*0.92); p.t = rnd();
-    p.speed = rr(0.5, 1.1) / (2*Math.PI*p.r);
+    p.plaza = 1; p.r = rr(-0.88, 0.88); p.t = rnd();
+    // one full there-and-back is twice the length of the square
+    p.speed = rr(0.6, 1.3) / (4*(TSQ_HALF - 12));
     return;
   }
   p.plaza = 0;
@@ -3983,7 +4185,9 @@ for(let k=0;k<4;k++){
 }
 
 // ---------- player ----------
-const SPAWN = { x: midX(10) + BLOCK/2 + WALK*0.5, z: midZ(22) };
+// a kerb two avenues east of Broadway — the old spawn was on the diagonal
+// itself, which the square has since grown over
+const SPAWN = { x: midX(11) + BLOCK/2 + WALK*0.5, z: midZ(23) };
 const player = { x:SPAWN.x, y:CURB, z:SPAWN.z, vy:0, yaw:0, pitch:0,
                  onGround:true, bob:0 };
 const EYE = 1.7, RADIUS = 0.55;
@@ -4238,6 +4442,7 @@ function setNight(v, silent){
   sunDisc.scale.setScalar(night ? 70 : 170);
   lampGlows.forEach(g => g.visible = night);
   tsqLight.visible = night; tsqLight.intensity = night ? 2.4 : 0;
+  if(tsqBall) tsqBall.material.color.set(night ? 0xffffff : 0xd8cfae);
   roamLights.forEach(l => { l.visible = night; l.intensity = night ? 1.5 : 0; });
   clock24 = night ? 21.4 : 9.5;
   if(!silent) toast(night ? 'Night falls over New York' : 'Daybreak');
@@ -4404,6 +4609,17 @@ function drawBigMap(){
     bg.ellipse(ox + (w.x - OFF_X)*s, oy + (w.z - OFF_Z)*s, w.rx*s, w.rz*s, 0, 0, 6.283);
     bg.fill();
   }
+  // the square, which is a shape worth being able to see
+  bg.fillStyle = '#4a505d';
+  bg.beginPath();
+  for(let k=0;k<=48;k++){
+    const s2 = k <= 24 ? 1 : -1, t = (k <= 24 ? k : 48 - k)/24;
+    const a = (t*2 - 1)*TSQ_HALF;
+    const [x, z] = tsqXZ(a, tsqEdge(a, s2));
+    const mx = ox + (x - OFF_X)*s, my = oy + (z - OFF_Z)*s;
+    k ? bg.lineTo(mx, my) : bg.moveTo(mx, my);
+  }
+  bg.closePath(); bg.fill();
   bg.fillStyle = 'rgba(255,255,255,.75)';
   bg.font = '10px Helvetica, Arial';
   const label = (txt, i, j) => bg.fillText(txt, ox + i*PITCH*s, oy + j*PITCH*s);
@@ -4472,6 +4688,7 @@ function tick(){
   }
   const bOn = Math.sin(t*2.2) > 0;
   for(const b of beacons) b.material.color.setHex(bOn ? 0xff5252 : 0x551111);
+  if(tsqBall) tsqBall.rotation.y = t*0.22;      // it turns up there all year round
   waterTex.offset.x = t * 0.004;
   waterTex.offset.y = t * 0.0025;
   skyDome.position.set(camera.position.x, 0, camera.position.z);
