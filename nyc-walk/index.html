@@ -1885,39 +1885,41 @@ function sidewalkShed(c, i, j, ax, sgn){
 // entrance is open all night.
 // `ang` is the direction the stairs run; the well is 3.6 across and 5.0 long,
 // which is exactly a five-wide sidewalk band with a little to spare.
-function subwayEntrance(c, x, z, ang){
-  const ux = Math.sin(ang), uz = Math.cos(ang);          // along the stairs
+/* The head of a station stair, up on the sidewalk. It is an opening now rather
+ * than a lid — the shaft under it is real and you walk down it — so nothing
+ * blocks the mouth. Only the railings down either side are solid, which is all
+ * that stops you going in sideways. */
+function subwayEntrance(c, x, z, ang, lineCol){
+  const ux = Math.sin(ang), uz = Math.cos(ang);          // down into the stairs
   const px = Math.cos(ang), pz = -Math.sin(ang);         // across them
   const bits = [];
-  const pit = colored(new THREE.BoxGeometry(3.6, 3.0, 5.0), 0x0b0d10);
-  pit.rotateY(ang); pit.translate(x, CURB - 1.42, z);
-  bits.push(pit);
-  for(let k=0;k<4;k++){                                   // treads going down
-    const st = colored(new THREE.BoxGeometry(3.4, 0.24, 0.8), 0x3d4148);
-    st.rotateY(ang);
-    st.translate(x + ux*(1.7 - k*0.85), CURB - 0.32 - k*0.36, z + uz*(1.7 - k*0.85));
-    bits.push(st);
-  }
   for(const s of [-1, 1]){
-    const rail = colored(new THREE.BoxGeometry(0.13, 1.05, 4.6), 0x2f3439);
+    const rail = colored(new THREE.BoxGeometry(0.13, 1.05, 5.6), 0x2f3439);
     rail.rotateY(ang);
-    rail.translate(x + px*s*1.85, CURB + 0.55, z + pz*s*1.85);
+    rail.translate(x + px*s*2.2, CURB + 0.55, z + pz*s*2.2);
     bits.push(rail);
-    const cap = colored(new THREE.BoxGeometry(0.24, 0.14, 4.7), 0x9aa1a8);
+    const cap = colored(new THREE.BoxGeometry(0.24, 0.14, 5.7), 0x9aa1a8);
     cap.rotateY(ang);
-    cap.translate(x + px*s*1.85, CURB + 1.13, z + pz*s*1.85);
+    cap.translate(x + px*s*2.2, CURB + 1.13, z + pz*s*2.2);
     bits.push(cap);
+    // the lip of the opening, so the hole reads as an edge you step over
+    const lip = colored(new THREE.BoxGeometry(0.36, 0.2, 5.6), 0x74797f);
+    lip.rotateY(ang);
+    lip.translate(x + px*s*1.95, CURB + 0.1, z + pz*s*1.95);
+    bits.push(lip);
+    addSolid(x + px*s*2.2, z + pz*s*2.2,
+             Math.abs(px)*0.5 + Math.abs(ux)*5.6, Math.abs(pz)*0.5 + Math.abs(uz)*5.6);
   }
   const post = colored(new THREE.CylinderGeometry(0.08, 0.1, 2.9, 6), 0x2b3036);
-  post.translate(x - ux*2.9 + px*1.85, CURB + 1.45, z - uz*2.9 + pz*1.85);
-  bits.push(post);
+  post.translate(x - ux*3.2 + px*2.2, CURB + 1.45, z - uz*3.2 + pz*2.2);
+  const sign = colored(new THREE.BoxGeometry(1.6, 0.52, 0.12), 0x1b1f25);
+  sign.rotateY(ang); sign.translate(x - ux*3.2 + px*2.2, CURB + 2.4, z - uz*3.2 + pz*2.2);
+  bits.push(post, sign);
   c.prop.push(...bits);
-  const globe = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8),
-    new THREE.MeshBasicMaterial({color:0x35c45f}));
-  globe.position.set(x - ux*2.9 + px*1.85, CURB + 3.05, z - uz*2.9 + pz*1.85);
-  cityGroup.add(globe);
-  addSolid(x, z, Math.abs(px)*3.6 + Math.abs(ux)*5.2 + 0.6,
-                 Math.abs(pz)*3.6 + Math.abs(uz)*5.2 + 0.6);
+  const globe = colored(new THREE.SphereGeometry(0.34, 10, 8), lineCol || 0x35c45f)
+    .translate(x - ux*3.2 + px*2.2, CURB + 3.05, z - uz*3.2 + pz*2.2);
+  if(c.glow) c.glow.push(globe);
+  else cityGroup.add(new THREE.Mesh(globe, litMat));
 }
 
 function trashPile(c, x, z){
@@ -2884,14 +2886,17 @@ function buildCell(i, j){
       const S = BLOCK + WALK*2;
       // Broadway slices the block, so lay that sidewalk as tiles and drop the
       // ones the roadbed runs over. Everywhere else one slab is enough.
-      const cut = bwayDist(midX(i), midZ(j)) < S/2 + BWAY_W + 2 ||
+      const holed = holeCells.has(skey(i, j));
+      const cut = holed || bwayDist(midX(i), midZ(j)) < S/2 + BWAY_W + 2 ||
                   tsqDist(midX(i), midZ(j)) < S/2 + TSQ_R;
       if(cut){
-        const N = 10, ts = S/N;
+        // finer tiles where a station mouth has to come through it
+        const N = holed ? 16 : 10, ts = S/N;
         for(let a=0;a<N;a++) for(let b=0;b<N;b++){
           const tx = midX(i) - S/2 + (a+0.5)*ts, tz = midZ(j) - S/2 + (b+0.5)*ts;
           if(bwayDist(tx, tz) < BWAY_W + ts*0.3) continue;
           if(tsqDist(tx, tz) < TSQ_R - ts*0.3) continue;
+          if(inSubwayHole(tx, tz)) continue;
           walkSlab(c, tx, tz, ts, ts);
         }
       } else walkSlab(c, midX(i), midZ(j), S, S);
@@ -3494,17 +3499,13 @@ tasks.push(() => {
   cityGroup.add(new THREE.Mesh(mergeGeos(steps), vcMat));
   if(glow.length) cityGroup.add(new THREE.Mesh(mergeGeos(glow), litMat));
 
-  // carts, and the stairs down to the busiest station in the system
+  // carts (the stairs down belong to the 1/2/3 station a block west)
   for(let k=0;k<5;k++){
     const a = rr(-TSQ_HALF + 36, TSQ_HALF - 20);
     const b = TSQ_LEAN*a + (rnd() < 0.5 ? -1 : 1)*(tsqHalfW(a) - 3.4);
     if(!free(a, b)) continue;
     const [cx2, cz2] = tsqXZ(a, b);
     foodCart(chunkOf(cx2, cz2), cx2, cz2, tsqFace(b > TSQ_LEAN*a ? 1 : -1));
-  }
-  for(const a of [TSQ_HALF - 26, -TSQ_HALF + 40]){
-    const [sx, sz] = tsqXZ(a, TSQ_LEAN*a + tsqHalfW(a) - 4);
-    subwayEntrance(chunkOf(sx, sz), sx, sz, south);
   }
   shopFronts();
 });
@@ -3556,20 +3557,529 @@ tasks.push(() => {
     }
   }
 });
+/* ==========================================================================
+ * THE SUBWAY
+ * ==========================================================================
+ * Three lines under the avenues, and you can walk down into them: street
+ * stair to a mezzanine over the tracks, second stair down to an island
+ * platform, tiled walls, a mosaic name tablet, steel columns down the middle,
+ * two tracks with a third rail on the far side of each, and trains that pull
+ * in, hold the doors, and go. Stand at an open door and right-click to get on.
+ *
+ * The whole thing hangs off one function. subwayY(x, z) gives the height of
+ * the MTA's floor at a point or null if there is no floor there, and that one
+ * answer does the walking, the collision, the platform edge you cannot step
+ * over, and the top of the stairs where you come back out into the city.
+ *
+ *   1 2 3   Seventh Avenue,  north-south, through Times Square
+ *   4 5 6   Lexington Avenue, north-south, up the east side
+ *   7       Flushing Line, crosstown under 42nd and out under the river
+ */
+const PLAT_Y  = -9.6;                 // the platform floor
+const MEZZ_Y  = -4.4;                 // the mezzanine over the tracks
+const RAIL_Y  = PLAT_Y - 1.15;        // top of rail: the platform is that high
+const PLAT_HL = 30, PLAT_HW = 4.8;    // half-length and half-width of a platform
+const TRACK_V = 8.1;                  // how far off centre each track sits
+const BOX_HW  = 11.9;                 // the tunnel wall
+const STAIR0 = 30, STAIR1 = 40;       // platform stair, along the line
+const MEZZ0  = 40, MEZZ1 = 50;        // mezzanine
+const HEAD0  = 50, HEAD1 = 62;        // street stair
+const HEAD_V = ROAD/2 + WALK/2;       // it comes up mid-sidewalk, beside the kerb
+/* The whole thing has to fit inside one block. Cross streets sit every 76 with
+ * eleven units of roadbed either side of the centre line, so the mouth has to
+ * land between them — 62 out from the station puts it two thirds of the way
+ * down the block with room to spare. Eighty put it in the intersection. */
+const CAR_L = 17.4, CAR_W = 2.9, CAR_H = 3.2, CAR_GAP = 1.1, TRAIN_N = 3;
+
+const SUB_LINES = [
+  { id:'1', bullet:'1 2 3', col:0xee352e, ax:'z', name:'Seventh Avenue Line' },
+  { id:'6', bullet:'4 5 6', col:0x00933c, ax:'z', name:'Lexington Avenue Line' },
+  { id:'7', bullet:'7',     col:0xb933ad, ax:'x', name:'Flushing Line' }
+];
+const stations = [];
+const stationCell = new Map();        // grid cell -> stations that reach into it
+const underSolid = [];                // columns and benches, down there only
+const subGroup = new THREE.Group();
+scene.add(subGroup);
+
+/* Where the lines run and where they stop, worked out up front — the sidewalk
+ * has to know before it is laid, because a stair that comes up under an
+ * unbroken slab is not an entrance, it is a cellar. */
+SUB_LINES[0].at = roadX(9);           // Seventh Avenue
+SUB_LINES[1].at = roadX(13);          // Lexington
+// one street clear of the Queensboro Bridge, whose approach ramp was coming
+// down on top of the Lexington Avenue entrance
+SUB_LINES[2].at = roadZ(21);          // 42nd Street, crosstown, and under the river
+// which way round a station faces is decided by where its stair would come
+// up: it has to surface on a sidewalk, on land, and not in an intersection
+function subHead(line, i, j, flip){
+  const x = line.ax === 'z' ? line.at : roadX(i);
+  const z = line.ax === 'z' ? roadZ(j) : line.at;
+  return line.ax === 'z' ? [x + HEAD_V, z + (HEAD1 - 2.5)*flip]
+                         : [x + (HEAD1 - 2.5)*flip, z + HEAD_V];
+}
+function headOK(line, i, j, flip){
+  const [hx, hz] = subHead(line, i, j, flip);
+  const ci = idxX(hx), cj = idxZ(hz);
+  return isLandIJ(ci, cj) && Math.abs(hx - midX(ci)) <= BLOCK/2 + WALK - 1
+                          && Math.abs(hz - midZ(cj)) <= BLOCK/2 + WALK - 1;
+}
+const SUB_PLAN = [];
+for(const line of SUB_LINES){
+  let flip = 1;
+  const add = (i, j) => {
+    const f = headOK(line, i, j, flip) ? flip : (headOK(line, i, j, -flip) ? -flip : 0);
+    if(!f) return;
+    SUB_PLAN.push({line, i, j, flip: f});
+    flip = -f;
+  };
+  if(line.ax === 'z'){
+    const i = idxX(line.at);
+    for(let j=2; j<=31; j+=3) if(isLandIJ(i, j) && isLandIJ(i-1, j)) add(i, j);
+  } else {
+    const j = idxZ(line.at);
+    for(let i=8; i<=20; i+=3) if(isLandIJ(i, j) && isLandIJ(i, j-1)) add(i, j);
+  }
+}
+// the mouths, as rectangles cut out of the pavement
+const subwayHoles = [], holeCells = new Set();
+for(const p of SUB_PLAN){
+  const x = p.line.ax === 'z' ? p.line.at : roadX(p.i);
+  const z = p.line.ax === 'z' ? roadZ(p.j) : p.line.at;
+  const u0 = (HEAD1 - 7.2)*p.flip, u1 = (HEAD1 + 0.4)*p.flip;
+  const h = p.line.ax === 'z'
+    ? { x1: x + HEAD_V - 2.2, x2: x + HEAD_V + 2.2,
+        z1: z + Math.min(u0, u1), z2: z + Math.max(u0, u1) }
+    : { x1: x + Math.min(u0, u1), x2: x + Math.max(u0, u1),
+        z1: z + HEAD_V - 2.2, z2: z + HEAD_V + 2.2 };
+  subwayHoles.push(h);
+  for(let i = idxX(h.x1); i <= idxX(h.x2); i++)
+    for(let j = idxZ(h.z1); j <= idxZ(h.z2); j++) holeCells.add(skey(i, j));
+}
+function inSubwayHole(x, z){
+  for(let k=0;k<subwayHoles.length;k++){
+    const h = subwayHoles[k];
+    if(x > h.x1 && x < h.x2 && z > h.z1 && z < h.z2) return true;
+  }
+  return false;
+}
+
+/* Height of the subway's floor under a point, or null for "no floor here".
+ * Each station keeps its walkable surfaces as rectangles in its own frame —
+ * u along the line, v across it — and every line runs on a grid axis, so the
+ * test is two comparisons and a lerp. */
+function subwayY(x, z){
+  const arr = stationCell.get(skey(idxX(x), idxZ(z)));
+  if(!arr) return null;
+  for(let k=0;k<arr.length;k++){
+    const st = arr[k];
+    const u = (st.ax === 'z' ? z - st.z : x - st.x) * st.flip;
+    const v = st.ax === 'z' ? x - st.x : z - st.z;
+    for(let q=0;q<st.floors.length;q++){
+      const r = st.floors[q];
+      if(u < r.u0 || u > r.u1 || v < r.v0 || v > r.v1) continue;
+      if(r.y0 === r.y1) return r.y0;
+      return r.y0 + (r.y1 - r.y0) * (u - r.u0)/(r.u1 - r.u0);
+    }
+  }
+  return null;
+}
+
+// white 3-by-6 tile with dark grout and a colour band, which is what the walls
+// of half the system are still finished in
+function subTileTex(band){
+  const S = 256, ca = document.createElement('canvas'); ca.width = ca.height = S;
+  const g = ca.getContext('2d');
+  g.fillStyle = '#22242a'; g.fillRect(0, 0, S, S);
+  const rows = 10, rh = S/rows, cw = S/5;
+  for(let r=0;r<rows;r++){
+    const off = (r % 2) * cw/2;
+    for(let c=-1;c<6;c++){
+      const v = 0.93 + rnd()*0.14;
+      // three courses of colour partway up, like the band on a real platform
+      const isBand = r >= 3 && r <= 4;
+      const base = isBand ? band : [232, 228, 216];
+      g.fillStyle = 'rgb(' + Math.round(base[0]*v) + ',' + Math.round(base[1]*v)
+                  + ',' + Math.round(base[2]*v) + ')';
+      g.fillRect(c*cw + off + 1.5, r*rh + 1.5, cw - 3, rh - 3);
+      g.fillStyle = 'rgba(255,255,255,.13)';
+      g.fillRect(c*cw + off + 1.5, r*rh + 1.5, cw - 3, 2.5);
+    }
+  }
+  noise(g, S, 12);
+  // grime creeping up from the platform
+  const grd = g.createLinearGradient(0, S*0.6, 0, S);
+  grd.addColorStop(0, 'rgba(20,18,14,0)'); grd.addColorStop(1, 'rgba(20,18,14,.42)');
+  g.fillStyle = grd; g.fillRect(0, S*0.6, S, S*0.4);
+  const t = mkTex(ca); t.repeat.set(1, 1);
+  return t;
+}
+// the mosaic name tablet, and the wayfinding beside it
+function tabletTex(name, bullet, col, dirTxt){
+  const W = 512, H = 128;
+  const ca = document.createElement('canvas'); ca.width = W; ca.height = H;
+  const g = ca.getContext('2d');
+  g.fillStyle = '#2a2520'; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#d8cdb4'; g.fillRect(8, 8, W - 16, H - 16);
+  g.fillStyle = '#7a6a4e'; g.fillRect(14, 14, W - 28, H - 28);
+  g.fillStyle = '#e6dcc4'; g.fillRect(20, 20, W - 40, H - 40);
+  // the little glass squares
+  g.strokeStyle = 'rgba(120,105,80,.35)'; g.lineWidth = 1;
+  for(let x=20;x<W-20;x+=10){ g.beginPath(); g.moveTo(x, 20); g.lineTo(x, H-20); g.stroke(); }
+  for(let y=20;y<H-20;y+=10){ g.beginPath(); g.moveTo(20, y); g.lineTo(W-20, y); g.stroke(); }
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillStyle = '#2b2416';
+  let px = 52;
+  do { g.font = 'bold ' + px + 'px Georgia, serif'; px -= 3; }
+  while(g.measureText(name).width > W - 150 && px > 16);
+  g.fillText(name, W/2 + 34, H/2 - 6);
+  g.fillStyle = '#6b5c3e'; g.font = '17px Helvetica, Arial';
+  g.fillText(dirTxt, W/2 + 34, H/2 + 32);
+  // route bullets on the left
+  const bl = bullet.split(' ');
+  for(let k=0;k<bl.length;k++){
+    const cx = 46, cy = H/2 + (k - (bl.length-1)/2) * 38;
+    g.fillStyle = '#' + col.toString(16).padStart(6, '0');
+    g.beginPath(); g.arc(cx, cy, 16, 0, 6.283); g.fill();
+    g.fillStyle = '#fff'; g.font = 'bold 21px Helvetica, Arial';
+    g.fillText(bl[k], cx, cy + 1);
+  }
+  const t = new THREE.CanvasTexture(ca);
+  t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+
+function stationName(line, i, j){
+  const [sx, sz] = line.ax === 'z' ? [line.at, roadZ(j)] : [roadX(i), line.at];
+  if(tsqDist(sx, sz) < TSQ_R + 90) return 'Times Sq–42 St';
+  if(line.ax === 'z') return ORD(Math.max(1, ST_AT_J0 + ST_J0 - j)) + ' St';
+  if(i >= 8 && i <= 14) return AVES[i - AVE_I0];
+  return ORD(Math.max(1, i - 15)) + ' St';
+}
+
+function buildStation(line, i, j, flip){
+  const x = line.ax === 'z' ? line.at : roadX(i);
+  const z = line.ax === 'z' ? roadZ(j) : line.at;
+  const name = stationName(line, i, j);
+  const st = { line, x, z, ax: line.ax, flip, name, pos: line.ax === 'z' ? z : x,
+               floors: [], group: new THREE.Group() };
+  // the walkable surfaces, in the station's own frame
+  st.floors.push(
+    { u0:-PLAT_HL, u1:STAIR0, v0:-PLAT_HW, v1:PLAT_HW, y0:PLAT_Y, y1:PLAT_Y },
+    { u0:STAIR0, u1:STAIR1, v0:-3.1, v1:3.1, y0:PLAT_Y, y1:MEZZ_Y },
+    { u0:MEZZ0, u1:MEZZ1, v0:-BOX_HW, v1:BOX_HW, y0:MEZZ_Y, y1:MEZZ_Y },
+    { u0:HEAD0, u1:HEAD1, v0:HEAD_V-2.0, v1:HEAD_V+2.0, y0:MEZZ_Y, y1:CURB });
+
+  const S = [], W = [], L = [];         // structure, tiled walls, lit things
+  const P = (u, v, y) => {              // station frame -> world
+    const uu = u*flip;
+    return line.ax === 'z' ? [x + v, y, z + uu] : [x + uu, y, z + v];
+  };
+  const box = (list, u, v, y, du, dv, h, col) => {
+    const [wx, wy, wz] = P(u, v, y);
+    const g = colored(new THREE.BoxGeometry(line.ax === 'z' ? dv : du, h,
+                                            line.ax === 'z' ? du : dv), col);
+    g.translate(wx, wy, wz);
+    list.push(g);
+    return g;
+  };
+  const CONC = 0x6d6a64, STEEL = 0x3d434a, DARK = 0x0d0f12;
+
+  // ---- platform slab, its edges, and the tactile strip -------------------
+  box(S, (STAIR0 - PLAT_HL)/2, 0, PLAT_Y - 0.6, PLAT_HL + STAIR0, PLAT_HW*2, 1.2, CONC);
+  for(const s of [-1, 1]){
+    box(S, (STAIR0 - PLAT_HL)/2, s*(PLAT_HW - 0.35), PLAT_Y + 0.015,
+        PLAT_HL + STAIR0, 0.7, 0.03, 0xc9a227);                    // yellow edge
+    // trackbed, rails, sleepers, third rail and its cover board
+    box(S, 0, s*TRACK_V, RAIL_Y - 0.75, PLAT_HL*2 + 90, 6.4, 0.5, 0x2a2721);
+    for(const r of [-0.72, 0.72])
+      box(S, 0, s*TRACK_V + r, RAIL_Y - 0.09, PLAT_HL*2 + 90, 0.16, 0.22, 0x6b6156);
+    for(let u = -PLAT_HL - 44; u < PLAT_HL + 44; u += 2.2)
+      box(S, u, s*TRACK_V, RAIL_Y - 0.34, 0.5, 2.4, 0.2, 0x3a322a);
+    box(S, 0, s*(TRACK_V + 2.5), RAIL_Y - 0.26, PLAT_HL*2 + 90, 0.3, 0.34, 0x8a6a3a);
+    box(S, 0, s*(TRACK_V + 2.5), RAIL_Y + 0.06, PLAT_HL*2 + 90, 0.62, 0.12, 0x4a3826);
+    // the tiled wall behind each track, and the ceiling over it
+    const wall = colored(new THREE.PlaneGeometry(PLAT_HL*2 + 60, 5.6), 0xffffff);
+    const uv = wall.attributes.uv;
+    for(let q=0;q<uv.count;q++) uv.setXY(q, uv.getX(q)*((PLAT_HL*2 + 60)/5.6), uv.getY(q));
+    wall.rotateY(line.ax === 'z' ? (s > 0 ? -Math.PI/2 : Math.PI/2)
+                                 : (s > 0 ? Math.PI : 0));
+    const [wx, wy, wz] = P(0, s*BOX_HW, RAIL_Y + 2.4);
+    wall.translate(wx, wy, wz);
+    W.push(wall);
+    box(S, 0, s*(BOX_HW + PLAT_HW)/2, PLAT_Y + 4.3,
+        PLAT_HL*2 + 60, BOX_HW - PLAT_HW, 0.5, 0x3a3f45);
+  }
+  // ceiling over the platform itself, and the columns holding it up
+  box(S, (STAIR0 - PLAT_HL)/2, 0, PLAT_Y + 4.5, PLAT_HL + STAIR0, PLAT_HW*2, 0.5, 0x33383e);
+  for(let u = -PLAT_HL + 4; u < STAIR0 - 3; u += 6.2){
+    for(const s of [-1, 1]){
+      box(S, u, s*3.5, PLAT_Y + 2.2, 0.55, 0.55, 4.4, STEEL);
+      const [cx, , cz] = P(u, s*3.5, 0);
+      underSolid.push({x1:cx-0.6, x2:cx+0.6, z1:cz-0.6, z2:cz+0.6});
+    }
+    if(u % 12 < 6.2) box(L, u, 0, PLAT_Y + 4.15, 3.6, 1.1, 0.12, 0xfff2d0);  // strip light
+  }
+  // ---- the name tablets, one on each wall --------------------------------
+  const dirTxt = line.ax === 'z' ? 'DOWNTOWN & BROOKLYN' : 'QUEENS & TIMES SQ';
+  const tabMat = new THREE.MeshBasicMaterial({map: tabletTex(name, line.bullet, line.col, dirTxt)});
+  for(const s of [-1, 1]) for(const u of [-18, 14]){
+    const pl = new THREE.PlaneGeometry(7.6, 1.9);
+    pl.rotateY(line.ax === 'z' ? (s > 0 ? -Math.PI/2 : Math.PI/2)
+                               : (s > 0 ? Math.PI : 0));
+    const [tx, ty, tz] = P(u, s*(BOX_HW - 0.06), RAIL_Y + 3.0);
+    pl.translate(tx, ty, tz);
+    const m = new THREE.Mesh(pl, tabMat);
+    st.group.add(m);
+  }
+  // ---- benches, bins and a couple of signs on the platform ---------------
+  for(const u of [-24, -6, 20]){
+    box(S, u, 0, PLAT_Y + 0.45, 3.4, 1.3, 0.12, 0x5a4a38);
+    box(S, u, 0, PLAT_Y + 0.75, 3.4, 0.14, 0.6, 0x5a4a38);
+    for(const s of [-1, 1]) box(S, u + s*1.5, 0, PLAT_Y + 0.22, 0.16, 1.2, 0.45, STEEL);
+    const [bx, , bz] = P(u, 0, 0);
+    underSolid.push({x1:bx-1.9, x2:bx+1.9, z1:bz-1.9, z2:bz+1.9});
+  }
+  for(const u of [-30, 8]){
+    box(S, u, 2.6, PLAT_Y + 0.55, 0.9, 0.9, 1.1, 0x2f4a33);        // bin
+    box(L, u, -2.6, PLAT_Y + 3.1, 2.6, 0.1, 0.9, line.col);        // hanging sign
+  }
+  // ---- stair down from the mezzanine, its treads and rails ---------------
+  for(let k=0;k<16;k++){
+    const u = STAIR0 + 0.5 + k*((STAIR1 - STAIR0 - 1)/15);
+    const y = PLAT_Y + (MEZZ_Y - PLAT_Y)*(k/15);
+    box(S, u, 0, y - 0.12, 0.95, 6.2, 0.24, CONC);
+  }
+  for(const s of [-1, 1])
+    box(S, (STAIR0 + STAIR1)/2, s*3.3, (PLAT_Y + MEZZ_Y)/2 + 1.0,
+        STAIR1 - STAIR0, 0.14, 1.05, STEEL);
+  // ---- mezzanine: floor, ceiling, turnstiles and the booth ---------------
+  box(S, (MEZZ0 + MEZZ1)/2, 0, MEZZ_Y - 0.45, MEZZ1 - MEZZ0 + 2, BOX_HW*2, 0.9, CONC);
+  box(S, (MEZZ0 + MEZZ1)/2, 0, MEZZ_Y + 3.4, MEZZ1 - MEZZ0 + 2, BOX_HW*2, 0.5, 0x33383e);
+  box(L, (MEZZ0 + MEZZ1)/2, 0, MEZZ_Y + 3.05, 6.0, 1.1, 0.12, 0xfff2d0);
+  for(let k=-3;k<=3;k++){                                    // the turnstile line
+    const v = k*2.6;
+    box(S, MEZZ0 + 3.5, v, MEZZ_Y + 0.55, 1.4, 1.3, 1.1, 0x4a5058);
+    box(L, MEZZ0 + 3.5, v + 0.75, MEZZ_Y + 1.2, 0.5, 0.2, 0.1, k === 0 ? 0x2fe06a : 0xff3b30);
+    const [tx, , tz] = P(MEZZ0 + 3.5, v, 0);
+    if(k !== 0) underSolid.push({x1:tx-0.9, x2:tx+0.9, z1:tz-0.9, z2:tz+0.9});
+  }
+  box(S, MEZZ0 + 7.5, -BOX_HW + 3, MEZZ_Y + 1.3, 4.4, 5.0, 2.6, 0x2b3038);   // booth
+  box(L, MEZZ0 + 7.5, -BOX_HW + 5.6, MEZZ_Y + 1.6, 3.2, 0.1, 1.4, 0xd8e4ee);
+  // ---- street stair -------------------------------------------------------
+  for(let k=0;k<20;k++){
+    const u = HEAD0 + 0.4 + k*((HEAD1 - HEAD0 - 0.8)/19);
+    const y = MEZZ_Y + (CURB - MEZZ_Y)*(k/19);
+    box(S, u, HEAD_V, y - 0.12, 0.62, 4.0, 0.24, CONC);
+  }
+  for(const s of [-1, 1])
+    box(S, (HEAD0 + HEAD1)/2, HEAD_V + s*2.1, (MEZZ_Y + CURB)/2 + 0.6,
+        HEAD1 - HEAD0, 0.2, 6.0, 0x1b1e22);                  // shaft side walls
+  box(S, (HEAD0 + HEAD1)/2 - 2, HEAD_V, MEZZ_Y + 4.2, HEAD1 - HEAD0 + 6, 4.6, 0.4, 0x2a2f35);
+  // and the head of it up on the sidewalk, with its railings and green globe
+  {
+    const [hx, , hz] = P(HEAD1 - 2.5, HEAD_V, 0);
+    const ang = line.ax === 'z' ? (flip > 0 ? Math.PI : 0) : (flip > 0 ? -Math.PI/2 : Math.PI/2);
+    subwayEntrance({prop: S, glow: L}, hx, hz, ang, line.col);
+    st.headX = hx; st.headZ = hz;
+  }
+
+  if(S.length) st.group.add(new THREE.Mesh(mergeGeos(S), vcMat));
+  if(W.length) st.group.add(new THREE.Mesh(mergeGeos(W), subWallMat[line.id]));
+  if(L.length) st.group.add(new THREE.Mesh(mergeGeos(L), litMat));
+  st.group.visible = false;
+  subGroup.add(st.group);
+
+  // register the cells this station reaches into, so subwayY is a hash lookup
+  const rad = HEAD1 + 6;
+  for(let di = -Math.ceil(rad/PITCH) - 1; di <= Math.ceil(rad/PITCH) + 1; di++)
+    for(let dj = -Math.ceil(rad/PITCH) - 1; dj <= Math.ceil(rad/PITCH) + 1; dj++){
+      const key = skey(idxX(x) + di, idxZ(z) + dj);
+      let a = stationCell.get(key);
+      if(!a){ a = []; stationCell.set(key, a); }
+      if(!a.includes(st)) a.push(st);
+    }
+  stations.push(st);
+  return st;
+}
+
+const subWallMat = {};
 tasks.push(() => {
-  // A station entrance every few corners. It has to sit in the five-wide
-  // sidewalk band beside the kerb, not on the block, or the stairs come up
-  // inside a building: mid-band is ROAD/2 + WALK/2 in from the road centre.
-  const band = ROAD/2 + WALK/2;
-  for(let k=2; k<subwaySpots.length; k+=5){
-    const [X, Z] = subwaySpots[k];
-    const [x, z, ang] = (k % 2)
-      ? [X - band, Z - 14, 0]                  // east band, stairs running north
-      : [X - 14, Z - band, Math.PI/2];         // south band, running west
-    if(onBway(x, z) || tsqDist(x, z) < TSQ_R + 8) continue;
-    subwayEntrance(chunkOf(x, z), x, z, ang);
+  for(const line of SUB_LINES)
+    subWallMat[line.id] = new THREE.MeshLambertMaterial({
+      map: subTileTex([((line.col>>16)&255)*0.55 + 90, ((line.col>>8)&255)*0.55 + 90,
+                       (line.col&255)*0.55 + 90]) });
+  for(const p of SUB_PLAN) buildStation(p.line, p.i, p.j, p.flip);
+  for(const line of SUB_LINES){
+    line.stops = stations.filter(s => s.line === line).sort((a, b) => a.pos - b.pos);
+    // rail and running lights the whole length of the line, between stations
+    if(line.stops.length > 1){
+      const R = [], G = [];
+      const a0 = line.stops[0].pos - 60, a1 = line.stops[line.stops.length-1].pos + 60;
+      for(const s of [-1, 1]) for(const r of [-0.72, 0.72]){
+        const g = colored(new THREE.BoxGeometry(
+          line.ax === 'z' ? 0.16 : a1-a0, 0.22, line.ax === 'z' ? a1-a0 : 0.16), 0x6b6156);
+        g.translate(line.ax === 'z' ? line.at + s*TRACK_V + r : (a0+a1)/2, RAIL_Y - 0.09,
+                    line.ax === 'z' ? (a0+a1)/2 : line.at + s*TRACK_V + r);
+        R.push(g);
+      }
+      for(let p = a0; p < a1; p += 21){
+        const g = colored(new THREE.SphereGeometry(0.3, 6, 5), 0xffd9a0);
+        g.translate(line.ax === 'z' ? line.at + BOX_HW - 0.6 : p, RAIL_Y + 3.4,
+                    line.ax === 'z' ? p : line.at + BOX_HW - 0.6);
+        G.push(g);
+      }
+      subGroup.add(new THREE.Mesh(mergeGeos(R), vcMat));
+      subGroup.add(new THREE.Mesh(mergeGeos(G), litMat));
+    }
   }
 });
+
+/* ---- trains --------------------------------------------------------------
+ * Four cars, stainless with a stripe, dark glass, and a lit interior you can
+ * see into through the doors. They run the line, brake for the next station,
+ * hold the doors open a few seconds and go on. At the end they change ends.
+ */
+const trains = [];
+function carGeoSub(col){
+  const P = [];
+  P.push(colored(new THREE.BoxGeometry(CAR_W, CAR_H, CAR_L), 0xb0b6bd).translate(0, CAR_H/2, 0));
+  P.push(colored(new THREE.BoxGeometry(CAR_W + 0.04, 0.5, CAR_L - 0.6), 0x1f4a8a)
+           .translate(0, CAR_H - 0.5, 0));                              // the stripe
+  for(const s of [-1, 1]){
+    P.push(colored(new THREE.BoxGeometry(0.06, 1.15, CAR_L - 1.6), 0x11161d)
+             .translate(s*(CAR_W/2 + 0.02), CAR_H - 1.35, 0));          // glass band
+    for(let k=-1;k<=1;k++)                                              // door leaves
+      P.push(colored(new THREE.BoxGeometry(0.10, 2.1, 1.9), 0x8d949c)
+               .translate(s*(CAR_W/2 + 0.04), 1.15, k*5.2));
+  }
+  P.push(colored(new THREE.BoxGeometry(CAR_W - 0.5, 0.9, 0.06), col).translate(0, 2.5, CAR_L/2));
+  for(const [dz] of [[CAR_L/2 - 2.2], [-CAR_L/2 + 2.2]])
+    for(const s of [-1, 1])
+      P.push(colored(new THREE.CylinderGeometry(0.42, 0.42, 0.24, 8), 0x14171a)
+               .rotateZ(Math.PI/2).translate(s*1.0, 0.42, dz));
+  return mergeGeos(P);
+}
+function carInnerGeo(){
+  const P = [];
+  P.push(colored(new THREE.BoxGeometry(CAR_W - 0.22, CAR_H - 0.3, CAR_L - 0.3), 0xf2ecdc)
+           .translate(0, CAR_H/2 + 0.05, 0));
+  return mergeGeos(P);
+}
+const carInnerMat = new THREE.MeshBasicMaterial({vertexColors:true, side:THREE.BackSide});
+tasks.push(() => {
+  const innerGeo = carInnerGeo();
+  for(const line of SUB_LINES){
+    if(!line.stops || line.stops.length < 2) continue;
+    const bodyGeo = carGeoSub(line.col);
+    const span = line.stops[line.stops.length-1].pos - line.stops[0].pos;
+    for(let n=0;n<3;n++){
+      const t = { line, dir: n % 2 ? -1 : 1, v: 0, state:'run', dwell: 0, doors: false,
+                  pos: line.stops[0].pos + span*(0.15 + n*0.33),
+                  track: n % 2 ? 1 : -1, cars: [] };
+      for(let c=0;c<TRAIN_N;c++){
+        const g = new THREE.Group();
+        g.add(new THREE.Mesh(bodyGeo, vcMat), new THREE.Mesh(innerGeo, carInnerMat));
+        g.visible = false;
+        subGroup.add(g);
+        t.cars.push({ g, off: (c - (TRAIN_N-1)/2) * (CAR_L + CAR_GAP) });
+      }
+      trains.push(t);
+    }
+  }
+});
+
+const TRAIN_TOP = 24, TRAIN_ACC = 6.5, TRAIN_BRK = 5.0, TRAIN_DWELL = 6.5;
+let ride = null;                       // { train, car } while you are on board
+function updateSubway(dt){
+  for(const t of trains){
+    const stops = t.line.stops;
+    if(t.state === 'dwell'){
+      t.dwell -= dt;
+      if(t.dwell <= 0){
+        t.doors = false; t.state = 'run';
+        if(ride && ride.train === t) toast('Stand clear of the closing doors');
+      }
+    } else {
+      /* Latch on to the next stop and hold it until the train is standing at
+       * it. Re-picking the nearest stop ahead every frame meant that the
+       * moment the train got close enough to stop, that stop stopped counting
+       * as ahead — so it took aim at the one after and accelerated away, for
+       * ever, and no train ever opened a door. */
+      if(!t.next){
+        let best = null;
+        for(const s of stops){
+          const d = (s.pos - t.pos) * t.dir;
+          if(d > 0.5 && (!best || d < (best.pos - t.pos)*t.dir)) best = s;
+        }
+        if(!best){ t.dir = -t.dir; t.v = 0; continue; }   // end of the line
+        t.next = best;
+      }
+      const d = (t.next.pos - t.pos) * t.dir;
+      const vmax = Math.min(TRAIN_TOP, Math.sqrt(2*TRAIN_BRK*Math.max(0, d)));
+      t.v = Math.max(0, t.v + Math.max(-TRAIN_BRK*dt, Math.min(TRAIN_ACC*dt, vmax - t.v)));
+      t.pos += t.v * dt * t.dir;
+      if(d <= 0.5 || (t.v < 0.1 && d < 4)){
+        t.pos = t.next.pos; t.v = 0;
+        t.state = 'dwell'; t.dwell = TRAIN_DWELL; t.doors = true;
+        t.at = t.next; t.next = null;
+        if(ride && ride.train === t) toast(t.at.name + ' — this is a ' + t.line.bullet + ' train');
+      }
+    }
+    // place the cars, and only show a train you could actually see
+    const ax = t.line.ax, lat = t.line.at + t.track * TRACK_V;
+    const show = ride && ride.train === t ? true :
+      (ax === 'z' ? Math.abs(t.pos - player.z) < 150 && Math.abs(lat - player.x) < 90
+                  : Math.abs(t.pos - player.x) < 150 && Math.abs(lat - player.z) < 90);
+    for(const c of t.cars){
+      c.g.visible = !!show;
+      if(!c.g.visible) continue;
+      const p = t.pos + c.off;
+      if(ax === 'z'){ c.g.position.set(lat, RAIL_Y + 0.44, p); c.g.rotation.y = 0; }
+      else          { c.g.position.set(p, RAIL_Y + 0.44, lat); c.g.rotation.y = Math.PI/2; }
+    }
+  }
+  if(ride){
+    const c = ride.car, p = c.g.position;
+    player.x = p.x; player.z = p.z;
+    player.y = RAIL_Y + 0.44 + 0.55;
+    player.vy = 0; player.onGround = true;
+  }
+}
+// the door you are standing at, if a train is holding one open beside you
+function trainAtDoor(){
+  for(const t of trains){
+    if(!t.doors) continue;
+    for(const c of t.cars){
+      if(!c.g.visible) continue;
+      // the track sits eight off the platform centre, so a door is never
+      // closer than that even when you are standing right at the edge
+      const dx = c.g.position.x - player.x, dz = c.g.position.z - player.z;
+      if(dx*dx + dz*dz < 121) return { train: t, car: c };
+    }
+  }
+  return null;
+}
+function boardTrain(){
+  const hit = trainAtDoor();
+  if(!hit) return false;
+  ride = hit;
+  toast('Boarded the ' + hit.train.line.bullet + ' — right-click again to get off');
+  return true;
+}
+function alightTrain(){
+  const t = ride.train;
+  if(!t.doors){ toast('Wait for the next stop'); return; }
+  const c = ride.car, lat = t.line.at;
+  // step out onto the platform, which is on the inboard side of the track
+  player.x = t.line.ax === 'z' ? lat + (t.track > 0 ? PLAT_HW - 1.2 : -PLAT_HW + 1.2)
+                               : c.g.position.x;
+  player.z = t.line.ax === 'z' ? c.g.position.z
+                               : lat + (t.track > 0 ? PLAT_HW - 1.2 : -PLAT_HW + 1.2);
+  player.y = PLAT_Y; player.under = true;
+  ride = null;
+  toast(t.at ? t.at.name : 'Next stop');
+}
 tasks.push(() => {
   // three landmark towers
   setbackTower(midX(11), midZ(22), [[42,42,54],[32,32,56],[22,22,48],[13,13,32]], 34, 5);
@@ -4189,10 +4699,12 @@ for(let k=0;k<4;k++){
 // itself, which the square has since grown over
 const SPAWN = { x: midX(11) + BLOCK/2 + WALK*0.5, z: midZ(23) };
 const player = { x:SPAWN.x, y:CURB, z:SPAWN.z, vy:0, yaw:0, pitch:0,
-                 onGround:true, bob:0 };
+                 onGround:true, bob:0, under:false };
 const EYE = 1.7, RADIUS = 0.55;
 
-function groundAt(x, z){
+function groundAt(x, z, under){
+  // underground you are standing on the subway's floors, not the city's
+  if(under){ const sy = subwayY(x, z); if(sy !== null) return sy; }
   const b = bridgeAt(x, z);
   if(b) return CURB + bridgeY(b, x);
   // built-over streets and the plaza island are kerb height wherever they are,
@@ -4207,7 +4719,10 @@ function groundAt(x, z){
   }
   return 0;
 }
-function isSolidGround(x, z){
+function isSolidGround(x, z, under){
+  // down there the only floor is the one the MTA built: step off the platform
+  // and there is nothing under you, which is exactly what stops you doing it
+  if(under) return subwayY(x, z) !== null;
   if(bridgeAt(x, z)) return true;
   // you do not walk across the Reservoir; Bow Bridge is there for a reason
   if(inParkWater(x, z)) return false;
@@ -4215,7 +4730,22 @@ function isSolidGround(x, z){
   return i>=0 && j>=0 && i<GX && j<GZ && grid[i][j] !== WATER;
 }
 let ignoreKerb = false;                // set while moving a pursuing police car
-function pushOut(x, z, rad){
+function pushOut(x, z, rad, under){
+  if(under){
+    for(let k=0;k<underSolid.length;k++){
+      const s = underSolid[k];
+      if(x > s.x1-rad && x < s.x2+rad && z > s.z1-rad && z < s.z2+rad){
+        const pxr = s.x2+rad - x, pxl = x - (s.x1-rad);
+        const pzr = s.z2+rad - z, pzl = z - (s.z1-rad);
+        const m = Math.min(pxr, pxl, pzr, pzl);
+        if(m === pxr) x = s.x2+rad;
+        else if(m === pxl) x = s.x1-rad;
+        else if(m === pzr) z = s.z2+rad;
+        else z = s.z1-rad;
+      }
+    }
+    return [x, z];
+  }
   for(let di=-1; di<=1; di++) for(let dj=-1; dj<=1; dj++){
     const arr = solidGrid.get(skey(idxX(x)+di, idxZ(z)+dj));
     if(!arr) continue;
@@ -4239,13 +4769,13 @@ function pushOut(x, z, rad){
   return [x, z];
 }
 /** move from (ox,oz) toward (nx,nz), sliding on buildings and stopping at the water */
-function move(ox, oz, nx, nz, rad){
-  let [x, z] = pushOut(nx, nz, rad);
-  if(!isSolidGround(x, z)){
-    let [ax, az] = pushOut(nx, oz, rad);
-    if(isSolidGround(ax, az)) return [ax, az];
-    let [bx, bz] = pushOut(ox, nz, rad);
-    if(isSolidGround(bx, bz)) return [bx, bz];
+function move(ox, oz, nx, nz, rad, under){
+  let [x, z] = pushOut(nx, nz, rad, under);
+  if(!isSolidGround(x, z, under)){
+    let [ax, az] = pushOut(nx, oz, rad, under);
+    if(isSolidGround(ax, az, under)) return [ax, az];
+    let [bx, bz] = pushOut(ox, nz, rad, under);
+    if(isSolidGround(bx, bz, under)) return [bx, bz];
     return [ox, oz];
   }
   return [x, z];
@@ -4290,7 +4820,13 @@ function exitCar(){
   toast('Parked. Right-click it again to drive.');
 }
 function toggleCar(){
+  if(ride){ alightTrain(); return; }
   if(drive){ exitCar(); return; }
+  // underground the only thing to get into is a train
+  if(player.under){
+    if(!boardTrain()) toast('Wait at the platform edge for a train');
+    return;
+  }
   const c = nearestCarMesh();
   if(c) enterCar(c);
   else toast('Aim at a car and right-click');
@@ -4418,8 +4954,27 @@ function honk(vol){
 }
 
 // ---------- day / night ----------
-function setNight(v, silent){
-  night = v;
+/* Going underground is a lighting change as much as a height change: no sky,
+ * no sun, and a fog thick enough that the tunnel goes black a few carriages
+ * away. Everything down there lights itself. */
+function setUnder(v){
+  if(player.under === v) return;
+  player.under = v;
+  if(v){
+    scene.fog.color.set(0x05070b);
+    scene.fog.density = 0.055;
+    ambient.color.set(0x8fa2b8); ambient.intensity = 0.30;
+    sun.intensity = 0.04; bounce.intensity = 0.10; fill.intensity = 0.03;
+    skyDome.visible = stars.visible = sunDisc.visible = cloudMesh.visible = false;
+    cityGroup.visible = false;
+  } else {
+    skyDome.visible = sunDisc.visible = cloudMesh.visible = true;
+    stars.visible = true;
+    cityGroup.visible = true;
+    applySky();
+  }
+}
+function applySky(){
   const s = night ? SKY.night : SKY.day;
   skyMat.uniforms.top.value.set(s.top);
   skyMat.uniforms.bot.value.set(s.bot);
@@ -4444,6 +4999,10 @@ function setNight(v, silent){
   tsqLight.visible = night; tsqLight.intensity = night ? 2.4 : 0;
   if(tsqBall) tsqBall.material.color.set(night ? 0xffffff : 0xd8cfae);
   roamLights.forEach(l => { l.visible = night; l.intensity = night ? 1.5 : 0; });
+}
+function setNight(v, silent){
+  night = v;
+  if(!player.under) applySky();
   clock24 = night ? 21.4 : 9.5;
   if(!silent) toast(night ? 'Night falls over New York' : 'Daybreak');
 }
@@ -4475,6 +5034,16 @@ const BK_ST = ['Bedford Ave','Nostrand Ave','Flatbush Ave','Franklin Ave','Class
 const clampPick = (arr, k) => arr[Math.max(0, Math.min(arr.length - 1, k))];
 
 function locationName(){
+  if(ride) return [ride.train.at ? ride.train.at.name : 'In the tunnel',
+                   ride.train.line.bullet + ' train'];
+  if(player.under){
+    let best = null, bd = 1e9;
+    for(let k=0;k<stations.length;k++){
+      const d = Math.hypot(stations[k].x - player.x, stations[k].z - player.z);
+      if(d < bd){ bd = d; best = stations[k]; }
+    }
+    if(best) return [best.name, best.line.bullet + ' · ' + best.line.name];
+  }
   const b = bridgeAt(player.x, player.z);
   if(b) return [b.name, 'over the river'];
   if(tsqDist(player.x, player.z) < TSQ_R + 16) return ['Times Square', 'the crossroads of the world'];
@@ -4609,6 +5178,26 @@ function drawBigMap(){
     bg.ellipse(ox + (w.x - OFF_X)*s, oy + (w.z - OFF_Z)*s, w.rx*s, w.rz*s, 0, 0, 6.283);
     bg.fill();
   }
+  // the subway, in the colours it is signed in, with a dot at every stop
+  bg.lineWidth = Math.max(1.8, 3.4*s); bg.lineCap = 'round';
+  for(const line of SUB_LINES){
+    if(!line.stops || line.stops.length < 2) continue;
+    const p0 = line.stops[0].pos, p1 = line.stops[line.stops.length-1].pos;
+    const A = line.ax === 'z' ? [line.at, p0] : [p0, line.at];
+    const B = line.ax === 'z' ? [line.at, p1] : [p1, line.at];
+    bg.strokeStyle = '#' + line.col.toString(16).padStart(6, '0');
+    bg.beginPath();
+    bg.moveTo(ox + (A[0] - OFF_X)*s, oy + (A[1] - OFF_Z)*s);
+    bg.lineTo(ox + (B[0] - OFF_X)*s, oy + (B[1] - OFF_Z)*s);
+    bg.stroke();
+    bg.fillStyle = '#f2f4f7';
+    for(const st of line.stops){
+      bg.beginPath();
+      bg.arc(ox + (st.x - OFF_X)*s, oy + (st.z - OFF_Z)*s, Math.max(1.6, 2.4*s), 0, 6.283);
+      bg.fill();
+    }
+  }
+  bg.lineWidth = 1;
   // the square, which is a shape worth being able to see
   bg.fillStyle = '#4a505d';
   bg.beginPath();
@@ -4672,13 +5261,23 @@ function tick(){
   if(drive) updateDriving(dt, mf, ms);
   else      updateWalking(dt, mf, ms);
 
-  updateTraffic(dt);
-  updateCarShadows();
-  updateChase(dt);
-  updatePeds(dt, t);
-  updateSteam(dt);
-  updateBirds(dt, t);
-  updateSky(dt);
+  updateSubway(dt);
+  if(!player.under){
+    updateTraffic(dt);
+    updateCarShadows();
+    updateChase(dt);
+    updatePeds(dt, t);
+    updateSteam(dt);
+    updateBirds(dt, t);
+    updateSky(dt);
+  }
+  // light up the station you are in, and the one you can see down into
+  for(let k=0;k<stations.length;k++){
+    const st = stations[k];
+    st.group.visible = player.under
+      ? Math.abs(st.x - player.x) < 170 && Math.abs(st.z - player.z) < 170
+      : Math.abs(st.headX - player.x) < 46 && Math.abs(st.headZ - player.z) < 46;
+  }
 
   // signals + beacons — greenPhase is what the lenses show and what traffic obeys
   const gph = greenPhase;
@@ -4694,7 +5293,7 @@ function tick(){
   skyDome.position.set(camera.position.x, 0, camera.position.z);
   stars.position.copy(skyDome.position);
 
-  if(night){
+  if(night && !player.under){
     let best = [];
     for(let k=0;k<lampSpots.length;k++){
       const d2 = (lampSpots[k][0]-player.x)**2 + (lampSpots[k][1]-player.z)**2;
@@ -4708,9 +5307,19 @@ function tick(){
   }
 
   // crosshair hint
-  if(!drive && !isTouch){
+  if(ride){
+    elCross.classList.remove('hot');
+    elPrompt.textContent = 'Right-click to get off';
+    elPrompt.classList.toggle('on', ride.train.doors);
+  } else if(player.under && !isTouch){
+    const d = trainAtDoor();
+    elCross.classList.remove('hot');
+    elPrompt.textContent = 'Right-click to board';
+    elPrompt.classList.toggle('on', !!d);
+  } else if(!drive && !isTouch){
     const c = nearestCarMesh();
     elCross.classList.toggle('hot', !!c);
+    elPrompt.textContent = 'Right-click to drive';
     elPrompt.classList.toggle('on', !!c);
   } else { elCross.classList.remove('hot'); elPrompt.classList.remove('on'); }
 
@@ -4737,18 +5346,36 @@ function updateWalking(dt, mf, ms){
   const sprint = (keys.ShiftLeft || keys.ShiftRight) ? 1.9 : 1;
   const speed  = 4.4 * sprint;
   const sin = Math.sin(player.yaw), cos = Math.cos(player.yaw);
-  const nx = player.x + (-sin*mf + cos*ms) * speed * dt;
-  const nz = player.z + (-cos*mf - sin*ms) * speed * dt;
-  [player.x, player.z] = move(player.x, player.z, nx, nz, RADIUS);
+  let nx = player.x + (-sin*mf + cos*ms) * speed * dt;
+  let nz = player.z + (-cos*mf - sin*ms) * speed * dt;
 
-  const gh = groundAt(player.x, player.z);
-  if((keys.Space || touchJump) && player.onGround){ player.vy = 5.2; player.onGround = false; }
+  /* Which level are you on? Decided from where you are trying to step, not
+   * where you are. Step into the stair mouth and you are underground from
+   * that moment; step off the end of a platform and you are not, so the move
+   * gets refused instead of putting you on the street with a road over your
+   * head. Coming back up only counts near the top of the steps. */
+  if(ride){ nx = player.x; nz = player.z; }
+  else {
+    const tgt = subwayY(nx, nz);
+    if(!player.under){
+      if(tgt !== null && tgt < CURB - 0.15) setUnder(true);
+    } else if(tgt === null){
+      const cur = subwayY(player.x, player.z);
+      if(cur !== null && cur > CURB - 0.7) setUnder(false);
+    }
+    [player.x, player.z] = move(player.x, player.z, nx, nz, RADIUS, player.under);
+  }
+
+  const gh = groundAt(player.x, player.z, player.under);
+  if(!ride){
+    if((keys.Space || touchJump) && player.onGround){ player.vy = 5.2; player.onGround = false; }
+    player.vy -= 15 * dt;
+    player.y += player.vy * dt;
+    if(player.y <= gh){ player.y = gh; player.vy = 0; player.onGround = true; }
+  }
   touchJump = false;
-  player.vy -= 15 * dt;
-  player.y += player.vy * dt;
-  if(player.y <= gh){ player.y = gh; player.vy = 0; player.onGround = true; }
 
-  const moving = mag > 0.05 && player.onGround;
+  const moving = mag > 0.05 && player.onGround && !ride;
   player.bob += dt * (moving ? 9 * sprint : 0);
   const bobY = moving ? Math.sin(player.bob)*0.055 : 0;
   const bobX = moving ? Math.cos(player.bob*0.5)*0.03 : 0;
