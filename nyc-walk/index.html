@@ -222,7 +222,7 @@ const WATER=0, MID=1, DOWN=2, UPPER=3, HARLEM=4, PARK=5, BKLYN=6,
 
 const D = {
   [MID]:     {name:'Midtown',             h:[34,118], tall:0.22, pal:[1,2,3,5], lots:2},
-  [DOWN]:    {name:'Financial District',  h:[30,108], tall:0.20, pal:[2,3,5],   lots:3},
+  [DOWN]:    {name:'Financial District',  h:[30,108], tall:0.20, pal:[2,3,5],   lots:4},
   [UPPER]:   {name:'Upper Manhattan',     h:[22,56],  tall:0.06, pal:[0,1,4,5], lots:2},
   [HARLEM]:  {name:'Harlem',              h:[14,36],  tall:0.04, pal:[0,4,1],   lots:2},
   [VILLAGE]: {name:'Greenwich Village',   h:[13,34],  tall:0.03, pal:[0,4,1],   lots:2},
@@ -236,13 +236,22 @@ const D = {
   [WATER]:   {name:'the water'}
 };
 
-function manSpan(j){            // Manhattan's east/west cell range per row
-  if(j < 1 || j > 32) return null;
-  if(j <= 6)  return [9, 13];
-  if(j <= 11) return [8, 13];
-  if(j <= 25) return [8, 14];
-  if(j <= 30) return [9, 14];
-  return [10, 13];
+/* Manhattan's east-west cell range per row — its outline, in other words, and
+ * it is not a rectangle. The Hudson runs almost straight down the west side,
+ * so that edge barely moves; everything that varies is the east side, where
+ * the Harlem River cuts in behind Inwood and the island widens through Harlem
+ * to its full width from the Upper West Side down to the Village. Below Canal
+ * it narrows fast and comes to a point at the Battery. */
+function manSpan(j){
+  if(j < 2 || j > 32) return null;
+  if(j <= 4)   return [8, 11];   // Inwood, with the Harlem River in behind it
+  if(j <= 6)   return [8, 12];   // Washington Heights
+  if(j <= 11)  return [8, 13];   // Harlem
+  if(j <= 28)  return [8, 14];   // the full width: UWS and UES down to the Village
+  if(j === 29) return [8, 13];   // SoHo
+  if(j === 30) return [9, 13];   // TriBeCa
+  if(j === 31) return [10, 13];  // the Financial District
+  return [10, 12];               // the Battery
 }
 function manType(j){
   if(j <= 6)  return UPPER;
@@ -264,14 +273,28 @@ for(let i=0;i<GX;i++){
     // five rows was nowhere near it — the park came out almost square when
     // the real one is two and a half times longer than it is wide
     if(i >= 10 && i <= 12 && j >= 12 && j <= 18) t = PARK;          // Central Park
-    if(i >= 16 && j >= 6  && j <= 22) t = QUEENS;
-    if(i >= 16 && j >= 23 && j <= 34) t = BKLYN;
+    /* Long Island: Queens on top, Brooklyn underneath, and the line between
+     * them runs from Newtown Creek away to the south-east — it is not a
+     * latitude. Brooklyn's north-west corner sits opposite the Lower East
+     * Side, which is why Williamsburg is Brooklyn and Long Island City is
+     * not. Queens starts level with the Upper East Side; north of that, what
+     * is across the water from Manhattan is the Bronx. */
+    if(i >= 16 && j >= 11 && j <= 34)
+      t = j < 23 + Math.round((i - 16) * 0.55) ? QUEENS : BKLYN;
     if(i >= 20 && i <= 22 && j >= 27 && j <= 29) t = PARK;          // Prospect Park
     if(i >= 21 && i <= 22 && j >= 12 && j <= 13) t = PARK;          // Flushing Meadows
-    if(j <= 5  && i >= 15) t = BRONX;
-    if(i <= 5  && j >= 2  && j <= 31) t = JERSEY;
-    if(i >= 1  && i <= 7  && j >= 33) t = STATEN;
+    /* The Bronx is the only one of the five on the mainland. It comes over the
+     * top of the island and down its whole east flank to Hell Gate, with the
+     * Harlem River — one cell of it — in between the entire way. */
+    if(j === 0 && i >= 9)  t = BRONX;
+    if(j <= 4 && i >= 14)  t = BRONX;
+    if(j <= 8 && i >= 15)  t = BRONX;
+    if(i === 15 && j === 9) t = PARK;                              // Randall's Island
+    if(i <= 5  && j <= 31) t = JERSEY;
+    if(i >= 1  && i <= 6  && j >= 33) t = STATEN;
     if(i === 8 && j === 33) t = LIBERTY;
+    if(i === 8 && j === 32) t = PARK;                              // Ellis Island
+    if(i === 12 && j === 33) t = PARK;                             // Governors Island
     grid[i][j] = t;
   }
 }
@@ -294,19 +317,19 @@ const buildable = t => !!(D[t] && D[t].h);
  *   Verrazzano   suspension, tall plain steel towers, the longest span here
  */
 const bridges = [
-  {ax:'x', line:roadZ(3),  a:cellX(5)+BLOCK,  b:cellX(9),  h:17, big:true,
+  {ax:'x', line:roadZ(3),  a:cellX(5)+BLOCK,  b:cellX(8),  h:17, big:true,
    kind:'susp', tower:'lattice', col:0x9aa0a6, th:52, name:'George Washington Bridge'},
-  {ax:'x', line:roadZ(4),  a:cellX(13)+BLOCK, b:cellX(15), h:7,  big:false,
+  {ax:'x', line:roadZ(4),  a:cellX(12)+BLOCK, b:cellX(15), h:7,  big:false,
    kind:'arch', col:0x79808a, name:'Harlem River Bridge'},
   {ax:'x', line:roadZ(20), a:cellX(14)+BLOCK, b:cellX(16), h:14, big:true,
    kind:'cantilever', col:0x8d949b, th:38, name:'Queensboro Bridge'},
   {ax:'x', line:roadZ(25), a:cellX(14)+BLOCK, b:cellX(16), h:12, big:true,
    kind:'susp', tower:'lattice', col:0x9c9287, th:40, truss:true, name:'Williamsburg Bridge'},
-  {ax:'x', line:roadZ(28), a:cellX(14)+BLOCK, b:cellX(16), h:13, big:true,
+  {ax:'x', line:roadZ(28), a:cellX(13)+BLOCK, b:cellX(16), h:13, big:true,
    kind:'susp', tower:'lattice', col:0x3f6ea8, th:42, name:'Manhattan Bridge'},
-  {ax:'x', line:roadZ(30), a:cellX(14)+BLOCK, b:cellX(16), h:15, big:true,
+  {ax:'x', line:roadZ(30), a:cellX(13)+BLOCK, b:cellX(16), h:15, big:true,
    kind:'susp', tower:'gothic', col:0xa89a86, th:40, stays:true, name:'Brooklyn Bridge'},
-  {ax:'x', line:roadZ(34), a:cellX(7)+BLOCK,  b:cellX(16), h:24, big:true,
+  {ax:'x', line:roadZ(33), a:cellX(6)+BLOCK,  b:cellX(16), h:24, big:true,
    kind:'susp', tower:'lattice', col:0x9aa0a6, th:60, name:'Verrazzano Bridge'}
 ];
 const DECK_HALF = ROAD/2 + WALK;
@@ -761,11 +784,11 @@ const segDist = (px, pz, x0, z0, x1, z1) => {
  */
 const LANES = [
   { w: BWAY_W, name: 'Broadway',   pts: BWAY },
-  { w: 7.5, name: 'Fulton St',     pts: [[9.7,30.15],[11.5,30.02],[13.9,30.2]] },
+  { w: 7.5, name: 'Fulton St',     pts: [[9.7,30.15],[11.5,30.02],[13.3,30.2]] },
   { w: 6.5, name: 'Maiden Ln',     pts: [[11.4,30.78],[12.3,30.5],[13.3,30.3]] },
   { w: 8.0, name: 'Wall St',       pts: [[10.55,31.38],[12.2,31.2],[13.35,31.05]] },
-  { w: 7.0, name: 'Pearl St',      pts: [[13.3,30.4],[12.9,31.1],[12.3,31.75],[11.55,32.3]] },
-  { w: 6.5, name: 'Water St',      pts: [[13.45,30.62],[13.15,31.35],[12.6,32.0],[11.9,32.42]] },
+  { w: 7.0, name: 'Pearl St',      pts: [[13.3,30.4],[12.8,31.05],[12.1,31.5],[11.45,32.25]] },
+  { w: 6.5, name: 'Water St',      pts: [[13.4,30.65],[13.0,31.2],[12.2,31.55],[11.8,32.3]] },
   { w: 6.5, name: 'William St',    pts: [[12.55,30.08],[12.45,30.9],[12.2,31.8],[12.05,32.3]] },
   { w: 6.0, name: 'Nassau St',     pts: [[11.35,30.2],[11.3,31.0],[11.15,31.9]] },
   { w: 6.0, name: 'Beaver St',     pts: [[10.72,32.06],[11.8,31.74],[12.4,31.6]] },
@@ -5466,7 +5489,10 @@ function locationName(){
   if(t === WATER)   return ['The Harbor', 'new york bay'];
   if(t === LIBERTY) return ['Liberty Island', 'new york harbor'];
   if(t === PARK){
-    if(i <= 13){
+    if(i === 8  && j === 32) return ['Ellis Island', 'new york harbor'];
+    if(i === 12 && j === 33) return ['Governors Island', 'new york harbor'];
+    if(i === 15 && j === 9)  return ["Randall's Island", 'hell gate'];
+    if(i >= 10 && i <= 12 && j >= 12 && j <= 18){
       // name the piece of it you are standing in — the park is a set of
       // places, and nobody in New York says "Central Park" when they mean
       // Sheep Meadow
