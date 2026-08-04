@@ -843,6 +843,30 @@ function laneEdge(x, z){
   return best;
 }
 const onLane = (x, z) => laneEdge(x, z) < 0;
+
+/* ---------- the cross streets ---------------------------------------------
+ * The 1811 grid is not square and never was. A Manhattan block runs about
+ * nine hundred feet east-west between avenues and two hundred north-south
+ * between streets — twenty streets to the mile against ten avenues — which is
+ * why you walk twenty blocks uptown in the time it takes to walk two across,
+ * and why the island reads as a stack of long bars rather than a chessboard.
+ * Every cell of the grid gets a street cut across the middle of it, so a block
+ * comes out three times as wide as it is deep.
+ */
+const XS_ON = new Set([MID, UPPER, HARLEM, VILLAGE]);
+const XS_HW = 4.5;                      // half the roadbed of a cross street
+const LM_CELLS = new Set(['11|23','13|21','10|30','11|25']);   // keep their blocks whole
+function crossEdge(x, z){
+  const i = idxX(x), j = idxZ(z);
+  if(i < 0 || j < 0 || i >= GX || j >= GZ) return 1e9;
+  if(!XS_ON.has(grid[i][j]) || LM_CELLS.has(skey(i, j))) return 1e9;
+  // it runs the width of the block and meets the avenue kerb at either end
+  if(Math.abs(x - midX(i)) > BLOCK/2 + WALK) return 1e9;
+  return Math.abs(z - midZ(j)) - XS_HW;
+}
+// distance to the nearest roadbed of any kind, old lane or cross street
+const streetEdge = (x, z) => Math.min(laneEdge(x, z), crossEdge(x, z));
+const onStreet = (x, z) => streetEdge(x, z) < 0;
 /* Does this rectangle keep out of every roadbed? Walked round its outline
  * rather than measured from its middle. A circle round the lot was the only
  * thing on offer before, and downtown that is hopeless: the blocks between
@@ -865,11 +889,11 @@ function solidOverlaps(x, z, w, d){
 }
 function lotClearOfLanes(bx, bz, lw, ld, pad){
   const p = pad === undefined ? 0.6 : pad;
-  if(laneEdge(bx, bz) < p) return false;
+  if(streetEdge(bx, bz) < p) return false;
   const nx = Math.max(1, Math.ceil(lw/7)), nz = Math.max(1, Math.ceil(ld/7));
   for(let a=0;a<=nx;a++) for(let b=0;b<=nz;b++){
     if(a > 0 && a < nx && b > 0 && b < nz) continue;      // outline only
-    if(laneEdge(bx - lw/2 + lw*a/nx, bz - ld/2 + ld*b/nz) < p) return false;
+    if(streetEdge(bx - lw/2 + lw*a/nx, bz - ld/2 + ld*b/nz) < p) return false;
   }
   return true;
 }
@@ -1143,7 +1167,7 @@ const grassTex = flatTex('#3f6b33', 34); grassTex.repeat.set(6,6);
 const grassMat = new THREE.MeshLambertMaterial({map:grassTex});
 
 function addMark(c, w, l, x, z, turn, color){
-  if(onLane(x, z)) return;              // the lanes carry their own markings
+  if(onStreet(x, z)) return;            // the lanes carry their own markings
   if(tsqDist(x, z) < TSQ_R) return;     // and nothing is painted on the plaza
   const g = new THREE.PlaneGeometry(w, l);
   g.rotateX(-Math.PI/2);
@@ -1864,7 +1888,7 @@ function trafficCone(c, x, z, onRoad){
 // ---------- props ----------
 function addProps(c, i, j){
   const cx = midX(i), cz = midZ(j), e = BLOCK/2 + WALK*0.6;
-  const clear = (x, z) => !onLane(x, z) && tsqDist(x, z) > TSQ_R + 4;
+  const clear = (x, z) => !onStreet(x, z) && tsqDist(x, z) > TSQ_R + 4;
   /* Pick a spot on one of the four kerbs of this block and hand back where it
    * is and which way is out toward the street, so anything with a front — a
    * newsstand, a shelter, a kiosk — ends up facing the traffic rather than the
@@ -2083,7 +2107,7 @@ function addParking(c, i, j){
       if(rnd() < 0.32) continue;                    // hydrants, driveways, gaps
       const x = r.ax === 'x' ? x0 + s + rr(-0.5,0.5) : r.line;
       const z = r.ax === 'x' ? r.line : z0 + s + rr(-0.5,0.5);
-      if(onLane(x, z) || tsqDist(x, z) < TSQ_R + 6) continue;
+      if(onStreet(x, z) || tsqDist(x, z) < TSQ_R + 6) continue;
       c.park.push([x, z, r.ang + rr(-0.035, 0.035)]);
       if(r.ax === 'x') addSolid(x, z, 4.6, 2.1, true);
       else             addSolid(x, z, 2.1, 4.6, true);
@@ -2109,7 +2133,7 @@ function sidewalkShed(c, i, j, ax, sgn){
   const cxm = midX(i), czm = midZ(j);
   const cx = ax === 'x' ? cxm + rr(-6,6) : cxm + sgn*off;
   const cz = ax === 'x' ? czm + sgn*off : czm + rr(-6,6);
-  if(onLane(cx, cz) || tsqDist(cx, cz) < TSQ_R + 8) return;
+  if(onStreet(cx, cz) || tsqDist(cx, cz) < TSQ_R + 8) return;
   const dw = ax === 'x' ? len : w, dd = ax === 'x' ? w : len;
   const deck = colored(new THREE.BoxGeometry(dw, 0.32, dd), 0x6f7a83);
   deck.translate(cx, CURB + 4.7, cz);
@@ -2781,6 +2805,134 @@ function buildCentralPark(){
 }
 
 // ---------- landmarks ----------
+/* The buildings people actually picture when they picture New York. Generic
+ * wedding-cake towers give you a skyline; they do not give you *this* skyline.
+ * Each of these is built the way the real one is put together, which is the
+ * only thing that makes it recognisable from a distance. */
+function lmMass(c, v, cx, cz, y, w, d, h){
+  const g = new THREE.BoxGeometry(w, h, d); uvScale(g, w, h, d);
+  c.bldg[v].push(colored(g, 0xffffff).translate(cx, y + h/2, cz));
+}
+function lmBand(c, cx, cz, y, w, d, h, col){
+  c.roof.push(colored(new THREE.BoxGeometry(w, h, d), col).translate(cx, y + h/2, cz));
+}
+/* The Empire State: a five-storey base out to the lot line, the great
+ * setbacks, an eighty-storey shaft, the crown stepping in, and the mooring
+ * mast built for airships that never moored one. */
+function empireState(c, cx, cz){
+  const V = 5, T = TRIM[5];
+  let y = CURB;
+  for(const [w,d,h] of [[48,42,14],[40,35,7],[33,29,5]]){
+    lmMass(c, V, cx, cz, y, w, d, h);
+    lmBand(c, cx, cz, y + h - 0.7, w + 1.3, d + 1.3, 1.4, T);
+    y += h;
+  }
+  lmMass(c, V, cx, cz, y, 26, 22, 84);            // the shaft
+  for(let k=0;k<5;k++)                            // the vertical piers on it
+    for(const sx of [-1, 1])
+      lmBand(c, cx + sx*(13.2), cz - 8 + k*4, y, 0.7, 1.6, 84, T);
+  lmBand(c, cx, cz, y + 84 - 1, 28, 24, 2, T);
+  y += 84;
+  for(const [w,d,h] of [[21,18,9],[16,14,7],[12,10,5]]){   // the crown
+    lmMass(c, V, cx, cz, y, w, d, h);
+    lmBand(c, cx, cz, y + h - 0.6, w + 1.1, d + 1.1, 1.2, T);
+    y += h;
+  }
+  const mast = colored(new THREE.CylinderGeometry(1.5, 3.4, 14, 12), 0xa9a191);
+  mast.translate(cx, y + 7, cz); c.roof.push(mast);
+  c.roof.push(colored(new THREE.CylinderGeometry(1.0, 1.0, 4, 10), 0x8d949b)
+                .translate(cx, y + 16, cz));
+  const ant = colored(new THREE.CylinderGeometry(0.22, 0.5, 26, 6), 0xb8bec4);
+  ant.translate(cx, y + 31, cz); c.roof.push(ant);
+  const b = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 8),
+    new THREE.MeshBasicMaterial({color:0xff4444}));
+  b.position.set(cx, y + 44.5, cz); cityGroup.add(b); beacons.push(b);
+  addSolid(cx, cz, 48, 42);
+}
+/* The Chrysler: brick shaft, then the seven stainless arches stacked one
+ * inside the next with the triangular windows in them, then the needle. */
+function chrysler(c, cx, cz){
+  const V = 1, T = TRIM[1], STEEL = 0xc8ced6;
+  let y = CURB;
+  for(const [w,d,h] of [[38,34,16],[31,28,8]]){
+    lmMass(c, V, cx, cz, y, w, d, h);
+    lmBand(c, cx, cz, y + h - 0.7, w + 1.2, d + 1.2, 1.3, T);
+    y += h;
+  }
+  lmMass(c, V, cx, cz, y, 24, 22, 72);
+  for(const [sx, sz] of [[-1,0],[1,0],[0,-1],[0,1]])       // the corner eagles
+    c.roof.push(colored(new THREE.BoxGeometry(3.2, 1.6, 3.2), STEEL)
+                  .translate(cx + sx*12.5, y + 73, cz + sz*11.5));
+  y += 72;
+  // seven arches: each a shallow drum, narrower and taller than the last
+  for(let k=0;k<7;k++){
+    const r = 12.5 - k*1.55, h = 4.6 - k*0.28;
+    const g = colored(new THREE.CylinderGeometry(r, r + 1.1, h, 14), STEEL);
+    g.translate(cx, y + h/2, cz); c.roof.push(g);
+    for(let q=0;q<14;q++){                                  // the sunburst windows
+      const a = (q/14)*6.283;
+      c.glow.push(colored(new THREE.BoxGeometry(0.9, h*0.5, 0.12), 0x1b2530)
+        .rotateY(-a).translate(cx + Math.sin(a)*(r + 0.5), y + h*0.45, cz + Math.cos(a)*(r + 0.5)));
+    }
+    y += h;
+  }
+  c.roof.push(colored(new THREE.ConeGeometry(3.4, 12, 10), STEEL).translate(cx, y + 6, cz));
+  const sp = colored(new THREE.CylinderGeometry(0.16, 0.9, 30, 8), STEEL);
+  sp.translate(cx, y + 27, cz); c.roof.push(sp);
+  addSolid(cx, cz, 38, 34);
+}
+/* One World Trade Center: a square base whose corners are chamfered away as
+ * it rises, so it is a perfect octagon at half height and a square turned
+ * forty-five degrees at the top, and then the mast. */
+function oneWTC(c, cx, cz){
+  const V = 3;
+  let y = CURB;
+  lmMass(c, V, cx, cz, y, 30, 30, 10);
+  y += 10;
+  const N = 7;
+  for(let k=0;k<N;k++){                       // the taper, in stacked octagons
+    const h = 106/N;
+    const r0 = 19.5 - k*(7.5/N), r1 = 19.5 - (k+1)*(7.5/N);
+    const g = new THREE.CylinderGeometry(r1, r0, h, 8);
+    cylUV(g, (r0 + r1)/2, h);
+    g.rotateY(Math.PI/8);
+    c.bldg[V].push(colored(g, 0xffffff).translate(cx, y + h/2, cz));
+    y += h;
+  }
+  c.roof.push(colored(new THREE.CylinderGeometry(11.6, 11.6, 2.4, 8), 0x2a343d)
+                .rotateY(Math.PI/8).translate(cx, y + 1.2, cz));
+  y += 2.4;
+  c.roof.push(colored(new THREE.CylinderGeometry(2.6, 5.4, 9, 12), 0x9aa0a8)
+                .translate(cx, y + 4.5, cz));
+  const mast = colored(new THREE.CylinderGeometry(0.5, 1.5, 46, 8), 0xb8bec4);
+  mast.translate(cx, y + 32, cz); c.roof.push(mast);
+  const b = new THREE.Mesh(new THREE.SphereGeometry(1.0, 10, 8),
+    new THREE.MeshBasicMaterial({color:0xff4444}));
+  b.position.set(cx, y + 56, cz); cityGroup.add(b); beacons.push(b);
+  addSolid(cx, cz, 34, 34);
+}
+/* The Flatiron: the wedge left over where Broadway crosses Fifth, six feet
+ * across at the point, and the whole reason anybody photographs that corner. */
+function flatiron(c, cx, cz){
+  const V = 4, T = TRIM[4], H = 46;
+  const bang = Math.atan2(BWAY[5][0] - BWAY[4][0], BWAY[5][1] - BWAY[4][1]);
+  const g = new THREE.CylinderGeometry(23, 23, H, 3);
+  cylUV(g, 23, H);
+  g.rotateY(bang);
+  c.bldg[V].push(colored(g, 0xffffff).translate(cx, CURB + H/2, cz));
+  for(const yy of [CURB + 12, CURB + 30, CURB + H - 1.6]){   // the cornices
+    const b = colored(new THREE.CylinderGeometry(24.2, 24.2, 1.5, 3), T);
+    b.rotateY(bang); b.translate(cx, yy, cz);
+    c.roof.push(b);
+  }
+  const cap = colored(new THREE.CylinderGeometry(21, 24.2, 3, 3), T);
+  cap.rotateY(bang); cap.translate(cx, CURB + H + 1.5, cz);
+  c.roof.push(cap);
+  addSolid(cx, cz, 34, 34);
+}
+const LANDMARKS = { '11|23': empireState, '13|21': chrysler,
+                    '10|30': oneWTC,      '11|25': flatiron };
+
 function setbackTower(cx, cz, tiers, mastH, variant){
   const c = chunkOf(cx, cz);
   let y = CURB;
@@ -3164,11 +3316,16 @@ function buildCell(i, j){
         const N = holed ? 16 : 10, ts = S/N;
         for(let a=0;a<N;a++) for(let b=0;b<N;b++){
           const tx = midX(i) - S/2 + (a+0.5)*ts, tz = midZ(j) - S/2 + (b+0.5)*ts;
-          if(laneEdge(tx, tz) < ts*0.3) continue;
+          if(streetEdge(tx, tz) < ts*0.3) continue;
           if(tsqDist(tx, tz) < TSQ_R - ts*0.3) continue;
           if(inSubwayHole(tx, tz)) continue;
           walkSlab(c, tx, tz, ts, ts);
         }
+      } else if(XS_ON.has(t)){
+        // one slab each side of the cross street, not one over the top of it
+        const h = S/2 - XS_HW;
+        walkSlab(c, midX(i), midZ(j) - XS_HW - h/2, S, h);
+        walkSlab(c, midX(i), midZ(j) + XS_HW + h/2, S, h);
       } else walkSlab(c, midX(i), midZ(j), S, S);
 
       // A closed street is paved over and built on, so the block runs through.
@@ -3196,8 +3353,10 @@ function buildCell(i, j){
        * with a skyline of their own, and both of them are across the water
        * from Manhattan looking back at it. */
       if(TALL_CELLS.has(skey(i, j))) info = D.tallOuter;
+      const lm = LANDMARKS[skey(i, j)];
+      if(lm){ lm(c, midX(i), midZ(j)); addProps(c, i, j); }
       // a whole borough of terraced houses rather than two slabs to a block
-      if(info.row && !cut){
+      else if(info.row && !cut){
         (info.detached ? detachedBlock : rowBlock)(c, i, j, info);
         addProps(c, i, j);
       } else {
@@ -3208,9 +3367,18 @@ function buildCell(i, j){
       const wx = !!(info.superblock && closedX[i][j]);
       const wz = !!(info.superblock && closedZ[i][j]);
       const lots = [];
-      splitLot(cellX(i), cellZ(j),
-               cellX(i) + BLOCK + (wx ? STREET : 0), cellZ(j) + BLOCK + (wz ? STREET : 0),
-               (cut ? info.lots + 1 : info.lots) + (wx || wz ? 1 : 0), lots, info.minLot);
+      const lx2 = cellX(i) + BLOCK + (wx ? STREET : 0);
+      const depth = (cut ? info.lots + 1 : info.lots) + (wx || wz ? 1 : 0);
+      if(XS_ON.has(t)){
+        // two long bars, each three times as wide as it is deep
+        const in1 = midZ(j) - XS_HW - 3.5, in2 = midZ(j) + XS_HW + 3.5;
+        splitLot(cellX(i), cellZ(j), lx2, in1, depth, lots, info.minLot);
+        splitLot(cellX(i), in2, lx2, cellZ(j) + BLOCK + (wz ? STREET : 0),
+                 depth, lots, info.minLot);
+      } else {
+        splitLot(cellX(i), cellZ(j), lx2, cellZ(j) + BLOCK + (wz ? STREET : 0),
+                 depth, lots, info.minLot);
+      }
       /* A lane crossing a lot should take a slice out of it, not the whole
        * thing. If the lot will not fit clear of the roadbeds, halve it and try
        * both halves, three times over — which is how the small awkward
@@ -5289,7 +5457,7 @@ function groundAt(x, z, under){
   // built-over streets and the plaza island are kerb height wherever they are,
   // so they win over the roadbed test below
   if(isPaved(x, z)) return CURB;
-  if(onLane(x, z) || tsqDist(x, z) < TSQ_R) return 0;   // a roadbed / the square
+  if(onStreet(x, z) || tsqDist(x, z) < TSQ_R) return 0; // a roadbed / the square
   const i = idxX(x), j = idxZ(z);
   if(i>=0 && j>=0 && i<GX && j<GZ && grid[i][j] !== WATER){
     if(Math.abs(x - midX(i)) <= BLOCK/2 + WALK && Math.abs(z - midZ(j)) <= BLOCK/2 + WALK)
