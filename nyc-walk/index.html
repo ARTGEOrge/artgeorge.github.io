@@ -653,6 +653,10 @@ function shopUV(geo, w, d){
 // the very first thing that runs — working out where Broadway crosses the
 // grid — already asks what counts as solid ground.
 const parkWater = [], parkDeck = [];
+// the boats, up here for the same reason: a deck is ground you can stand on,
+// and the ground test is one of the first things that runs
+const ferries = [];
+let aboardFerry = null;
 const solidGrid = new Map();
 const skey = (i,j) => i + '|' + j;
 function addSolid(x, z, w, d, kerb){
@@ -3935,6 +3939,237 @@ tasks.push(() => {
   }
 });
 
+/* ==========================================================================
+ * THE FERRY
+ * ==========================================================================
+ * The Staten Island Ferry, which is the best thing in New York that costs
+ * nothing: Whitehall at the bottom of Manhattan across the harbour to St
+ * George, past the Statue of Liberty on the way, and back again all day.
+ *
+ * The boat is double-ended and never turns round — it has a wheelhouse at
+ * each end and drives into the slip nose first at whichever end is leading —
+ * so the route is one straight line and the hull always lies along it.
+ *
+ * You do not press anything to ride it. You walk down the pier, across the
+ * apron plate and onto the deck, and when it sails you go with it: the deck
+ * is ground the same way the pavement is, and the ship carries whatever is
+ * standing on it. Walk round the promenade while it crosses.
+ */
+const FERRY_L = 62, FERRY_B = 16, HOUSE_L = 40, HOUSE_B = 12.4;
+const FERRY_DECK = CURB;
+const FERRY_ROUTE = {
+  a: [midX(10) - 44, midZ(32) + 2],     // Whitehall, off the Battery
+  b: [midX(3) + 10, midZ(33) - 34],     // St George, Staten Island
+  aName: 'Whitehall Terminal', bName: 'St George Terminal'
+};
+{
+  const [ax, az] = FERRY_ROUTE.a, [bx, bz] = FERRY_ROUTE.b;
+  const R = Math.hypot(bx-ax, bz-az);
+  FERRY_ROUTE.ux = (bx-ax)/R; FERRY_ROUTE.uz = (bz-az)/R; FERRY_ROUTE.len = R;
+}
+// where the ship's nose comes to rest at each end
+const BERTH = 36;
+// route position -> world
+const ferryXZ = s => [FERRY_ROUTE.a[0] + FERRY_ROUTE.ux*s,
+                      FERRY_ROUTE.a[1] + FERRY_ROUTE.uz*s];
+
+/* Is this point on a deck? Returns the boat, or null. The house in the middle
+ * is not deck — it is solid — so what you get is the promenade round it, which
+ * is where everybody stands anyway. */
+function ferryDeckAt(x, z){
+  for(let k=0;k<ferries.length;k++){
+    const f = ferries[k];
+    const dx = x - f.x, dz = z - f.z;
+    const u = dx*FERRY_ROUTE.ux + dz*FERRY_ROUTE.uz;
+    const v = -dx*FERRY_ROUTE.uz + dz*FERRY_ROUTE.ux;
+    if(Math.abs(u) > FERRY_L/2 + 1.4 || Math.abs(v) > FERRY_B/2 - 0.75) continue;
+    if(Math.abs(u) < HOUSE_L/2 && Math.abs(v) < HOUSE_B/2) continue;
+    return f;
+  }
+  return null;
+}
+
+function ferryGeo(){
+  const S = [], L = [];
+  const ORANGE = 0xdd6a12, WHITE = 0xe8e6e0, DKBLUE = 0x1b2a3a, DECKCOL = 0x5f6266;
+  const HL = FERRY_L/2, HB = FERRY_B/2;
+  // hull: a slab with the ends drawn in, and a boot-top stripe at the water
+  S.push(colored(new THREE.BoxGeometry(FERRY_B, 2.0, FERRY_L - 14), ORANGE)
+           .translate(0, FERRY_DECK - 1.0, 0));
+  for(const s of [-1, 1]){
+    S.push(colored(new THREE.BoxGeometry(FERRY_B - 3.6, 2.0, 7), ORANGE)
+             .translate(0, FERRY_DECK - 1.0, s*(HL - 3.5)));
+    S.push(colored(new THREE.BoxGeometry(FERRY_B - 8.5, 2.0, 7), ORANGE)
+             .translate(0, FERRY_DECK - 1.0, s*(HL + 3.0)));
+  }
+  S.push(colored(new THREE.BoxGeometry(FERRY_B + 0.1, 0.34, FERRY_L - 13), 0x2b2118)
+           .translate(0, FERRY_DECK - 1.85, 0));
+  // the deck you walk on, and the bulwark round it
+  S.push(colored(new THREE.BoxGeometry(FERRY_B, 0.18, FERRY_L), DECKCOL)
+           .translate(0, FERRY_DECK - 0.09, 0));
+  for(const s of [-1, 1]){
+    S.push(colored(new THREE.BoxGeometry(0.35, 1.15, FERRY_L), ORANGE)
+             .translate(s*(HB - 0.17), FERRY_DECK + 0.57, 0));
+    S.push(colored(new THREE.BoxGeometry(0.5, 0.16, FERRY_L), 0x9aa0a6)
+             .translate(s*(HB - 0.17), FERRY_DECK + 1.2, 0));
+    S.push(colored(new THREE.BoxGeometry(FERRY_B, 1.15, 0.35), ORANGE)
+             .translate(0, FERRY_DECK + 0.57, s*(HL - 0.17)));
+    S.push(colored(new THREE.BoxGeometry(FERRY_B, 0.16, 0.5), 0x9aa0a6)
+             .translate(0, FERRY_DECK + 1.2, s*(HL - 0.17)));
+  }
+  // the house: two decks of it, windows all round
+  for(let d=0; d<2; d++){
+    const y = FERRY_DECK + 0.1 + d*3.4, w = HOUSE_B - d*0.8, l = HOUSE_L - d*2.4;
+    S.push(colored(new THREE.BoxGeometry(w, 3.2, l), d ? WHITE : ORANGE)
+             .translate(0, y + 1.6, 0));
+    S.push(colored(new THREE.BoxGeometry(w + 1.1, 0.24, l + 1.1), WHITE)
+             .translate(0, y + 3.32, 0));
+    for(const s of [-1, 1]){
+      L.push(colored(new THREE.BoxGeometry(0.06, 1.25, l - 3), 0xf6e6b4)
+               .translate(s*(w/2 + 0.04), y + 1.95, 0));
+      L.push(colored(new THREE.BoxGeometry(w - 3, 1.25, 0.06), 0xf6e6b4)
+               .translate(0, y + 1.95, s*(l/2 + 0.04)));
+    }
+    // railing round the upper deck overhang
+    if(d === 1) for(const s of [-1, 1]){
+      S.push(colored(new THREE.BoxGeometry(0.12, 0.95, l + 1.1), 0x9aa0a6)
+               .translate(s*(w/2 + 0.5), y + 3.9, 0));
+      S.push(colored(new THREE.BoxGeometry(w + 1.1, 0.95, 0.12), 0x9aa0a6)
+               .translate(0, y + 3.9, s*(l/2 + 0.5)));
+    }
+  }
+  // a wheelhouse at each end, because it drives both ways
+  for(const s of [-1, 1]){
+    S.push(colored(new THREE.BoxGeometry(7.4, 2.5, 5.2), WHITE)
+             .translate(0, FERRY_DECK + 8.2, s*(HOUSE_L/2 - 5)));
+    S.push(colored(new THREE.BoxGeometry(8.0, 0.22, 5.8), 0x3a4048)
+             .translate(0, FERRY_DECK + 9.55, s*(HOUSE_L/2 - 5)));
+    L.push(colored(new THREE.BoxGeometry(6.6, 1.1, 0.06), 0x9fd0e8)
+             .translate(0, FERRY_DECK + 8.5, s*(HOUSE_L/2 - 5) + s*2.63));
+  }
+  // funnel, mast, and the name board people photograph
+  S.push(colored(new THREE.BoxGeometry(3.2, 4.6, 2.4), ORANGE)
+           .translate(0, FERRY_DECK + 9.6, 0));
+  S.push(colored(new THREE.BoxGeometry(3.6, 0.4, 2.8), 0x22262b)
+           .translate(0, FERRY_DECK + 12.1, 0));
+  S.push(colored(new THREE.CylinderGeometry(0.14, 0.2, 6.5, 6), 0xb8bec4)
+           .translate(0, FERRY_DECK + 13.2, -1.6));
+  for(const s of [-1, 1])
+    L.push(colored(new THREE.BoxGeometry(0.07, 0.9, 12), 0xffe9a8)
+             .translate(s*(HOUSE_B/2 + 0.06), FERRY_DECK + 6.4, 0));
+  // life rings and the orange boats on the upper deck
+  for(const s of [-1, 1]) for(const q of [-1, 1]){
+    S.push(colored(new THREE.TorusGeometry(0.42, 0.12, 5, 10), 0xe8571f)
+             .rotateY(Math.PI/2).translate(s*(HB - 0.6), FERRY_DECK + 0.85, q*14));
+    S.push(colored(new THREE.BoxGeometry(1.9, 1.0, 5.4), 0xe86a1f)
+             .translate(s*(HOUSE_B/2 + 1.6), FERRY_DECK + 7.6, q*11));
+  }
+  // navigation lights: red to port, green to starboard, white up the mast
+  L.push(colored(new THREE.SphereGeometry(0.24, 6, 5), 0xff3b30)
+           .translate(-(HB - 0.3), FERRY_DECK + 1.5, 0));
+  L.push(colored(new THREE.SphereGeometry(0.24, 6, 5), 0x2fe06a)
+           .translate(HB - 0.3, FERRY_DECK + 1.5, 0));
+  L.push(colored(new THREE.SphereGeometry(0.26, 6, 5), 0xffffff)
+           .translate(0, FERRY_DECK + 16.3, -1.6));
+  return { body: mergeGeos(S), lit: mergeGeos(L) };
+}
+
+// the pier, the fender racks that funnel the boat in, and the shed on the end
+function buildTerminal(sAlong, facing, name){
+  const [tx, tz] = ferryXZ(sAlong);
+  const ux = FERRY_ROUTE.ux*facing, uz = FERRY_ROUTE.uz*facing;   // out to sea
+  const nx = -FERRY_ROUTE.uz, nz = FERRY_ROUTE.ux;
+  const c = chunkOf(tx, tz);
+  const P = (u, v, y) => [tx + ux*u + nx*v, y, tz + uz*u + nz*v];
+  const ang = Math.atan2(ux, uz);
+  const box = (list, u, v, y, du, dv, h, col) => {
+    const [wx, wy, wz] = P(u, v, y);
+    const g = colored(new THREE.BoxGeometry(dv, h, du), col);
+    g.rotateY(ang); g.translate(wx, wy, wz);
+    list.push(g);
+  };
+  const S = [], L = [];
+  // the apron: a pier deck reaching back onto the land at one end and out over
+  // the water to the berth at the other
+  box(S, 11.5, 0, CURB/2, 51, 26, CURB, 0x6f6a62);
+  {
+    const cs = [P(-14,-13,0), P(37,-13,0), P(37,13,0), P(-14,13,0)];
+    addPaved(Math.min(...cs.map(p => p[0])), Math.min(...cs.map(p => p[2])),
+             Math.max(...cs.map(p => p[0])), Math.max(...cs.map(p => p[2])));
+  }
+  for(let u=-8; u<=37; u+=6) for(const s of [-1, 1])          // pier piles
+    box(S, u, s*12.4, -1.2, 0.9, 0.9, 3.2, 0x4a3826);
+  // the fender racks either side of the slip, which is what a slip is
+  for(let u=8; u<=34; u+=2.4) for(const s of [-1, 1]){
+    box(S, u, s*10.2, CURB + 0.9, 0.7, 0.7, 3.4, 0x6b5334);
+    box(S, u, s*10.9, CURB + 1.9, 0.5, 0.9, 0.35, 0x33383e);
+  }
+  // the shed: a big roof over the waiting hall, and the boarding doors
+  box(S, 0, 0, CURB + 4.2, 22, 26, 8.4, 0xd8d4ca);
+  box(S, 0, 0, CURB + 8.7, 25, 29, 0.6, 0x8a6a3a);
+  box(S, -9.5, 0, CURB + 3.4, 1.0, 26, 6.6, 0xdd6a12);
+  for(let k=-2;k<=2;k++) L.push(colored(new THREE.BoxGeometry(0.08, 2.6, 3.0), 0xf6e6b4)
+    .rotateY(ang).translate(...P(9.6, k*4.6, CURB + 2.6)));
+  L.push(colored(new THREE.BoxGeometry(0.1, 1.5, 14), 0xffd84d)
+    .rotateY(ang).translate(...P(-10.2, 0, CURB + 6.6)));          // the name board
+  const [bx, , bz] = P(0, 0, 0);
+  addSolid(bx, bz, 24, 24);                       // you walk round the shed
+  c.prop.push(...S);
+  c.glow.push(...L);
+  return { x: tx, z: tz, name, s: sAlong };
+}
+
+tasks.push(() => {
+  const geo = ferryGeo();
+  FERRY_ROUTE.termA = buildTerminal(0, 1, FERRY_ROUTE.aName);
+  FERRY_ROUTE.termB = buildTerminal(FERRY_ROUTE.len, -1, FERRY_ROUTE.bName);
+  const g = new THREE.Group();
+  g.add(new THREE.Mesh(geo.body, vcMat), new THREE.Mesh(geo.lit, litMat));
+  g.rotation.y = Math.atan2(FERRY_ROUTE.ux, FERRY_ROUTE.uz);
+  cityGroup.add(g);
+  const s0 = BERTH + FERRY_L/2;
+  const f = { g, s: s0, dir: 1, v: 0, state:'dock', wait: 8, dx:0, dz:0,
+              x: 0, z: 0, bob: 0 };
+  [f.x, f.z] = ferryXZ(f.s);
+  ferries.push(f);
+});
+
+const FERRY_TOP = 11, FERRY_ACC = 1.4, FERRY_BRK = 1.1, FERRY_DWELL = 15;
+function updateFerry(dt, t){
+  for(const f of ferries){
+    const px = f.x, pz = f.z;
+    const sA = BERTH + FERRY_L/2, sB = FERRY_ROUTE.len - BERTH - FERRY_L/2;
+    if(f.state === 'dock'){
+      f.wait -= dt;
+      if(f.wait <= 0){
+        f.state = 'sail'; f.dir = f.s < (sA + sB)/2 ? 1 : -1;
+        if(aboardFerry === f) toast('Departing ' +
+          (f.dir > 0 ? FERRY_ROUTE.aName : FERRY_ROUTE.bName));
+      }
+    } else {
+      const tgt = f.dir > 0 ? sB : sA;
+      const d = (tgt - f.s) * f.dir;
+      const vmax = Math.min(FERRY_TOP, Math.sqrt(2*FERRY_BRK*Math.max(0, d)));
+      f.v = Math.max(0, f.v + Math.max(-FERRY_BRK*dt, Math.min(FERRY_ACC*dt, vmax - f.v)));
+      f.s += f.v * dt * f.dir;
+      if(d <= 0.4 || (f.v < 0.04 && d < 3)){
+        f.s = tgt; f.v = 0; f.state = 'dock'; f.wait = FERRY_DWELL;
+        if(aboardFerry === f) toast('Now arriving: ' +
+          (f.dir > 0 ? FERRY_ROUTE.bName : FERRY_ROUTE.aName));
+      }
+    }
+    [f.x, f.z] = ferryXZ(f.s);
+    f.dx = f.x - px; f.dz = f.z - pz;
+    // a long swell, and she leans a little into it
+    f.bob = Math.sin(t*0.55)*0.13 + Math.sin(t*0.83 + 1.1)*0.07;
+    f.g.position.set(f.x, f.bob, f.z);
+    f.g.rotation.z = Math.sin(t*0.42)*0.012;
+    f.g.rotation.x = Math.sin(t*0.61 + 2)*0.008;
+  }
+  // and whatever is standing on the deck goes with her
+  if(aboardFerry){ player.x += aboardFerry.dx; player.z += aboardFerry.dz; }
+}
+
 /* ---- trains --------------------------------------------------------------
  * Four cars, stainless with a stripe, dark glass, and a lit interior you can
  * see into through the doors. They run the line, brake for the next station,
@@ -3973,9 +4208,11 @@ tasks.push(() => {
     if(!line.stops || line.stops.length < 2) continue;
     const bodyGeo = carGeoSub(line.col);
     const span = line.stops[line.stops.length-1].pos - line.stops[0].pos;
-    for(let n=0;n<3;n++){
+    // five to a line: three left you standing on a platform for two minutes,
+    // which is realistic and is also no fun at all
+    for(let n=0;n<5;n++){
       const t = { line, dir: n % 2 ? -1 : 1, v: 0, state:'run', dwell: 0, doors: false,
-                  pos: line.stops[0].pos + span*(0.15 + n*0.33),
+                  pos: line.stops[0].pos + span*(0.08 + n*0.19),
                   track: n % 2 ? 1 : -1, cars: [] };
       for(let c=0;c<TRAIN_N;c++){
         const g = new THREE.Group();
@@ -4137,15 +4374,22 @@ tasks.push(() => {
     }
     if(c.park.length){
       const inst = new THREE.InstancedMesh(parkGeo, vcMat, c.park.length);
+      let sx = 0, sz = 0;
+      inst.userData.spots = [];
       c.park.forEach(([x, z, ang], k) => {
         q.setFromAxisAngle(new THREE.Vector3(0,1,0), ang);
         v.set(x, CURB - 0.30, z);          // sits on the road, not the kerb
         inst.setMatrixAt(k, m4.compose(v,q,s));
         col.setHex(rnd() < 0.13 ? 0xf5c518 : pick(PARKED_COLORS));
         inst.setColorAt(k, col);
+        // remember where each one is, so you can get into it
+        inst.userData.spots[k] = { spot:true, mesh:inst, idx:k, x, z, ang, taken:false };
+        sx += x; sz += z;
       });
       inst.instanceColor.needsUpdate = true;
+      inst.userData.cx = sx/c.park.length; inst.userData.cz = sz/c.park.length;
       cityGroup.add(inst);
+      parkedMeshes.push(inst);
     }
     if(c.lamp.length){
       const inst = new THREE.InstancedMesh(lampGeo, vcMat, c.lamp.length);
@@ -4294,6 +4538,7 @@ const segOff   = (s, x, z) => (x - s.ox)*s.nx + (z - s.oz)*s.nz;
 const CAR_COLORS = [0xf5c518,0xf5c518,0xf5c518,0xd9dde2,0x2f3a4a,0x8c1f1f,
                     0x1f5f3a,0x2b2b2b,0x3c6fb5,0xb5b5bd,0x6a3f8f];
 const cars = [], carMeshes = [];
+const parkedMeshes = [];         // the instanced lines of cars at every kerb
 const CAR_COUNT = 210;
 
 function wheels(parts, hw, r, ...zs){
@@ -4707,6 +4952,7 @@ function groundAt(x, z, under){
   if(under){ const sy = subwayY(x, z); if(sy !== null) return sy; }
   const b = bridgeAt(x, z);
   if(b) return CURB + bridgeY(b, x);
+  if(ferryDeckAt(x, z)) return CURB;      // a deck is at kerb height, on purpose
   // built-over streets and the plaza island are kerb height wherever they are,
   // so they win over the roadbed test below
   if(isPaved(x, z)) return CURB;
@@ -4723,9 +4969,11 @@ function isSolidGround(x, z, under){
   // down there the only floor is the one the MTA built: step off the platform
   // and there is nothing under you, which is exactly what stops you doing it
   if(under) return subwayY(x, z) !== null;
-  if(bridgeAt(x, z)) return true;
   // you do not walk across the Reservoir; Bow Bridge is there for a reason
   if(inParkWater(x, z)) return false;
+  if(ferryDeckAt(x, z)) return true;      // the deck, and the promenade round it
+  if(isPaved(x, z)) return true;          // and the piers, which stand over water
+  if(bridgeAt(x, z)) return true;
   const i = idxX(x), j = idxZ(z);
   return i>=0 && j>=0 && i<GX && j<GZ && grid[i][j] !== WATER;
 }
@@ -4787,17 +5035,76 @@ const raycaster = new THREE.Raycaster();
 raycaster.far = 40;
 const MPH = 2.24;
 
+/* What you are aiming at, if it is something you could drive.
+ *
+ * The kerbs are lined with parked cars now, and those are instances in a
+ * merged mesh rather than entries in the traffic list — so aiming at one and
+ * right-clicking did nothing whatsoever, which is most of the cars in the
+ * city. A car at the kerb is a car. Aim at one and you get in it.
+ */
+const parkedNear = [];
 function nearestCarMesh(){
   raycaster.setFromCamera({x:0, y:0}, camera);
   const hit = raycaster.intersectObjects(carMeshes, false);
   if(hit.length && hit[0].distance < 34) return hit[0].object.userData.car;
+  // only the nearest few kerbs are worth testing against a ray thirty-four
+  // long — this runs every frame for the crosshair, so it stays cheap
+  parkedNear.length = 0;
+  for(let k=0;k<parkedMeshes.length;k++){
+    const m = parkedMeshes[k];
+    const d = Math.abs(m.userData.cx - player.x) + Math.abs(m.userData.cz - player.z);
+    if(d < 260) parkedNear.push(m);
+  }
+  if(parkedNear.length > 4){
+    parkedNear.sort((a, b) =>
+      (Math.abs(a.userData.cx-player.x) + Math.abs(a.userData.cz-player.z)) -
+      (Math.abs(b.userData.cx-player.x) + Math.abs(b.userData.cz-player.z)));
+    parkedNear.length = 4;
+  }
+  if(parkedNear.length){
+    const ph = raycaster.intersectObjects(parkedNear, false);
+    for(const h of ph){
+      if(h.distance > 34) break;
+      const sp = h.object.userData.spots[h.instanceId];
+      if(sp && !sp.taken) return sp;
+    }
+  }
   // forgiving fallback: any car within arm's reach
-  let best = null, bd = 100;
+  let best = null, bd = 169;
   for(const c of cars){
     const d = (c.g.position.x-player.x)**2 + (c.g.position.z-player.z)**2;
     if(d < bd){ bd = d; best = c; }
   }
-  return bd < 64 ? best : null;
+  if(best) return best;
+  for(let k=0;k<parkedMeshes.length;k++){
+    const sps = parkedMeshes[k].userData.spots;
+    for(let q=0;q<sps.length;q++){
+      const sp = sps[q];
+      if(sp.taken) continue;
+      const d = (sp.x-player.x)**2 + (sp.z-player.z)**2;
+      if(d < 36) return sp;
+    }
+  }
+  return null;
+}
+/* Getting into one at the kerb: hide the instance, borrow a car from the far
+ * side of the city, stand it in the empty space and hand you the keys. */
+function enterParked(sp){
+  let best = null, bd = -1;
+  for(const c of cars){
+    if(c.parked) continue;
+    const d = (c.g.position.x-player.x)**2 + (c.g.position.z-player.z)**2;
+    if(d > bd){ bd = d; best = c; }
+  }
+  if(!best){ toast('Every car in the city is spoken for'); return; }
+  sp.taken = true;
+  _m4.makeScale(0, 0, 0);
+  sp.mesh.setMatrixAt(sp.idx, _m4);
+  sp.mesh.instanceMatrix.needsUpdate = true;
+  best.parked = true; best.vel = 0; best.turning = false; best.turn = 0;
+  best.g.position.set(sp.x, 0.02, sp.z);
+  best.g.rotation.y = sp.ang;
+  enterCar(best);
 }
 function enterCar(c){
   drive = { c, speed: c.speed * c.dir * (c.seg && c.seg.ax === 'x' ? 1 : 1), heading: c.g.rotation.y, camOff: 0 };
@@ -4828,8 +5135,9 @@ function toggleCar(){
     return;
   }
   const c = nearestCarMesh();
-  if(c) enterCar(c);
-  else toast('Aim at a car and right-click');
+  if(!c){ toast('Aim at a car and right-click'); return; }
+  if(c.spot) enterParked(c);
+  else enterCar(c);
 }
 
 // ---------- input ----------
@@ -5044,6 +5352,15 @@ function locationName(){
     }
     if(best) return [best.name, best.line.bullet + ' · ' + best.line.name];
   }
+  if(aboardFerry){
+    const f = aboardFerry;
+    if(f.state === 'dock')
+      return ['Staten Island Ferry', 'alongside at ' +
+              (f.s < FERRY_ROUTE.len/2 ? FERRY_ROUTE.aName : FERRY_ROUTE.bName)];
+    const lib = Math.hypot(f.x - (midX(8)), f.z - midZ(33));
+    return ['Staten Island Ferry',
+            lib < 110 ? 'passing the Statue of Liberty' : 'new york harbor'];
+  }
   const b = bridgeAt(player.x, player.z);
   if(b) return [b.name, 'over the river'];
   if(tsqDist(player.x, player.z) < TSQ_R + 16) return ['Times Square', 'the crossroads of the world'];
@@ -5197,6 +5514,21 @@ function drawBigMap(){
       bg.fill();
     }
   }
+  // the ferry, across the harbour past Liberty Island
+  if(ferries.length){
+    bg.setLineDash([6, 5]); bg.lineWidth = Math.max(1.4, 2.2*s);
+    bg.strokeStyle = '#e08a3c';
+    bg.beginPath();
+    bg.moveTo(ox + (FERRY_ROUTE.a[0] - OFF_X)*s, oy + (FERRY_ROUTE.a[1] - OFF_Z)*s);
+    bg.lineTo(ox + (FERRY_ROUTE.b[0] - OFF_X)*s, oy + (FERRY_ROUTE.b[1] - OFF_Z)*s);
+    bg.stroke(); bg.setLineDash([]);
+    bg.fillStyle = '#f2c48a';
+    for(const f of ferries){
+      bg.beginPath();
+      bg.arc(ox + (f.x - OFF_X)*s, oy + (f.z - OFF_Z)*s, Math.max(2, 3*s), 0, 6.283);
+      bg.fill();
+    }
+  }
   bg.lineWidth = 1;
   // the square, which is a shape worth being able to see
   bg.fillStyle = '#4a505d';
@@ -5258,6 +5590,9 @@ function tick(){
   }
   if(isTouch){ mf -= touchMove.y; ms += touchMove.x; }
 
+  // the boat moves first, carrying whatever is standing on her, and then you
+  // walk about on the deck she has already moved
+  updateFerry(dt, t);
   if(drive) updateDriving(dt, mf, ms);
   else      updateWalking(dt, mf, ms);
 
@@ -5379,6 +5714,9 @@ function updateWalking(dt, mf, ms){
   player.bob += dt * (moving ? 9 * sprint : 0);
   const bobY = moving ? Math.sin(player.bob)*0.055 : 0;
   const bobX = moving ? Math.cos(player.bob*0.5)*0.03 : 0;
+
+  // standing on a deck is a fact about where you are, not a mode you enter
+  aboardFerry = player.under ? null : ferryDeckAt(player.x, player.z);
 
   camera.position.set(player.x + bobX, player.y + EYE + bobY, player.z);
   camera.rotation.set(0,0,0);
@@ -6168,6 +6506,7 @@ function start(){
   cityGroup.matrixAutoUpdate = false; cityGroup.updateMatrix();
   for(const c of cars) c.g.matrixAutoUpdate = true;
   for(const s of steams) s.spr.matrixAutoUpdate = true;
+  for(const f of ferries) f.g.matrixAutoUpdate = true;   // she is not scenery
   // the crowd is instanced: the meshes themselves never move, only the
   // per-instance matrices, so they can stay static like the rest of the city
 
