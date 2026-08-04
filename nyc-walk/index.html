@@ -222,15 +222,20 @@ const WATER=0, MID=1, DOWN=2, UPPER=3, HARLEM=4, PARK=5, BKLYN=6,
 
 const D = {
   [MID]:     {name:'Midtown',             h:[34,118], tall:0.22, pal:[1,2,3,5], lots:2},
-  [DOWN]:    {name:'Financial District',  h:[30,108], tall:0.20, pal:[2,3,5],   lots:4},
+  [DOWN]:    {name:'Financial District',  h:[30,108], tall:0.20, pal:[2,3,5],   lots:4,
+              superblock:1, minLot:9, minBuild:5, infill:1, gap:0.3},
   [UPPER]:   {name:'Upper Manhattan',     h:[22,56],  tall:0.06, pal:[0,1,4,5], lots:2},
   [HARLEM]:  {name:'Harlem',              h:[14,36],  tall:0.04, pal:[0,4,1],   lots:2},
   [VILLAGE]: {name:'Greenwich Village',   h:[13,34],  tall:0.03, pal:[0,4,1],   lots:2},
-  [BKLYN]:   {name:'Brooklyn',            h:[11,30],  tall:0.05, pal:[0,4,1,5], lots:1},
-  [QUEENS]:  {name:'Queens',              h:[10,26],  tall:0.04, pal:[0,4,5],   lots:1},
-  [BRONX]:   {name:'The Bronx',           h:[11,28],  tall:0.04, pal:[0,4,1],   lots:1},
-  [JERSEY]:  {name:'New Jersey',          h:[12,42],  tall:0.08, pal:[2,3,5],   lots:1},
-  [STATEN]:  {name:'Staten Island',       h:[8,19],   tall:0.02, pal:[0,4],     lots:1},
+  // `row` builds a terrace round the edge of the block instead of slabs in it,
+  // which is what these places are actually made of; `detached` pulls the
+  // terrace apart into separate houses with gardens between them
+  [BKLYN]:   {name:'Brooklyn',            h:[10,15],  tall:0, pal:[0,4,1],  lots:2, row:1},
+  [QUEENS]:  {name:'Queens',              h:[9,14],   tall:0, pal:[0,4,1],  lots:2, row:1},
+  [BRONX]:   {name:'The Bronx',           h:[10,16],  tall:0, pal:[0,4,1],  lots:2, row:1},
+  [JERSEY]:  {name:'New Jersey',          h:[11,17],  tall:0, pal:[0,1,4],  lots:2, row:1},
+  [STATEN]:  {name:'Staten Island',       h:[7,10],   tall:0, pal:[0,4,1],  lots:1, row:1, detached:1},
+  tallOuter: {name:'Downtown Brooklyn',   h:[26,74],  tall:0.22, pal:[2,3,5], lots:2},
   [PARK]:    {name:'Parkland'},
   [LIBERTY]: {name:'Liberty Island'},
   [WATER]:   {name:'the water'}
@@ -242,6 +247,9 @@ const D = {
  * the Harlem River cuts in behind Inwood and the island widens through Harlem
  * to its full width from the Upper West Side down to the Village. Below Canal
  * it narrows fast and comes to a point at the Battery. */
+/* The two places outside Manhattan with a skyline of their own: Downtown
+ * Brooklyn behind the bridges, and Long Island City across from Midtown. */
+const TALL_CELLS = new Set(['16|26','16|27','17|27','16|19','16|20','17|20']);
 function manSpan(j){
   if(j < 2 || j > 32) return null;
   if(j <= 4)   return [8, 11];   // Inwood, with the Harlem River in behind it
@@ -713,6 +721,16 @@ for(let i=0;i<GX;i++) for(let j=0;j<GZ;j++){
                   [BRONX]:0.20, [STATEN]:0.26, [JERSEY]:0.20 };
   for(let j=0;j<GZ;j++) for(let i=0;i<GX;i++){
     const t = grid[i][j], p = IRREG[t] || 0;
+    /* Below Houston there is no rectangular grid to thin out — there is no
+     * rectangular grid at all. Every one of the commissioners' streets inside
+     * the Financial District is paved over, so the district is one continuous
+     * piece of ground and the only streets in it are the old lanes cut
+     * through it. Deleting some of the grid still left a grid. */
+    if(t === DOWN){
+      if(i+1 < GX && grid[i+1][j] === DOWN) closedX[i][j] = true;
+      if(j+1 < GZ && grid[i][j+1] === DOWN) closedZ[i][j] = true;
+      continue;
+    }
     if(!p) continue;
     // never two in a row, or the block runs three cells wide and reads wrong
     if(i+1 < GX && grid[i+1][j] === t && rnd() < p &&
@@ -784,15 +802,19 @@ const segDist = (px, pz, x0, z0, x1, z1) => {
  */
 const LANES = [
   { w: BWAY_W, name: 'Broadway',   pts: BWAY },
-  { w: 7.5, name: 'Fulton St',     pts: [[9.7,30.15],[11.5,30.02],[13.3,30.2]] },
-  { w: 6.5, name: 'Maiden Ln',     pts: [[11.4,30.78],[12.3,30.5],[13.3,30.3]] },
-  { w: 8.0, name: 'Wall St',       pts: [[10.55,31.38],[12.2,31.2],[13.35,31.05]] },
-  { w: 7.0, name: 'Pearl St',      pts: [[13.3,30.4],[12.8,31.05],[12.1,31.5],[11.45,32.25]] },
-  { w: 6.5, name: 'Water St',      pts: [[13.4,30.65],[13.0,31.2],[12.2,31.55],[11.8,32.3]] },
-  { w: 6.5, name: 'William St',    pts: [[12.55,30.08],[12.45,30.9],[12.2,31.8],[12.05,32.3]] },
-  { w: 6.0, name: 'Nassau St',     pts: [[11.35,30.2],[11.3,31.0],[11.15,31.9]] },
-  { w: 6.0, name: 'Beaver St',     pts: [[10.72,32.06],[11.8,31.74],[12.4,31.6]] },
-  { w: 5.0, name: 'Stone St',      pts: [[11.1,31.96],[11.9,31.86]] }
+  { w: 6.0, name: 'Fulton St',     pts: [[9.7,30.15],[11.5,30.02],[13.3,30.2]] },
+  { w: 4.5, name: 'Maiden Ln',     pts: [[11.4,30.78],[12.3,30.5],[13.3,30.3]] },
+  { w: 6.5, name: 'Wall St',       pts: [[10.55,31.38],[12.2,31.2],[13.35,31.05]] },
+  { w: 5.0, name: 'Pearl St',      pts: [[13.3,30.4],[12.8,31.05],[12.1,31.5],[11.45,32.25]] },
+  { w: 5.0, name: 'Water St',      pts: [[13.4,30.65],[13.0,31.2],[12.2,31.55],[11.8,32.3]] },
+  { w: 5.0, name: 'William St',    pts: [[12.55,30.08],[12.45,30.9],[12.2,31.8],[12.05,32.3]] },
+  { w: 4.5, name: 'Nassau St',     pts: [[11.35,30.2],[11.3,31.0],[11.15,31.9]] },
+  { w: 4.5, name: 'Beaver St',     pts: [[10.72,32.06],[11.8,31.74],[12.4,31.6]] },
+  { w: 4.0, name: 'Stone St',      pts: [[11.1,31.96],[11.9,31.86]] },
+  { w: 5.0, name: 'Broad St',      pts: [[11.95,31.3],[11.8,32.15]] },
+  { w: 5.0, name: 'Greenwich St',  pts: [[10.3,29.9],[10.5,31.3],[10.75,32.1]] },
+  { w: 5.0, name: 'Church St',     pts: [[10.95,29.9],[11.05,31.0],[11.2,31.7]] },
+  { w: 4.5, name: 'Liberty St',    pts: [[10.85,30.9],[12.85,30.78]] }
 ];
 for(const L of LANES){
   if(L.name !== 'Broadway') L.pts = L.pts.map(p => bwayPt(p[0], p[1]));
@@ -821,6 +843,36 @@ function laneEdge(x, z){
   return best;
 }
 const onLane = (x, z) => laneEdge(x, z) < 0;
+/* Does this rectangle keep out of every roadbed? Walked round its outline
+ * rather than measured from its middle. A circle round the lot was the only
+ * thing on offer before, and downtown that is hopeless: the blocks between
+ * these lanes are smaller than the circle, so nothing could ever be built on
+ * one. Buildings there stand right on the street line, which is the whole
+ * character of the place — you can touch both sides of some of those streets.
+ */
+// is anything already standing here?
+function solidOverlaps(x, z, w, d){
+  const hx = w/2, hz = d/2;
+  for(let di=-1; di<=1; di++) for(let dj=-1; dj<=1; dj++){
+    const arr = solidGrid.get(skey(idxX(x)+di, idxZ(z)+dj));
+    if(!arr) continue;
+    for(let k=0;k<arr.length;k++){
+      const s = arr[k];
+      if(x + hx > s.x1 && x - hx < s.x2 && z + hz > s.z1 && z - hz < s.z2) return true;
+    }
+  }
+  return false;
+}
+function lotClearOfLanes(bx, bz, lw, ld, pad){
+  const p = pad === undefined ? 0.6 : pad;
+  if(laneEdge(bx, bz) < p) return false;
+  const nx = Math.max(1, Math.ceil(lw/7)), nz = Math.max(1, Math.ceil(ld/7));
+  for(let a=0;a<=nx;a++) for(let b=0;b<=nz;b++){
+    if(a > 0 && a < nx && b > 0 && b < nz) continue;      // outline only
+    if(laneEdge(bx - lw/2 + lw*a/nx, bz - ld/2 + ld*b/nz) < p) return false;
+  }
+  return true;
+}
 // which one you are standing in or beside, for the location readout
 function laneAt(x, z, margin){
   let best = null, bd = margin === undefined ? 0 : margin;
@@ -1440,15 +1492,138 @@ function crown(c, cx, cz, y, w, d, glassy, shape){
     cn.translate(cx, y + 3.2 + rad*2.7 + rad*0.45, cz); c.roof.push(cn);
   }
 }
-function splitLot(x1,z1,x2,z2,depth,out){
-  const w = x2-x1, d = z2-z1;
-  if(depth <= 0 || (w < 26 && d < 26) || (rnd() < 0.18 && w < 40 && d < 40)){
+// `min` is the smallest a lot is allowed to get. Downtown wants it small: the
+// lots down there are tiny and the lanes are everywhere, and a lot big enough
+// to be worth building on could not find anywhere to stand.
+function splitLot(x1,z1,x2,z2,depth,out,min){
+  const w = x2-x1, d = z2-z1, m = min || 26;
+  if(depth <= 0 || (w < m && d < m) || (rnd() < 0.18 && w < m*1.55 && d < m*1.55)){
     out.push([x1,z1,x2,z2]); return;
   }
   if(w >= d){ const t = x1 + w*rr(0.36,0.64);
-    splitLot(x1,z1,t,z2,depth-1,out); splitLot(t,z1,x2,z2,depth-1,out); }
+    splitLot(x1,z1,t,z2,depth-1,out,min); splitLot(t,z1,x2,z2,depth-1,out,min); }
   else { const t = z1 + d*rr(0.36,0.64);
-    splitLot(x1,z1,x2,t,depth-1,out); splitLot(x1,t,x2,z2,depth-1,out); }
+    splitLot(x1,z1,x2,t,depth-1,out,min); splitLot(x1,t,x2,z2,depth-1,out,min); }
+}
+
+/* ---------- the outer boroughs -------------------------------------------
+ * Brooklyn, Queens and the Bronx are not made of small office blocks. They
+ * are made of terraces: houses twenty feet wide and three or four storeys,
+ * built shoulder to shoulder round the edge of the block with the gardens
+ * hidden in the middle of it, a stoop up to the parlour floor and a door
+ * underneath to the basement, one cornice line running the whole length of
+ * the street, and every house painted differently from its neighbour. Two
+ * fat slabs to a block was the single least New York thing in the city.
+ *
+ * Further out — Staten Island, the far edge of Queens — they come apart into
+ * detached houses with a path, a hedge and a pitched roof.
+ */
+function rowHouse(c, cx, cz, w, d, h, variant, ang){
+  const geo = new THREE.BoxGeometry(w, h, d);
+  uvScale(geo, w, h, d);
+  c.bldg[variant].push(colored(geo, 0xffffff).translate(cx, CURB + h/2, cz));
+  // the cornice, which is the thing that makes a row read as one terrace
+  c.roof.push(colored(new THREE.BoxGeometry(w + 0.55, 0.9, d + 0.55), TRIM[variant])
+                .translate(cx, CURB + h - 0.25, cz),
+              colored(new THREE.BoxGeometry(w + 0.2, 0.7, d + 0.2), TRIM[variant])
+                .translate(cx, CURB + h + 0.35, cz));
+  const fx = Math.sin(ang), fz = Math.cos(ang);      // out toward the street
+  const px = Math.cos(ang), pz = -Math.sin(ang);     // along the frontage
+  const off = (rnd() < 0.5 ? -1 : 1) * w*0.22;
+  const sw = Math.min(2.6, w*0.42);
+  // the stoop: five or six steps up to the front door
+  const N = 6, rise = 1.55/N, run = 2.4/N;
+  for(let k=0;k<N;k++){
+    const o = 2.4 - k*run;
+    c.prop.push(colored(new THREE.BoxGeometry(
+        Math.abs(px)*sw + Math.abs(fx)*(run+0.06), rise + 0.06,
+        Math.abs(pz)*sw + Math.abs(fz)*(run+0.06)), 0x8d8578)
+      .translate(cx + px*off + fx*(d/2 + o - run/2), CURB + rise*(k + 0.5),
+                 cz + pz*off + fz*(d/2 + o - run/2)));
+  }
+  for(const s of [-1, 1])                            // stoop railings
+    c.prop.push(colored(new THREE.BoxGeometry(
+        Math.abs(px)*0.1 + Math.abs(fx)*2.5, 0.95, Math.abs(pz)*0.1 + Math.abs(fz)*2.5), 0x2b3036)
+      .translate(cx + px*(off + s*sw/2) + fx*(d/2 + 1.2), CURB + 1.5,
+                 cz + pz*(off + s*sw/2) + fz*(d/2 + 1.2)));
+  // the parlour door at the top of it, and the basement door under it
+  c.prop.push(colored(new THREE.BoxGeometry(
+      Math.abs(px)*1.15 + Math.abs(fx)*0.12, 2.1, Math.abs(pz)*1.15 + Math.abs(fz)*0.12), 0x3a2a20)
+    .translate(cx + px*off + fx*(d/2 + 0.06), CURB + 1.55 + 1.05, cz + pz*off + fz*(d/2 + 0.06)));
+  c.prop.push(colored(new THREE.BoxGeometry(
+      Math.abs(px)*1.0 + Math.abs(fx)*0.12, 1.7, Math.abs(pz)*1.0 + Math.abs(fz)*0.12), 0x24282e)
+    .translate(cx - px*off*0.7 + fx*(d/2 + 0.06), CURB + 0.85, cz - pz*off*0.7 + fz*(d/2 + 0.06)));
+  addSolid(cx, cz, Math.abs(px)*w + Math.abs(fx)*(d + 3), Math.abs(pz)*w + Math.abs(fz)*(d + 3));
+  if(rnd() < 0.30) roofExtras(c, cx, cz, CURB + h, w, d);
+}
+// one frontage of a block, built as a single terrace under one cornice line
+function rowTerrace(c, ax, fixed, a, b, dep, ang, info){
+  const base = rr(info.h[0], info.h[1]);
+  const pal = info.pal;
+  for(let s = a; s < b - 5; ){
+    const w = Math.min(rr(6.2, 9.4), b - s);
+    if(w < 5) break;
+    const cx = ax === 'x' ? s + w/2 : fixed, cz = ax === 'x' ? fixed : s + w/2;
+    rowHouse(c, cx, cz, ax === 'x' ? w : dep, ax === 'x' ? dep : w,
+             Math.max(7, base + rr(-1.3, 1.3)), pick(pal), ang);
+    s += w + 0.06;
+  }
+}
+function rowBlock(c, i, j, info){
+  const x0 = cellX(i), z0 = cellZ(j), x1 = x0 + BLOCK, z1 = z0 + BLOCK;
+  const dep = rr(11, 13.5);
+  rowTerrace(c, 'x', z0 + dep/2, x0, x1, dep, Math.PI,     info);   // north frontage
+  rowTerrace(c, 'x', z1 - dep/2, x0, x1, dep, 0,           info);   // south
+  rowTerrace(c, 'z', x0 + dep/2, z0 + dep, z1 - dep, dep, -Math.PI/2, info);
+  rowTerrace(c, 'z', x1 - dep/2, z0 + dep, z1 - dep, dep,  Math.PI/2, info);
+  // the gardens in the middle, which is where the whole block's greenery is
+  const gx = (x0 + x1)/2, gz = (z0 + z1)/2, gw = BLOCK - dep*2;
+  if(gw > 6){
+    const g = new THREE.BoxGeometry(gw, CURB + 0.04, gw);
+    g.translate(gx, (CURB + 0.04)/2, gz);
+    c.grass.push(colored(g, 0xffffff));
+    for(let k=0, n=ri(2, 5); k<n; k++)
+      c.tree.push([gx + rr(-gw/2 + 2, gw/2 - 2), gz + rr(-gw/2 + 2, gw/2 - 2), rr(0.7, 1.1)]);
+  }
+}
+// out at the edges the terrace comes apart into separate houses
+function detachedBlock(c, i, j, info){
+  const x0 = cellX(i), z0 = cellZ(j), x1 = x0 + BLOCK, z1 = z0 + BLOCK;
+  const dep = 11;
+  const runs = [
+    {ax:'x', fixed: z0 + dep/2, a: x0 + 1, b: x1 - 1, ang: Math.PI},
+    {ax:'x', fixed: z1 - dep/2, a: x0 + 1, b: x1 - 1, ang: 0},
+    {ax:'z', fixed: x0 + dep/2, a: z0 + dep + 1, b: z1 - dep - 1, ang: -Math.PI/2},
+    {ax:'z', fixed: x1 - dep/2, a: z0 + dep + 1, b: z1 - dep - 1, ang: Math.PI/2}
+  ];
+  for(const r of runs){
+    for(let s = r.a; s < r.b - 9; s += rr(12.5, 15)){
+      const w = rr(8, 9.6), h = rr(6.2, 8.4);
+      const cx = r.ax === 'x' ? s + w/2 : r.fixed, cz = r.ax === 'x' ? r.fixed : s + w/2;
+      const dw = r.ax === 'x' ? w : 8.6, dd = r.ax === 'x' ? 8.6 : w;
+      const geo = new THREE.BoxGeometry(dw, h, dd);
+      uvScale(geo, dw, h, dd);
+      const v = pick(info.pal);
+      c.bldg[v].push(colored(geo, 0xffffff).translate(cx, CURB + h/2, cz));
+      // a hipped roof, which is what says house rather than building
+      const roof = colored(new THREE.ConeGeometry(Math.max(dw, dd)*0.78, 2.6, 4),
+                           pick([0x5a4a3e, 0x4a4a50, 0x6a4a38]));
+      roof.rotateY(Math.PI/4); roof.translate(cx, CURB + h + 1.3, cz);
+      c.roof.push(roof);
+      const fx = Math.sin(r.ang), fz = Math.cos(r.ang);
+      c.prop.push(colored(new THREE.BoxGeometry(1.1, 2.0, 1.1), 0x3a2a20)
+        .translate(cx + fx*(dd/2 + 0.04), CURB + 1.0, cz + fz*(dd/2 + 0.04)));
+      // the path up to it, a hedge along the front and a tree in the garden
+      c.prop.push(colored(new THREE.BoxGeometry(
+          Math.abs(fx)*3.4 + 1.3, 0.06, Math.abs(fz)*3.4 + 1.3), 0x9a948a)
+        .translate(cx + fx*(dd/2 + 1.9), CURB + 0.03, cz + fz*(dd/2 + 1.9)));
+      c.prop.push(colored(new THREE.BoxGeometry(
+          Math.abs(fx)*0.6 + dw*0.9, 0.9, Math.abs(fz)*0.6 + dd*0.9), 0x3d6b34)
+        .translate(cx + fx*(dd/2 + 3.6), CURB + 0.45, cz + fz*(dd/2 + 3.6)));
+      c.tree.push([cx - fx*(dd/2 + 2.2), cz - fz*(dd/2 + 2.2), rr(0.7, 1.0)]);
+      addSolid(cx, cz, dw + 1, dd + 1);
+    }
+  }
 }
 
 /* ---------- sidewalk furniture -------------------------------------------
@@ -3016,42 +3191,85 @@ function buildCell(i, j){
                  roadX(i) + STREET/2, roadZ(j) + STREET/2);
       }
 
-      const info = D[t];
+      let info = D[t];
+      /* Downtown Brooklyn and Long Island City are the two places out there
+       * with a skyline of their own, and both of them are across the water
+       * from Manhattan looking back at it. */
+      if(TALL_CELLS.has(skey(i, j))) info = D.tallOuter;
+      // a whole borough of terraced houses rather than two slabs to a block
+      if(info.row && !cut){
+        (info.detached ? detachedBlock : rowBlock)(c, i, j, info);
+        addProps(c, i, j);
+      } else {
+      /* Where every grid street has been paved over there is no block left —
+       * there is one continuous piece of ground — so the whole cell including
+       * its old roadbeds is carved up at once, and the lanes are what cut it
+       * back into streets. */
+      const wx = !!(info.superblock && closedX[i][j]);
+      const wz = !!(info.superblock && closedZ[i][j]);
       const lots = [];
-      splitLot(cellX(i), cellZ(j), cellX(i)+BLOCK, cellZ(j)+BLOCK,
-               cut ? info.lots + 1 : info.lots, lots);
-      for(const [a,b,cc,e] of lots){
-        const gap = 0.7, lw = cc-a-gap*2, ld = e-b-gap*2;
-        if(lw < 8 || ld < 8) continue;
+      splitLot(cellX(i), cellZ(j),
+               cellX(i) + BLOCK + (wx ? STREET : 0), cellZ(j) + BLOCK + (wz ? STREET : 0),
+               (cut ? info.lots + 1 : info.lots) + (wx || wz ? 1 : 0), lots, info.minLot);
+      /* A lane crossing a lot should take a slice out of it, not the whole
+       * thing. If the lot will not fit clear of the roadbeds, halve it and try
+       * both halves, three times over — which is how the small awkward
+       * buildings that fill the gaps between old streets come about. */
+      const minB = info.minBuild || 8;
+      const place = (a, b, cc, e, depth) => {
+        const gap = info.gap || 0.7, lw = cc-a-gap*2, ld = e-b-gap*2;
+        if(lw < minB || ld < minB) return;
         const bx = a+gap+lw/2, bz = b+gap+ld/2;
-        // Keep a lot out if any *corner* of it would land in the roadbed or on
-        // the plaza, not just its middle: measuring from the short side let a
-        // wide lot near the waist of the square put its end inside the square.
         const reach = Math.hypot(lw, ld)*0.5;
-        if(laneEdge(bx, bz) < reach) continue;
-        if(tsqDist(bx, bz) < TSQ_R + reach) continue;
+        if(!lotClearOfLanes(bx, bz, lw, ld) || tsqDist(bx, bz) < TSQ_R + reach){
+          if(depth <= 0) return;
+          if(cc-a >= e-b){ const t = (a+cc)/2;
+            place(a, b, t, e, depth-1); place(t, b, cc, e, depth-1); }
+          else { const t = (b+e)/2;
+            place(a, b, cc, t, depth-1); place(a, t, cc, e, depth-1); }
+          return;
+        }
         let h = rr(info.h[0], info.h[1]);
         if(rnd() < info.tall) h *= rr(1.4, 2.2);
         building(bx, bz, lw, ld, h, pick(info.pal));
+      };
+      for(const [a,b,cc,e] of lots) place(a, b, cc, e, 3);
+      /* And then fill what is left. An old district has no spare ground in it
+       * — the awkward leftovers between a lane and a lot got built on too, in
+       * something narrow and not as tall. Without this the Financial District
+       * comes out as buildings with paved voids between them. */
+      if(info.infill){
+        const step = 5.8, ox = cellX(i), oz = cellZ(j);
+        const W = BLOCK + (wx ? STREET : 0), Dd = BLOCK + (wz ? STREET : 0);
+        for(let px = ox + 1.5; px < ox + W - step; px += step)
+          for(let pz = oz + 1.5; pz < oz + Dd - step; pz += step){
+            const bw = step - 0.8, bd = step - 0.8;
+            const bx = px + bw/2, bz = pz + bd/2;
+            if(!lotClearOfLanes(bx, bz, bw, bd)) continue;
+            if(tsqDist(bx, bz) < TSQ_R + 14) continue;
+            // only its own footprint has to be free: these share party walls
+            // with whatever is already there, the way they do down there
+            if(solidOverlaps(bx, bz, bw - 0.6, bd - 0.6)) continue;
+            building(bx, bz, bw, bd, rr(11, 32), pick(info.pal));
+          }
       }
       // Fill the old roadbed so the street visibly stops here — but these are
       // long thin slabs and there are a lot of them downtown now, so they get
       // measured against the lanes by the corner exactly like a lot does.
-      if(info.h && closedX[i][j]){
+      if(info.h && closedX[i][j] && !wx){
         const bd = S * rr(0.45, 0.8), bz = midZ(j) + rr(-5,5);
-        if(laneEdge(roadX(i), bz) > Math.hypot(STREET - 2.6, bd)*0.5 &&
-           !inSq(roadX(i), bz))
+        if(lotClearOfLanes(roadX(i), bz, STREET - 2.6, bd) && !inSq(roadX(i), bz))
           building(roadX(i), bz, STREET - 2.6, bd,
                    rr(info.h[0], info.h[1]) * 0.85, pick(info.pal));
       }
-      if(info.h && closedZ[i][j]){
+      if(info.h && closedZ[i][j] && !wz){
         const bw = S * rr(0.45, 0.8), bx = midX(i) + rr(-5,5);
-        if(laneEdge(bx, roadZ(j)) > Math.hypot(bw, STREET - 2.6)*0.5 &&
-           !inSq(bx, roadZ(j)))
+        if(lotClearOfLanes(bx, roadZ(j), bw, STREET - 2.6) && !inSq(bx, roadZ(j)))
           building(bx, roadZ(j), bw, STREET - 2.6,
                    rr(info.h[0], info.h[1]) * 0.85, pick(info.pal));
       }
       addProps(c, i, j);
+      }
     }
     seawall(c, i, j);
     crossing(c, i, j);        // parks included: the perimeter is signalised too
