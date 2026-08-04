@@ -222,7 +222,7 @@ const WATER=0, MID=1, DOWN=2, UPPER=3, HARLEM=4, PARK=5, BKLYN=6,
 
 const D = {
   [MID]:     {name:'Midtown',             h:[34,118], tall:0.22, pal:[1,2,3,5], lots:2},
-  [DOWN]:    {name:'Financial District',  h:[30,108], tall:0.20, pal:[2,3,5],   lots:2},
+  [DOWN]:    {name:'Financial District',  h:[30,108], tall:0.20, pal:[2,3,5],   lots:3},
   [UPPER]:   {name:'Upper Manhattan',     h:[22,56],  tall:0.06, pal:[0,1,4,5], lots:2},
   [HARLEM]:  {name:'Harlem',              h:[14,36],  tall:0.04, pal:[0,4,1],   lots:2},
   [VILLAGE]: {name:'Greenwich Village',   h:[13,34],  tall:0.03, pal:[0,4,1],   lots:2},
@@ -686,7 +686,7 @@ for(let i=0;i<GX;i++) for(let j=0;j<GZ;j++){
   if(j+1 < GZ && grid[i][j+1] === PARK && j % 2 === 0) closedZ[i][j] = true;
 }
 {
-  const IRREG = { [DOWN]:0.42, [VILLAGE]:0.32, [BKLYN]:0.22, [QUEENS]:0.18,
+  const IRREG = { [DOWN]:0.58, [VILLAGE]:0.32, [BKLYN]:0.22, [QUEENS]:0.18,
                   [BRONX]:0.20, [STATEN]:0.26, [JERSEY]:0.20 };
   for(let j=0;j<GZ;j++) for(let i=0;i<GX;i++){
     const t = grid[i][j], p = IRREG[t] || 0;
@@ -735,6 +735,82 @@ function bwayDist(x, z){
   return best;
 }
 const onBway = (x, z) => bwayDist(x, z) < BWAY_W;
+
+// how close a point comes to a line segment — wanted by the lanes below, by
+// the square's street closures, and by the park's planting
+const segDist = (px, pz, x0, z0, x1, z1) => {
+  const dx = x1-x0, dz = z1-z0, L = dx*dx + dz*dz;
+  let t = L ? ((px-x0)*dx + (pz-z0)*dz)/L : 0;
+  t = t < 0 ? 0 : t > 1 ? 1 : t;
+  return Math.hypot(x0 + dx*t - px, z0 + dz*t - pz);
+};
+
+/* ---------- the streets that are older than the grid ----------------------
+ * The 1811 Commissioners' Plan starts at Houston Street. Everything below it
+ * grew out of a Dutch town and two hundred years of landfill, and it has no
+ * grid in it at all: Pearl Street still follows the shoreline it was built
+ * along before the shoreline moved, Wall Street runs where the wall ran,
+ * Maiden Lane follows a brook, and the blocks between them are triangles.
+ * Drawing the Financial District as more nine-by-five rectangles was the
+ * single most obviously wrong thing left in the city.
+ *
+ * They are built the way Broadway is: a lane is a polyline with a half-width,
+ * it cuts the pavement and keeps buildings off itself, and the asphalt apron
+ * already under every cell shows through as its roadbed. Broadway is the
+ * first entry, so one distance test covers the lot.
+ */
+const LANES = [
+  { w: BWAY_W, name: 'Broadway',   pts: BWAY },
+  { w: 7.5, name: 'Fulton St',     pts: [[9.7,30.15],[11.5,30.02],[13.9,30.2]] },
+  { w: 6.5, name: 'Maiden Ln',     pts: [[11.4,30.78],[12.3,30.5],[13.3,30.3]] },
+  { w: 8.0, name: 'Wall St',       pts: [[10.55,31.38],[12.2,31.2],[13.35,31.05]] },
+  { w: 7.0, name: 'Pearl St',      pts: [[13.3,30.4],[12.9,31.1],[12.3,31.75],[11.55,32.3]] },
+  { w: 6.5, name: 'Water St',      pts: [[13.45,30.62],[13.15,31.35],[12.6,32.0],[11.9,32.42]] },
+  { w: 6.5, name: 'William St',    pts: [[12.55,30.08],[12.45,30.9],[12.2,31.8],[12.05,32.3]] },
+  { w: 6.0, name: 'Nassau St',     pts: [[11.35,30.2],[11.3,31.0],[11.15,31.9]] },
+  { w: 6.0, name: 'Beaver St',     pts: [[10.72,32.06],[11.8,31.74],[12.4,31.6]] },
+  { w: 5.0, name: 'Stone St',      pts: [[11.1,31.96],[11.9,31.86]] }
+];
+for(const L of LANES){
+  if(L.name !== 'Broadway') L.pts = L.pts.map(p => bwayPt(p[0], p[1]));
+  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+  for(const p of L.pts){
+    x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]);
+    z0 = Math.min(z0, p[1]); z1 = Math.max(z1, p[1]);
+  }
+  // padded so the "within m of a kerb" tests still see a lane they are near
+  const pad = L.w + 80;
+  L.x0 = x0 - pad; L.x1 = x1 + pad; L.z0 = z0 - pad; L.z1 = z1 + pad;
+}
+/* Distance from the near kerb of the closest lane. Negative means you are
+ * standing in the roadbed. Everything that used to ask "how far from
+ * Broadway" asks this instead, so a new lane is one more line up there. */
+function laneEdge(x, z){
+  let best = 1e9;
+  for(let k=0;k<LANES.length;k++){
+    const L = LANES[k];
+    if(x < L.x0 || x > L.x1 || z < L.z0 || z > L.z1) continue;
+    for(let s=0;s<L.pts.length-1;s++){
+      const d = segDist(x, z, L.pts[s][0], L.pts[s][1], L.pts[s+1][0], L.pts[s+1][1]) - L.w;
+      if(d < best) best = d;
+    }
+  }
+  return best;
+}
+const onLane = (x, z) => laneEdge(x, z) < 0;
+// which one you are standing in or beside, for the location readout
+function laneAt(x, z, margin){
+  let best = null, bd = margin === undefined ? 0 : margin;
+  for(let k=0;k<LANES.length;k++){
+    const L = LANES[k];
+    if(x < L.x0 || x > L.x1 || z < L.z0 || z > L.z1) continue;
+    for(let s=0;s<L.pts.length-1;s++){
+      const d = segDist(x, z, L.pts[s][0], L.pts[s][1], L.pts[s+1][0], L.pts[s+1][1]) - L.w;
+      if(d < bd){ bd = d; best = L; }
+    }
+  }
+  return best;
+}
 
 // Every grid line Broadway cuts is a signalised crossing. Solved once here:
 // the world point, which leg it falls on and how far along, and which way the
@@ -814,14 +890,6 @@ const tsqEdge = (a, s, out) => TSQ_LEAN*a + s*(tsqHalfW(a) + (out || 0));
  * 2009. Any street whose line runs through it is shut, so the middle of the
  * square is one paved surface rather than a crossroads with a plaza painted
  * round it. Traffic routes around the outside. */
-// how close a road actually comes, over its whole run past the square, not
-// just at the cell centre — a boundary can clip the plaza well off centre
-const segDist = (px, pz, x0, z0, x1, z1) => {
-  const dx = x1-x0, dz = z1-z0, L = dx*dx + dz*dz;
-  let t = L ? ((px-x0)*dx + (pz-z0)*dz)/L : 0;
-  t = t < 0 ? 0 : t > 1 ? 1 : t;
-  return Math.hypot(x0 + dx*t - px, z0 + dz*t - pz);
-};
 // Walk each street segment and shut it if the plaza actually lies on top of
 // it. A single distance from the middle of the square worked while the square
 // was a disc; a long thin one has to be tested along its length or it either
@@ -1000,7 +1068,7 @@ const grassTex = flatTex('#3f6b33', 34); grassTex.repeat.set(6,6);
 const grassMat = new THREE.MeshLambertMaterial({map:grassTex});
 
 function addMark(c, w, l, x, z, turn, color){
-  if(onBway(x, z)) return;              // Broadway carries its own markings
+  if(onLane(x, z)) return;              // the lanes carry their own markings
   if(tsqDist(x, z) < TSQ_R) return;     // and nothing is painted on the plaza
   const g = new THREE.PlaneGeometry(w, l);
   g.rotateX(-Math.PI/2);
@@ -1598,7 +1666,7 @@ function trafficCone(c, x, z, onRoad){
 // ---------- props ----------
 function addProps(c, i, j){
   const cx = midX(i), cz = midZ(j), e = BLOCK/2 + WALK*0.6;
-  const clear = (x, z) => !onBway(x, z) && tsqDist(x, z) > TSQ_R + 4;
+  const clear = (x, z) => !onLane(x, z) && tsqDist(x, z) > TSQ_R + 4;
   /* Pick a spot on one of the four kerbs of this block and hand back where it
    * is and which way is out toward the street, so anything with a front — a
    * newsstand, a shelter, a kiosk — ends up facing the traffic rather than the
@@ -1817,7 +1885,7 @@ function addParking(c, i, j){
       if(rnd() < 0.32) continue;                    // hydrants, driveways, gaps
       const x = r.ax === 'x' ? x0 + s + rr(-0.5,0.5) : r.line;
       const z = r.ax === 'x' ? r.line : z0 + s + rr(-0.5,0.5);
-      if(onBway(x, z) || tsqDist(x, z) < TSQ_R + 6) continue;
+      if(onLane(x, z) || tsqDist(x, z) < TSQ_R + 6) continue;
       c.park.push([x, z, r.ang + rr(-0.035, 0.035)]);
       if(r.ax === 'x') addSolid(x, z, 4.6, 2.1, true);
       else             addSolid(x, z, 2.1, 4.6, true);
@@ -1843,7 +1911,7 @@ function sidewalkShed(c, i, j, ax, sgn){
   const cxm = midX(i), czm = midZ(j);
   const cx = ax === 'x' ? cxm + rr(-6,6) : cxm + sgn*off;
   const cz = ax === 'x' ? czm + sgn*off : czm + rr(-6,6);
-  if(onBway(cx, cz) || tsqDist(cx, cz) < TSQ_R + 8) return;
+  if(onLane(cx, cz) || tsqDist(cx, cz) < TSQ_R + 8) return;
   const dw = ax === 'x' ? len : w, dd = ax === 'x' ? w : len;
   const deck = colored(new THREE.BoxGeometry(dw, 0.32, dd), 0x6f7a83);
   deck.translate(cx, CURB + 4.7, cz);
@@ -1870,7 +1938,7 @@ function sidewalkShed(c, i, j, ax, sgn){
   for(let s = -len/2 + 2; s <= len/2 - 2; s += rr(3.2, 5.4)){
     const kx = ax === 'x' ? cx + s : cxm + sgn*koff;
     const kz = ax === 'x' ? czm + sgn*koff : cz + s;
-    if(onBway(kx, kz)) continue;
+    if(onLane(kx, kz)) continue;
     trafficCone(c, kx, kz);
   }
   if(rnd() < 0.5){
@@ -2891,14 +2959,14 @@ function buildCell(i, j){
       // Broadway slices the block, so lay that sidewalk as tiles and drop the
       // ones the roadbed runs over. Everywhere else one slab is enough.
       const holed = holeCells.has(skey(i, j));
-      const cut = holed || bwayDist(midX(i), midZ(j)) < S/2 + BWAY_W + 2 ||
+      const cut = holed || laneEdge(midX(i), midZ(j)) < S/2 + 2 ||
                   tsqDist(midX(i), midZ(j)) < S/2 + TSQ_R;
       if(cut){
         // finer tiles where a station mouth has to come through it
         const N = holed ? 16 : 10, ts = S/N;
         for(let a=0;a<N;a++) for(let b=0;b<N;b++){
           const tx = midX(i) - S/2 + (a+0.5)*ts, tz = midZ(j) - S/2 + (b+0.5)*ts;
-          if(bwayDist(tx, tz) < BWAY_W + ts*0.3) continue;
+          if(laneEdge(tx, tz) < ts*0.3) continue;
           if(tsqDist(tx, tz) < TSQ_R - ts*0.3) continue;
           if(inSubwayHole(tx, tz)) continue;
           walkSlab(c, tx, tz, ts, ts);
@@ -2937,22 +3005,28 @@ function buildCell(i, j){
         // the plaza, not just its middle: measuring from the short side let a
         // wide lot near the waist of the square put its end inside the square.
         const reach = Math.hypot(lw, ld)*0.5;
-        if(bwayDist(bx, bz) < BWAY_W + reach) continue;
+        if(laneEdge(bx, bz) < reach) continue;
         if(tsqDist(bx, bz) < TSQ_R + reach) continue;
         let h = rr(info.h[0], info.h[1]);
         if(rnd() < info.tall) h *= rr(1.4, 2.2);
         building(bx, bz, lw, ld, h, pick(info.pal));
       }
-      // fill the old roadbed so the street visibly stops here
-      if(info.h && closedX[i][j] && !onBway(roadX(i), midZ(j)) && !inSq(roadX(i), midZ(j))){
-        const bd = S * rr(0.45, 0.8);
-        building(roadX(i), midZ(j) + rr(-5,5), STREET - 2.6, bd,
-                 rr(info.h[0], info.h[1]) * 0.85, pick(info.pal));
+      // Fill the old roadbed so the street visibly stops here — but these are
+      // long thin slabs and there are a lot of them downtown now, so they get
+      // measured against the lanes by the corner exactly like a lot does.
+      if(info.h && closedX[i][j]){
+        const bd = S * rr(0.45, 0.8), bz = midZ(j) + rr(-5,5);
+        if(laneEdge(roadX(i), bz) > Math.hypot(STREET - 2.6, bd)*0.5 &&
+           !inSq(roadX(i), bz))
+          building(roadX(i), bz, STREET - 2.6, bd,
+                   rr(info.h[0], info.h[1]) * 0.85, pick(info.pal));
       }
-      if(info.h && closedZ[i][j] && !onBway(midX(i), roadZ(j)) && !inSq(midX(i), roadZ(j))){
-        const bw = S * rr(0.45, 0.8);
-        building(midX(i) + rr(-5,5), roadZ(j), bw, STREET - 2.6,
-                 rr(info.h[0], info.h[1]) * 0.85, pick(info.pal));
+      if(info.h && closedZ[i][j]){
+        const bw = S * rr(0.45, 0.8), bx = midX(i) + rr(-5,5);
+        if(laneEdge(bx, roadZ(j)) > Math.hypot(bw, STREET - 2.6)*0.5 &&
+           !inSq(bx, roadZ(j)))
+          building(bx, roadZ(j), bw, STREET - 2.6,
+                   rr(info.h[0], info.h[1]) * 0.85, pick(info.pal));
       }
       addProps(c, i, j);
     }
@@ -4321,7 +4395,25 @@ tasks.push(() => {
   // three landmark towers
   setbackTower(midX(11), midZ(22), [[42,42,54],[32,32,56],[22,22,48],[13,13,32]], 34, 5);
   setbackTower(midX(13), midZ(20), [[30,30,60],[22,22,42],[14,14,26]], 26, 3);
-  setbackTower(midX(12), midZ(31), [[34,34,74],[26,26,46]], 40, 3);   // clear of Broadway
+  /* The downtown tower goes wherever the old lanes leave room for it. Below
+   * Houston there is no such thing as a spare block — Wall Street and William
+   * Street were running straight through where this one used to stand — so it
+   * hunts for the widest gap and takes a narrower footprint if that is all
+   * that is going. Which is how every tower down there actually got built. */
+  {
+    let bx = midX(12), bz = midZ(31), bd = -1e9;
+    for(let i=10;i<=13;i++) for(let j=30;j<=32;j++){
+      if(grid[i][j] !== DOWN) continue;
+      for(const ox of [-15, 0, 15]) for(const oz of [-15, 0, 15]){
+        const x = midX(i) + ox, z = midZ(j) + oz;
+        const d = Math.min(laneEdge(x, z), tsqDist(x, z) - TSQ_R);
+        if(d > bd){ bd = d; bx = x; bz = z; }
+      }
+    }
+    if(bd > 26)      setbackTower(bx, bz, [[34,34,74],[26,26,46]], 40, 3);
+    else if(bd > 19) setbackTower(bx, bz, [[24,24,80],[18,18,44]], 34, 3);
+    else             setbackTower(bx, bz, [[17,17,86],[13,13,38]], 28, 3);
+  }
 });
 // the park is laid out whole, after every cell has put its grass down and
 // before the chunks are welded shut
@@ -4747,7 +4839,7 @@ function relocatePed(p){
     // pavement all the way round it, and walking the old perimeter would put
     // people out in the roadbed. Leave those blocks alone.
     const S = BLOCK + WALK*2;
-    if(bwayDist(midX(i), midZ(j)) < S/2 + BWAY_W + 2) continue;
+    if(laneEdge(midX(i), midZ(j)) < S/2 + 2) continue;
     if(tsqDist(midX(i), midZ(j)) < S/2 + TSQ_R) continue;
     p.i = i; p.j = j; p.t = rnd();
     p.speed = rr(0.9,1.7) / (4*(BLOCK+WALK*1.5));
@@ -4852,7 +4944,7 @@ function relocateBird(b){
     const side = ri(0, 3);
     const x = side < 2 ? midX(i) + along : midX(i) + (side === 2 ? -r : r);
     const z = side < 2 ? midZ(j) + (side === 0 ? -r : r) : midZ(j) + along;
-    if(onBway(x, z)) continue;
+    if(onLane(x, z)) continue;
     b.x = x; b.z = z; b.y = groundAt(x, z) + 0.02;
     b.fly = 0; b.vy = 0; b.hop = rnd()*2; b.ang = rnd()*6.283;
     return;
@@ -4956,7 +5048,7 @@ function groundAt(x, z, under){
   // built-over streets and the plaza island are kerb height wherever they are,
   // so they win over the roadbed test below
   if(isPaved(x, z)) return CURB;
-  if(onBway(x, z) || tsqDist(x, z) < TSQ_R) return 0;   // Broadway / the square
+  if(onLane(x, z) || tsqDist(x, z) < TSQ_R) return 0;   // a roadbed / the square
   const i = idxX(x), j = idxZ(z);
   if(i>=0 && j>=0 && i<GX && j<GZ && grid[i][j] !== WATER){
     if(Math.abs(x - midX(i)) <= BLOCK/2 + WALK && Math.abs(z - midZ(j)) <= BLOCK/2 + WALK)
@@ -5364,7 +5456,11 @@ function locationName(){
   const b = bridgeAt(player.x, player.z);
   if(b) return [b.name, 'over the river'];
   if(tsqDist(player.x, player.z) < TSQ_R + 16) return ['Times Square', 'the crossroads of the world'];
-  if(onBway(player.x, player.z)) return ['Broadway', 'manhattan'];
+  // below Houston the streets have names, not coordinates
+  {
+    const L = laneAt(player.x, player.z, 7);
+    if(L) return [L.name, L.name === 'Broadway' ? 'manhattan' : 'lower manhattan'];
+  }
   const i = idxX(player.x), j = idxZ(player.z);
   const t = (i<0||j<0||i>=GX||j>=GZ) ? WATER : grid[i][j];
   if(t === WATER)   return ['The Harbor', 'new york bay'];
@@ -5424,11 +5520,15 @@ function drawMap(){
       mg.fillStyle = DCOL[grid[i][j]] || '#39404d';
       mg.fillRect(bx, by, BLOCK*s, BLOCK*s);
     }
-  mg.strokeStyle = '#20242b'; mg.lineWidth = BWAY_W*2*s; mg.lineJoin = 'round';
-  mg.beginPath();
-  BWAY.forEach((p, k) => { const [mx,my] = toMap(p[0], p[1]);
-                           k ? mg.lineTo(mx,my) : mg.moveTo(mx,my); });
-  mg.stroke();
+  // Broadway and the old lanes below Houston, which are not on the grid
+  mg.strokeStyle = '#20242b'; mg.lineJoin = 'round'; mg.lineCap = 'round';
+  for(const L of LANES){
+    mg.lineWidth = Math.max(1.5, L.w*2*s);
+    mg.beginPath();
+    L.pts.forEach((p, k) => { const [mx,my] = toMap(p[0], p[1]);
+                              k ? mg.lineTo(mx,my) : mg.moveTo(mx,my); });
+    mg.stroke();
+  }
   mg.lineWidth = 1;
   for(const b of bridges){
     const [x0,y0] = toMap(b.a, b.line - DECK_HALF);
@@ -5474,14 +5574,16 @@ function drawBigMap(){
     bg.fillStyle = DCOL[grid[i][j]] || '#39404d';
     bg.fillRect(ox + i*PITCH*s, oy + j*PITCH*s, PITCH*s, PITCH*s);
   }
-  bg.strokeStyle = '#20242b'; bg.lineWidth = Math.max(1.5, BWAY_W*2*s);
-  bg.lineJoin = 'round';
-  bg.beginPath();
-  BWAY.forEach((p, k) => {
-    const mx = ox + (p[0] - OFF_X)*s, my = oy + (p[1] - OFF_Z)*s;
-    k ? bg.lineTo(mx, my) : bg.moveTo(mx, my);
-  });
-  bg.stroke();
+  bg.strokeStyle = '#20242b'; bg.lineJoin = 'round'; bg.lineCap = 'round';
+  for(const L of LANES){
+    bg.lineWidth = Math.max(1.4, L.w*2*s);
+    bg.beginPath();
+    L.pts.forEach((p, k) => {
+      const mx = ox + (p[0] - OFF_X)*s, my = oy + (p[1] - OFF_Z)*s;
+      k ? bg.lineTo(mx, my) : bg.moveTo(mx, my);
+    });
+    bg.stroke();
+  }
   bg.lineWidth = 1;
   bg.fillStyle = '#8d949f';
   for(const b of bridges)
