@@ -1,0 +1,304 @@
+<meta charset="utf-8">
+<title>Home Circuit — Draw Your Own Track</title>
+<style>
+  html,body{margin:0;height:100%;background:#080810;color:#fff;
+    font-family:"Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:8px}
+  canvas{border:3px solid #23232f;border-radius:8px;background:#6b5a48;cursor:crosshair;
+    box-shadow:0 18px 60px rgba(0,0,0,.65),0 0 0 1px rgba(255,255,255,.05)}
+  canvas.racing{cursor:default}
+  #hud{font-size:14px;letter-spacing:1px;color:#8d93a4;text-align:center;max-width:660px}
+</style>
+<script src="kart-gfx.js"></script>
+<script src="kart-audio.js"></script>
+<canvas id="c" width="720" height="480"></canvas>
+<div id="hud">Hold the mouse and draw a loop · then Arrows / WASD for 3 laps · N new track · R restart · M mute</div>
+<script>
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+const W=c.width,H=c.height,ROADW=66,TAU=Math.PI*2;
+
+/* ---------- the living room, painted once ---------- */
+const room=document.createElement('canvas');room.width=W;room.height=H;
+(function(){
+  const g=room.getContext('2d');
+  const base=g.createLinearGradient(0,0,0,H);
+  base.addColorStop(0,'#7d6750');base.addColorStop(1,'#5c4a39');
+  g.fillStyle=base;g.fillRect(0,0,W,H);
+  // floorboards
+  for(let y=0;y<H;y+=34){
+    g.fillStyle=(y/34)%2?'rgba(255,255,255,.035)':'rgba(0,0,0,.05)';
+    g.fillRect(0,y,W,34);
+    g.strokeStyle='rgba(0,0,0,.18)';g.lineWidth=1;
+    g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke();
+    for(let x=((y/34)%2)*90;x<W;x+=180){
+      g.beginPath();g.moveTo(x,y);g.lineTo(x,y+34);g.stroke();
+    }
+  }
+  for(let i=0;i<900;i++){
+    g.fillStyle='rgba(0,0,0,.05)';
+    g.fillRect(Math.random()*W,Math.random()*H,10+Math.random()*30,1);
+  }
+  // rug
+  g.save();
+  g.fillStyle='#7a3f4a';
+  g.beginPath();g.ellipse(W*0.68,H*0.66,180,112,0,0,TAU);g.fill();
+  g.strokeStyle='#a45b66';g.lineWidth=8;
+  g.beginPath();g.ellipse(W*0.68,H*0.66,160,96,0,0,TAU);g.stroke();
+  g.strokeStyle='#67343d';g.lineWidth=4;
+  g.beginPath();g.ellipse(W*0.68,H*0.66,132,78,0,0,TAU);g.stroke();
+  g.restore();
+  // skirting + wall
+  g.fillStyle='#48566b';g.fillRect(0,0,W,34);
+  g.fillStyle='#3a4657';g.fillRect(0,30,W,8);
+  g.fillStyle='#e8e3d8';g.fillRect(0,34,W,4);
+  // sofa
+  g.fillStyle='#3f5165';GFX.rr(g,26,H-116,168,92,12);g.fill();
+  g.fillStyle='#4d627a';GFX.rr(g,36,H-108,148,52,10);g.fill();
+  g.fillStyle='#59708b';GFX.rr(g,44,H-100,60,40,8);g.fill();
+  GFX.rr(g,116,H-100,60,40,8);g.fill();
+  g.fillStyle='rgba(0,0,0,.28)';GFX.rr(g,20,H-30,184,16,8);g.fill();
+  // TV unit
+  g.fillStyle='#4a3a2c';GFX.rr(g,W-206,44,168,44,6);g.fill();
+  g.fillStyle='#14161c';GFX.rr(g,W-190,-4,136,52,4);g.fill();
+  g.fillStyle='rgba(90,150,220,.35)';GFX.rr(g,W-184,2,124,40,3);g.fill();
+  g.fillStyle='rgba(0,0,0,.25)';GFX.rr(g,W-212,86,180,12,6);g.fill();
+  // lamp pool
+  const lp=g.createRadialGradient(W*0.22,H*0.34,10,W*0.22,H*0.34,240);
+  lp.addColorStop(0,'rgba(255,236,190,.30)');lp.addColorStop(1,'rgba(255,236,190,0)');
+  g.fillStyle=lp;g.fillRect(0,0,W,H);
+})();
+
+const fx=new GFX.Particles(300);
+const keys={};
+let mode,path,drawing,car,lap,cpIdx,cps,startT,finT,done,trackImg,MASKDATA,trail;
+function reset(){
+  mode='draw';path=[];drawing=false;car=null;lap=1;cpIdx=1;cps=[];
+  startT=0;finT=0;done=false;trackImg=null;MASKDATA=null;trail=[];
+  fx.clear();
+  c.classList.remove('racing');
+}
+reset();
+
+function pt(e){
+  const r=c.getBoundingClientRect();
+  return{x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)};
+}
+c.addEventListener('mousedown',e=>{
+  if(mode!=='draw')return;
+  drawing=true;path=[pt(e)];
+});
+c.addEventListener('mousemove',e=>{
+  if(!drawing)return;
+  const p=pt(e),l=path[path.length-1];
+  if(Math.hypot(p.x-l.x,p.y-l.y)>14)path.push(p);
+});
+addEventListener('mouseup',()=>{
+  if(!drawing)return;
+  drawing=false;
+  if(path.length<12){path=[];return}
+  buildTrack();
+});
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();keys[k]=true;
+  if(k.startsWith('arrow'))e.preventDefault();
+  // NB: 'd' is the steer-right key, so the redraw shortcut is 'n' — using 'd'
+  // meant every right turn wiped the track you had just drawn.
+  if(k==='r'||k==='n'){reset();SFX.ui()}
+  if(k==='m')SFX.toggle();
+});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false});
+GFX.trackKeys(keys);
+
+function stroke(g,w,col,dash){
+  g.setLineDash(dash||[]);
+  g.beginPath();g.moveTo(path[0].x,path[0].y);
+  for(let i=1;i<path.length;i++)g.lineTo(path[i].x,path[i].y);
+  g.closePath();
+  g.lineWidth=w;g.strokeStyle=col;g.lineJoin='round';g.lineCap='round';g.stroke();
+  g.setLineDash([]);
+}
+function buildTrack(){
+  // mask for physics
+  const mk=document.createElement('canvas');mk.width=W;mk.height=H;
+  const mg=mk.getContext('2d');
+  stroke(mg,ROADW,'#fff');
+  MASKDATA=mg.getImageData(0,0,W,H).data;
+
+  // the AR track ribbon, painted once
+  trackImg=document.createElement('canvas');trackImg.width=W;trackImg.height=H;
+  const tg=trackImg.getContext('2d');
+  tg.save();tg.shadowColor='rgba(80,190,255,.9)';tg.shadowBlur=22;
+  stroke(tg,ROADW+16,'rgba(90,190,255,.35)');
+  tg.restore();
+  stroke(tg,ROADW+12,'rgba(226,236,248,.92)');
+  stroke(tg,ROADW,'#565663');
+  for(let i=0;i<2600;i++){
+    tg.fillStyle=Math.random()<.5?'rgba(255,255,255,.035)':'rgba(0,0,0,.05)';
+    tg.fillRect(Math.random()*W,Math.random()*H,3,3);
+  }
+  // kerb dashes along both edges
+  tg.setLineDash([15,15]);
+  tg.lineWidth=6;tg.strokeStyle='rgba(255,90,90,.55)';
+  tg.beginPath();tg.moveTo(path[0].x,path[0].y);
+  for(let i=1;i<path.length;i++)tg.lineTo(path[i].x,path[i].y);
+  tg.closePath();tg.stroke();
+  tg.setLineDash([]);
+  stroke(tg,3,'rgba(220,228,240,.8)',[14,20]);
+  const a=path[0],b=path[1],ang=Math.atan2(b.y-a.y,b.x-a.x);
+  GFX.checkerStrip(tg,a.x,a.y,ang,3,4,9);
+
+  const n=path.length;
+  cps=[0,1,2,3].map(i=>path[Math.floor(i*n/4)]);
+  car={x:a.x,y:a.y,a:ang,sp:0};
+  mode='race';lap=1;cpIdx=1;done=false;trail=[];
+  startT=performance.now();
+  c.classList.add('racing');
+  SFX.select();
+}
+function onRoad(x,y){
+  if(!MASKDATA)return false;
+  const ix=x|0,iy=y|0;
+  if(ix<0||iy<0||ix>=W||iy>=H)return false;
+  return MASKDATA[(iy*W+ix)*4+3]>40;
+}
+
+function update(dt,now){
+  fx.update(dt);
+  for(let i=trail.length-1;i>=0;i--){trail[i].t-=dt;if(trail[i].t<=0)trail.splice(i,1)}
+  if(mode!=='race'||done)return;
+  const road=onRoad(car.x,car.y);
+  const max=road?230:75;
+  const lf=keys.arrowleft||keys.a, rt=keys.arrowright||keys.d;
+  if(keys.arrowup||keys.w){if(car.sp<max)car.sp=Math.min(max,car.sp+265*dt)}
+  else if(keys.arrowdown||keys.s)car.sp-=310*dt;
+  else car.sp*=1-1.5*dt;
+  if(car.sp<-80)car.sp=-80;
+  if(car.sp>max)car.sp=max+(car.sp-max)*Math.exp(-5*dt);
+  const t=2.9*Math.min(1,Math.abs(car.sp)/50)*(car.sp<0?-1:1);
+  if(lf)car.a-=t*dt;
+  if(rt)car.a+=t*dt;
+  car.x+=Math.cos(car.a)*car.sp*dt;
+  car.y+=Math.sin(car.a)*car.sp*dt;
+  car.x=Math.max(8,Math.min(W-8,car.x));
+  car.y=Math.max(8,Math.min(H-8,car.y));
+
+  if(Math.abs(car.sp)>60){
+    const n=car.a+Math.PI/2;
+    trail.push({x:car.x-Math.cos(n)*8,y:car.y-Math.sin(n)*8,t:1.1});
+    trail.push({x:car.x+Math.cos(n)*8,y:car.y+Math.sin(n)*8,t:1.1});
+  }
+  if(!road&&Math.abs(car.sp)>50){
+    fx.emit({x:car.x,y:car.y,vx:(Math.random()-.5)*60,vy:(Math.random()-.5)*60,
+      life:.5,r:5,r2:0,col:'rgba(180,150,110,.6)',drag:1.5});
+  }
+
+  SFX.engine(Math.abs(car.sp)/230,road?1:0.85);
+  SFX.skid((lf||rt)&&Math.abs(car.sp)>120,0.45);
+
+  const g=cps[cpIdx];
+  if(Math.hypot(car.x-g.x,car.y-g.y)<52){
+    cpIdx=(cpIdx+1)%4;
+    SFX.gate();
+    fx.burst(g.x,g.y,12,{spd:130,life:.5,r:4,col:'#7fd8ff',shape:'spark',drag:2.4});
+    if(cpIdx===1){lap++;
+      if(lap>3){done=true;finT=(now-startT)/1000;SFX.engine(0);SFX.skid(false);SFX.win()}
+      else SFX.lap();}
+  }
+}
+
+function gate(g,i,now){
+  const on=i===cpIdx;
+  ctx.save();ctx.translate(g.x,g.y);
+  ctx.fillStyle='rgba(0,0,0,.3)';
+  ctx.beginPath();ctx.ellipse(3,34,20,6,0,0,TAU);ctx.fill();
+  // cardboard arch
+  ctx.fillStyle=on?'#e0a63c':'#b8834a';
+  GFX.rr(ctx,-22,-34,9,68,3);ctx.fill();
+  GFX.rr(ctx,13,-34,9,68,3);ctx.fill();
+  GFX.rr(ctx,-22,-40,44,12,3);ctx.fill();
+  ctx.fillStyle='rgba(0,0,0,.18)';
+  GFX.rr(ctx,-22,-40,44,4,2);ctx.fill();
+  ctx.fillStyle=on?'#2a2410':'#f0e6d2';
+  ctx.font='bold 11px Segoe UI';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(i+1,0,-34);
+  if(on){
+    ctx.strokeStyle='rgba(255,214,90,'+(0.4+0.3*Math.sin(now/200))+')';
+    ctx.lineWidth=3;GFX.rr(ctx,-26,-44,52,80,6);ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function render(now){
+  ctx.drawImage(room,0,0);
+
+  if(mode==='draw'){
+    if(path.length>1){
+      ctx.save();
+      ctx.shadowColor='rgba(90,200,255,.9)';ctx.shadowBlur=16;
+      ctx.setLineDash([12,10]);ctx.strokeStyle='rgba(150,225,255,.95)';ctx.lineWidth=4;
+      ctx.beginPath();ctx.moveTo(path[0].x,path[0].y);
+      for(let i=1;i<path.length;i++)ctx.lineTo(path[i].x,path[i].y);
+      ctx.stroke();ctx.restore();ctx.setLineDash([]);
+      ctx.fillStyle='#ffd23f';ctx.beginPath();ctx.arc(path[0].x,path[0].y,8,0,TAU);ctx.fill();
+      ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.stroke();
+    }
+    arOverlay(now);
+    GFX.panel(ctx,W/2-236,H/2-52,472,104,{r:16});
+    GFX.glowText(ctx,'Draw a loop on the floor',W/2,H/2-8,{font:'bold 25px Segoe UI',fill:'#8fe0ff'});
+    GFX.glowText(ctx,'hold the mouse, trace a full circuit, then release',W/2,H/2+24,
+      {font:'14px Segoe UI',fill:'#c9d4e2',glow:false});
+    return;
+  }
+
+  ctx.drawImage(trackImg,0,0);
+  trail.forEach(t=>{
+    ctx.fillStyle='rgba(20,20,26,'+(t.t/1.1*0.3)+')';
+    ctx.beginPath();ctx.arc(t.x,t.y,3,0,TAU);ctx.fill();
+  });
+  fx.draw(ctx);
+  cps.forEach((g,i)=>gate(g,i,now));
+  const steer=((keys.arrowright||keys.d)?0.45:0)-((keys.arrowleft||keys.a)?0.45:0);
+  GFX.kartTop(ctx,{x:car.x,y:car.y,a:car.a,s:0.78,col:'#e0392b',acc:'#f4f4f8',steer,
+    boost:car.sp>225?0.35:0});
+
+  arOverlay(now);
+  drawHUD(now);
+}
+function arOverlay(now){
+  GFX.bloom(ctx,c,0.28);
+  GFX.scanlines(ctx,W,H,0.05);
+  GFX.grain(ctx,W,H,0.06);
+  GFX.vignette(ctx,W,H,0.42);
+  ctx.strokeStyle='rgba(150,225,255,.55)';ctx.lineWidth=2;
+  const m=16,L=26;
+  [[m,m,1,1],[W-m,m,-1,1],[m,H-m,1,-1],[W-m,H-m,-1,-1]].forEach(([x,y,sx,sy])=>{
+    ctx.beginPath();ctx.moveTo(x,y+sy*L);ctx.lineTo(x,y);ctx.lineTo(x+sx*L,y);ctx.stroke();
+  });
+  if(((now/600)|0)%2){
+    ctx.fillStyle='#ff5a5a';ctx.beginPath();ctx.arc(W-42,H-24,5,0,TAU);ctx.fill();
+  }
+  ctx.fillStyle='rgba(220,235,250,.75)';ctx.font='10px Segoe UI';ctx.textAlign='left';
+  ctx.fillText('REC',W-32,H-20);
+  ctx.fillText('KART CAM · LIVE',20,H-20);
+}
+function drawHUD(now){
+  GFX.panel(ctx,12,46,182,62,{r:12});
+  ctx.textAlign='left';ctx.textBaseline='alphabetic';
+  ctx.fillStyle='#8d93a4';ctx.font='10px Segoe UI';ctx.fillText('LAP',26,66);
+  ctx.fillStyle='#fff';ctx.font='bold 24px Segoe UI';ctx.fillText(Math.min(lap,3)+'/3',26,92);
+  ctx.fillStyle='#8d93a4';ctx.font='10px Segoe UI';ctx.fillText('GATE',86,66);
+  ctx.fillStyle='#8fe0ff';ctx.font='bold 24px Segoe UI';ctx.fillText((cpIdx+1)+'/4',86,92);
+  ctx.fillStyle='#8d93a4';ctx.font='10px Segoe UI';ctx.fillText('TIME',142,66);
+  ctx.fillStyle='#ffd75e';ctx.font='bold 17px Segoe UI';
+  ctx.fillText(((done?finT*1000:now-startT)/1000).toFixed(1)+'s',140,90);
+}
+
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(0.04,(now-last)/1000);last=now;
+  update(dt,now);render(now);
+  if(done)GFX.banner(ctx,W,H,'3 LAPS · '+finT.toFixed(2)+'s','press N to draw a new track');
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>

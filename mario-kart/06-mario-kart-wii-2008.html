@@ -1,0 +1,208 @@
+<meta charset="utf-8">
+<title>Kart Wii — Trick Attack</title>
+<style>
+  html,body{margin:0;height:100%;background:#080810;color:#fff;
+    font-family:"Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:8px}
+  canvas{border:3px solid #23232f;border-radius:8px;background:#7fc4f0;
+    box-shadow:0 18px 60px rgba(0,0,0,.65),0 0 0 1px rgba(255,255,255,.05)}
+  #hud{font-size:14px;letter-spacing:2px;color:#8d93a4}
+</style>
+<script src="kart-gfx.js"></script>
+<script src="kart-audio.js"></script>
+<canvas id="c" width="740" height="450"></canvas>
+<div id="hud">↑/W throttle · ↓/S brake · ←/→ spin in the air · land level · R restart · M mute</div>
+<script>
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+const W=c.width,H=c.height,G=1500,TAU=Math.PI*2;
+
+function ramp(x){
+  const p=((x%900)+900)%900;
+  if(p>700&&p<870){const t=(p-700)/170;return -110*t*t}
+  return 0;
+}
+function ground(x){
+  return 300+50*Math.sin(x*0.0042)+26*Math.sin(x*0.0113+1.2)+ramp(x);
+}
+function slopeAt(x){return (ground(x+3)-ground(x-3))/6}
+
+const fx=new GFX.Particles(420);
+const keys={};
+let k,score,combo,air,airRot,best,msg,msgT,crashT,wheelSpin;
+function reset(){
+  k={x:100,y:ground(100),vy:0,sp:300,rot:0};
+  score=0;combo=0;air=false;airRot=0;best=0;msg='';msgT=0;crashT=0;wheelSpin=0;
+  fx.clear();
+}
+reset();
+addEventListener('keydown',e=>{const kk=e.key.toLowerCase();keys[kk]=true;
+  if(kk.startsWith('arrow')||kk===' ')e.preventDefault(); if(kk==='r')reset();
+  if(kk==='m')SFX.toggle()});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false});
+GFX.trackKeys(keys);
+
+function say(t){msg=t;msgT=1.5}
+
+function update(dt){
+  fx.update(dt);
+  if(msgT>0)msgT-=dt;
+  if(crashT>0){crashT-=dt;k.sp*=1-2*dt}
+  const maxSp=crashT>0?150:560;
+  if(keys.arrowup||keys.w){if(k.sp<maxSp)k.sp=Math.min(maxSp,k.sp+240*dt)}
+  else if(keys.arrowdown||keys.s)k.sp-=420*dt;
+  else k.sp-=60*dt;
+  if(k.sp<80)k.sp=80;
+  if(k.sp>maxSp)k.sp=maxSp+(k.sp-maxSp)*Math.exp(-4*dt);
+  wheelSpin+=k.sp*dt*0.06;
+
+  k.x+=k.sp*dt;
+  k.vy+=G*dt;
+  k.y+=k.vy*dt;
+
+  const gy=ground(k.x);
+  if(k.y>=gy){
+    if(air){
+      const terr=Math.atan(slopeAt(k.x));
+      let diff=k.rot-terr;
+      while(diff>Math.PI)diff-=TAU;
+      while(diff<-Math.PI)diff+=TAU;
+      const spins=Math.abs(airRot)/TAU;
+      if(Math.abs(diff)<0.8){
+        const pts=Math.round(60+spins*400);
+        score+=pts;combo++;
+        if(spins>0.9){say('FLIP x'+spins.toFixed(1)+'!  +'+pts);SFX.trick()}
+        else if(spins>0.25){say('TRICK!  +'+pts);SFX.trick()}
+        else {say('CLEAN LANDING  +'+pts);SFX.land()}
+        k.sp+=90;SFX.boost();
+        fx.burst(k.x,k.y,20,{spd:180,life:.6,r:6,col:'rgba(255,225,150,.9)',shape:'spark',drag:2.2});
+        fx.burst(k.x,k.y,12,{spd:90,life:.7,r:10,r2:1,col:'rgba(190,170,130,.7)',drag:1.4});
+      }else{
+        combo=0;crashT=1.0;say('WIPEOUT');SFX.crash();
+        fx.burst(k.x,k.y,26,{spd:200,life:.8,r:8,r2:1,col:'rgba(170,150,110,.85)',drag:1.6});
+      }
+      k.rot=terr;airRot=0;air=false;
+    }
+    k.y=gy;
+    k.vy=Math.max(-780,k.sp*slopeAt(k.x));
+    k.rot=Math.atan(slopeAt(k.x));
+    if(k.sp>200&&Math.random()<0.55){
+      fx.emit({x:k.x-18,y:k.y+4,vx:-k.sp*0.25-Math.random()*40,vy:-Math.random()*40,
+        life:.45,r:5+Math.random()*4,r2:0.5,col:'rgba(190,170,130,.55)',drag:1.4});
+    }
+  }else{
+    if(!air)SFX.jump();
+    air=true;
+    const s=(keys.arrowleft||keys.a?-1:0)+(keys.arrowright||keys.d?1:0);
+    if(s){
+      const d=s*5.2*dt;
+      k.rot+=d;airRot+=d;
+      fx.emit({x:k.x,y:k.y,vx:(Math.random()-.5)*70,vy:(Math.random()-.5)*70,
+        life:.35,r:4,r2:0,col:'rgba(120,215,255,.75)',drag:2});
+    }else{
+      let d=-k.rot;
+      while(d>Math.PI)d-=TAU;
+      while(d<-Math.PI)d+=TAU;
+      k.rot+=d*Math.min(1,4.5*dt);
+    }
+  }
+  if(k.x>best)best=k.x;
+  SFX.engine(k.sp/560,air?1.35:1);
+  SFX.skid(!air&&crashT>0,0.7);
+}
+
+function render(){
+  const camX=k.x-210, camY=k.y-H*0.60;
+  GFX.skyGrad(ctx,W,H,[[0,'#1d55b0'],[0.42,'#57a0dd'],[0.74,'#a8d6ef'],[1,'#dcefdc']]);
+  GFX.sun(ctx,W*0.78,H*0.16,18,'#fff0b8');
+  GFX.cloudBand(ctx,W,H*0.13,-camX*0.06,1.1,'rgba(255,255,255,.42)');
+  GFX.cloudBand(ctx,W,H*0.27,-camX*0.11,0.75,'rgba(255,255,255,.66)');
+  GFX.hills(ctx,W,H*0.60,-camX*0.18,52,0.0024,'#4a6f9c');
+  GFX.hills(ctx,W,H*0.68,-camX*0.30,38,0.0045,'#3d6a70');
+  GFX.hills(ctx,W,H*0.74,-camX*0.46,26,0.0075,'#356b47');
+
+  // terrain body
+  ctx.beginPath();ctx.moveTo(0,H);
+  for(let x=0;x<=W;x+=3)ctx.lineTo(x,ground(camX+x)-camY);
+  ctx.lineTo(W,H);ctx.closePath();
+  const dirt=ctx.createLinearGradient(0,H*0.45,0,H);
+  dirt.addColorStop(0,'#6b5334');dirt.addColorStop(1,'#3d2f1e');
+  ctx.fillStyle=dirt;ctx.fill();
+  // rock speckle
+  ctx.save();ctx.clip();
+  for(let i=0;i<130;i++){
+    const px=(i*97+((camX*0.5)|0)%97)%W;
+    const py=H-((i*53)%(H*0.4));
+    ctx.fillStyle=i%2?'rgba(0,0,0,.13)':'rgba(255,255,255,.05)';
+    ctx.beginPath();ctx.arc(px,py,2+((i%3)),0,TAU);ctx.fill();
+  }
+  ctx.restore();
+  // grass cap
+  ctx.strokeStyle='#4ea053';ctx.lineWidth=13;ctx.lineJoin='round';
+  ctx.beginPath();
+  for(let x=0;x<=W;x+=3){const sy=ground(camX+x)-camY;x?ctx.lineTo(x,sy):ctx.moveTo(x,sy)}
+  ctx.stroke();
+  ctx.strokeStyle='#67bd68';ctx.lineWidth=5;
+  ctx.beginPath();
+  for(let x=0;x<=W;x+=3){const sy=ground(camX+x)-camY-3;x?ctx.lineTo(x,sy):ctx.moveTo(x,sy)}
+  ctx.stroke();
+
+  // ramp chevrons
+  for(let n=-1;n<4;n++){
+    const base=Math.floor(camX/900+n)*900+700;
+    for(let i=0;i<170;i+=24){
+      const wx=base+i,sx=wx-camX;
+      if(sx<-30||sx>W+30)continue;
+      const sy=ground(wx)-camY;
+      const sl=Math.atan(slopeAt(wx));
+      ctx.save();ctx.translate(sx,sy-7);ctx.rotate(sl);
+      ctx.fillStyle='#ffc93c';ctx.fillRect(-7,-4,14,7);
+      ctx.fillStyle='#20202a';ctx.fillRect(-7,-4,7,7);
+      ctx.restore();
+    }
+  }
+
+  fx.draw(ctx);
+  GFX.kartSide(ctx,{x:k.x-camX,y:k.y-camY-11,a:k.rot,s:1.15,
+    col:crashT>0?'#8d8d99':'#e0392b',acc:'#f4f4f8',spin:wheelSpin});
+
+  if(air){
+    const spins=Math.abs(airRot)/TAU;
+    GFX.glowText(ctx,'SPIN '+spins.toFixed(2),k.x-camX,k.y-camY-62,
+      {font:'bold 14px Segoe UI',fill:spins>0.9?'#ffd23f':'#eaf4ff',blur:12});
+  }
+  GFX.speedLines(ctx,W,H,GFX.clamp((k.sp-330)/230,0,1)*0.55);
+  GFX.bloom(ctx,c,0.24);
+  GFX.grain(ctx,W,H,0.045);
+  GFX.vignette(ctx,W,H,0.42);
+
+  if(msgT>0){
+    ctx.globalAlpha=Math.min(1,msgT*1.6);
+    GFX.glowText(ctx,msg,W/2,92,{font:'bold 32px Segoe UI',
+      fill:msg==='WIPEOUT'?'#ff6a5a':'#ffd23f',stroke:'rgba(0,0,0,.55)',strokeW:5,blur:22});
+    ctx.globalAlpha=1;
+  }
+  drawHUD();
+}
+function drawHUD(){
+  GFX.panel(ctx,12,12,214,64,{r:12});
+  ctx.textAlign='left';
+  ctx.fillStyle='#8d93a4';ctx.font='10px Segoe UI';ctx.fillText('SCORE',26,30);
+  ctx.fillStyle='#fff';ctx.font='bold 25px Segoe UI';ctx.fillText(score,26,57);
+  ctx.fillStyle='#8d93a4';ctx.font='10px Segoe UI';ctx.fillText('COMBO',128,30);
+  ctx.fillStyle=combo?'#6dd6a0':'#5a6172';ctx.font='bold 22px Segoe UI';
+  ctx.fillText('x'+combo,128,55);
+  GFX.panel(ctx,W-170,12,158,64,{r:12});
+  ctx.fillStyle='#8d93a4';ctx.font='10px Segoe UI';ctx.fillText('SPEED',W-154,30);
+  GFX.statBar(ctx,W-154,36,126,10,k.sp/560,'#ff7a4a');
+  ctx.fillStyle='#8d93a4';ctx.font='10px Segoe UI';
+  ctx.fillText(((k.sp/6)|0)+' km/h   ·   '+((best/50)|0)+' m',W-154,64);
+}
+
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(0.04,(now-last)/1000);last=now;
+  update(dt);render();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>

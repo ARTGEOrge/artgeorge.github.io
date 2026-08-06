@@ -1,0 +1,88 @@
+<meta charset="utf-8">
+<title>Kart Games — 16 Playable Versions</title>
+<style>
+  :root{color-scheme:dark}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#07070d;color:#eef0f6;
+    font-family:"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  body{background-image:
+    radial-gradient(900px 500px at 12% -10%,rgba(59,167,232,.16),transparent 60%),
+    radial-gradient(800px 460px at 92% 0%,rgba(224,57,43,.14),transparent 60%),
+    radial-gradient(700px 500px at 50% 110%,rgba(255,210,63,.08),transparent 60%)}
+  .wrap{max-width:1120px;margin:0 auto;padding:56px 24px 90px}
+  .eyebrow{font-size:11px;letter-spacing:4px;color:#6f7788;
+    text-transform:uppercase;margin:0 0 10px}
+  h1{font-size:clamp(30px,5vw,46px);margin:0 0 10px;line-height:1.05;letter-spacing:-1px}
+  h1 span{background:linear-gradient(92deg,#ffd23f,#ff7a4a 45%,#3ba7e8);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  .sub{color:#9aa1b4;margin:0 0 8px;font-size:16px;max-width:640px;line-height:1.55}
+  .note{color:#5f6678;font-size:13px;margin:0 0 38px}
+  h2{font-size:12px;letter-spacing:3px;color:#767d92;text-transform:uppercase;
+    margin:40px 0 16px;font-weight:600;display:flex;align-items:center;gap:14px}
+  h2::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,#242838,transparent)}
+  .grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(310px,1fr))}
+  a.card{--accent:#3ba7e8;display:block;text-decoration:none;position:relative;
+    background:linear-gradient(160deg,#14161f,#0f1118);
+    border:1px solid #23262f;border-radius:14px;padding:18px 20px 20px;
+    transition:transform .16s ease,border-color .16s ease,box-shadow .16s ease;overflow:hidden}
+  a.card::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--accent);
+    opacity:.75;transition:opacity .16s}
+  a.card::after{content:"";position:absolute;width:180px;height:180px;right:-70px;top:-70px;
+    border-radius:50%;background:var(--accent);opacity:.07;transition:opacity .16s}
+  a.card:hover{transform:translateY(-3px);border-color:#3a4054;
+    box-shadow:0 14px 40px rgba(0,0,0,.55)}
+  a.card:hover::after{opacity:.16}
+  .yr{font-size:10px;letter-spacing:2px;color:var(--accent);font-weight:600;
+    text-transform:uppercase}
+  .nm{font-size:18px;font-weight:650;color:#fff;margin:5px 0 7px;letter-spacing:-.2px}
+  .ds{font-size:13.5px;color:#98a0b2;line-height:1.5}
+  .tag{display:inline-block;margin-top:12px;font-size:10.5px;letter-spacing:1.4px;
+    color:#8b93a8;border:1px solid #2b3040;border-radius:20px;padding:3px 10px}
+  footer{margin-top:52px;color:#4f5566;font-size:12.5px;line-height:1.7;
+    border-top:1px solid #191c26;padding-top:22px}
+</style>
+<div class="wrap">
+<p class="eyebrow">Thirty-three years of kart racing</p>
+<h1>Kart Games — <span>16 playable versions</span></h1>
+<p class="sub">One browser game for every Mario Kart release, each built around the mechanic
+that game actually introduced. No install, no internet — open a file and drive.</p>
+<p class="note">Keyboard for all of them; mouse for Home Circuit and the VR range.
+<b>Sound is on</b> — it unlocks on your first key press (browser rule), and <b>M</b> mutes.
+Keep <code>kart-gfx.js</code> and <code>kart-audio.js</code> in this folder — every game loads them
+for sprites, effects and synthesised sound.</p>
+
+<h2>Final build</h2>
+<div class="grid">
+<a class="card" style="--accent:#ffd23f" href="mario-kart-final.html"><div class="yr">★ THE FULL RACE</div><div class="nm">Mario Kart Final</div><div class="ds">The Mode 7 racer built out into a proper grand prix — four rival karts, working boost chevrons, live race positions, a start countdown and a finishing order.</div><span class="tag">3 LAPS · 5 RACERS · BOOST</span></a>
+</div>
+
+<h2>Console &amp; Handheld</h2>
+<div class="grid">
+<a class="card" style="--accent:#e0392b" href="01-super-mario-kart-1992.html"><div class="yr">1992 · SNES</div><div class="nm">Mode 7 Time Trial</div><div class="ds">A real Mode 7 renderer — the track is a painted texture sampled per scanline, with distance haze and projected trackside billboards.</div><span class="tag">3 LAPS · TIME TRIAL</span></a>
+<a class="card" style="--accent:#3ba7e8" href="02-mario-kart-64-1996.html"><div class="yr">1996 · Nintendo 64</div><div class="nm">Pseudo-3D Road Race</div><div class="ds">Segment-based 3D road with hills, banked curves and rumble strips. Nine rival karts to shove past.</div><span class="tag">3 LAPS · 9 RIVALS</span></a>
+<a class="card" style="--accent:#5fd06a" href="03-mario-kart-super-circuit-2001.html"><div class="yr">2001 · Game Boy Advance</div><div class="nm">Top-Down Grand Prix</div><div class="ds">Rotating overhead view over a painted circuit. Coins raise your top speed, exactly like the GBA original.</div><span class="tag">3 LAPS · COINS</span></a>
+<a class="card" style="--accent:#f07fae" href="04-mario-kart-double-dash-2003.html"><div class="yr">2003 · GameCube</div><div class="nm">Two Racers, One Kart</div><div class="ds">Front rider drives, rear rider throws. TAB swaps them, changing your stats and your item at once. Seven laps of Baby Park.</div><span class="tag">7 LAPS · ITEM SWAP</span></a>
+<a class="card" style="--accent:#8effc0" href="05-mario-kart-ds-2005.html"><div class="yr">2005 · Nintendo DS</div><div class="nm">Mission Mode</div><div class="ds">Pop eight numbered targets in the right order with shells that ricochet off the arena walls.</div><span class="tag">TIMED · 8 TARGETS</span></a>
+<a class="card" style="--accent:#ffd23f" href="06-mario-kart-wii-2008.html"><div class="yr">2008 · Wii</div><div class="nm">Trick Attack</div><div class="ds">Side-on stunt track with parallax hills. Spin off the ramps for points, but land level or you wipe out.</div><span class="tag">ENDLESS · COMBOS</span></a>
+<a class="card" style="--accent:#7fd8ff" href="07-mario-kart-7-2011.html"><div class="yr">2011 · Nintendo 3DS</div><div class="nm">Glider Run</div><div class="ds">Deploy the glider and thread twenty rings in perspective 3D, over open sea and passing islands.</div><span class="tag">20 RINGS</span></a>
+<a class="card" style="--accent:#b56cff" href="08-mario-kart-8-2014.html"><div class="yr">2014 · Wii U</div><div class="nm">Anti-Gravity Tube</div><div class="ds">Magnetised to the inner wall of a neon tube, rotating around it to dodge barriers rushing at you.</div><span class="tag">3 SHIELDS · BOOST</span></a>
+<a class="card" style="--accent:#4fd0e0" href="09-mario-kart-8-deluxe-2017.html"><div class="yr">2017 · Nintendo Switch</div><div class="nm">Balloon Battle</div><div class="ds">Three balloons each. You against three AI karts that hunt you down and fire on sight.</div><span class="tag">LAST ONE STANDING</span></a>
+<a class="card" style="--accent:#ff7ad0" href="10-mario-kart-tour-2019.html"><div class="yr">2019 · iOS / Android</div><div class="nm">One-Thumb Endless</div><div class="ds">Portrait, three lanes, endless night city. Three items in a row triggers Frenzy and nothing can touch you.</div><span class="tag">ENDLESS · FRENZY</span></a>
+<a class="card" style="--accent:#8fe0ff" href="11-mario-kart-live-home-circuit-2020.html"><div class="yr">2020 · Switch + RC kart</div><div class="nm">Draw Your Own Track</div><div class="ds">Sketch a circuit on the living-room floor with the mouse, then race the track you drew through cardboard gates. N draws a new one.</div><span class="tag">MOUSE · 3 LAPS</span></a>
+<a class="card" style="--accent:#ffb03a" href="12-mario-kart-world-2025.html"><div class="yr">2025 · Nintendo Switch 2</div><div class="nm">Open World Free Roam</div><div class="ds">A connected road network across grass, desert and lakeside. Find all eight medallions before the clock runs out.</div><span class="tag">75 SECONDS · 8 MEDALLIONS</span></a>
+</div>
+
+<h2>Arcade</h2>
+<div class="grid">
+<a class="card" style="--accent:#3350d8" href="13-mario-kart-arcade-gp-2005.html"><div class="yr">2005 · Arcade</div><div class="nm">Pellet Maze</div><div class="ds">The Namco crossover taken literally — a kart in a neon Pac-Man maze with three ghosts and power pellets.</div><span class="tag">3 LIVES · 150 PELLETS</span></a>
+<a class="card" style="--accent:#5fd06a" href="14-mario-kart-arcade-gp-2-2007.html"><div class="yr">2007 · Arcade</div><div class="nm">Pick a Body</div><div class="ds">GP 2 added body selection, so: three bodies with real speed / accel / grip trade-offs, then a timed run.</div><span class="tag">3 BODIES · 3 LAPS</span></a>
+<a class="card" style="--accent:#ff5a4a" href="15-mario-kart-arcade-gp-dx-2013.html"><div class="yr">2013 · Arcade</div><div class="nm">Kart Fusion</div><div class="ds">DX's signature feature — fuse two bodies into a two-tone hybrid with blended stats, then race what you built.</div><span class="tag">FUSION · 3 LAPS</span></a>
+<a class="card" style="--accent:#57e0c8" href="16-mario-kart-arcade-gp-vr-2017.html"><div class="yr">2017 · Arcade VR</div><div class="nm">Item Throw Range</div><div class="ds">Reach out and hurl shells at moving targets in depth, tracking glove and headset optics included.</div><span class="tag">MOUSE · 45 SECONDS</span></a>
+</div>
+
+<footer>
+Built as plain HTML5 canvas — no frameworks, no image or audio files, everything generated in code.<br>
+Sprites, particles, lighting and post-processing live in <code>kart-gfx.js</code>;
+every sound is synthesised on the fly with WebAudio in <code>kart-audio.js</code>.
+</footer>
+</div>

@@ -1,0 +1,199 @@
+<meta charset="utf-8">
+<title>Kart 8 — Anti-Gravity Tube</title>
+<style>
+  html,body{margin:0;height:100%;background:#050509;color:#fff;
+    font-family:"Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:8px}
+  canvas{border:3px solid #23232f;border-radius:8px;background:#04040c;
+    box-shadow:0 18px 60px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.05)}
+  #hud{font-size:14px;letter-spacing:2px;color:#8d93a4}
+</style>
+<script src="kart-gfx.js"></script>
+<script src="kart-audio.js"></script>
+<canvas id="c" width="680" height="490"></canvas>
+<div id="hud">←/→ or A/D rotate · ↑ boost · dodge the barriers · R restart · M mute</div>
+<script>
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+const W=c.width,H=c.height,CXP=W/2,CYP=H/2,K=27000,TAU=Math.PI*2;
+
+const fx=new GFX.Particles(400);
+const keys={};
+let theta,vt,z,spd,walls,hp,score,done,flash,shake,stars,wasBoost=false;
+function makeWall(zz,i){
+  return{z:zz,a0:(i*2.399)%TAU,span:0.9+((i*0.37)%0.85),
+    col:['#ff4b6e','#ffb03a','#57e0c8','#b56cff'][i%4],done:false};
+}
+function reset(){
+  theta=Math.PI/2;vt=0;z=0;spd=900;hp=3;score=0;done=false;flash=0;shake=0;
+  fx.clear();
+  walls=[];
+  for(let i=0;i<70;i++)walls.push(makeWall(900+i*520,i));
+  stars=[];
+  for(let i=0;i<90;i++)stars.push({a:Math.random()*TAU,r:Math.random()*0.9+0.1,
+    z:Math.random()*5000+300,s:Math.random()*1.6+0.4});
+}
+reset();
+addEventListener('keydown',e=>{const k=e.key.toLowerCase();keys[k]=true;
+  if(k.startsWith('arrow'))e.preventDefault(); if(k==='r')reset();
+  if(k==='m')SFX.toggle()});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false});
+GFX.trackKeys(keys);
+
+function angDiff(a,b){let d=a-b;while(d>Math.PI)d-=TAU;while(d<-Math.PI)d+=TAU;return d}
+
+function update(dt){
+  fx.update(dt);
+  if(flash>0)flash-=dt;
+  if(shake>0)shake-=dt;
+  if(done)return;
+  const acc=((keys.arrowright||keys.d)?1:0)-((keys.arrowleft||keys.a)?1:0);
+  vt+=acc*11*dt;
+  vt*=1-3.4*dt;
+  theta+=vt*dt;
+  theta=(theta%TAU+TAU)%TAU;
+
+  const boosting=keys.arrowup||keys.w;
+  if(boosting&&!wasBoost)SFX.boost();
+  wasBoost=boosting;
+  const target=boosting?1750:1000;
+  spd+=(target-spd)*1.6*dt;
+  SFX.engine(GFX.clamp((spd-700)/1100,0,1),1.2);
+  z+=spd*dt;
+  score+=spd*dt*0.01;
+
+  if(boosting&&Math.random()<0.8){
+    fx.emit({x:CXP+(Math.random()-.5)*30,y:CYP+K/300+22,
+      vx:(Math.random()-.5)*60,vy:60+Math.random()*90,
+      life:.4,r:6,r2:0,col:'rgba(255,190,90,.8)',drag:1.4});
+  }
+
+  walls.forEach(w=>{
+    if(w.done)return;
+    if(w.z-z<40){
+      w.done=true;
+      if(Math.abs(angDiff(theta,w.a0+w.span/2))<w.span/2){
+        hp--;flash=0.45;shake=0.4;spd*=0.5;SFX.hit();
+        fx.burst(CXP,CYP+K/300,26,{spd:280,life:.6,r:6,col:'#ff6a8a',shape:'spark',drag:2.2});
+        if(hp<=0){done=true;SFX.engine(0);SFX.lose()}
+      }else score+=25;
+    }
+  });
+  if(!done&&walls.every(w=>w.done)){done=true;SFX.engine(0);SFX.win()}
+  stars.forEach(s=>{s.z-=spd*dt;if(s.z<60)s.z+=5200});
+}
+
+function render(){
+  ctx.fillStyle='#04040c';ctx.fillRect(0,0,W,H);
+  ctx.save();
+  if(shake>0)ctx.translate((Math.random()-.5)*10,(Math.random()-.5)*10);
+
+  // deep glow down the throat of the tube
+  const core=ctx.createRadialGradient(CXP,CYP,4,CXP,CYP,190);
+  core.addColorStop(0,'rgba(150,190,255,.42)');
+  core.addColorStop(0.5,'rgba(70,90,200,.14)');
+  core.addColorStop(1,'rgba(20,20,60,0)');
+  ctx.fillStyle=core;ctx.fillRect(0,0,W,H);
+
+  ctx.save();ctx.translate(CXP,CYP);ctx.rotate(-theta+Math.PI/2);
+  // starfield inside the tube
+  stars.forEach(s=>{
+    const r=K/s.z*s.r;
+    const t=GFX.clamp(1-s.z/5200,0,1);
+    ctx.fillStyle='rgba(200,220,255,'+(t*0.7)+')';
+    ctx.beginPath();ctx.arc(Math.cos(s.a)*r,Math.sin(s.a)*r,s.s*t+0.3,0,TAU);ctx.fill();
+  });
+  // rings
+  for(let i=1;i<=32;i++){
+    const dz=i*180-(z%180);
+    if(dz<30)continue;
+    const r=K/dz;
+    if(r<4)continue;
+    const t=GFX.clamp(1-dz/5800,0,1);
+    ctx.strokeStyle='rgba(96,140,255,'+(0.06+t*0.42)+')';
+    ctx.lineWidth=1+t*2.6;
+    ctx.beginPath();ctx.arc(0,0,r,0,TAU);ctx.stroke();
+    if(i%4===0){
+      ctx.strokeStyle='rgba(150,220,255,'+(0.05+t*0.30)+')';
+      ctx.lineWidth=1+t*5;
+      ctx.beginPath();ctx.arc(0,0,r*1.005,0,TAU);ctx.stroke();
+    }
+  }
+  // spars
+  ctx.strokeStyle='rgba(96,140,255,.16)';ctx.lineWidth=1;
+  for(let i=0;i<16;i++){
+    const a=i/16*TAU;
+    ctx.beginPath();ctx.moveTo(Math.cos(a)*12,Math.sin(a)*12);
+    ctx.lineTo(Math.cos(a)*K/60,Math.sin(a)*K/60);ctx.stroke();
+  }
+  // barriers
+  walls.filter(w=>!w.done&&w.z-z>60&&w.z-z<6200)
+       .sort((a,b)=>(b.z-a.z))
+       .forEach(w=>{
+    const dz=w.z-z,r=K/dz,t=GFX.clamp(1-dz/6200,0,1);
+    ctx.save();
+    ctx.shadowColor=w.col;ctx.shadowBlur=26*t;
+    ctx.strokeStyle=GFX.alpha(w.col,0.22+t*0.78);
+    ctx.lineWidth=Math.max(3,r*0.2);
+    ctx.beginPath();ctx.arc(0,0,r,w.a0,w.a0+w.span);ctx.stroke();
+    ctx.restore();
+    ctx.strokeStyle='rgba(255,255,255,'+(t*0.55)+')';
+    ctx.lineWidth=Math.max(1,r*0.045);
+    ctx.beginPath();ctx.arc(0,0,r*1.055,w.a0,w.a0+w.span);ctx.stroke();
+  });
+  ctx.restore();
+
+  fx.draw(ctx);
+
+  // the kart, magnetised to the tube wall
+  const pr=K/300;
+  ctx.save();ctx.translate(CXP,CYP+pr);
+  const gl=ctx.createRadialGradient(0,0,3,0,0,54);
+  gl.addColorStop(0,'rgba(90,190,255,.45)');gl.addColorStop(1,'rgba(90,190,255,0)');
+  ctx.fillStyle=gl;ctx.beginPath();ctx.arc(0,0,54,0,TAU);ctx.fill();
+  GFX.kartRear(ctx,{x:0,y:0,s:0.62,col:'#3ba7e8',acc:'#ffd23f',
+    lean:vt*0.25,boost:(keys.arrowup||keys.w)?0.9:0.15});
+  ctx.restore();
+  ctx.restore();
+
+  GFX.speedLines(ctx,W,H,GFX.clamp((spd-900)/900,0,1)*0.9);
+  GFX.flash(ctx,W,H,'#ff3c5a',flash*0.85);
+  GFX.bloom(ctx,c,0.52,9);
+  GFX.grain(ctx,W,H,0.04);
+  GFX.vignette(ctx,W,H,0.6);
+  drawHUD();
+}
+function drawHUD(){
+  GFX.panel(ctx,12,12,178,62,{r:12});
+  ctx.textAlign='left';
+  ctx.fillStyle='#8d93a4';ctx.font='10px Segoe UI';ctx.fillText('SHIELD',26,30);
+  for(let i=0;i<3;i++){
+    ctx.fillStyle=i<hp?'#4fd0e0':'rgba(255,255,255,.14)';
+    GFX.rr(ctx,26+i*22,36,17,10,4);ctx.fill();
+  }
+  ctx.fillStyle='#8d93a4';ctx.font='10px Segoe UI';ctx.fillText('SCORE',110,30);
+  ctx.fillStyle='#fff';ctx.font='bold 19px Segoe UI';ctx.fillText(score|0,110,50);
+
+  const sx=W-68,sy=H-58,R=40,frac=GFX.clamp((spd-800)/1000,0,1);
+  ctx.save();
+  ctx.strokeStyle='rgba(255,255,255,.10)';ctx.lineWidth=11;ctx.lineCap='round';
+  ctx.beginPath();ctx.arc(sx,sy,R,Math.PI*0.75,Math.PI*2.25);ctx.stroke();
+  const gg=ctx.createLinearGradient(sx-R,0,sx+R,0);
+  gg.addColorStop(0,'#4fd0e0');gg.addColorStop(1,'#ff5a9a');
+  ctx.strokeStyle=gg;ctx.lineWidth=7;
+  ctx.shadowColor='#4fd0e0';ctx.shadowBlur=14;
+  ctx.beginPath();ctx.arc(sx,sy,R,Math.PI*0.75,Math.PI*0.75+Math.PI*1.5*frac);ctx.stroke();
+  ctx.restore();
+  ctx.textAlign='center';
+  ctx.fillStyle='#fff';ctx.font='bold 19px Segoe UI';ctx.fillText((spd/9)|0,sx,sy+4);
+  ctx.fillStyle='#8d93a4';ctx.font='9px Segoe UI';ctx.fillText('KM/H',sx,sy+18);
+}
+
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(0.04,(now-last)/1000);last=now;
+  update(dt);render();
+  if(done)GFX.banner(ctx,W,H,hp>0?'TUBE CLEARED':'WIPEOUT','score '+(score|0)+'  ·  press R');
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>

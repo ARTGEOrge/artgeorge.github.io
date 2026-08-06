@@ -1,0 +1,309 @@
+<meta charset="utf-8">
+<title>Super Kart — Mode 7 Time Trial</title>
+<style>
+  html,body{margin:0;height:100%;background:#080810;color:#fff;
+    font-family:"Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:8px}
+  canvas{border:3px solid #23232f;border-radius:8px;background:#000;
+    box-shadow:0 18px 60px rgba(0,0,0,.65),0 0 0 1px rgba(255,255,255,.05)}
+  #hud{font-size:14px;letter-spacing:2px;color:#8d93a4}
+</style>
+<script src="kart-gfx.js"></script>
+<script src="kart-audio.js"></script>
+<canvas id="c" width="680" height="430"></canvas>
+<div id="hud">Arrows / WASD to drive · hold Shift to drift · R restart · M mute</div>
+<script>
+const c=document.getElementById('c'),ctx=c.getContext('2d');
+const W=c.width,H=c.height,SKYH=162,GND=H-SKYH;
+const TAU=Math.PI*2;
+
+/* ---------- track geometry ---------- */
+const TW=1400,TH=1400,ROADW=132;
+const CX=700,CY=700,PTS=[];
+for(let i=0;i<220;i++){
+  const t=i/220*TAU;
+  const r=440+80*Math.sin(3*t)+50*Math.cos(2*t);
+  PTS.push({x:CX+Math.cos(t)*r,y:CY+Math.sin(t)*r});
+}
+function seg(i){return[PTS[i],PTS[(i+1)%PTS.length]]}
+
+/* ---------- painted track texture ---------- */
+const tc=document.createElement('canvas');tc.width=TW;tc.height=TH;
+const g2=tc.getContext('2d');
+(function paint(){
+  g2.fillStyle='#3c8a42';g2.fillRect(0,0,TW,TH);
+  for(let i=0;i<2600;i++){
+    const s=14+Math.random()*46;
+    g2.fillStyle=['#367f3c','#44984a','#2f7436','#4ca253'][(Math.random()*4)|0];
+    g2.beginPath();g2.ellipse(Math.random()*TW,Math.random()*TH,s,s*0.62,Math.random()*TAU,0,TAU);g2.fill();
+  }
+  g2.lineJoin='round';
+  // sand run-off
+  g2.strokeStyle='#c2a568';g2.lineWidth=ROADW+96;g2.lineCap='round';
+  g2.beginPath();g2.moveTo(PTS[0].x,PTS[0].y);
+  PTS.forEach(p=>g2.lineTo(p.x,p.y));g2.closePath();g2.stroke();
+  // alternating kerbs
+  g2.lineCap='butt';g2.lineWidth=ROADW+26;
+  for(let i=0;i<PTS.length;i++){
+    const[a,b]=seg(i);
+    g2.strokeStyle=(i&1)?'#e04a3c':'#f0f0f4';
+    g2.beginPath();g2.moveTo(a.x,a.y);g2.lineTo(b.x,b.y);g2.stroke();
+  }
+  // asphalt
+  g2.lineCap='round';g2.lineWidth=ROADW;g2.strokeStyle='#494954';
+  g2.beginPath();g2.moveTo(PTS[0].x,PTS[0].y);
+  PTS.forEach(p=>g2.lineTo(p.x,p.y));g2.closePath();g2.stroke();
+  // asphalt grain + racing line
+  for(let i=0;i<9000;i++){
+    g2.fillStyle=Math.random()<.5?'rgba(255,255,255,.035)':'rgba(0,0,0,.05)';
+    g2.fillRect(Math.random()*TW,Math.random()*TH,3,3);
+  }
+  g2.strokeStyle='rgba(20,20,26,.30)';g2.lineWidth=34;
+  g2.beginPath();g2.moveTo(PTS[0].x,PTS[0].y);
+  PTS.forEach(p=>g2.lineTo(p.x,p.y));g2.closePath();g2.stroke();
+  g2.setLineDash([26,34]);g2.strokeStyle='rgba(226,226,236,.75)';g2.lineWidth=4;
+  g2.beginPath();g2.moveTo(PTS[0].x,PTS[0].y);
+  PTS.forEach(p=>g2.lineTo(p.x,p.y));g2.closePath();g2.stroke();
+  g2.setLineDash([]);
+  // boost chevrons
+  [30,86,142,190].forEach(i=>{
+    const[a,b]=seg(i),ang=Math.atan2(b.y-a.y,b.x-a.x);
+    g2.save();g2.translate(a.x,a.y);g2.rotate(ang);
+    for(let k=0;k<3;k++){
+      g2.fillStyle='rgba(255,205,70,'+(0.75-k*0.16)+')';
+      g2.beginPath();
+      g2.moveTo(k*26-30,-30);g2.lineTo(k*26-8,0);g2.lineTo(k*26-30,30);
+      g2.lineTo(k*26-20,30);g2.lineTo(k*26+2,0);g2.lineTo(k*26-20,-30);
+      g2.closePath();g2.fill();
+    }
+    g2.restore();
+  });
+  // start / finish
+  const[a,b]=seg(0),ang=Math.atan2(b.y-a.y,b.x-a.x);
+  g2.save();g2.translate(a.x,a.y);g2.rotate(ang);
+  for(let i=-9;i<9;i++)for(let j=0;j<3;j++){
+    g2.fillStyle=((i+j)&1)?'#f6f6fa':'#1e1e28';
+    g2.fillRect(j*12-18,i*9,12,9);
+  }
+  g2.restore();
+})();
+const TEX=g2.getImageData(0,0,TW,TH).data;
+
+/* road mask, so physics never depends on how the paint looks */
+const mc=document.createElement('canvas');mc.width=TW;mc.height=TH;
+const mgc=mc.getContext('2d');
+mgc.strokeStyle='#fff';mgc.lineWidth=ROADW;mgc.lineCap='round';mgc.lineJoin='round';
+mgc.beginPath();mgc.moveTo(PTS[0].x,PTS[0].y);
+PTS.forEach(p=>mgc.lineTo(p.x,p.y));mgc.closePath();mgc.stroke();
+const MASK=mgc.getImageData(0,0,TW,TH).data;
+function onRoad(x,y){
+  const ix=((x|0)%TW+TW)%TW,iy=((y|0)%TH+TH)%TH;
+  return MASK[(iy*TW+ix)*4+3]>40;
+}
+
+/* trackside billboards */
+const PROPS=[];
+for(let i=0;i<PTS.length;i+=3){
+  const[a,b]=seg(i);
+  const n=Math.atan2(b.y-a.y,b.x-a.x)+Math.PI/2;
+  [-1,1].forEach(sd=>{
+    if((i+(sd>0?1:0))%2)return;
+    const d=(ROADW/2+96+((i*37)%90))*sd;
+    PROPS.push({x:a.x+Math.cos(n)*d,y:a.y+Math.sin(n)*d,k:(i/3|0)%5});
+  });
+}
+
+const frame=ctx.createImageData(W,GND);
+const dust=new GFX.Particles(320);
+
+/* ---------- state ---------- */
+const keys={};
+let car,lap,cpIdx,lapStart,best,done,msg;
+const CP=[0,55,110,165].map(i=>PTS[i]);
+function reset(){
+  car={x:PTS[0].x,y:PTS[0].y,a:Math.atan2(PTS[1].y-PTS[0].y,PTS[1].x-PTS[0].x),sp:0};
+  lap=1;cpIdx=1;lapStart=performance.now();best=null;done=false;msg='';
+  dust.clear();
+}
+reset();
+addEventListener('keydown',e=>{
+  const k=e.key.toLowerCase();keys[k]=true;
+  if(k.startsWith('arrow')||k===' ')e.preventDefault();
+  if(k==='r')reset();
+  if(k==='m')SFX.toggle();
+});
+addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false});
+GFX.trackKeys(keys);
+
+/* ---------- update ---------- */
+function update(dt,now){
+  dust.update(dt);
+  if(done)return;
+  const up=keys.arrowup||keys.w, dn=keys.arrowdown||keys.s;
+  const lf=keys.arrowleft||keys.a, rt=keys.arrowright||keys.d;
+  const road=onRoad(car.x,car.y);
+  const max=road?240:74;
+  if(up){if(car.sp<max)car.sp=Math.min(max,car.sp+275*dt)}
+  else if(dn)car.sp-=330*dt;
+  else car.sp*=1-1.3*dt;
+  if(car.sp>max)car.sp=max+(car.sp-max)*Math.exp(-5*dt);
+  if(car.sp<-80)car.sp=-80;
+  const grip=Math.min(1,Math.abs(car.sp)/55);
+  const drift=keys.shift?1.6:1;
+  const turn=2.3*drift*grip*(car.sp<0?-1:1);
+  if(lf)car.a-=turn*dt;
+  if(rt)car.a+=turn*dt;
+  car.x+=Math.cos(car.a)*car.sp*dt;
+  car.y+=Math.sin(car.a)*car.sp*dt;
+
+  // kick up dust / smoke behind the kart (screen-space, under the sprite)
+  if(Math.abs(car.sp)>40&&((!road)||(keys.shift&&(lf||rt)))){
+    const spread=road?26:40;
+    dust.emit({
+      x:W/2+(Math.random()-.5)*spread, y:H-34+Math.random()*8,
+      vx:(Math.random()-.5)*70, vy:-30-Math.random()*50,
+      life:0.5+Math.random()*0.4, r:7+Math.random()*8, r2:1,
+      col:road?'rgba(210,210,220,.55)':'rgba(196,168,110,.75)', drag:1.1
+    });
+  }
+
+  SFX.engine(Math.abs(car.sp)/240,road?1:0.85);
+  SFX.skid(!!keys.shift&&(lf||rt)&&Math.abs(car.sp)>100,0.5);
+
+  const t=CP[cpIdx];
+  if(Math.hypot(car.x-t.x,car.y-t.y)<130){
+    cpIdx=(cpIdx+1)%CP.length;
+    if(cpIdx===1){
+      const lt=(now-lapStart)/1000;
+      if(best===null||lt<best)best=lt;
+      lapStart=now;lap++;
+      if(lap>3){done=true;msg=best.toFixed(2)+'s best lap';SFX.skid(false);SFX.win()}
+      else SFX.lap();
+    }
+  }
+}
+
+/* ---------- render ---------- */
+function drawSky(){
+  GFX.skyGrad(ctx,W,SKYH+2,[[0,'#123a86'],[0.45,'#3f80cf'],[0.8,'#9fd0ef'],[1,'#d9ecf7']]);
+  const off=-car.a*260;
+  GFX.sun(ctx,W*0.5+Math.sin(car.a*-1)*260,SKYH*0.34,15,'#ffe9a8');
+  GFX.cloudBand(ctx,W,SKYH*0.30,off*0.35,0.9,'rgba(255,255,255,.42)');
+  GFX.cloudBand(ctx,W,SKYH*0.52,off*0.6,0.65,'rgba(255,255,255,.62)');
+  GFX.hills(ctx,W,SKYH-14,off*0.9,30,0.010,'#3d5f8e');
+  GFX.hills(ctx,W,SKYH-2,off*1.35,20,0.017,'#33507a');
+}
+function drawGround(){
+  const cos=Math.cos(car.a),sin=Math.sin(car.a),d=frame.data;
+  const camH=44,fov=224,HAZE=52;
+  for(let row=0;row<GND;row++){
+    const z=camH*fov/(row+1);
+    const cx=car.x+cos*z, cy=car.y+sin*z, sx=z/fov;
+    const f=row<HAZE?(1-row/HAZE)*0.8:0;
+    for(let px=0;px<W;px++){
+      const o=(px-W/2)*sx;
+      const wx=cx-sin*o, wy=cy+cos*o;
+      const si=((((wy|0)%TH+TH)%TH)*TW+(((wx|0)%TW+TW)%TW))*4;
+      const di=(row*W+px)*4;
+      if(f>0){
+        d[di]  =TEX[si]  +(172-TEX[si])*f;
+        d[di+1]=TEX[si+1]+(206-TEX[si+1])*f;
+        d[di+2]=TEX[si+2]+(234-TEX[si+2])*f;
+      }else{
+        d[di]=TEX[si];d[di+1]=TEX[si+1];d[di+2]=TEX[si+2];
+      }
+      d[di+3]=255;
+    }
+  }
+  ctx.putImageData(frame,0,SKYH);
+}
+function drawProps(){
+  const cos=Math.cos(car.a),sin=Math.sin(car.a),camH=44,fov=224;
+  const vis=[];
+  for(const p of PROPS){
+    const dx=p.x-car.x, dy=p.y-car.y;
+    const fwd=dx*cos+dy*sin;
+    if(fwd<28||fwd>1500)continue;
+    const rgt=-dx*sin+dy*cos;
+    const sx=W/2+rgt*fov/fwd;
+    if(sx<-90||sx>W+90)continue;
+    vis.push({sx,sy:SKYH+camH*fov/fwd,s:fov/fwd*1.35,fwd,k:p.k});
+  }
+  vis.sort((a,b)=>b.fwd-a.fwd);
+  for(const v of vis){
+    if(v.s<0.05)continue;
+    ctx.globalAlpha=Math.min(1,(1500-v.fwd)/450);
+    if(v.k===4){
+      // striped marker post
+      ctx.fillStyle='#e8e8ee';ctx.fillRect(v.sx-2*v.s,v.sy-26*v.s,4*v.s,26*v.s);
+      ctx.fillStyle='#e04a3c';ctx.fillRect(v.sx-2*v.s,v.sy-26*v.s,4*v.s,8*v.s);
+    }else{
+      GFX.tree(ctx,v.sx,v.sy,v.s,['#57ad57','#4a9a4e','#67b96a','#3f8f43'][v.k],'#2c6b32');
+    }
+    ctx.globalAlpha=1;
+  }
+}
+function drawHUD(now){
+  // lap panel
+  GFX.panel(ctx,12,12,182,64,{r:12});
+  ctx.textAlign='left';
+  ctx.fillStyle='#8d93a4';ctx.font='11px Segoe UI';ctx.fillText('LAP',26,32);
+  ctx.fillStyle='#fff';ctx.font='bold 25px Segoe UI';
+  ctx.fillText(Math.min(lap,3)+'/3',26,60);
+  ctx.fillStyle='#8d93a4';ctx.font='11px Segoe UI';ctx.fillText('TIME',104,32);
+  ctx.fillStyle='#ffd75e';ctx.font='bold 20px Segoe UI';
+  ctx.fillText(((done?0:(now-lapStart))/1000).toFixed(2),104,58);
+  if(best!==null){
+    ctx.fillStyle='#6dd6a0';ctx.font='11px Segoe UI';
+    ctx.fillText('BEST '+best.toFixed(2),26,74);
+  }
+
+  // speedometer
+  const sx=W-74,sy=H-64,R=42,frac=GFX.clamp(Math.abs(car.sp)/240,0,1);
+  ctx.save();
+  ctx.strokeStyle='rgba(0,0,0,.5)';ctx.lineWidth=11;ctx.lineCap='round';
+  ctx.beginPath();ctx.arc(sx,sy,R,Math.PI*0.75,Math.PI*2.25);ctx.stroke();
+  const gg=ctx.createLinearGradient(sx-R,0,sx+R,0);
+  gg.addColorStop(0,'#4fd0e0');gg.addColorStop(0.6,'#ffd75e');gg.addColorStop(1,'#ff5a4a');
+  ctx.strokeStyle=gg;ctx.lineWidth=7;
+  ctx.beginPath();ctx.arc(sx,sy,R,Math.PI*0.75,Math.PI*0.75+Math.PI*1.5*frac);ctx.stroke();
+  ctx.restore();
+  ctx.textAlign='center';
+  ctx.fillStyle='#fff';ctx.font='bold 20px Segoe UI';
+  ctx.fillText(Math.abs(car.sp/1.6)|0,sx,sy+4);
+  ctx.fillStyle='#8d93a4';ctx.font='9px Segoe UI';ctx.fillText('KM/H',sx,sy+18);
+
+  // minimap
+  const ms=0.062,ox=W-116,oy=14;
+  GFX.panel(ctx,ox-10,oy-10,TW*ms+20,TH*ms+20,{r:10});
+  ctx.strokeStyle='rgba(190,200,215,.65)';ctx.lineWidth=6;ctx.lineJoin='round';
+  ctx.beginPath();
+  PTS.forEach((p,i)=>{const x=ox+p.x*ms,y=oy+p.y*ms;i?ctx.lineTo(x,y):ctx.moveTo(x,y)});
+  ctx.closePath();ctx.stroke();
+  const t=CP[cpIdx];
+  ctx.fillStyle='#4fd0e0';ctx.beginPath();ctx.arc(ox+t.x*ms,oy+t.y*ms,3,0,TAU);ctx.fill();
+  ctx.fillStyle='#ff4b3a';ctx.beginPath();ctx.arc(ox+car.x*ms,oy+car.y*ms,4,0,TAU);ctx.fill();
+}
+
+let last=performance.now();
+function loop(now){
+  const dt=Math.min(0.05,(now-last)/1000);last=now;
+  update(dt,now);
+
+  drawSky();drawGround();drawProps();
+  GFX.lightShafts(ctx,W,H,W*0.5+Math.sin(-car.a)*260,SKYH*0.34,0.85,'#ffe9a8');
+  GFX.motes(ctx,W,H,now/1000,30,'#fff6d8');
+  dust.draw(ctx);
+  const lean=(keys.arrowleft||keys.a?-1:0)+(keys.arrowright||keys.d?1:0);
+  GFX.kartRear(ctx,{x:W/2+lean*9,y:H-70,s:0.92,col:'#d8342a',acc:'#f4f4f8',
+    lean:lean*(keys.shift?1.8:1),boost:car.sp>225?0.5:0});
+  GFX.speedLines(ctx,W,H,GFX.clamp((Math.abs(car.sp)-140)/120,0,1)*0.7);
+  GFX.bloom(ctx,c,0.26);
+  GFX.grain(ctx,W,H,0.045);
+  GFX.vignette(ctx,W,H,0.42);
+  drawHUD(now);
+  if(done)GFX.banner(ctx,W,H,'FINISH!',msg+'  ·  press R');
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
