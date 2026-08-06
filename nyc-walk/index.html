@@ -134,6 +134,7 @@
     <div><b>&#8679;</b>sprint &nbsp; <b>&#9251;</b>jump / brake</div>
     <div><b>RMB</b>get in / out of a car</div>
     <div><b>N</b>day / night &nbsp; <b>M</b>city map</div>
+    <div><b>R</b>weather &nbsp; <b>E</b>sit on a train</div>
   </div>
   <div id="mapwrap"><canvas id="map" width="170" height="170"></canvas></div>
   <div id="prompt">Right-click to drive</div>
@@ -163,9 +164,11 @@
     <h2>Art George presents</h2>
     <h1>NEW YORK CITY<br>WALK</h1>
     <p>Five boroughs, two rivers and six bridges. Walk the avenues, then
-       right-click any moving cab to take the wheel and drive across town.</p>
+       right-click any moving cab to take the wheel and drive across town.
+       The weather turns while you are out in it &mdash; wait for the rain and
+       watch the whole city change colour.</p>
     <div class="go">CLICK TO WALK</div>
-    <div class="row"><span>WASD move</span><span>Mouse look</span><span>Right-click a car</span><span>M map</span><span>N night</span></div>
+    <div class="row"><span>WASD move</span><span>Mouse look</span><span>Right-click a car</span><span>E sit on a train</span><span>M map</span><span>N night</span><span>R weather</span></div>
   </div>
 </div>
 
@@ -375,6 +378,35 @@ const SKY = {
   night: {top:0x05070f, bot:0x1b2440, fog:0x141c30, sun:0x4a6098, amb:0x3a4666, si:0.22, ai:0.30}
 };
 let night = false;
+
+/* ---------- weather ------------------------------------------------------
+ * A city is never the same city in the rain. The sky loses its blue, the
+ * horizon comes in, the sun stops throwing shadows, the asphalt goes black and
+ * starts handing the sky back at you out of every low spot in the roadbed.
+ * Everything below reads off one of these five rows, and the two numbers that
+ * lag behind them — `wet`, how much water is lying, and `lay`, how much snow —
+ * ease across over half a minute, because a street does not dry the moment the
+ * cloud passes.
+ *
+ * cloud  how much of the overhead is covered
+ * grey   how far the sky, the fog and the light get pulled toward slate
+ * fog    multiplier on fog density: how far down the avenue you can see
+ * light  multiplier on every light in the scene
+ */
+const WX = [
+  { name:'Clear',    cloud:0.55, grey:0.00, fog:1.00, light:1.00, rain:0,    snow:0,    wet:0.00, lay:0.00 },
+  { name:'Overcast', cloud:1.00, grey:0.52, fog:1.45, light:0.72, rain:0,    snow:0,    wet:0.14, lay:0.00 },
+  { name:'Rain',     cloud:1.00, grey:0.82, fog:2.05, light:0.52, rain:0.55, snow:0,    wet:0.88, lay:0.00 },
+  { name:'Downpour', cloud:1.00, grey:0.94, fog:2.90, light:0.36, rain:1.00, snow:0,    wet:1.00, lay:0.00, storm:1 },
+  { name:'Snow',     cloud:1.00, grey:0.74, fog:2.30, light:0.64, rain:0,    snow:1.00, wet:0.28, lay:1.00 }
+];
+let wxI  = 0;          // which row we are in
+let wet  = 0;          // 0..1 water lying on the ground, lagging the rain
+let lay  = 0;          // 0..1 snow lying on the ground, lagging the snow
+let bolt = 0;          // seconds left on a lightning flash
+let wxNext = 260;      // seconds until the weather moves on by itself
+const windA = { a: 0.7, s: 2.6 };            // which way it is blowing, and how hard
+
 scene.fog = new THREE.FogExp2(SKY.day.fog, 0.0046);
 
 const ambient = new THREE.AmbientLight(SKY.day.amb, SKY.day.ai);
@@ -626,6 +658,10 @@ function colored(geo, hex){
   g.setAttribute('color', new THREE.BufferAttribute(arr,3));
   return g;
 }
+// the same colour, further into shadow — for a seam, a shut line, a lapel
+const shade = (hex, f) => (Math.round(((hex>>16)&255)*f)<<16)
+                        | (Math.round(((hex>>8)&255)*f)<<8)
+                        | Math.round((hex&255)*f);
 function mergeGeos(list){
   let count = 0; list.forEach(g => count += g.attributes.position.count);
   const pos = new Float32Array(count*3), nor = new Float32Array(count*3),
@@ -2114,15 +2150,68 @@ function addParking(c, i, j){
     }
   }
 }
-// Body colour comes from the instance, so the body is white here and the glass
-// and tyres are near-black — multiplied by any colour they stay dark.
+/* The line of cars at every kerb. You walk the length of one on every block,
+ * so this is the same saloon as the ones that are driving, not a lump.
+ *
+ * It comes back in two halves. The body is instance-coloured, so everything in
+ * it is white or a grey — multiplied by the car's colour those come out as the
+ * colour and its shadow. Everything that must NOT take the body colour — the
+ * glass, the tyres, the chrome, a red tail lamp, a white plate — goes in the
+ * trim half, which is drawn as a second instanced mesh with the same matrices
+ * and no tint at all. One extra draw call a chunk buys real headlamps.
+ */
 function parkedGeo(){
-  const p = [];
-  p.push(colored(new THREE.BoxGeometry(2.0, 0.8, 4.4), 0xffffff).translate(0,0.72,0));
-  p.push(colored(new THREE.BoxGeometry(1.8, 0.76, 2.2), 0x191d23).translate(0,1.44,-0.15));
-  for(const [dx,dz] of [[-0.94,1.4],[0.94,1.4],[-0.94,-1.4],[0.94,-1.4]])
-    p.push(colored(new THREE.BoxGeometry(0.24, 0.72, 0.72), 0x0e1013).translate(dx,0.36,dz));
-  return mergeGeos(p);
+  const B = [], T = [];
+  const bx = (L, w, h, d, col, y, z, x) =>
+    L.push(colored(new THREE.BoxGeometry(w, h, d), col).translate(x || 0, y, z || 0));
+  const rake = (L, w, h, d, col, rx, y, z, x) =>
+    L.push(colored(new THREE.BoxGeometry(w, h, d), col).rotateX(rx).translate(x || 0, y, z || 0));
+  const GLASS = 0x141c25, TYRE = 0x121417, TRIM = 0x24282e, CHR = 0x8f959c;
+
+  bx(B, 1.94, 0.26, 4.28, 0xa8a8a8, 0.42,  0);              // sill, in its own shadow
+  bx(B, 2.02, 0.36, 4.34, 0xffffff, 0.72,  0);              // the flank
+  bx(B, 1.96, 0.20, 4.26, 0xf4f4f4, 1.00,  0);              // shoulder line
+  bx(B, 1.86, 0.14, 1.50, 0xffffff, 1.14,  1.38);           // bonnet
+  bx(B, 1.86, 0.14, 1.05, 0xffffff, 1.16, -1.66);           // boot lid
+  bx(B, 1.78, 0.22, 0.34, 0xe8e8e8, 1.00,  2.10);           // nose
+  bx(B, 1.80, 0.18, 0.30, 0xe8e8e8, 1.04, -2.08);
+  bx(B, 1.66, 0.14, 1.78, 0xf8f8f8, 1.74, -0.28);           // roof
+  bx(T, 1.76, 0.54, 2.05, GLASS, 1.42, -0.18);              // the greenhouse
+  rake(T, 1.70, 0.60, 0.09, GLASS, -0.52, 1.44,  0.92);
+  rake(T, 1.66, 0.52, 0.09, GLASS,  0.60, 1.46, -1.24);
+  for(const s of [-1, 1]){
+    B.push(colored(new THREE.BoxGeometry(0.10, 0.62, 0.13), 0xffffff)
+             .rotateX(-0.52).translate(s*0.86, 1.44, 0.92));
+    bx(B, 0.10, 0.56, 0.11, 0xffffff, 1.42, -0.22, s*0.87);
+    B.push(colored(new THREE.BoxGeometry(0.10, 0.54, 0.20), 0xffffff)
+             .rotateX(0.60).translate(s*0.86, 1.46, -1.22));
+    for(const z of [1.40, -1.40]) bx(B, 0.09, 0.36, 1.16, 0x8e8e8e, 0.76, z, s*1.00);
+    bx(B, 0.03, 0.66, 0.035, 0x6a6a6a, 0.86,  0.60, s*1.015);   // shut lines
+    bx(B, 0.03, 0.66, 0.035, 0x6a6a6a, 0.86, -0.62, s*1.015);
+    bx(B, 0.15, 0.13, 0.22, 0xf0f0f0, 1.32,  0.78, s*1.09);     // mirror
+    bx(T, 0.06, 0.10, 0.30, TRIM, 1.30,  0.86, s*1.04);         // its stalk
+    bx(T, 0.09, 0.07, 2.00, CHR,  1.68, -0.28, s*0.83);         // drip rail
+    bx(T, 0.05, 0.06, 0.20, CHR,  1.02,  0.20, s*1.02);         // handles
+    bx(T, 0.05, 0.06, 0.20, CHR,  1.02, -1.00, s*1.02);
+    bx(T, 0.44, 0.18, 0.10, 0xfff4d6, 1.00,  2.18, s*0.72);     // lamps
+    bx(T, 0.16, 0.10, 0.10, 0xe8a93c, 0.86,  2.18, s*0.86);
+    bx(T, 0.42, 0.22, 0.10, 0x8e1414, 1.02, -2.18, s*0.70);
+    bx(T, 0.14, 0.10, 0.10, 0xd8dce2, 0.88, -2.18, s*0.86);
+    // wheels, and a hub in each one
+    for(const z of [1.40, -1.40]){
+      const t = colored(new THREE.CylinderGeometry(0.42, 0.42, 0.26, 9), TYRE);
+      t.rotateZ(Math.PI/2); T.push(t.translate(s*0.95, 0.42, z));
+      const h = colored(new THREE.CylinderGeometry(0.24, 0.24, 0.30, 7), CHR);
+      h.rotateZ(Math.PI/2); T.push(h.translate(s*0.95, 0.42, z));
+    }
+  }
+  bx(T, 2.00, 0.26, 0.20, TRIM, 0.56,  2.14);               // bumpers
+  bx(T, 2.00, 0.26, 0.20, TRIM, 0.56, -2.14);
+  bx(T, 1.30, 0.20, 0.10, 0x0d0f12, 0.98, 2.18);            // grille
+  bx(T, 1.34, 0.05, 0.12, CHR,     1.03, 2.19);
+  bx(T, 0.50, 0.16, 0.05, 0xdde2e8, 0.72,  2.22);           // plates
+  bx(T, 0.50, 0.16, 0.05, 0xdde2e8, 0.74, -2.22);
+  return { body: mergeGeos(B), trim: mergeGeos(T) };
 }
 
 // The green plywood shed over half the sidewalks in this city.
@@ -2930,8 +3019,235 @@ function flatiron(c, cx, cz){
   c.roof.push(cap);
   addSolid(cx, cz, 34, 34);
 }
+/* 30 Rockefeller Plaza. Not a tower — a slab, four times as wide as it is
+ * deep, whose ends step back as it rises. Broadside it is a sheer limestone
+ * cliff; end-on it is a needle. Getting that one building wrong as a square
+ * tower would take the whole of midtown down with it. */
+function rockefeller(c, cx, cz){
+  const V = 5, T = TRIM[5], DP = 20;
+  let y = CURB;
+  lmMass(c, V, cx, cz, y, 46, DP, 12);
+  lmBand(c, cx, cz, y + 12 - 0.7, 47.3, DP + 1.3, 1.4, T);
+  y += 12;
+  for(const [w, h] of [[42,26],[36,24],[30,24],[24,22],[18,20]]){
+    lmMass(c, V, cx, cz, y, w, DP, h);
+    lmBand(c, cx, cz, y + h - 0.6, w + 1.1, DP + 1.1, 1.2, T);
+    y += h;
+  }
+  // the piers up the broad faces, each stopping at the setback that cuts it off
+  for(let k=0;k<7;k++){
+    const px = cx - 15 + k*5, ph = Math.abs(k - 3) < 2 ? 94 : Math.abs(k - 3) < 3 ? 74 : 50;
+    for(const sz of [-1, 1]) lmBand(c, px, cz + sz*(DP/2 + 0.2), CURB + 12, 1.1, 0.6, ph, T);
+  }
+  addSolid(cx, cz, 46, DP);
+}
+/* St Patrick's, which is across the street from it and a tenth of its height —
+ * and is still the thing you look at, because everything around it is a box
+ * and this has two spires on it. */
+function stPatricks(c, cx, cz){
+  const V = 5, T = TRIM[5], STONE = 0xd8d2c4;
+  /* It has to fit its block like anything else — the nave runs back from the
+   * avenue, not through the cross street behind it — and the spires have to
+   * stay short enough that midtown still towers over it, which is the whole
+   * effect of the real one. */
+  let y = CURB;
+  lmMass(c, V, cx, cz, y, 20, 40, 22);                       // the nave
+  lmBand(c, cx, cz, y + 22, 21, 41, 1.6, T);
+  c.roof.push(colored(new THREE.BoxGeometry(14, 9, 38), 0x5a6068)
+                .translate(cx, y + 27.5, cz));               // the pitched roof
+  for(const sz of [-1, 1]) for(let k=0;k<5;k++)              // buttresses
+    c.roof.push(colored(new THREE.BoxGeometry(1.8, 20, 1.8), STONE)
+                  .translate(cx + sz*10.4, y + 10, cz - 16 + k*8));
+  // the west front, and the two spires standing off its corners
+  lmMass(c, V, cx, cz + 22, y, 24, 8, 28);
+  c.glow.push(colored(new THREE.CylinderGeometry(4, 4, 0.6, 12).rotateX(Math.PI/2), 0x2a3340)
+                .translate(cx, y + 19, cz + 25.9));          // the rose window
+  for(const sx of [-1, 1]){
+    const bx = cx + sx*8.4;
+    lmMass(c, V, bx, cz + 22, y, 8, 8, 32);
+    lmBand(c, bx, cz + 22, y + 32, 9, 9, 1.4, T);
+    for(let k=0;k<4;k++){                                    // the spire, in stages
+      const s = 7.2 - k*1.7;
+      c.roof.push(colored(new THREE.BoxGeometry(s, 4.8, s), STONE)
+                    .translate(bx, y + 35.6 + k*4.8, cz + 22));
+    }
+    c.roof.push(colored(new THREE.ConeGeometry(1.2, 6, 4), STONE)
+                  .translate(bx, y + 56, cz + 22));
+  }
+  addSolid(cx, cz + 3, 26, 46);
+}
+/* 432 Park Avenue: a square, and nothing but a square, all the way up. Six
+ * floors of it are left open so the wind goes through instead of pushing it
+ * over, and those gaps are the only thing breaking the shaft. */
+function parkAve432(c, cx, cz){
+  const V = 5, T = TRIM[5], S = 17, H = 150;
+  let y = CURB;
+  lmMass(c, V, cx, cz, y, S + 5, S + 5, 9);
+  lmBand(c, cx, cz, y + 9 - 0.6, S + 6, S + 6, 1.2, T);
+  y += 9;
+  lmMass(c, V, cx, cz, y, S, S, H);
+  for(let k=1;k<=6;k++){                       // the open floors
+    const yy = y + H*k/7 - 3;
+    lmBand(c, cx, cz, yy, S + 0.7, S + 0.7, 1.5, T);
+    lmBand(c, cx, cz, yy + 1.5, S - 1.2, S - 1.2, 4.2, 0x15191f);
+    lmBand(c, cx, cz, yy + 5.7, S + 0.7, S + 0.7, 1.5, T);
+  }
+  for(const sx of [-1, 1]) for(const sz of [-1, 1])          // corner piers
+    lmBand(c, cx + sx*(S/2 + 0.2), cz + sz*(S/2 + 0.2), y, 1.4, 1.4, H, T);
+  y += H;
+  lmBand(c, cx, cz, y, S + 1.2, S + 1.2, 2.2, T);
+  const b = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 8),
+    new THREE.MeshBasicMaterial({color:0xff4444}));
+  b.position.set(cx, y + 4, cz); cityGroup.add(b); beacons.push(b);
+  addSolid(cx, cz, S + 5, S + 5);
+}
+/* Citigroup Center. Two things make it: the top sliced off at forty-five
+ * degrees, and the fact that it stands on four columns set at the MIDDLE of
+ * each side rather than at the corners — there was a church on the corner that
+ * would not move, so the tower had to step over it. Put the legs on the
+ * corners and it stops being this building. */
+function citicorp(c, cx, cz){
+  const V = 2, S = 26, H = 84;
+  let y = CURB;
+  for(const [sx, sz] of [[-1,0],[1,0],[0,-1],[0,1]])
+    c.roof.push(colored(new THREE.BoxGeometry(sx ? 7 : 9, 30, sx ? 9 : 7), 0xb9bcc0)
+                  .translate(cx + sx*(S/2 - 3.5), y + 15, cz + sz*(S/2 - 3.5)));
+  c.roof.push(colored(new THREE.BoxGeometry(10, 30, 10), 0x8f959c).translate(cx, y + 15, cz));
+  y += 30;
+  lmMass(c, V, cx, cz, y, S, S, H);
+  for(let k=0;k<13;k++)                        // the aluminium banding up the face
+    lmBand(c, cx, cz, y + 3 + k*6.2, S + 0.4, S + 0.4, 1.7, 0xd8dce2);
+  y += H;
+  // and the slope, in slabs — each one keeps its far edge and loses its near
+  const N = 13;
+  for(let k=0;k<N;k++){
+    const dd = S*(1 - k/N), hh = S/N;
+    c.roof.push(colored(new THREE.BoxGeometry(S, hh, Math.max(dd, 0.6)), 0xc6cad0)
+                  .translate(cx, y + hh/2 + k*hh, cz - (S - dd)/2));
+  }
+  const b = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 8),
+    new THREE.MeshBasicMaterial({color:0xff4444}));
+  b.position.set(cx, y + S + 1.5, cz); cityGroup.add(b); beacons.push(b);
+  addSolid(cx, cz, S, S);
+}
+/* Grand Central, and the tower standing on top of the far end of it. The
+ * terminal is low and wide with three arched windows the height of the whole
+ * front; the MetLife slab behind plugs the end of Park Avenue, which is the
+ * most complained-about thing ever built in this city and also unmistakable. */
+function grandCentral(c, cx, cz){
+  const V = 5, T = TRIM[5];
+  let y = CURB;
+  lmMass(c, V, cx, cz + 8, y, 48, 34, 19);                   // the terminal
+  lmBand(c, cx, cz + 8, y + 19 - 0.9, 49.5, 35.5, 1.8, T);
+  for(let k=-1;k<=1;k++){                                    // the three arches
+    const ax = cx + k*15;
+    c.glow.push(colored(new THREE.BoxGeometry(11, 12, 0.5), 0x2a3340)
+                  .translate(ax, y + 7.5, cz + 25.3));
+    c.glow.push(colored(new THREE.CylinderGeometry(5.5, 5.5, 0.5, 14, 1, false, 0, Math.PI)
+                  .rotateX(Math.PI/2).rotateZ(Math.PI/2), 0x2a3340)
+                  .translate(ax, y + 13.5, cz + 25.3));
+    for(const sx of [-1, 1])                                 // and the piers between
+      lmBand(c, ax + sx*7.2, cz + 25.2, y, 2.4, 1.2, 18, T);
+  }
+  c.roof.push(colored(new THREE.BoxGeometry(9, 5, 1.4), 0xa9a191)   // the clock group
+                .translate(cx, y + 20.5, cz + 25.4));
+  y += 19;
+  // the tower, set back over the north end, with the corners cut off it. Its
+  // half-width has to clear the block: 15 round, stretched to 23 across, is
+  // 46 wide in a 54 block, and anything more stands in the avenue.
+  const g = new THREE.CylinderGeometry(15, 15, 106, 8);
+  cylUV(g, 15, 106); g.rotateY(Math.PI/8); g.scale(1.55, 1, 0.95);
+  c.bldg[V].push(colored(g, 0xffffff).translate(cx, y + 53, cz - 9));
+  for(let k=0;k<9;k++)
+    lmBand(c, cx, cz - 9, y + 8 + k*11, 46, 28, 1.2, 0x8f959c);
+  y += 106;
+  lmBand(c, cx, cz - 9, y, 42, 26, 3, T);
+  const b = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 8),
+    new THREE.MeshBasicMaterial({color:0xff4444}));
+  b.position.set(cx, y + 5, cz - 9); cityGroup.add(b); beacons.push(b);
+  addSolid(cx, cz, 48, 50);
+}
+/* The UN Secretariat: a green glass slab with two blank ends. No windows at
+ * all in the narrow sides — that is the entire building, and the reason it
+ * still looks like nothing else on the river seventy years on. */
+function unSecretariat(c, cx, cz){
+  const V = 3, W = 38, DP = 11, H = 78;
+  let y = CURB;
+  lmMass(c, V, cx, cz, y, W, DP, H);
+  for(const sx of [-1, 1])
+    lmBand(c, cx + sx*(W/2 + 0.4), cz, y, 1.4, DP + 1.2, H, 0xd8d4c8);
+  lmBand(c, cx, cz, y + H, W + 1.4, DP + 1.4, 2.2, 0xb9b5aa);
+  // the General Assembly alongside, low and swept, with the dome on it
+  c.roof.push(colored(new THREE.BoxGeometry(26, 15, 20), 0xe0dccf)
+                .translate(cx, y + 7.5, cz + 16));
+  c.roof.push(colored(new THREE.CylinderGeometry(5.5, 5.5, 3, 14), 0xd2cec2)
+                .translate(cx, y + 16.5, cz + 16));
+  c.roof.push(colored(new THREE.SphereGeometry(5.5, 14, 7, 0, 6.2832, 0, 1.1), 0xd8d4c8)
+                .translate(cx, y + 18, cz + 16));
+  addSolid(cx, cz, W, DP);
+  addSolid(cx, cz + 16, 26, 20);
+}
+/* The Woolworth Building: the Cathedral of Commerce. A gothic tower in cream
+ * terracotta with turrets on the corners of the setback and a green copper
+ * roof over the lot — it was the tallest in the world for seventeen years and
+ * it does not look like an office block from any angle. */
+function woolworth(c, cx, cz){
+  const V = 1, T = TRIM[1], CU = 0x4e8f78, STONE = 0xcfc4ad;
+  let y = CURB;
+  lmMass(c, V, cx, cz, y, 40, 36, 26);                       // the U-shaped base
+  lmBand(c, cx, cz, y + 26 - 0.8, 41.4, 37.4, 1.6, T);
+  y += 26;
+  lmMass(c, V, cx, cz, y, 20, 20, 62);                       // the tower
+  for(let k=0;k<4;k++) for(const sx of [-1, 1])              // gothic piers on it
+    lmBand(c, cx + sx*(9.6), cz - 7 + k*4.7, y, 1.0, 1.6, 62, T);
+  for(let k=0;k<4;k++) for(const sz of [-1, 1])
+    lmBand(c, cx - 7 + k*4.7, cz + sz*9.6, y, 1.6, 1.0, 62, T);
+  // the turrets at the corners of the setback, each with its own copper cap
+  for(const sx of [-1, 1]) for(const sz of [-1, 1]){
+    const tx = cx + sx*13, tz = cz + sz*13;
+    c.roof.push(colored(new THREE.BoxGeometry(5, 22, 5), STONE).translate(tx, y + 11, tz));
+    c.roof.push(colored(new THREE.ConeGeometry(3.4, 9, 4), CU).translate(tx, y + 26.5, tz));
+  }
+  y += 62;
+  lmBand(c, cx, cz, y, 22, 22, 2.4, T);
+  y += 2.4;
+  for(let k=0;k<3;k++){                                      // the crown, stepping in
+    const s = 18 - k*4;
+    c.roof.push(colored(new THREE.BoxGeometry(s, 6, s), STONE).translate(cx, y + 3 + k*6, cz));
+  }
+  y += 18;
+  c.roof.push(colored(new THREE.ConeGeometry(7, 18, 4), CU).translate(cx, y + 9, cz));
+  c.roof.push(colored(new THREE.CylinderGeometry(0.3, 0.9, 10, 6), CU).translate(cx, y + 23, cz));
+  addSolid(cx, cz, 40, 36);
+}
+/* The Guggenheim: a white spiral that gets wider as it goes up, which is the
+ * opposite of every other building in this city and the reason you cannot
+ * mistake it for one. */
+function guggenheim(c, cx, cz){
+  const WH = 0xefeae0;
+  let y = CURB;
+  for(let k=0;k<6;k++){                        // the bowl, widening as it rises
+    const r0 = 11 + k*1.3, r1 = 11 + (k + 1)*1.3;
+    c.roof.push(colored(new THREE.CylinderGeometry(r1, r0, 4.4, 20), k % 2 ? WH : 0xe4dfd4)
+                  .translate(cx - 6, y + 2.2 + k*4.4, cz));
+  }
+  y += 26.4;
+  c.roof.push(colored(new THREE.CylinderGeometry(18.2, 18.2, 1.6, 20), 0xd8d2c6)
+                .translate(cx - 6, y + 0.8, cz));
+  c.roof.push(colored(new THREE.CylinderGeometry(14, 14, 2.2, 20), 0xcfd4d8)
+                .translate(cx - 6, y + 2.6, cz));            // the glass dome over the ramp
+  // the small rotunda and the flat slab behind, which is the rest of it
+  c.roof.push(colored(new THREE.CylinderGeometry(7, 6, 17, 16), WH).translate(cx + 13, CURB + 8.5, cz - 9));
+  c.roof.push(colored(new THREE.BoxGeometry(16, 20, 26), WH).translate(cx + 12, CURB + 10, cz + 8));
+  addSolid(cx - 6, cz, 36, 36);
+  addSolid(cx + 12, cz + 4, 18, 34);
+}
 const LANDMARKS = { '11|23': empireState, '13|21': chrysler,
-                    '10|30': oneWTC,      '11|25': flatiron };
+                    '10|30': oneWTC,      '11|25': flatiron,
+                    '11|20': rockefeller, '12|20': stPatricks,
+                    '12|19': parkAve432,  '13|19': citicorp,
+                    '12|21': grandCentral,'14|21': unSecretariat,
+                    '12|30': woolworth,   '13|14': guggenheim };
 
 function setbackTower(cx, cz, tiers, mastH, variant){
   const c = chunkOf(cx, cz);
@@ -4674,6 +4990,18 @@ function carGeoSub(col){
       D.push(colored(new THREE.BoxGeometry(0.12, 0.86, 0.66), 0x121821).translate(dx, 1.72, dz));
       D.push(colored(new THREE.BoxGeometry(0.12, 2.10, 0.07), 0xd8ae2c)
                .translate(dx, 1.15, dz - h*0.44));                      // the closing edge
+      /* and the inside of the leaf, which is what you are looking at for the
+       * whole run between two stations: a pale skin, the window in a frame,
+       * the red band across it and the route bullet under that */
+      const ix = s*(CAR_W/2 - 0.06);
+      D.push(colored(new THREE.BoxGeometry(0.06, 2.06, 0.88), 0xb4bac1).translate(ix, 1.15, dz));
+      D.push(colored(new THREE.BoxGeometry(0.07, 0.94, 0.74), 0x8f959c).translate(ix, 1.72, dz));
+      D.push(colored(new THREE.BoxGeometry(0.08, 0.84, 0.64), 0x121821).translate(ix, 1.72, dz));
+      D.push(colored(new THREE.BoxGeometry(0.09, 0.08, 0.54), 0xb3221f).translate(ix, 1.34, dz));
+      D.push(colored(new THREE.BoxGeometry(0.09, 0.05, 0.54), 0xe8e4dc).translate(ix, 1.26, dz));
+      D.push(colored(new THREE.CylinderGeometry(0.11, 0.11, 0.05, 12), col)
+               .rotateZ(Math.PI/2).translate(ix - s*0.02, 0.98, dz));
+      D.push(colored(new THREE.BoxGeometry(0.07, 0.34, 0.30), 0xa2a9b0).translate(ix, 0.42, dz));
     }
   }
   P.push(colored(new THREE.BoxGeometry(CAR_W - 0.5, 0.9, 0.06), col).translate(0, 2.5, CAR_L/2));
@@ -4688,126 +5016,253 @@ function carGeoSub(col){
  * so the moment you stepped aboard the screen went white and stayed white —
  * no floor, no ceiling, no windows, nothing to tell you you were moving.
  *
- * This is a car: a dark floor, the fluorescent strip down the middle of the
- * ceiling, pale walls with the windows dark against them, the orange and
- * yellow benches along both sides, the stanchions and the grab rail. It is
- * all unlit, because there is no daylight three storeys under Seventh Avenue
- * and the car brings its own.
+ * This is a car, put together the way the real one is put together, from the
+ * floor up: rubber matting with a stainless threshold and the yellow at every
+ * doorway, then a bench of orange and yellow buckets under a wall of window,
+ * and a windscreen and a pole where each bench run ends. At the window head
+ * the wall stops going up and turns in — the shoulder — and everything you
+ * ever actually read on a train is on that slope, tipped down towards you:
+ * the card ads, the system map, and over each doorway the pair of screens
+ * with the strip map between them. One end of each side has no seats in it
+ * at all, because that is where a wheelchair goes, and the ends of the car
+ * are bulkheads with a storm door through to the next one.
+ *
+ * It is all unlit geometry, because there is no daylight three storeys under
+ * Seventh Avenue and the car brings its own.
  */
 function carInnerGeo(lineCol){
   const P = [];
   const W = CAR_W - 0.20, HW = W/2, H = CAR_H, L = CAR_L - 0.26, HL = L/2, y0 = 0.30;
+  const FY = y0 + 0.10;                     // the top of the floor, where you stand
   const DOORZ = [-5.2, 0, 5.2], DHW = 1.05;
   // the four stretches of wall between the doorways: seats below, windows in
-  // the middle, advertising above, which is how the whole side is divided up
+  // the middle, and the shoulder over the top, which is how a side is divided
   const SECT = [[-HL + 0.25, -DHW - 5.2], [-5.2 + DHW, -DHW],
                 [DHW, 5.2 - DHW], [5.2 + DHW, HL - 0.25]];
+  // the two ends left open for a wheelchair, one a side, diagonally opposite
+  const isOpen = (s, i) => (s < 0 ? i === 0 : i === 3);
+  const atDoor = z => DOORZ.some(dz => Math.abs(z - dz) < DHW + 0.12);
+
+  /* The shoulder. A subway car is not a shoebox: the wall runs up to the head
+   * of the window and then rakes inward to meet the ceiling, and the cards and
+   * the light are on the rake. Everything mounted there is placed by two
+   * numbers — u, how far along the slope, and d, how far proud of it. */
+  const SH_Y0 = 2.62, SH_Y1 = 3.06, SH_X0 = HW - 0.05, SH_X1 = 0.92;
+  const shLen = Math.hypot(SH_X0 - SH_X1, SH_Y1 - SH_Y0);
+  const shAng = Math.atan2(SH_X0 - SH_X1, SH_Y1 - SH_Y0);
+  const shS = Math.sin(shAng), shC = Math.cos(shAng);
+  const shMx = (SH_X0 + SH_X1)/2, shMy = (SH_Y0 + SH_Y1)/2;
+
   const box = (w, h, d, col, x, y, z) =>
     P.push(colored(new THREE.BoxGeometry(w, h, d), col).translate(x || 0, y, z || 0));
   const tube = (r, len, col, x, y, z, along) => {
     const g = colored(new THREE.CylinderGeometry(r, r, len, 6), col);
     if(along === 'z') g.rotateX(Math.PI/2);
+    if(along === 'x') g.rotateZ(Math.PI/2);
     P.push(g.translate(x || 0, y, z || 0));
   };
+  const disc = (r, t, col, x, y, z) =>                      // a route bullet, flat to a wall
+    P.push(colored(new THREE.CylinderGeometry(r, r, t, 14), col)
+             .rotateZ(Math.PI/2).translate(x, y, z));
+  const shPanel = (s, u, d, h, len, col, z) => {
+    const g = colored(new THREE.BoxGeometry(0.035, h, len), col);
+    g.rotateZ(s*shAng);
+    P.push(g.translate(s*(shMx - u*shS - d*shC), shMy + u*shC - d*shS, z));
+  };
 
-  // ---- floor: rubber matting, a worn centre lane, yellow at every door ----
+  // ---- floor: matting worn down the middle, stainless and yellow at doors --
   box(W, 0.10, L, 0x2c3138, 0, y0, 0);
-  box(W - 1.5, 0.05, L, 0x23272d, 0, y0 + 0.055, 0);
-  for(const dz of DOORZ) for(const s of [-1, 1])
-    box(0.55, 0.03, DHW*2 - 0.1, 0xd8ae2c, s*(HW - 0.32), y0 + 0.075, dz);
+  box(W - 1.5, 0.045, L, 0x23272d, 0, FY + 0.02, 0);            // the walking lane
+  for(let k=-7;k<=7;k++)
+    box(W - 0.06, 0.02, 0.035, 0x21252b, 0, FY + 0.012, k*1.15);   // the seams in it
+  for(const dz of DOORZ) for(const s of [-1, 1]){
+    box(0.70, 0.05, DHW*2 + 0.12, 0x9aa1a8, s*(HW - 0.32), FY, dz);      // threshold plate
+    box(0.46, 0.035, DHW*2 - 0.04, 0xd8ae2c, s*(HW - 0.38), FY + 0.03, dz);  // the yellow
+    box(0.11, 0.05, DHW*2 + 0.12, 0x14181d, s*(HW - 0.02), FY + 0.02, dz);   // and the gap
+  }
 
   // ---- the sides ---------------------------------------------------------
   for(const s of [-1, 1]){
-    const wx = s*(HW - 0.03);
-    for(const [z0, z1] of SECT){
-      const len = z1 - z0, mid = (z0 + z1)/2;
+    const wx = s*(HW - 0.03), gx = s*(HW - 0.08);
+    for(let si=0; si<SECT.length; si++){
+      const [z0, z1] = SECT[si], len = z1 - z0, mid = (z0 + z1)/2;
+      const open = isOpen(s, si);
       // wall only between the doorways — it used to run straight across them,
       // so an open door showed you the inside of the wall
-      box(0.07, H - y0 - 0.30, len, 0xb9bec4, wx, (y0 + H)/2 + 0.03, mid);
+      box(0.07, SH_Y0 - FY - 0.08, len, 0xb9bec4, wx, (FY + 0.08 + SH_Y0)/2, mid);
       box(0.05, 0.55, len, 0x9aa1a8, s*(HW - 0.07), y0 + 0.30, mid);    // skirting
-      // windows, in panes with a mullion between them
-      const panes = Math.max(1, Math.round(len/1.5));
+
+      /* Windows stop half a metre short of a doorway, because the panel of
+       * blank wall beside every door is where the intercom and the brake and
+       * the route bullet live, and there is nowhere else to put them. */
+      const p0 = atDoor(z0) ? 0.50 : 0.16, p1 = atDoor(z1) ? 0.50 : 0.16;
+      const wz0 = z0 + p0, wz1 = z1 - p1, wlen = wz1 - wz0;
+      const panes = Math.max(1, Math.round(wlen/1.15));
       for(let k=0;k<panes;k++){
-        const pl = len/panes;
-        box(0.045, 0.94, pl - 0.16, 0x121821, s*(HW - 0.08), 2.02, z0 + pl*(k + 0.5));
-        if(k) box(0.06, 1.02, 0.16, 0xa8aeb5, s*(HW - 0.08), 2.02, z0 + pl*k);
+        const pl = wlen/panes, cz = wz0 + pl*(k + 0.5);
+        box(0.045, 0.94, pl - 0.16, 0x121821, gx, 2.02, cz);             // the glass
+        box(0.035, 0.10, pl - 0.24, 0x1d2732, s*(HW - 0.10), 2.20, cz);  // what it reflects
+        box(0.035, 0.06, pl - 0.16, 0x3a4149, s*(HW - 0.10), 1.58, cz);  // rubber, top
+        box(0.035, 0.06, pl - 0.16, 0x3a4149, s*(HW - 0.10), 2.46, cz);  // and bottom
+        if(k) box(0.06, 1.02, 0.16, 0xa8aeb5, gx, 2.02, wz0 + pl*k);     // mullion
       }
-      box(0.06, 0.09, len, 0x8f959c, s*(HW - 0.08), 1.50, mid);        // window sill
-      box(0.06, 0.08, len, 0x8f959c, s*(HW - 0.08), 2.55, mid);        // and head
+      box(0.06, 0.09, wlen, 0x8f959c, gx, 1.50, (wz0 + wz1)/2);          // window sill
+      box(0.06, 0.08, wlen, 0x8f959c, gx, 2.55, (wz0 + wz1)/2);          // and head
 
-      /* the bench: a run of moulded buckets, in blocks of orange and yellow.
-       * Everybody remembers the colours and nobody remembers that they come
-       * in blocks rather than one continuous stripe. */
-      const seats = Math.max(2, Math.round(len/0.52));
-      for(let k=0;k<seats;k++){
-        const sl = len/seats, cz = z0 + sl*(k + 0.5);
-        const col = (k + (s > 0 ? 0 : 1)) % 2 ? 0xdc7220 : 0xe2b534;
-        box(0.60, 0.09, sl - 0.06, col, s*(HW - 0.36), y0 + 0.46, cz);   // pan
-        box(0.08, 0.46, sl - 0.06, col, s*(HW - 0.09), y0 + 0.74, cz);   // back
-        box(0.62, 0.05, 0.05, 0x6f767d, s*(HW - 0.35), y0 + 0.50, cz - sl/2);
+      if(!open){
+        /* the bench: a run of moulded buckets, in blocks of orange and yellow.
+         * Everybody remembers the colours and nobody remembers that they come
+         * in blocks rather than one continuous stripe. */
+        const seats = Math.max(2, Math.round(len/0.52));
+        for(let k=0;k<seats;k++){
+          const sl = len/seats, cz = z0 + sl*(k + 0.5);
+          const col = (k + (s > 0 ? 0 : 1)) % 2 ? 0xdc7220 : 0xe2b534;
+          box(0.60, 0.09, sl - 0.06, col, s*(HW - 0.36), y0 + 0.46, cz);      // pan
+          box(0.52, 0.05, sl - 0.16, col, s*(HW - 0.32), y0 + 0.51, cz);      // its dish
+          box(0.08, 0.46, sl - 0.06, col, s*(HW - 0.09), y0 + 0.74, cz);      // back
+          box(0.12, 0.08, sl - 0.06, col, s*(HW - 0.11), y0 + 0.99, cz);      // its roll
+          box(0.62, 0.05, 0.05, 0x6f767d, s*(HW - 0.35), y0 + 0.50, cz - sl/2);
+        }
+        box(0.55, 0.30, len, 0x3a4046, s*(HW - 0.33), y0 + 0.24, mid);        // under-seat
+        // the heater under the bench, which is a recess full of slats
+        box(0.05, 0.18, len - 0.36, 0x1e2227, s*(HW - 0.60), y0 + 0.25, mid);
+        const nsl = Math.max(2, Math.round((len - 0.36)/0.28));
+        for(let k=0;k<nsl;k++)
+          box(0.06, 0.155, 0.06, 0x565d64, s*(HW - 0.605), y0 + 0.25,
+              z0 + 0.18 + ((len - 0.36)/nsl)*(k + 0.5));
+        tube(0.045, 0.42, 0xc4cad0, s*(HW - 0.62), y0 + 0.24, z0 + 0.2, 'z');
+      } else {
+        /* no bench here: a leaning pad, two rails to hold on to and the blue
+         * sign that says what the space is for */
+        box(0.10, 0.09, len - 0.3, 0xb9bec4, s*(HW - 0.10), y0 + 0.60, mid);
+        tube(0.05, len - 0.3, 0xc9ced4, s*(HW - 0.22), y0 + 0.62, mid, 'z');
+        tube(0.05, len - 0.3, 0xc9ced4, s*(HW - 0.22), y0 + 1.04, mid, 'z');
+        box(0.05, 0.34, 0.34, 0x1b4fa0, gx, 1.94, mid);                       // the sign
+        box(0.04, 0.24, 0.24, 0xeef1f5, s*(HW - 0.10), 1.94, mid);
+        box(0.16, 0.60, 0.86, 0xdc7220, s*(HW - 0.14), y0 + 0.86, mid - len/2 + 0.6);
+        box(0.18, 0.06, 0.86, 0x6f767d, s*(HW - 0.15), y0 + 0.55, mid - len/2 + 0.6);
       }
-      box(0.55, 0.30, len, 0x3a4046, s*(HW - 0.33), y0 + 0.24, mid);     // under-seat
-      box(0.05, 0.16, len - 0.4, 0x2a2f35, s*(HW - 0.60), y0 + 0.24, mid);  // heater grille
-      tube(0.045, 0.42, 0xc4cad0, s*(HW - 0.62), y0 + 0.24, z0 + 0.2, 'z');
+
+      /* the windscreen where a bench run meets a doorway — a framed panel and
+       * the pole on the end of it, which is the thing everybody leans on */
+      for(const e of [0, 1]){
+        const ez = e ? z1 : z0, dir = e ? -1 : 1;
+        if(!atDoor(ez)) continue;
+        const fz = ez + dir*0.04;
+        box(0.72, 1.58, 0.06, 0x9aa1a8, s*(HW - 0.36), FY + 0.79, fz);        // frame
+        box(0.62, 1.16, 0.03, 0x2b333c, s*(HW - 0.36), FY + 1.02, fz + dir*0.03);
+        tube(0.05, 1.58, 0xc9ced4, s*(HW - 0.70), FY + 0.79, fz);             // its pole
+        tube(0.05, 0.70, 0xc9ced4, s*(HW - 0.36), FY + 1.58, fz, 'x');        // and grab
+      }
     }
-    /* the card ads along the top of the wall, which run the whole length of
-     * the car over the doors and everything else */
-    const cards = 13;
+
+    /* the card ads, on the shoulder over the windows, running the length of
+     * the car — except over a doorway, where the screens go instead */
+    const cards = 13, cl = (L - 0.5)/cards, mapK = s < 0 ? 4 : 8;
+    const CARD_H = shLen - 0.25, CARD_U = -0.075;   // clear of the light at the top
     for(let k=0;k<cards;k++){
-      const cl = (L - 0.5)/cards, cz = -HL + 0.25 + cl*(k + 0.5);
-      box(0.05, 0.42, cl - 0.07, 0xe9e6de, s*(HW - 0.08), 2.86, cz);
+      const cz = -HL + 0.25 + cl*(k + 0.5);
+      if(atDoor(cz)) continue;
+      /* A card stops short of the top of the slope, because the top of the
+       * slope is where the light is. Cover it and the car has no lamp in it. */
+      if(k === mapK){
+        // the system map, in the same frame as an ad because that is where it is
+        shPanel(s, CARD_U, 0.02, CARD_H, cl - 0.07, 0xf2efe6, cz);
+        shPanel(s, CARD_U, 0.04, CARD_H - 0.09, cl - 0.22, 0x35506b, cz);
+        const LC = [0xee352e, 0x00933c, 0xb933ad, 0x0039a6, 0xff6319, 0xfccc0a];
+        for(let m=0;m<LC.length;m++)
+          shPanel(s, CARD_U - 0.11 + m*0.043, 0.055, 0.022, cl - 0.42, LC[m], cz);
+        continue;
+      }
+      shPanel(s, CARD_U, 0.02, CARD_H, cl - 0.07, 0xe9e6de, cz);
       const acc = [0xc3122e, 0x1f4f8a, 0x2f7a4a, 0xd8ae2c, 0x6a3f8f][k % 5];
-      box(0.04, 0.15, cl - 0.30, acc, s*(HW - 0.10), 2.80, cz);
+      shPanel(s, CARD_U - 0.06, 0.04, 0.13, cl - 0.30, acc, cz);
+      shPanel(s, CARD_U + 0.06, 0.04, 0.05, cl - 0.36, 0x30363d, cz);
+      shPanel(s, CARD_U + 0.12, 0.04, 0.035, cl - 0.52, 0x30363d, cz);
     }
-    // the surround of each doorway: a header over it and a jamb either side
+    // the shoulder itself, and the tube that runs the length of the top of it
+    shPanel(s, 0, 0, shLen, L, 0xc2c7cd, 0);
+    shPanel(s, shLen/2 - 0.075, 0.03, 0.15, L - 0.5, 0xfbf9f2, 0);       // diffuser
+    shPanel(s, shLen/2 - 0.005, 0.055, 0.04, L - 0.5, 0xaeb4bb, 0);      // its lip
+    shPanel(s, -shLen/2 + 0.03, 0.02, 0.06, L, 0x9aa1a8, 0);             // and its bottom edge
+
+    // the surround of each doorway, and what is hung around it
     for(const dz of DOORZ){
-      box(0.09, 0.35, DHW*2 + 0.2, 0x8f959c, wx, 2.55, dz);
+      box(0.09, 0.36, DHW*2 + 0.2, 0x8f959c, wx, 2.44, dz);              // header
+      box(0.06, 0.05, DHW*2, 0xd8ae2c, gx, 2.26, dz);                    // yellow over it
+      for(const h of [-1, 1]){
+        box(0.09, 2.06, 0.15, 0x8f959c, wx, FY + 1.03, dz + h*(DHW + 0.07));   // jamb
+        tube(0.05, 2.06, 0xc9ced4, s*(HW - 0.17), FY + 1.03, dz + h*(DHW + 0.18));
+        // the blank panel outboard of the jamb, and its furniture
+        const pz = dz + h*(DHW + 0.30);
+        disc(0.13, 0.045, 0xf0ece2, s*(HW - 0.095), 2.02, pz);
+        disc(0.105, 0.05, lineCol || 0xd8ae2c, s*(HW - 0.105), 2.02, pz);
+      }
+      // the intercom on one side of the door, the brake handle on the other
+      box(0.09, 0.26, 0.20, 0xb3221f, s*(HW - 0.10), 1.66, dz + DHW + 0.30);
+      box(0.10, 0.07, 0.14, 0xe8e4dc, s*(HW - 0.11), 1.78, dz + DHW + 0.30);
+      box(0.09, 0.30, 0.22, 0x8f959c, s*(HW - 0.10), 1.66, dz - DHW - 0.30);
+      box(0.10, 0.13, 0.10, 0xb3221f, s*(HW - 0.11), 1.62, dz - DHW - 0.30);
+      /* over the doorway: the two screens and, between them, the strip map for
+       * this line with a lit dot at the stop you are coming to */
+      shPanel(s, CARD_U, 0.02, CARD_H, DHW*2 + 0.10, 0x13171d, dz);
       for(const h of [-1, 1])
-        box(0.09, 2.08, 0.15, 0x8f959c, wx, y0 + 1.14, dz + h*(DHW + 0.07));
-      box(0.06, 0.05, DHW*2, 0xd8ae2c, s*(HW - 0.09), 2.36, dz);
+        shPanel(s, CARD_U + 0.04, 0.045, CARD_H - 0.16, 0.62, 0x2f5f8c, dz + h*0.52);
+      for(let k=-3;k<=3;k++)
+        shPanel(s, CARD_U - 0.10, 0.045, 0.055, 0.045,
+                k === 1 ? 0x3ad07a : 0xe8a92c, dz + k*0.07);
     }
-    // a framed map, and the red intercom by a door
-    box(0.05, 0.60, 1.35, 0xf2efe6, s*(HW - 0.085), 2.86, -2.6);
-    box(0.04, 0.46, 1.15, 0x35506b, s*(HW - 0.105), 2.86, -2.6);
-    for(const dz of [-5.2, 5.2])
-      box(0.09, 0.24, 0.18, 0xb3221f, s*(HW - 0.10), 1.62, dz + DHW + 0.22);
   }
 
-  // ---- ceiling: two light coves, the duct between them, and the rails ----
-  box(W, 0.10, L, 0xc6cbd0, 0, H - 0.20, 0);
-  for(const s of [-1, 1]){
-    box(0.52, 0.07, L - 1.0, 0xf8f6ee, s*0.78, H - 0.28, 0);            // diffuser
-    box(0.60, 0.06, L - 1.0, 0xaeb4bb, s*0.78, H - 0.235, 0);           // its housing
-  }
-  box(0.62, 0.16, L - 1.4, 0xb4b9bf, 0, H - 0.30, 0);                   // the duct
+  // ---- ceiling: the flat panel, the duct, the rails and the straps --------
+  box(SH_X1*2 + 0.06, 0.09, L, 0xc9ced4, 0, SH_Y1 + 0.045, 0);
+  box(0.62, 0.16, L - 1.4, 0xb4b9bf, 0, SH_Y1 - 0.06, 0);                // the duct
   for(let k=-4;k<=4;k++)
-    box(0.46, 0.04, 0.34, 0x8d939a, 0, H - 0.38, k*1.7);                // vents
+    box(0.46, 0.04, 0.34, 0x8d939a, 0, SH_Y1 - 0.15, k*1.7);             // its vents
   for(const s of [-1, 1]){
-    tube(0.045, L - 0.9, 0xc9ced4, s*0.64, H - 0.62, 0, 'z');           // grab rail
+    for(const z of [-4.4, 4.4])                                          // speakers
+      box(0.22, 0.045, 0.22, 0x6f767d, s*0.55, SH_Y1 - 0.02, z);
+    tube(0.10, 0.09, 0x2a2f36, s*0.30, SH_Y1 - 0.04, s*6.2);             // and a camera
+  }
+  const RY = 2.46;
+  for(const s of [-1, 1]){
+    tube(0.045, L - 0.9, 0xc9ced4, s*0.64, RY, 0, 'z');                  // grab rail
+    for(const z of [-6.6, -3.3, 0, 3.3, 6.6])                            // its hangers
+      box(0.05, SH_Y1 - RY, 0.05, 0xb0b6bd, s*0.64, (RY + SH_Y1)/2, z);
     // and the straps hanging off it
     for(let k=-5;k<=5;k++){
       const hz = k*1.45;
-      box(0.03, 0.24, 0.05, 0x6d737a, s*0.64, H - 0.80, hz);
-      box(0.05, 0.13, 0.16, 0x2e343a, s*0.64, H - 0.98, hz);
+      box(0.03, 0.22, 0.05, 0x6d737a, s*0.64, RY - 0.16, hz);
+      box(0.05, 0.13, 0.16, 0x2e343a, s*0.64, RY - 0.34, hz);
     }
   }
-  // stanchions, at the doors and between the seat runs
-  for(const dz of DOORZ) for(const s of [-1, 1])
-    tube(0.05, H - y0 - 0.34, 0xc9ced4, s*(HW - 0.55), (y0 + H)/2 + 0.05, dz + DHW*0.85);
+  // poles: one in the aisle at each end doorway, two more amidships. Nothing
+  // goes at the very centre of the car, which is where your head is.
+  for(const dz of [-5.2, 5.2])
+    tube(0.05, SH_Y1 - FY, 0xc9ced4, 0, (FY + SH_Y1)/2, dz);
   for(const s of [-1, 1])
-    tube(0.05, H - y0 - 0.34, 0xc9ced4, s*0.64, (y0 + H)/2 + 0.05, 0);
+    tube(0.05, SH_Y1 - FY, 0xc9ced4, s*0.64, (FY + SH_Y1)/2, 0);
 
-  // ---- the bulkhead at each end, with the door through to the next car ---
+  // ---- the bulkhead at each end, with the storm door through to the next --
   for(const s of [-1, 1]){
-    box(W, H - y0 - 0.30, 0.08, 0xacb2b9, 0, (y0 + H)/2 + 0.03, s*HL);
+    box(W, SH_Y1 - FY - 0.08, 0.08, 0xacb2b9, 0, (FY + 0.08 + SH_Y1)/2, s*HL);
     box(0.92, 1.98, 0.05, 0x39404a, 0, y0 + 1.02, s*(HL - 0.04));       // the door
+    box(0.80, 0.06, 0.06, 0x8f959c, 0, y0 + 0.10, s*(HL - 0.05));       // its kick plate
     box(0.66, 0.72, 0.04, 0x131a23, 0, y0 + 1.52, s*(HL - 0.06));       // its window
-    box(0.10, 1.98, 0.05, 0xd8ae2c, s*0.42, y0 + 1.02, s*(HL - 0.05));
-    // the strip sign over it, showing the route
-    box(1.9, 0.30, 0.05, 0x0d1016, 0, y0 + 2.30, s*(HL - 0.05));
-    box(0.24, 0.22, 0.04, lineCol || 0xe8ae2c, -0.72, y0 + 2.30, s*(HL - 0.07));
+    box(0.72, 0.05, 0.05, 0x9aa1a8, 0, y0 + 1.90, s*(HL - 0.06));
+    box(0.10, 1.98, 0.05, 0xd8ae2c, s*0.42, y0 + 1.02, s*(HL - 0.05));  // the closing edge
+    box(0.16, 0.09, 0.09, 0xb3221f, -0.30, y0 + 1.02, s*(HL - 0.08));   // the red handle
+    box(0.44, 0.13, 0.04, 0xb3221f, -0.24, y0 + 2.02, s*(HL - 0.06));   // EMERGENCY EXIT
+    box(0.40, 0.09, 0.03, 0xe8e4dc, -0.24, y0 + 2.02, s*(HL - 0.075));
+    box(0.34, 0.10, 0.04, 0x9aa1a8, 0.76, y0 + 2.02, s*(HL - 0.06));    // the car number
+    for(const h of [-1, 1])                                             // corner poles
+      tube(0.05, SH_Y1 - FY, 0xc9ced4, h*1.02, (FY + SH_Y1)/2, s*(HL - 0.18));
+    box(1.10, 0.06, 0.30, 0x8d939a, 0, SH_Y1 - 0.02, s*(HL - 0.55));    // the air return
+    // the strip sign over the door, showing the route
+    box(1.9, 0.30, 0.05, 0x0d1016, 0, y0 + 2.40, s*(HL - 0.05));
+    box(0.24, 0.22, 0.04, lineCol || 0xe8ae2c, -0.72, y0 + 2.40, s*(HL - 0.07));
     for(let k=0;k<5;k++)
-      box(0.16, 0.10, 0.04, 0xe8a92c, -0.30 + k*0.24, y0 + 2.30, s*(HL - 0.07));
+      box(0.16, 0.10, 0.04, 0xe8a92c, -0.30 + k*0.24, y0 + 2.40, s*(HL - 0.07));
   }
   return mergeGeos(P);
 }
@@ -4829,10 +5284,11 @@ tasks.push(() => {
       for(let c=0;c<TRAIN_N;c++){
         const g = new THREE.Group();
         const leaves = new THREE.Mesh(veh.doors, carDoorMat);
-        g.add(new THREE.Mesh(veh.body, vcMat), new THREE.Mesh(innerGeo, carInnerMat), leaves);
+        const inner = new THREE.Mesh(innerGeo, carInnerMat);
+        g.add(new THREE.Mesh(veh.body, vcMat), inner, leaves);
         g.visible = false;
         subGroup.add(g);
-        t.cars.push({ g, leaves, off: (c - (TRAIN_N-1)/2) * (CAR_L + CAR_GAP) });
+        t.cars.push({ g, leaves, inner, off: (c - (TRAIN_N-1)/2) * (CAR_L + CAR_GAP) });
       }
       trains.push(t);
     }
@@ -4888,13 +5344,27 @@ function updateSubway(dt){
       const p = t.pos + c.off;
       if(ax === 'z'){ c.g.position.set(lat, RAIL_Y + 0.44, p); c.g.rotation.y = 0; }
       else          { c.g.position.set(p, RAIL_Y + 0.44, lat); c.g.rotation.y = Math.PI/2; }
+      /* the inside of a car is ten thousand triangles, and from the far end of
+       * a tunnel it is four dark windows — so only the cars near enough to see
+       * into are carrying one, and the one you are riding in always is */
+      const dx = c.g.position.x - player.x, dz = c.g.position.z - player.z;
+      c.inner.visible = (ride && ride.car === c) || dx*dx + dz*dz < 4900;
     }
   }
   if(ride){
-    const c = ride.car, p = c.g.position;
-    player.x = p.x; player.z = p.z;
-    player.y = RAIL_Y + 0.44 + 0.55;
+    /* Where you are is the car's transform plus where you have walked to
+     * inside it. The camera is set here rather than left to updateWalking,
+     * which runs before this and would therefore be placing it from where the
+     * train was last frame — a third of a metre back at line speed. */
+    const c = ride.car, p = c.g.position, a = c.g.rotation.y;
+    const ca = Math.cos(a), sa = Math.sin(a);
+    player.x = p.x + ride.lx*ca + ride.lz*sa;
+    player.z = p.z - ride.lx*sa + ride.lz*ca;
+    player.y = p.y + (ride.seat ? CAR_SEAT_Y : CAR_FLOOR_Y);
     player.vy = 0; player.onGround = true;
+    camera.position.set(player.x,
+                        player.y + (ride.seat ? CAR_SEAT_EYE : EYE),
+                        player.z);
   }
 }
 // the door you are standing at, if a train is holding one open beside you
@@ -4911,22 +5381,86 @@ function trainAtDoor(){
   }
   return null;
 }
+/* Riding used to pin you to the exact middle of the car for the whole journey:
+ * you could not walk down it, you could not stand at a door, and you could not
+ * sit on any of the seats that had just been built for you. So a ride now
+ * carries a position of its own — lx across the car, lz along it — and you are
+ * placed at the car's transform plus that, which is the only way to walk about
+ * inside something that is itself doing twenty-four metres a second.
+ *
+ * The aisle is the gap between the two benches. At a doorway there is no bench,
+ * so you can step right out to the glass and watch the tunnel go past. */
+/* Seated numbers are set against the window, not against a person: the sill is
+ * at 1.50 and the glass runs to 2.49, so an eye at 1.71 is looking out of it
+ * rather than at the sill, and is a good half metre below where it was when
+ * you were standing. And 0.92 across is on the seat, not perched on its lip. */
+const CAR_FLOOR_Y = 0.40, CAR_SEAT_Y = 0.805, CAR_SEAT_EYE = 0.90;
+const CAR_AISLE_HW = 0.62, CAR_DOOR_HW = 1.14, CAR_END = 8.05;
+const CAR_SIT_X = 0.92, CAR_DOORZ = [-5.2, 0, 5.2], CAR_DHW = 1.05;
+// the four bench runs in the car's own frame, the same split the interior is
+// built from — and one end of each side is the open space with no seats in it
+const CAR_BENCH = [[-8.32, -6.25], [-4.15, -1.05], [1.05, 4.15], [6.25, 8.32]];
+const benchHere = (s, si) => !(s < 0 ? si === 0 : si === 3);
+function insideCar(lx, lz){
+  if(Math.abs(lz) > CAR_END) return false;
+  let hw = CAR_AISLE_HW;
+  for(const dz of CAR_DOORZ)
+    if(Math.abs(lz - dz) < CAR_DHW - 0.14){ hw = CAR_DOOR_HW; break; }
+  return Math.abs(lx) <= hw;
+}
+// try the whole step, then each axis on its own, so you slide along a bench
+// front instead of sticking on it
+function moveInCar(lx, lz, nx, nz){
+  if(insideCar(nx, nz)) return [nx, nz];
+  if(insideCar(nx, lz)) return [nx, lz];
+  if(insideCar(lx, nz)) return [lx, nz];
+  return [lx, lz];
+}
+// the bench you are standing beside, nearer side first — because one end of
+// each side is the open space, and there the only seat is the one behind you
+function benchBeside(lx, lz){
+  const near = lx >= 0 ? 1 : -1;
+  for(const s of [near, -near])
+    for(let si=0; si<CAR_BENCH.length; si++)
+      if(benchHere(s, si) && lz > CAR_BENCH[si][0] + 0.25
+                          && lz < CAR_BENCH[si][1] - 0.25) return s;
+  return 0;
+}
+function sitDown(){
+  const s = benchBeside(ride.lx, ride.lz);
+  if(s){
+    ride.seat = s;
+    ride.lx = s*CAR_SIT_X;
+    // and turn to face across the car, because that is what sitting on a
+    // bench down one side of a subway car means
+    const a = ride.car.g.rotation.y;
+    player.yaw = Math.atan2(s*Math.cos(a), -s*Math.sin(a));
+    player.pitch = 0;
+    toast('Sat down — E to stand up');
+    return true;
+  }
+  toast('Stand beside a bench to sit down');
+  return false;
+}
+function standUp(){ ride.seat = 0; ride.lx = 0; }
 function boardTrain(){
   const hit = trainAtDoor();
   if(!hit) return false;
   ride = hit;
-  toast('Boarded the ' + hit.train.line.bullet + ' — right-click again to get off');
+  ride.lx = 0; ride.lz = 0; ride.seat = 0;
+  toast('Boarded the ' + hit.train.line.bullet + ' — walk about, E to sit down');
   return true;
 }
 function alightTrain(){
   const t = ride.train;
   if(!t.doors){ toast('Wait for the next stop'); return; }
-  const c = ride.car, lat = t.line.at;
-  // step out onto the platform, which is on the inboard side of the track
-  player.x = t.line.ax === 'z' ? lat + (t.track > 0 ? PLAT_HW - 1.2 : -PLAT_HW + 1.2)
-                               : c.g.position.x;
-  player.z = t.line.ax === 'z' ? c.g.position.z
-                               : lat + (t.track > 0 ? PLAT_HW - 1.2 : -PLAT_HW + 1.2);
+  const lat = t.line.at;
+  /* Step sideways onto the platform, which is on the inboard side of the
+   * track, and keep where you had walked to along the car — get off at the
+   * back of the train and you are at the back of the platform, not magicked
+   * back to the middle of it. */
+  const edge = lat + (t.track > 0 ? PLAT_HW - 1.2 : -PLAT_HW + 1.2);
+  if(t.line.ax === 'z') player.x = edge; else player.z = edge;
   player.y = PLAT_Y; player.under = true;
   ride = null;
   toast(t.at ? t.at.name : 'Next stop');
@@ -5005,13 +5539,18 @@ tasks.push(() => {
       cityGroup.add(inst);
     }
     if(c.park.length){
-      const inst = new THREE.InstancedMesh(parkGeo, vcMat, c.park.length);
-      let sx = 0, sz = 0;
+      const inst = new THREE.InstancedMesh(parkGeo.body, vcMat, c.park.length);
+      // the glass, tyres, lamps and plates, on the same matrices but untinted
+      const trim = new THREE.InstancedMesh(parkGeo.trim, vcMat, c.park.length);
+      let sx = 0, sz = 0, x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
       inst.userData.spots = [];
       c.park.forEach(([x, z, ang], k) => {
+        if(x < x0) x0 = x;  if(x > x1) x1 = x;
+        if(z < z0) z0 = z;  if(z > z1) z1 = z;
         q.setFromAxisAngle(new THREE.Vector3(0,1,0), ang);
         v.set(x, CURB - 0.30, z);          // sits on the road, not the kerb
-        inst.setMatrixAt(k, m4.compose(v,q,s));
+        m4.compose(v,q,s);
+        inst.setMatrixAt(k, m4); trim.setMatrixAt(k, m4);
         col.setHex(rnd() < 0.13 ? 0xf5c518 : pick(PARKED_COLORS));
         inst.setColorAt(k, col);
         // remember where each one is, so you can get into it
@@ -5020,8 +5559,11 @@ tasks.push(() => {
       });
       inst.instanceColor.needsUpdate = true;
       inst.userData.cx = sx/c.park.length; inst.userData.cz = sz/c.park.length;
-      cityGroup.add(inst);
-      parkedMeshes.push(inst);
+      // a car is 4.4 long, so pad the box by its half-length either way
+      trim.userData.x0 = x0 - 2.4; trim.userData.x1 = x1 + 2.4;
+      trim.userData.z0 = z0 - 2.4; trim.userData.z1 = z1 + 2.4;
+      cityGroup.add(inst); cityGroup.add(trim);
+      parkedMeshes.push(inst); parkedTrims.push(trim);
     }
     if(c.lamp.length){
       const inst = new THREE.InstancedMesh(lampGeo, vcMat, c.lamp.length);
@@ -5171,24 +5713,132 @@ const CAR_COLORS = [0xf5c518,0xf5c518,0xf5c518,0xd9dde2,0x2f3a4a,0x8c1f1f,
                     0x1f5f3a,0x2b2b2b,0x3c6fb5,0xb5b5bd,0x6a3f8f];
 const cars = [], carMeshes = [];
 const parkedMeshes = [];         // the instanced lines of cars at every kerb
+/* and the fine half of them — glass, hubs, lamps, plates. There are some
+ * thousands of parked cars in this city and that half is twice the geometry of
+ * the other, so a block of it is only put on the card when you are near enough
+ * to make out a numberplate. Two blocks away it is four boxes and a shadow and
+ * you cannot tell the difference. */
+const parkedTrims = [];
+const PARK_TRIM_D2 = 150*150;
+/* Measured to the chunk's own extent, not to its middle. A chunk is four cells
+ * across — the better part of three hundred metres — so a chunk whose centre is
+ * far away can still have a car parked at your elbow, and testing the centre
+ * strips the hubs out of the car you are standing next to. */
+function updateParkedTrim(){
+  for(let k=0;k<parkedTrims.length;k++){
+    const m = parkedTrims[k], u = m.userData;
+    const dx = Math.max(u.x0 - player.x, 0, player.x - u.x1);
+    const dz = Math.max(u.z0 - player.z, 0, player.z - u.z1);
+    m.visible = dx*dx + dz*dz < PARK_TRIM_D2;
+  }
+}
 const CAR_COUNT = 210;
 
 function wheels(parts, hw, r, ...zs){
   for(const z of zs) for(const s of [-1, 1]){
-    const w = colored(new THREE.CylinderGeometry(r, r, 0.3, 8), 0x14171a);
-    w.rotateZ(Math.PI/2); w.translate(s*hw, r, z); parts.push(w);
+    const w = colored(new THREE.CylinderGeometry(r, r, 0.30, 10), 0x14171a);
+    w.rotateZ(Math.PI/2); parts.push(w.translate(s*hw, r, z));
+    const h = colored(new THREE.CylinderGeometry(r*0.52, r*0.52, 0.34, 8), 0x767d85);
+    h.rotateZ(Math.PI/2); parts.push(h.translate(s*hw, r, z));
+    const c = colored(new THREE.CylinderGeometry(r*0.18, r*0.18, 0.36, 6), 0x3a3f45);
+    c.rotateZ(Math.PI/2); parts.push(c.translate(s*hw, r, z));
   }
 }
+// the bigger vehicles are all one livery or a handful of cab colours, so their
+// geometry is cached too and the street shares a few copies of each
+const vehCache = new Map();
+/* A car.
+ *
+ * What was here was a box with a smaller box on top of it, which from the
+ * pavement is unmistakably a box with a smaller box on top of it — and the
+ * police car parked beside it had a bonnet, a grille, hubs and mirrors, which
+ * made every other car on the street look like a placeholder for a car.
+ *
+ * So: sills, a shoulder line, a bonnet and a boot that sit below the roof,
+ * glass with pillars standing in it rather than one dark slab, arches over the
+ * wheels, hubs in the wheels, bumpers, a grille, lamps, mirrors, shut lines,
+ * handles and a plate at each end. Geometry is cached per colour, so the two
+ * hundred cars on the street share about a dozen of these between them.
+ */
+const carGeoCache = new Map();
 function carGeo(bodyColor, taxi){
-  const parts = [];
-  parts.push(colored(new THREE.BoxGeometry(2.0, 0.85, 4.4), bodyColor).translate(0,0.75,0));
-  parts.push(colored(new THREE.BoxGeometry(1.82, 0.8, 2.3), 0x1f2a33).translate(0,1.5,-0.15));
-  for(const [dx,dz] of [[-0.95,1.4],[0.95,1.4],[-0.95,-1.4],[0.95,-1.4]]){
-    const w = colored(new THREE.CylinderGeometry(0.42,0.42,0.28,8), 0x14171a);
-    w.rotateZ(Math.PI/2); w.translate(dx,0.42,dz); parts.push(w);
+  const key = bodyColor + (taxi ? 'T' : '');
+  const hit = carGeoCache.get(key);
+  if(hit) return hit;
+  const P = [];
+  const body = bodyColor, dk = shade(bodyColor, 0.72), glass = 0x121a22,
+        tyre = 0x14171a, trim = 0x2a2f36, chrome = 0x9aa1a8;
+  const box = (w, h, d, col, y, z, x) =>
+    P.push(colored(new THREE.BoxGeometry(w, h, d), col).translate(x || 0, y, z || 0));
+  const rake = (w, h, d, col, rx, y, z) =>
+    P.push(colored(new THREE.BoxGeometry(w, h, d), col).rotateX(rx).translate(0, y, z));
+  const wheel = (x, z) => {
+    const t = colored(new THREE.CylinderGeometry(0.42, 0.42, 0.26, 10), tyre);
+    t.rotateZ(Math.PI/2); P.push(t.translate(x, 0.42, z));
+    const h = colored(new THREE.CylinderGeometry(0.24, 0.24, 0.30, 8), chrome);
+    h.rotateZ(Math.PI/2); P.push(h.translate(x, 0.42, z));
+    const c = colored(new THREE.CylinderGeometry(0.09, 0.09, 0.32, 6), shade(chrome, 0.7));
+    c.rotateZ(Math.PI/2); P.push(c.translate(x, 0.42, z));
+  };
+
+  // ---- the body, in the three bands a car actually reads as --------------
+  box(1.94, 0.26, 4.28, dk,   0.42,  0);                    // sill, in shadow
+  box(2.02, 0.36, 4.34, body, 0.72,  0);                    // the flank
+  box(1.96, 0.20, 4.26, body, 1.00,  0);                    // shoulder line
+  box(1.86, 0.14, 1.50, body, 1.14,  1.38);                 // bonnet
+  box(1.86, 0.14, 1.05, body, 1.16, -1.66);                 // boot lid
+  box(1.78, 0.22, 0.34, body, 1.00,  2.10);                 // the nose, tucked under
+  box(1.80, 0.18, 0.30, body, 1.04, -2.08);
+  // glass, with the screens raked and the pillars standing proud of them
+  box(1.76, 0.54, 2.05, glass, 1.42, -0.18);
+  box(1.66, 0.14, 1.78, body,  1.74, -0.28);                // roof
+  rake(1.70, 0.60, 0.09, glass, -0.52, 1.44,  0.92);        // windscreen
+  rake(1.66, 0.52, 0.09, glass,  0.60, 1.46, -1.24);        // and the back light
+  for(const s of [-1, 1]){
+    P.push(colored(new THREE.BoxGeometry(0.10, 0.62, 0.13), body)
+             .rotateX(-0.52).translate(s*0.86, 1.44, 0.92));            // A pillar
+    box(0.10, 0.56, 0.11, body, 1.42, -0.22, s*0.87);                   // B
+    P.push(colored(new THREE.BoxGeometry(0.10, 0.54, 0.20), body)
+             .rotateX(0.60).translate(s*0.86, 1.46, -1.22));            // C
+    box(0.09, 0.07, 2.00, chrome, 1.68, -0.28, s*0.83);                 // roof drip rail
+    // the arches, and the shut line between the doors
+    for(const z of [1.40, -1.40]) box(0.09, 0.36, 1.16, dk, 0.76, z, s*1.00);
+    box(0.03, 0.66, 0.035, shade(body, 0.62), 0.86,  0.60, s*1.015);
+    box(0.03, 0.66, 0.035, shade(body, 0.62), 0.86, -0.62, s*1.015);
+    box(0.05, 0.06, 0.20, chrome, 1.02,  0.20, s*1.02);                 // handles
+    box(0.05, 0.06, 0.20, chrome, 1.02, -1.00, s*1.02);
+    box(0.06, 0.10, 0.30, dk,     1.30,  0.86, s*1.04);                 // mirror stalk
+    box(0.15, 0.13, 0.22, body,   1.32,  0.78, s*1.09);
   }
-  if(taxi) parts.push(colored(new THREE.BoxGeometry(0.9,0.28,0.35), 0xf2f2e6).translate(0,1.98,-0.15));
-  return mergeGeos(parts);
+  wheel(-0.95, 1.40); wheel(0.95, 1.40); wheel(-0.95, -1.40); wheel(0.95, -1.40);
+
+  // ---- what is on each end ------------------------------------------------
+  box(2.00, 0.26, 0.20, trim, 0.56,  2.14);                 // bumpers
+  box(2.00, 0.26, 0.20, trim, 0.56, -2.14);
+  box(1.30, 0.20, 0.10, 0x0d0f12, 0.98, 2.18);              // grille
+  box(1.34, 0.05, 0.12, chrome,   1.03, 2.19);
+  box(0.50, 0.16, 0.05, 0xdde2e8, 0.72,  2.22);             // plates
+  box(0.50, 0.16, 0.05, 0xdde2e8, 0.74, -2.22);
+  for(const s of [-1, 1]){
+    box(0.44, 0.18, 0.10, 0xfff4d6, 1.00,  2.18, s*0.72);   // headlamps
+    box(0.16, 0.10, 0.10, 0xe8a93c, 0.86,  2.18, s*0.86);   // and the indicator
+    box(0.42, 0.22, 0.10, 0x8e1414, 1.02, -2.18, s*0.70);   // tail lamps
+    box(0.14, 0.10, 0.10, 0xd8dce2, 0.88, -2.18, s*0.86);   // reversing lamp
+  }
+
+  if(taxi){
+    // the roof light, and the medallion band down each front door
+    box(0.86, 0.09, 0.32, 0x22262b, 1.86, -0.20);
+    box(0.80, 0.20, 0.28, 0xf4f1e4, 1.96, -0.20);
+    box(0.44, 0.13, 0.20, 0x1a1a1a, 1.96, -0.20);
+    for(const s of [-1, 1]){
+      box(0.03, 0.20, 1.30, 0x1a1a1a, 0.94, 0.30, s*1.03);
+      box(0.035, 0.13, 0.34, 0xf4f1e4, 0.94, 0.30, s*1.035);
+    }
+  }
+  const g = mergeGeos(P);
+  carGeoCache.set(key, g);
+  return g;
 }
 /* A street of nothing but sedans is what gives a model city away. Real traffic
  * on an avenue here is cabs, a box truck double-parked with its hazards on, a
@@ -5196,36 +5846,136 @@ function carGeo(bodyColor, taxi){
  * longer than a car, which is why the following distance is worked out from
  * each vehicle's own length rather than a flat seven metres. */
 function busGeo(){
-  const P = [], L = 11.4, W = 2.62;
-  P.push(colored(new THREE.BoxGeometry(W, 2.05, L), 0xdadde2).translate(0, 1.55, 0));
-  P.push(colored(new THREE.BoxGeometry(W+0.04, 0.62, L-0.5), 0x1d4a7e).translate(0, 1.05, 0));
-  P.push(colored(new THREE.BoxGeometry(W+0.05, 0.9, L-2.2), 0x1b2b38).translate(0, 2.16, -0.4));
-  P.push(colored(new THREE.BoxGeometry(W-0.3, 1.0, 0.08), 0x22394a).translate(0, 2.1, L/2));
-  P.push(colored(new THREE.BoxGeometry(W-0.3, 0.9, 0.08), 0x22394a).translate(0, 2.1, -L/2));
-  P.push(colored(new THREE.BoxGeometry(W+0.06, 0.22, 3.4), 0x0f1216).translate(0, 2.62, 1.2));
-  P.push(colored(new THREE.BoxGeometry(W-1.0, 0.3, 0.06), 0xf2e6a8).translate(0, 2.72, L/2)); // route blind
-  P.push(colored(new THREE.BoxGeometry(W-0.5, 0.28, 1.6), 0xbfc3c8).translate(0, 2.7, -2.6)); // roof pod
-  wheels(P, W/2 - 0.14, 0.5, L/2 - 1.8, -L/2 + 3.6, -L/2 + 2.0);
-  return { geo: mergeGeos(P), len: L, speed: rr(8, 13) };
+  const L = 11.4, W = 2.62, HW = W/2;
+  let g = vehCache.get('bus');
+  if(!g){
+    const P = [], WH = 0xdadde2, BL = 0x1d4a7e, DK = 0x2b333c, GL = 0x1b2b38;
+    const box = (w, h, d, col, y, z, x) =>
+      P.push(colored(new THREE.BoxGeometry(w, h, d), col).translate(x || 0, y, z || 0));
+    box(W, 0.54, L, DK, 0.80, 0);                              // the skirt under it
+    box(W + 0.05, 0.34, L - 0.3, BL, 1.21, 0);                 // the blue belt
+    box(W, 1.44, L, WH, 2.00, 0);                              // the body
+    box(W - 0.08, 0.14, L - 0.2, 0xc2c6cc, 2.79, 0);           // the roof
+    box(W - 0.55, 0.32, 2.0, 0xbfc3c8, 2.96, -2.6);            // the air pack on it
+    for(let k=0;k<3;k++) box(W - 1.0, 0.09, 0.55, 0x8f959c, 2.90, 1.7 - k*1.35);
+    /* the windows down each side, in panes with a pillar between them — one
+     * long dark slab is what makes a model bus look like a bread bin */
+    const n = 7, pl = (L - 3.0)/n;
+    for(const s of [-1, 1]){
+      for(let k=0;k<n;k++){
+        const z = -L/2 + 1.7 + pl*(k + 0.5);
+        box(0.06, 0.88, pl - 0.14, GL, 2.28, z, s*(HW + 0.01));
+        box(0.07, 0.96, 0.14, WH, 2.28, z + pl/2, s*(HW + 0.015));
+      }
+      box(0.06, 0.07, L - 2.6, 0x9aa1a8, 2.74, 0, s*(HW + 0.02));   // the drip rail
+      box(0.09, 0.40, 1.30, DK, 0.86,  L/2 - 1.8, s*HW);            // arches
+      box(0.09, 0.40, 2.60, DK, 0.86, -L/2 + 2.8, s*HW);
+      box(0.10, 0.44, 0.14, DK, 1.60, L/2 - 0.35, s*(HW + 0.16));   // mirror arms
+      box(0.16, 0.34, 0.10, 0x22262b, 1.86, L/2 - 0.35, s*(HW + 0.24));
+    }
+    // the doors: one at the nose, one behind the middle, both in yellow frames
+    for(const dz of [L/2 - 2.4, -0.6]) for(const s of [-1, 1]){
+      box(0.05, 1.70, 1.20, GL, 1.80, dz, s*(HW + 0.02));
+      box(0.06, 1.76, 0.09, 0xd8ae2c, 1.80, dz + 0.62, s*(HW + 0.025));
+      box(0.06, 1.76, 0.09, 0xd8ae2c, 1.80, dz - 0.62, s*(HW + 0.025));
+    }
+    // the front: screen, blind, lamps, and the grille under the bumper
+    box(W - 0.24, 1.00, 0.09, GL, 2.20, L/2 + 0.01);
+    box(W - 1.0, 0.32, 0.07, 0x14100a, 2.86, L/2 + 0.02);
+    box(W - 1.1, 0.20, 0.06, 0xe8a92c, 2.86, L/2 + 0.03);      // the route in lights
+    box(W + 0.04, 0.34, 0.26, DK, 0.74, L/2 + 0.02);           // bumper
+    box(W + 0.04, 0.34, 0.26, DK, 0.74, -L/2 - 0.02);
+    box(W - 1.3, 0.34, 0.08, 0x15181c, 1.30, L/2 + 0.03);      // grille
+    for(const s of [-1, 1]){
+      box(0.34, 0.24, 0.08, 0xfff4d6, 1.10, L/2 + 0.04, s*(HW - 0.34));
+      box(0.18, 0.16, 0.08, 0xe8a93c, 1.10, L/2 + 0.04, s*(HW - 0.72));
+      box(0.30, 0.44, 0.08, 0x8e1414, 1.60, -L/2 - 0.04, s*(HW - 0.36));
+      box(0.20, 0.16, 0.08, 0xe8a93c, 1.24, -L/2 - 0.04, s*(HW - 0.36));
+    }
+    box(W - 0.30, 1.00, 0.09, GL, 2.30, -L/2 - 0.01);          // the back window
+    box(W - 1.2, 0.60, 0.08, 0x1a1e23, 1.30, -L/2 - 0.03);     // engine grille
+    box(0.52, 0.18, 0.06, 0xdde2e8, 0.98, -L/2 - 0.06);        // plate
+    wheels(P, HW - 0.14, 0.50, L/2 - 1.8, -L/2 + 3.6, -L/2 + 2.0);
+    g = mergeGeos(P); vehCache.set('bus', g);
+  }
+  return { geo: g, len: L, speed: rr(8, 13) };
 }
 function truckGeo(){
-  const P = [], W = 2.4, L = 7.6, cab = pick([0xd8dbe0, 0x8c1f1f, 0x2f4a7a, 0x2b2b2b]);
-  P.push(colored(new THREE.BoxGeometry(W, 2.4, 5.0), 0xe6e4de).translate(0, 2.1, -1.2));
-  P.push(colored(new THREE.BoxGeometry(W-0.06, 0.06, 5.0), 0xb8b5ad).translate(0, 3.28, -1.2));
-  P.push(colored(new THREE.BoxGeometry(W-0.05, 1.55, 2.5), cab).translate(0, 1.55, 2.55));
-  P.push(colored(new THREE.BoxGeometry(W-0.22, 0.85, 0.08), 0x1f2a33).translate(0, 2.05, 3.8));
-  P.push(colored(new THREE.BoxGeometry(W+0.06, 0.34, 0.5), 0x33383f).translate(0, 0.72, 3.7));
-  wheels(P, W/2 - 0.12, 0.48, 2.5, -2.2, -3.4);
-  return { geo: mergeGeos(P), len: L, speed: rr(9, 15) };
+  const W = 2.4, L = 7.6, HW = W/2;
+  const cab = pick([0xd8dbe0, 0x8c1f1f, 0x2f4a7a, 0x2b2b2b]);
+  let g = vehCache.get('truck' + cab);
+  if(!g){
+    const P = [], BOD = 0xe6e4de, DK = 0x33383f, GL = 0x1f2a33;
+    const box = (w, h, d, col, y, z, x) =>
+      P.push(colored(new THREE.BoxGeometry(w, h, d), col).translate(x || 0, y, z || 0));
+    box(W, 2.40, 5.0, BOD, 2.10, -1.2);                        // the box
+    box(W + 0.05, 0.08, 5.0, 0xb8b5ad, 3.28, -1.2);            // its cap rail
+    box(W + 0.05, 0.08, 5.0, 0xb8b5ad, 0.94, -1.2);            // and the bottom rail
+    for(const s of [-1, 1]) for(let k=0;k<6;k++)               // the ribs down the sides
+      box(0.05, 2.30, 0.09, 0xd2cfc8, 2.10, 0.9 - k*0.82, s*(HW + 0.01));
+    // the roller shutter at the back, in slats, with the handle across it
+    box(W - 0.14, 2.10, 0.08, 0xcfccc4, 2.06, -3.72);
+    for(let k=0;k<8;k++) box(W - 0.18, 0.05, 0.10, 0xb0ada6, 1.10 + k*0.26, -3.75);
+    box(W - 0.5, 0.09, 0.12, 0x6f747a, 1.30, -3.78);
+    box(W - 0.05, 1.55, 2.5, cab, 1.55, 2.55);                 // the cab
+    box(W - 0.46, 0.82, 0.09, GL, 2.06, 3.79);                 // screen
+    for(const s of [-1, 1]){
+      box(0.16, 0.88, 0.11, cab, 2.04, 3.80, s*(HW - 0.14));   // and its pillars
+      box(0.06, 0.72, 1.10, GL, 2.00, 2.70, s*HW);             // door glass
+      box(0.08, 0.55, 0.12, DK, 2.20, 3.55, s*(HW + 0.10));    // mirror
+      box(0.13, 0.30, 0.09, 0x22262b, 2.36, 3.55, s*(HW + 0.18));
+      box(0.05, 0.30, 0.60, 0x1a1d21, 0.44, -3.60, s*(HW - 0.1));  // mudflaps
+      box(0.30, 0.20, 0.08, 0xfff4d6, 0.86, 3.86, s*(HW - 0.38));  // lamps
+      box(0.26, 0.32, 0.08, 0x8e1414, 0.92, -3.84, s*(HW - 0.34));
+    }
+    box(W + 0.06, 0.34, 0.50, DK, 0.72, 3.70);                 // bumper
+    box(W + 0.02, 0.26, 0.22, DK, 0.60, -3.82);
+    box(W - 0.9, 0.30, 0.08, 0x15181c, 1.24, 3.83);            // grille
+    box(0.50, 0.16, 0.06, 0xdde2e8, 0.62, -3.86);              // plate
+    box(0.14, 0.14, 0.9, 0x9aa1a8, 2.90, 2.40, HW - 0.2);      // the stack
+    wheels(P, HW - 0.12, 0.48, 2.5, -2.2, -3.4);
+    g = mergeGeos(P); vehCache.set('truck' + cab, g);
+  }
+  return { geo: g, len: L, speed: rr(9, 15) };
 }
 function vanGeo(){
-  const P = [], W = 2.1, L = 5.8, col = pick([0xd9dde2, 0x8a5a2a, 0x2f6b43, 0x9a9ea4, 0x4a3f8f]);
-  P.push(colored(new THREE.BoxGeometry(W, 1.85, 4.2), col).translate(0, 1.35, -0.7));
-  P.push(colored(new THREE.BoxGeometry(W-0.04, 1.3, 1.8), col).translate(0, 1.1, 2.0));
-  P.push(colored(new THREE.BoxGeometry(W-0.03, 0.72, 1.2), 0x1f2a33).translate(0, 1.72, 1.6));
-  P.push(colored(new THREE.BoxGeometry(W-0.2, 0.7, 0.08), 0x1f2a33).translate(0, 1.5, 2.9));
-  wheels(P, W/2 - 0.1, 0.42, 1.8, -2.0);
-  return { geo: mergeGeos(P), len: L, speed: rr(10, 17) };
+  const W = 2.1, L = 5.8, HW = W/2;
+  const col = pick([0xd9dde2, 0x8a5a2a, 0x2f6b43, 0x9a9ea4, 0x4a3f8f]);
+  let g = vehCache.get('van' + col);
+  if(!g){
+    const P = [], GL = 0x1f2a33, DK = shade(col, 0.7);
+    const box = (w, h, d, c, y, z, x) =>
+      P.push(colored(new THREE.BoxGeometry(w, h, d), c).translate(x || 0, y, z || 0));
+    const rake = (w, h, d, c, rx, y, z) =>
+      P.push(colored(new THREE.BoxGeometry(w, h, d), c).rotateX(rx).translate(0, y, z));
+    /* A van is a wall with a short snout and a steeply raked screen up to the
+     * roof — not a box with a pane of glass lying on the bonnet. */
+    box(W, 1.92, 4.90, col, 1.37, -0.40);                      // the body
+    box(W - 0.10, 0.10, 4.80, shade(col, 0.88), 2.38, -0.40);  // roof
+    box(W - 0.10, 0.62, 0.78, col, 1.04, 2.42);                // the snout
+    rake(W - 0.06, 1.10, 0.10, GL, -0.47, 1.84, 2.25);         // the screen
+    for(const s of [-1, 1]){
+      box(0.05, 0.62, 1.05, GL, 1.78, 1.20, s*HW);             // cab door glass
+      box(0.05, 0.80, 0.90, GL, 1.86, -2.30, s*(HW - 0.02));   // and the back doors
+      box(0.05, 1.70, 0.05, DK, 1.34, -0.55, s*(HW + 0.01));   // the sliding door line
+      box(0.05, 1.70, 0.05, DK, 1.34,  0.68, s*(HW + 0.01));
+      box(0.06, 0.06, 0.18, 0x9aa1a8, 1.34, 0.14, s*(HW + 0.02));  // handle
+      box(0.09, 0.40, 1.06, DK, 0.66,  1.80, s*(HW + 0.01));   // arches
+      box(0.09, 0.40, 1.06, DK, 0.66, -2.00, s*(HW + 0.01));
+      box(0.08, 0.26, 0.11, 0x22262b, 1.78, 2.50, s*(HW + 0.13));  // mirrors
+      box(0.32, 0.20, 0.08, 0xfff4d6, 0.94, 2.68, s*(HW - 0.34));
+      box(0.16, 0.12, 0.08, 0xe8a93c, 0.80, 2.68, s*(HW - 0.62));
+      box(0.22, 0.44, 0.07, 0x8e1414, 1.40, -2.88, s*(HW - 0.26));
+    }
+    box(W + 0.04, 0.28, 0.22, 0x2a2f36, 0.62,  2.72);          // bumpers
+    box(W + 0.02, 0.26, 0.20, 0x2a2f36, 0.60, -2.86);
+    box(W - 0.8, 0.26, 0.08, 0x15181c, 1.22, 2.68);            // grille
+    box(0.46, 0.15, 0.05, 0xdde2e8, 0.86, 2.70);               // plates
+    box(0.46, 0.15, 0.05, 0xdde2e8, 0.62, -2.90);
+    wheels(P, HW - 0.10, 0.42, 1.8, -2.0);
+    g = mergeGeos(P); vehCache.set('van' + col, g);
+  }
+  return { geo: g, len: L, speed: rr(10, 17) };
 }
 function pickVehicle(){
   const r = rnd();
@@ -5302,36 +6052,181 @@ function roadY(x, z){
 
 // ---------- pedestrians ----------
 const peds = [];
-const PED_COUNT = 340, PED_KINDS = 10;
-// Everyone is drawn from ten instanced bodies plus two instanced legs, so a
-// crowd this size costs twelve draw calls rather than a thousand.
+const PED_COUNT = 340, PED_KINDS = 14;
+// Everyone is drawn from fourteen instanced bodies plus two instanced legs, so
+// a crowd this size costs sixteen draw calls rather than a thousand — and a
+// face costs fourteen of them rather than three hundred and forty.
 const pedBody = [], pedLegs = [];
 const pedHip = new THREE.Object3D();
 const pedLegNode = [new THREE.Object3D(), new THREE.Object3D()];
 pedHip.add(pedLegNode[0], pedLegNode[1]);
 pedLegNode[0].position.set(-0.14, 0.36, 0);
 pedLegNode[1].position.set( 0.14, 0.36, 0);
+const PED_SKIN = [0xf2cdad, 0xe8b48c, 0xd49b71, 0xc98d63, 0xa8703f, 0x8d5a3a,
+                  0x6b432a, 0x4a2e1c];
+const PED_HAIR = [0x1a130e, 0x241a12, 0x3a2517, 0x4a2f1c, 0x6b4a2a, 0x8a6a3a,
+                  0xb59a6a, 0x8e8e8e, 0xd2d2d2, 0x6a2a18];
+const PED_CLOTH= [0x2b3550, 0x53324a, 0x2f4a3a, 0x6b3f2a, 0x1f242c, 0x8a2f3a,
+                  0x3a4a6b, 0x2c2c2c, 0x6a6f78, 0x24405e, 0x7a4a2a, 0x3f3a52,
+                  0xa8a29a, 0x1d3b2f, 0x9a3f2a, 0x4a5560];
+const PED_LEGCOL = [0x22262e, 0x3a3f4a, 0x4a4438, 0x2c3550, 0x5a5f68, 0x1a1d22,
+                    0x6b6152, 0x2f3a30];
+
+/* One person.
+ *
+ * Everybody in the street used to be four boxes and a ball for a head, which
+ * is fine at thirty metres and is nothing at all at two, and on a pavement you
+ * are always at two. What you actually read at that distance is a face — eyes,
+ * brows, a nose, a mouth — and then hair, and then whether they are carrying
+ * anything. So that is what is modelled, and nothing finer.
+ *
+ * They are instanced, so this geometry is built fourteen times and drawn three
+ * hundred and forty. That is the whole reason a crowd can have faces at all.
+ * The head faces +z because that is the way the walk is aimed.
+ */
+function pedGeo(){
+  const P = [];
+  const skin = pick(PED_SKIN), hairC = pick(PED_HAIR), coat = pick(PED_CLOTH);
+  const shirt = pick(PED_CLOTH), hatC = pick(PED_CLOTH);
+  const hat = ri(0, 3), bag = ri(0, 2), longHair = rnd() < 0.35;
+  const glasses = rnd() < 0.22, beard = rnd() < 0.20 && hat !== 3, scarf = rnd() < 0.22;
+  const HY = 1.80;                                  // the middle of the head
+  const box = (w, h, d, col, x, y, z) =>
+    P.push(colored(new THREE.BoxGeometry(w, h, d), col).translate(x || 0, y, z || 0));
+  const slant = (w, h, d, col, rz, x, y, z) =>
+    P.push(colored(new THREE.BoxGeometry(w, h, d), col).rotateZ(rz).translate(x || 0, y, z || 0));
+  const ball = (r, col, x, y, z, sx, sy, sz) => {
+    const g = colored(new THREE.SphereGeometry(r, 7, 5), col);
+    if(sx !== undefined) g.scale(sx, sy, sz);
+    P.push(g.translate(x || 0, y, z || 0));
+  };
+  // a cap off the top of a head-shaped ellipsoid: hair, or a hat, or a hood
+  const dome = (r, col, th, phi0, phiL, dy) => {
+    const g = colored(new THREE.SphereGeometry(r, 8, 4, phi0 === undefined ? 0 : phi0,
+                                               phiL === undefined ? 6.2832 : phiL, 0, th), col);
+    g.scale(1, 1.10, 0.96);
+    P.push(g.translate(0, HY + (dy || 0), 0));
+  };
+
+  // ---- the coat, and what shows down the front of it ----------------------
+  box(0.46, 0.34, 0.28, coat, 0, 0.86, 0);                        // hips
+  box(0.50, 0.46, 0.29, coat, 0, 1.24, 0);                        // chest
+  box(0.54, 0.13, 0.30, coat, 0, 1.50, 0);                        // shoulders
+  box(0.15, 0.46, 0.03, shirt, 0, 1.28, 0.150);                   // shirt down the middle
+  for(const s of [-1, 1])
+    box(0.11, 0.32, 0.035, shade(coat, 0.82), s*0.115, 1.35, 0.152);   // lapels
+  box(0.30, 0.09, 0.27, shade(coat, 0.80), 0, 1.575, 0);          // collar
+  box(0.16, 0.05, 0.03, shade(coat, 0.6), 0, 1.02, 0.152);        // the hem of it
+
+  // ---- arms, hanging, with a hand on the end ------------------------------
+  for(const s of [-1, 1]){
+    box(0.145, 0.40, 0.19, coat, s*0.325, 1.30, 0);               // upper
+    box(0.125, 0.34, 0.17, coat, s*0.335, 0.95, 0.01);            // fore
+    box(0.13, 0.05, 0.175, shade(coat, 0.72), s*0.335, 0.79, 0.01);  // cuff
+    box(0.10, 0.13, 0.11, skin, s*0.335, 0.72, 0.015);            // hand
+    box(0.155, 0.055, 0.20, shade(coat, 0.86), s*0.322, 1.495, 0);   // shoulder seam
+  }
+
+  // ---- neck and head ------------------------------------------------------
+  box(0.135, 0.11, 0.13, shade(skin, 0.86), 0, 1.615, 0);
+  ball(0.185, skin, 0, HY, 0, 1, 1.10, 0.96);
+  for(const s of [-1, 1])
+    ball(0.042, skin, s*0.176, HY - 0.012, -0.012, 1, 1.35, 0.75);   // ears
+
+  // ---- the face -----------------------------------------------------------
+  for(const s of [-1, 1]){
+    ball(0.033, 0xf3f0e8, s*0.072, HY + 0.045, 0.150, 1, 0.78, 0.55);  // white
+    box(0.026, 0.030, 0.020, 0x241c14, s*0.072, HY + 0.045, 0.162);    // and the pupil
+    box(0.078, 0.021, 0.022, shade(hairC, 0.85), s*0.072, HY + 0.095, 0.140);  // brow
+  }
+  box(0.048, 0.080, 0.055, shade(skin, 0.95), 0, HY - 0.005, 0.165);   // nose
+  box(0.030, 0.020, 0.030, shade(skin, 0.84), 0, HY - 0.038, 0.168);   // under it
+  box(0.080, 0.026, 0.024, shade(skin, 0.48), 0, HY - 0.095, 0.150);   // mouth
+  box(0.10, 0.035, 0.03, shade(skin, 0.92), 0, HY - 0.150, 0.130);     // chin
+
+  /* Hair: the sides and the back come down over the ears, and the front stops
+   * above the brow — one dome cannot do both, so it is two, split front and
+   * back. A hairline that runs level all the way round is the giveaway. */
+  const bare = hat === 0 || hat === 3;
+  dome(0.193, hairC, 1.50, Math.PI/2 + 1.02, 6.2832 - 2.04);      // sides and back
+  if(bare) dome(0.193, hairC, 0.95, Math.PI/2 - 1.02, 2.04);      // the fringe
+  box(0.30, 0.17, 0.13, hairC, 0, HY - 0.075, -0.115);            // the back of the head
+  if(longHair && bare){
+    for(const s of [-1, 1]) box(0.085, 0.30, 0.17, hairC, s*0.155, HY - 0.21, -0.03);
+    box(0.32, 0.22, 0.13, hairC, 0, HY - 0.24, -0.095);
+  }
+
+  if(hat === 1){                                    // a beanie, down over the brows
+    dome(0.203, hatC, 1.30);
+    box(0.42, 0.075, 0.40, shade(hatC, 0.84), 0, HY + 0.062, 0);
+  } else if(hat === 2){                             // a cap, peak on the front
+    dome(0.202, hatC, 1.26);
+    box(0.372, 0.045, 0.342, shade(hatC, 0.88), 0, HY + 0.068, 0);    // the band
+    box(0.30, 0.032, 0.21, shade(hatC, 0.94), 0, HY + 0.058, 0.215);  // and the peak
+    box(0.05, 0.05, 0.05, shade(hatC, 0.7), 0, HY + 0.185, 0);        // the button
+  } else if(hat === 3){                             // a hood, up
+    dome(0.245, coat, 1.55, undefined, undefined, -0.02);
+    box(0.44, 0.20, 0.22, shade(coat, 0.88), 0, HY - 0.11, -0.16);
+    for(const s of [-1, 1]) box(0.06, 0.30, 0.07, shade(coat, 0.9), s*0.16, HY - 0.20, 0.10);
+  }
+
+  if(glasses){
+    for(const s of [-1, 1]){
+      box(0.092, 0.013, 0.016, 0x22262b, s*0.072, HY + 0.079, 0.148);
+      box(0.092, 0.013, 0.016, 0x22262b, s*0.072, HY + 0.013, 0.148);
+      box(0.013, 0.068, 0.016, 0x22262b, s*0.118, HY + 0.046, 0.140);
+      box(0.016, 0.013, 0.075, 0x22262b, s*0.152, HY + 0.052, 0.085);   // the arm of it
+    }
+    box(0.052, 0.013, 0.016, 0x22262b, 0, HY + 0.052, 0.152);           // the bridge
+  }
+  if(beard){
+    const bc = shade(hairC, 0.92);
+    box(0.20, 0.11, 0.13, bc, 0, HY - 0.150, 0.115);
+    for(const s of [-1, 1]) box(0.055, 0.15, 0.115, bc, s*0.135, HY - 0.085, 0.075);
+    box(0.080, 0.024, 0.028, bc, 0, HY - 0.062, 0.152);                 // moustache
+  }
+  if(scarf){
+    const sc = pick(PED_CLOTH);
+    box(0.35, 0.14, 0.31, sc, 0, 1.60, 0);
+    box(0.12, 0.32, 0.08, sc, 0.07, 1.42, 0.155);                       // the end hanging
+  }
+  if(bag === 1){                                    // a bag, on a strap across
+    const bc = shade(pick(PED_CLOTH), 0.75);
+    slant(0.07, 0.62, 0.055, bc, 0.42, -0.02, 1.24, 0.150);
+    slant(0.07, 0.62, 0.055, bc, -0.42, 0.02, 1.24, -0.150);
+    box(0.22, 0.26, 0.13, bc, 0.29, 0.92, -0.05);
+    box(0.22, 0.06, 0.14, shade(bc, 0.8), 0.29, 1.02, -0.05);           // its flap
+  } else if(bag === 2){                             // or a pack on the back
+    const bc = pick(PED_CLOTH);
+    box(0.36, 0.44, 0.19, bc, 0, 1.24, -0.245);
+    box(0.30, 0.13, 0.06, shade(bc, 0.78), 0, 1.34, -0.35);
+    for(const s of [-1, 1]) box(0.075, 0.42, 0.05, shade(bc, 0.86), s*0.165, 1.31, 0.150);
+  }
+  return mergeGeos(P);
+}
+/* The legs are one shared box for everybody, tinted per person — so the shoe
+ * has to be near-black in the geometry, and comes out dark whatever colour the
+ * trousers are multiplied by. */
+function pedLegGeo(){
+  return mergeGeos([
+    colored(new THREE.BoxGeometry(0.195, 0.635, 0.195), 0xffffff).translate(0, 0.058, 0),
+    colored(new THREE.BoxGeometry(0.205, 0.075, 0.205), 0xf0f0f0).translate(0, -0.235, 0),
+    colored(new THREE.BoxGeometry(0.205, 0.105, 0.285), 0x2a2a2e).translate(0, -0.318, 0.045),
+    colored(new THREE.BoxGeometry(0.215, 0.035, 0.30), 0x16171a).translate(0, -0.362, 0.05)
+  ]);
+}
 tasks.push(() => {
-  const SKIN = [0xe8b48c, 0xc98d63, 0x8d5a3a, 0x5f3a24, 0xf0c9a8];
-  const CLOTH= [0x2b3550, 0x53324a, 0x2f4a3a, 0x6b3f2a, 0x1f242c, 0x8a2f3a, 0x3a4a6b, 0x2c2c2c];
-  const LEG  = [0x22262e, 0x3a3f4a, 0x4a4438];
   const cap = Math.ceil(PED_COUNT / PED_KINDS);
   for(let k=0;k<PED_KINDS;k++){
-    const cloth = pick(CLOTH), skin = pick(SKIN);
-    const torso = mergeGeos([
-      colored(new THREE.BoxGeometry(0.52,0.9,0.3), cloth).translate(0,1.15,0),
-      colored(new THREE.SphereGeometry(0.19,8,6), skin).translate(0,1.78,0),
-      colored(new THREE.BoxGeometry(0.15,0.7,0.18), cloth).translate(-0.35,1.12,0),
-      colored(new THREE.BoxGeometry(0.15,0.7,0.18), cloth).translate(0.35,1.12,0)
-    ]);
-    const im = new THREE.InstancedMesh(torso, vcMat, cap);
+    const im = new THREE.InstancedMesh(pedGeo(), vcMat, cap);
     im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     im.frustumCulled = false; im.count = 0;
     cityGroup.add(im); pedBody.push(im);
   }
-  const legMat = new THREE.MeshLambertMaterial({color:0xffffff});
+  const legMat = new THREE.MeshLambertMaterial({vertexColors:true});
+  const legGeo = pedLegGeo();
   for(let s=0;s<2;s++){
-    const im = new THREE.InstancedMesh(new THREE.BoxGeometry(0.2,0.75,0.2), legMat, PED_COUNT);
+    const im = new THREE.InstancedMesh(legGeo, legMat, PED_COUNT);
     im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     im.frustumCulled = false; im.count = PED_COUNT;
     cityGroup.add(im); pedLegs.push(im);
@@ -5339,9 +6234,13 @@ tasks.push(() => {
   const col = new THREE.Color();
   for(let k=0;k<PED_COUNT;k++){
     const kind = k % PED_KINDS;
-    const p = { kind, slot: pedBody[kind].count++, idx:k,
-                i:0, j:0, t:rnd(), speed:0, phase:rnd()*6.28, plaza:0, r:0 };
-    col.setHex(LEG[Math.floor(rnd()*LEG.length)]);
+    // nobody is the same height as anybody else, which is most of what makes a
+    // crowd look like a crowd rather than a rank
+    const p = { kind, slot: pedBody[kind].count++, idx:k, h: rr(0.90, 1.09),
+                i:0, j:0, t:rnd(), speed:0, phase:rnd()*6.28, plaza:0, r:0,
+                // who puts one up when it rains, and who is out with the dog
+                umb: rnd() < 0.82, dog: rnd() < 0.055 };
+    col.setHex(pick(PED_LEGCOL));
     pedLegs[0].setColorAt(k, col); pedLegs[1].setColorAt(k, col);
     peds.push(p);
   }
@@ -5442,8 +6341,11 @@ function updateCarShadows(){
 // ---------- sky in motion ----------
 function updateSky(dt){
   const px = camera.position.x, pz = camera.position.z, half = CLOUD_FIELD/2;
-  cloudLit.setHex(night ? 0x2b3552 : 0xffffff);
-  cloudFar.setHex(night ? SKY.night.bot : SKY.day.bot);
+  const wg = WX[wxI].grey;
+  // a raincloud is not a white cloud with the light turned down: it is grey on
+  // its own account, and darkest underneath, which is the side you are stood on
+  cloudLit.setHex(night ? 0x2b3552 : 0xffffff).lerp(_wcB.setHex(night ? 0x121826 : 0x646c76), wg);
+  cloudFar.setHex(night ? SKY.night.bot : SKY.day.bot).lerp(_wcB.setHex(night ? 0x1b2130 : 0x8b939b), wg*0.85);
   for(let k=0;k<clouds.length;k++){
     const c = clouds[k];
     c.x += dt * c.drift; c.z += dt * c.drift * 0.35;
@@ -5776,7 +6678,9 @@ function toggleCar(){
 const keys = Object.create(null);
 addEventListener('keydown', e => {
   keys[e.code] = true;
+  if(e.code === 'KeyE' && ride){ if(ride.seat) standUp(); else sitDown(); }
   if(e.code === 'KeyN') setNight(!night);
+  if(e.code === 'KeyR') setWeather(wxI + 1);
   if(e.code === 'KeyM') document.getElementById('bigmap').classList.toggle('on');
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
 });
@@ -5877,6 +6781,7 @@ function audioStart(){
   const g = actx.createGain(); g.gain.value = 0.06;
   src.connect(f).connect(g).connect(actx.destination);
   src.start();
+  rainAudio();
 }
 function honk(vol){
   if(!actx) return;
@@ -5907,6 +6812,8 @@ function setUnder(v){
     sun.intensity = 0.04; bounce.intensity = 0.10; fill.intensity = 0.03;
     skyDome.visible = stars.visible = sunDisc.visible = cloudMesh.visible = false;
     cityGroup.visible = false;
+    // the rain is up there, not down here — but you can still just hear it
+    if(rainGain) rainGain.gain.value = WX[wxI].rain * 0.004;
   } else {
     skyDome.visible = sunDisc.visible = cloudMesh.visible = true;
     stars.visible = true;
@@ -5914,31 +6821,53 @@ function setUnder(v){
     applySky();
   }
 }
+const _wcA = new THREE.Color(), _wcB = new THREE.Color();
 function applySky(){
   const s = night ? SKY.night : SKY.day;
-  skyMat.uniforms.top.value.set(s.top);
-  skyMat.uniforms.bot.value.set(s.bot);
-  scene.fog.color.set(s.fog);
-  scene.fog.density = night ? 0.0060 : 0.0046;
-  ambient.color.set(s.amb); ambient.intensity = s.ai;
-  sun.color.set(s.sun); sun.intensity = s.si;
-  bounce.intensity = night ? 0.18 : 0.45;
-  fill.intensity = night ? 0.06 : 0.34;
-  matFacade.forEach(m => { m.emissive.set(night ? 0xffffff : 0x000000);
-                           m.emissiveIntensity = night ? 1 : 0; });
-  shopMat.emissive.set(night ? 0xffffff : 0x35291c);
-  water.material.color.set(night ? 0x2a3d52 : 0x9fc6dd);
-  stars.material.opacity = night ? 0.9 : 0;
+  const w = WX[wxI];
+  // After dark there is not much blue left to take out, so overcast does less
+  const g = w.grey * (night ? 0.5 : 1);
+  _wcB.setHex(night ? 0x1b2130 : 0x8b939b);          // what a covered sky greys toward
+  skyMat.uniforms.top.value.copy(_wcA.setHex(s.top).lerp(_wcB, g));
+  skyMat.uniforms.bot.value.copy(_wcA.setHex(s.bot).lerp(_wcB, g*0.85));
+  scene.fog.color.copy(_wcA.setHex(s.fog).lerp(_wcB, g*0.9));
+  scene.fog.density = (night ? 0.0060 : 0.0046) * w.fog;
+  ambient.color.set(s.amb); ambient.intensity = s.ai * (0.55 + w.light*0.45);
+  sun.color.set(s.sun); sun.intensity = s.si * w.light;
+  bounce.intensity = (night ? 0.18 : 0.45) * (0.6 + w.light*0.4);
+  fill.intensity = (night ? 0.06 : 0.34) * w.light;
+  // in weather this bad the lights come on in the middle of the afternoon
+  const lit = night || w.grey > 0.7;
+  matFacade.forEach(m => { m.emissive.set(lit ? 0xffffff : 0x000000);
+                           m.emissiveIntensity = lit ? (night ? 1 : 0.55) : 0; });
+  shopMat.emissive.set(lit ? 0xffffff : 0x35291c);
+  water.material.color.copy(_wcA.setHex(night ? 0x2a3d52 : 0x9fc6dd)
+                                .lerp(_wcB, w.grey*0.7));
+  stars.material.opacity = night ? 0.9 * (1 - w.cloud*0.92) : 0;
   // no sun, no shadows: what is left after dark is the faint pool a streetlight
-  // throws, not a hard one from overhead
-  shadowMat.opacity = night ? 0.13 : 0.40;
+  // throws, not a hard one from overhead — and cloud does the same thing by day
+  shadowMat.opacity = (night ? 0.13 : 0.40) * (1 - w.grey*0.88);
   sunDisc.material.color.set(night ? 0x93a8c8 : 0xffffff);
-  sunDisc.material.opacity = night ? 0.5 : 0.95;
+  sunDisc.material.opacity = (night ? 0.5 : 0.95) * (1 - w.grey);
   sunDisc.scale.setScalar(night ? 70 : 170);
-  lampGlows.forEach(g => g.visible = night);
+  cloudMat.opacity = 0.55 + 0.44 * w.cloud;
+  lampGlows.forEach(g2 => g2.visible = lit);
   tsqLight.visible = night; tsqLight.intensity = night ? 2.4 : 0;
   if(tsqBall) tsqBall.material.color.set(night ? 0xffffff : 0xd8cfae);
   roamLights.forEach(l => { l.visible = night; l.intensity = night ? 1.5 : 0; });
+  applyGround();
+}
+/* Water on the ground is most of what sells rain, and it is not the drops: it
+ * is that the asphalt goes two shades darker and stops scattering. Snow takes
+ * the same three materials the other way, and the pavement takes it faster than
+ * the roadbed does, because nothing is driving over the pavement. */
+const _gmA = new THREE.Color(), _gmB = new THREE.Color();
+function applyGround(){
+  const d = 1 - wet*0.44, p = 1 - wet*0.27;
+  _gmB.setHex(0xf4f7fb);
+  asphaltMat.color.copy(_gmA.setRGB(d, d, d*1.04).lerp(_gmB, lay*0.50));
+  walkMat.color.copy(_gmA.setRGB(p, p, p).lerp(_gmB, lay*0.82));
+  grassMat.color.copy(_gmA.setRGB(1, 1, 1).lerp(_gmB, lay*0.76));
 }
 function setNight(v, silent){
   night = v;
@@ -6245,11 +7174,13 @@ function tick(){
   if(!player.under){
     updateTraffic(dt);
     updateCarShadows();
+    updateParkedTrim();
     updateChase(dt);
     updatePeds(dt, t);
     updateSteam(dt);
     updateBirds(dt, t);
     updateSky(dt);
+    updateWeather(dt, t);
   }
   // light up the station you are in, and the one you can see down into
   for(let k=0;k<stations.length;k++){
@@ -6289,8 +7220,18 @@ function tick(){
   // crosshair hint
   if(ride){
     elCross.classList.remove('hot');
-    elPrompt.textContent = 'Right-click to get off';
-    elPrompt.classList.toggle('on', ride.train.doors);
+    // the doors are the thing worth saying while they are open; the rest of
+    // the ride, tell them they can sit down, because nothing else will
+    if(ride.train.doors){
+      elPrompt.textContent = 'Right-click to get off';
+      elPrompt.classList.add('on');
+    } else if(ride.seat){
+      elPrompt.textContent = 'E to stand up';
+      elPrompt.classList.add('on');
+    } else {
+      elPrompt.textContent = 'E to sit down';
+      elPrompt.classList.toggle('on', !!benchBeside(ride.lx, ride.lz));
+    }
   } else if(player.under && !isTouch){
     const d = trainAtDoor();
     elCross.classList.remove('hot');
@@ -6309,7 +7250,8 @@ function tick(){
   const hh = Math.floor(clock24), mm = Math.floor((clock24%1)*60);
   const [nameA, nameB] = locationName();
   elLoc.textContent = nameA; elSub.textContent = nameB;
-  elStats.textContent = `${((hh%12)||12)}:${String(mm).padStart(2,'0')} ${hh<12?'AM':'PM'} · ${fps} fps`;
+  elStats.textContent = `${((hh%12)||12)}:${String(mm).padStart(2,'0')} ${hh<12?'AM':'PM'}`
+                      + ` · ${WX[wxI].name} · ${fps} fps`;
   if(toastT > 0){ toastT -= dt; if(toastT <= 0) elToast.style.opacity = 0; }
   mapT += dt;
   if(mapT > 0.09){
@@ -6334,7 +7276,18 @@ function updateWalking(dt, mf, ms){
    * that moment; step off the end of a platform and you are not, so the move
    * gets refused instead of putting you on the street with a road over your
    * head. Coming back up only counts near the top of the steps. */
-  if(ride){ nx = player.x; nz = player.z; }
+  if(ride){
+    // inside a car you walk in the car's frame, not the world's — the world is
+    // going past at line speed and a world-space step would be swamped by it
+    if(ride.seat && mag > 0.05) standUp();
+    if(!ride.seat){
+      const a = ride.car.g.rotation.y, ca = Math.cos(a), sa = Math.sin(a);
+      const wx = (-sin*mf + cos*ms) * speed * dt, wz = (-cos*mf - sin*ms) * speed * dt;
+      [ride.lx, ride.lz] = moveInCar(ride.lx, ride.lz,
+                                     ride.lx + wx*ca - wz*sa, ride.lz + wx*sa + wz*ca);
+    }
+    nx = player.x; nz = player.z;
+  }
   else {
     const tgt = subwayY(nx, nz);
     if(!player.under){
@@ -7068,6 +8021,9 @@ function faceCar(c){
 
 function updatePeds(dt, t){
   if(!pedBody.length) return;
+  // whether anybody has an umbrella up is a property of the sky, not of them
+  const raining = WX[wxI].rain > 0;
+  umbN = dogN = 0;
   for(const p of peds){
     if(!p.speed){ relocatePed(p); continue; }
     p.t = (p.t + p.speed * dt) % 1;
@@ -7077,12 +8033,18 @@ function updatePeds(dt, t){
     p.x = px; p.z = pz;
     pedHip.position.set(px, y, pz);
     pedHip.rotation.set(0, Math.atan2(ax-px, az-pz), 0);
+    pedHip.scale.setScalar(p.h || 1);
     const sw = Math.sin(t*5.5 + p.phase) * 0.5;
     pedLegNode[0].rotation.x = sw; pedLegNode[1].rotation.x = -sw;
+    // the dog trots at its own rate and it is not their rate
+    dogNode.position.y = Math.abs(Math.sin(t*7.4 + p.phase)) * 0.035;
+    dogNode.rotation.y = Math.sin(t*2.1 + p.phase) * 0.18;
     pedHip.updateMatrixWorld(true);
     pedBody[p.kind].setMatrixAt(p.slot, pedHip.matrixWorld);
     pedLegs[0].setMatrixAt(p.idx, pedLegNode[0].matrixWorld);
     pedLegs[1].setMatrixAt(p.idx, pedLegNode[1].matrixWorld);
+    if(raining && p.umb && umbMesh) umbMesh.setMatrixAt(umbN++, pedHip.matrixWorld);
+    if(p.dog && dogMesh) dogMesh.setMatrixAt(dogN++, dogNode.matrixWorld);
     _v3.set(px + SH_X*0.35, y + 0.035, pz + SH_Z*0.35);
     _s3.set(0.95, 1, 0.95);
     pedShadow.setMatrixAt(p.idx, _m4.compose(_v3, _qI, _s3));
@@ -7090,6 +8052,8 @@ function updatePeds(dt, t){
   pedBody.forEach(im => im.instanceMatrix.needsUpdate = true);
   pedLegs.forEach(im => im.instanceMatrix.needsUpdate = true);
   pedShadow.instanceMatrix.needsUpdate = true;
+  if(umbMesh){ umbMesh.count = umbN; if(umbN) umbMesh.instanceMatrix.needsUpdate = true; }
+  if(dogMesh){ dogMesh.count = dogN; if(dogN) dogMesh.instanceMatrix.needsUpdate = true; }
   for(let n=0;n<10;n++){
     pedCursor = (pedCursor + 1) % peds.length;
     const p = peds[pedCursor];
@@ -7127,6 +8091,486 @@ function updateSteam(dt){
   }
 }
 
+/* ---------- weather in motion ---------------------------------------------
+ * Five things happen at once when it rains and only one of them is drops.
+ *
+ *   the drops      a column of streaks that travels with you, leaning with the
+ *                  wind, so the far end of the block is rained on too
+ *   the splashes   a ring on the ground wherever one lands, which is what tells
+ *                  you the water has somewhere to go
+ *   the puddles    low spots in the roadbed handing the sky back at you; they
+ *                  arrive slowly after the rain starts and go slowly after it
+ *                  stops, because that is what water does
+ *   the umbrellas  most of the crowd puts one up, and a street full of them
+ *                  from above is more of New York in the rain than the rain is
+ *   the sky        grey, close, and lit from nowhere in particular
+ *
+ * Snow is the same machinery run slower and sideways, plus white on the ground.
+ */
+const _wq = new THREE.Quaternion(), _we = new THREE.Euler(),
+      _wv = new THREE.Vector3(), _ws = new THREE.Vector3(), _wm = new THREE.Matrix4(),
+      _wcol = new THREE.Color();
+const _yAx = new THREE.Vector3(0,1,0);
+
+// ---- the drops ----
+const RAIN_N = 1700, RAIN_R = 26, RAIN_H = 30, RAIN_DROP = 9;
+const drops = [];
+let rainMesh = null;
+const rainMat = new THREE.MeshBasicMaterial({ color:0xc3d6e8, transparent:true,
+  opacity:0.40, depthWrite:false });
+tasks.push(() => {
+  const g = new THREE.BoxGeometry(0.030, 1, 0.030);
+  g.translate(0, -0.5, 0);                       // hangs down from its own origin
+  rainMesh = new THREE.InstancedMesh(g, rainMat, RAIN_N);
+  rainMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  rainMesh.frustumCulled = false; rainMesh.count = 0;
+  cityGroup.add(rainMesh);
+  for(let k=0;k<RAIN_N;k++)
+    drops.push({ x: rr(-RAIN_R, RAIN_R), y: rr(-RAIN_DROP, RAIN_H - RAIN_DROP),
+                 z: rr(-RAIN_R, RAIN_R), sp: rr(26, 40), len: rr(0.8, 1.6) });
+});
+
+// ---- the flakes ----
+const SNOW_N = 1500, SNOW_R = 22, SNOW_H = 26;
+let snowPts = null, snowPos = null;
+const flakes = [];
+const snowMat = new THREE.PointsMaterial({ size:0.17, sizeAttenuation:true,
+  transparent:true, opacity:0.92, depthWrite:false, color:0xffffff });
+tasks.push(() => {
+  const S = 32, ca = document.createElement('canvas'); ca.width = ca.height = S;
+  const gg = ca.getContext('2d');
+  const grd = gg.createRadialGradient(S/2, S/2, 0, S/2, S/2, S/2);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.45, 'rgba(255,255,255,.85)');
+  grd.addColorStop(1, 'rgba(255,255,255,0)');
+  gg.fillStyle = grd; gg.fillRect(0,0,S,S);
+  const t = new THREE.CanvasTexture(ca); t.colorSpace = THREE.SRGBColorSpace;
+  snowMat.map = t;
+  snowPos = new Float32Array(SNOW_N*3);
+  for(let k=0;k<SNOW_N;k++){
+    flakes.push({ x: rr(-SNOW_R, SNOW_R), y: rr(-6, SNOW_H-6), z: rr(-SNOW_R, SNOW_R),
+                  sp: rr(1.4, 3.4), sw: rr(0.5, 1.5), ph: rnd()*6.283 });
+    snowPos[k*3] = 0; snowPos[k*3+1] = -9999; snowPos[k*3+2] = 0;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(snowPos, 3));
+  snowPts = new THREE.Points(geo, snowMat);
+  snowPts.frustumCulled = false; snowPts.visible = false;
+  cityGroup.add(snowPts);
+});
+
+// ---- the splashes ----
+const SPL_N = 240;
+const splashes = [];
+let splMesh = null;
+tasks.push(() => {
+  const S = 64, ca = document.createElement('canvas'); ca.width = ca.height = S;
+  const gg = ca.getContext('2d');
+  gg.strokeStyle = 'rgba(255,255,255,.9)'; gg.lineWidth = 5;
+  gg.beginPath(); gg.arc(S/2, S/2, S/2 - 5, 0, 6.283); gg.stroke();
+  gg.strokeStyle = 'rgba(255,255,255,.35)'; gg.lineWidth = 2.5;
+  gg.beginPath(); gg.arc(S/2, S/2, S/2 - 13, 0, 6.283); gg.stroke();
+  const t = new THREE.CanvasTexture(ca); t.colorSpace = THREE.SRGBColorSpace;
+  const g = new THREE.PlaneGeometry(1,1); g.rotateX(-Math.PI/2);
+  splMesh = new THREE.InstancedMesh(g, new THREE.MeshBasicMaterial({ map:t,
+    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+    opacity:0.55, fog:true }), SPL_N);
+  splMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  splMesh.frustumCulled = false; splMesh.count = 0;
+  cityGroup.add(splMesh);
+  for(let k=0;k<SPL_N;k++) splashes.push({ x:0, y:0, z:0, t:1 });
+  const c = new THREE.Color(0,0,0);
+  for(let k=0;k<SPL_N;k++) splMesh.setColorAt(k, c);
+});
+
+// ---- the puddles ----
+const PUD_N = 46;
+const puddles = [];
+let pudMesh = null;
+tasks.push(() => {
+  const S = 128, ca = document.createElement('canvas'); ca.width = ca.height = S;
+  const gg = ca.getContext('2d');
+  // not a disc: a puddle has a ragged edge, because the road it sits in has one
+  gg.fillStyle = '#fff';
+  gg.beginPath();
+  for(let k=0;k<=26;k++){
+    const a = k/26*6.283, r = S*0.38 * (0.72 + Math.sin(a*3.1)*0.10 + Math.sin(a*5.7)*0.08);
+    const x = S/2 + Math.cos(a)*r*1.35, y = S/2 + Math.sin(a)*r;
+    k ? gg.lineTo(x, y) : gg.moveTo(x, y);
+  }
+  gg.closePath(); gg.fill();
+  gg.globalCompositeOperation = 'destination-in';
+  const grd = gg.createRadialGradient(S/2, S/2, S*0.16, S/2, S/2, S*0.52);
+  grd.addColorStop(0, 'rgba(0,0,0,1)'); grd.addColorStop(1, 'rgba(0,0,0,0)');
+  gg.fillStyle = grd; gg.fillRect(0,0,S,S);
+  const t = new THREE.CanvasTexture(ca); t.colorSpace = THREE.SRGBColorSpace;
+  const g = new THREE.PlaneGeometry(1,1); g.rotateX(-Math.PI/2);
+  pudMesh = new THREE.InstancedMesh(g, new THREE.MeshBasicMaterial({ map:t,
+    transparent:true, depthWrite:false, opacity:0 }), PUD_N);
+  pudMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  pudMesh.frustumCulled = false; pudMesh.renderOrder = -1;
+  cityGroup.add(pudMesh);
+  for(let k=0;k<PUD_N;k++) puddles.push({ x:0, y:-9999, z:0, w:rr(2.4,7.0), d:rr(1.6,4.2), a:rnd()*3.14 });
+});
+function relocatePuddle(p){
+  for(let k=0;k<14;k++){
+    // water collects in the roadbed, at the kerb line, far more than mid-block
+    const x = player.x + rr(-70, 70), z = player.z + rr(-70, 70);
+    if(!isSolidGround(x, z, false) || inParkWater(x, z)) continue;
+    if(bridgeAt(x, z)) continue;
+    if(!onStreet(x, z) && !isPaved(x, z) && rnd() < 0.75) continue;
+    p.x = x; p.z = z; p.y = groundAt(x, z, false) + 0.012;
+    p.w = rr(2.4, 7.4); p.d = rr(1.6, 4.4); p.a = rnd()*3.1416;
+    return;
+  }
+  p.y = -9999;
+}
+
+/* ---- what a car throws up off a wet road ---------------------------------
+ * The one thing that tells you the road is wet from across the street, more
+ * than any amount of shine on it: everything moving drags a plume of water off
+ * its back wheels, and it is thickest right where the tyre meets the road.
+ */
+const SPRAY_N = 200;
+let sprayMesh = null;
+tasks.push(() => {
+  const S = 64, ca = document.createElement('canvas'); ca.width = ca.height = S;
+  const gg = ca.getContext('2d');
+  const grd = gg.createRadialGradient(S/2, S*0.62, 0, S/2, S*0.62, S*0.5);
+  grd.addColorStop(0,    'rgba(255,255,255,.85)');
+  grd.addColorStop(0.45, 'rgba(255,255,255,.32)');
+  grd.addColorStop(1,    'rgba(255,255,255,0)');
+  gg.fillStyle = grd; gg.fillRect(0,0,S,S);
+  const t = new THREE.CanvasTexture(ca); t.colorSpace = THREE.SRGBColorSpace;
+  sprayMesh = new THREE.InstancedMesh(new THREE.PlaneGeometry(1,1),
+    new THREE.MeshBasicMaterial({ map:t, transparent:true, depthWrite:false,
+      blending:THREE.AdditiveBlending, opacity:0.5 }), SPRAY_N);
+  sprayMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  sprayMesh.frustumCulled = false; sprayMesh.count = 0;
+  cityGroup.add(sprayMesh);
+  const c = new THREE.Color(0,0,0);
+  for(let k=0;k<SPRAY_N;k++) sprayMesh.setColorAt(k, c);
+});
+
+// ---- umbrellas, over whoever is out in it ----
+const UMB_COL = [0x14161a, 0x14161a, 0x14161a, 0x1d2b45, 0x5a1f22, 0x243d2c,
+                 0x4a3a5c, 0x6d5a2a, 0xa8302c, 0x2b4f6b];
+let umbMesh = null, umbN = 0;
+tasks.push(() => {
+  const P = [
+    colored(new THREE.ConeGeometry(0.66, 0.30, 8), 0xffffff).translate(0, 2.06, 0.06),
+    colored(new THREE.ConeGeometry(0.62, 0.05, 8), 0xd8d8d8).translate(0, 1.94, 0.06),
+    colored(new THREE.CylinderGeometry(0.018, 0.018, 1.06, 5), 0x2a2118).translate(0, 1.60, 0.06),
+    colored(new THREE.SphereGeometry(0.035, 5, 4), 0x8f959c).translate(0, 2.24, 0.06)
+  ];
+  umbMesh = new THREE.InstancedMesh(mergeGeos(P), vcMat, PED_COUNT);
+  umbMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  umbMesh.frustumCulled = false; umbMesh.count = 0;
+  cityGroup.add(umbMesh);
+  const c = new THREE.Color();
+  for(let k=0;k<PED_COUNT;k++){ c.setHex(pick(UMB_COL)); umbMesh.setColorAt(k, c); }
+  umbMesh.instanceColor.needsUpdate = true;
+});
+
+// ---- and somebody is always walking a dog ----
+const DOG_COL = [0x4a3626, 0x2a2521, 0xc8a86a, 0x8a7256, 0xd6cec0, 0x6a4a30, 0x33302c];
+const dogNode = new THREE.Object3D();
+dogNode.position.set(0.64, 0, 0.24);
+pedHip.add(dogNode);
+let dogMesh = null, dogN = 0;
+tasks.push(() => {
+  const link = (a, b, t, col) => {
+    const dx=b[0]-a[0], dy=b[1]-a[1], dz=b[2]-a[2], L=Math.hypot(dx,dy,dz);
+    const g = colored(new THREE.CylinderGeometry(t, t, L, 4), col);
+    g.applyQuaternion(new THREE.Quaternion()
+      .setFromUnitVectors(new THREE.Vector3(0,1,0), new THREE.Vector3(dx/L, dy/L, dz/L)));
+    return g.translate((a[0]+b[0])/2, (a[1]+b[1])/2, (a[2]+b[2])/2);
+  };
+  const P = [
+    colored(new THREE.BoxGeometry(0.19, 0.24, 0.52), 0xffffff).translate(0, 0.40, 0),
+    colored(new THREE.BoxGeometry(0.17, 0.19, 0.16), 0xf2f2f2).translate(0, 0.50, 0.32),
+    colored(new THREE.BoxGeometry(0.10, 0.09, 0.12), 0x3a3a3a).translate(0, 0.45, 0.42),
+    colored(new THREE.BoxGeometry(0.05, 0.10, 0.03), 0xe0e0e0).translate(-0.07, 0.60, 0.29),
+    colored(new THREE.BoxGeometry(0.05, 0.10, 0.03), 0xe0e0e0).translate( 0.07, 0.60, 0.29),
+    colored(new THREE.CylinderGeometry(0.022, 0.016, 0.26, 4), 0xf2f2f2)
+      .rotateX(-0.7).translate(0, 0.50, -0.30)
+  ];
+  for(const [dx, dz] of [[-0.07,0.18],[0.07,0.18],[-0.07,-0.18],[0.07,-0.18]])
+    P.push(colored(new THREE.BoxGeometry(0.055, 0.30, 0.065), 0xededed).translate(dx, 0.15, dz));
+  const G = [ link([0, 0.52, 0.30], [-0.62, 1.02, -0.16], 0.010, 0x9a1f2a) ];  // the lead
+  dogMesh = new THREE.InstancedMesh(mergeGeos(P.concat(G)), vcMat, PED_COUNT);
+  dogMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  dogMesh.frustumCulled = false; dogMesh.count = 0;
+  cityGroup.add(dogMesh);
+  const c = new THREE.Color();
+  for(let k=0;k<PED_COUNT;k++){ c.setHex(pick(DOG_COL)); dogMesh.setColorAt(k, c); }
+  dogMesh.instanceColor.needsUpdate = true;
+});
+
+/* ---- the helicopter -------------------------------------------------------
+ * There is always one over Manhattan and you always hear it before you find it.
+ * It flies a wide circle over Midtown at about five hundred feet, which is high
+ * enough to clear everything but the two towers it goes round.
+ */
+let heli = null, heliRotor = null, heliTail = null, heliBeacon = null;
+const HELI = { r: 340, y: 168, sp: 0.075, a: 0 };
+tasks.push(() => {
+  heli = new THREE.Group();
+  const P = [
+    colored(new THREE.SphereGeometry(1.45, 10, 8), 0x1f2c3e).scale(1, 0.92, 1.7),
+    colored(new THREE.SphereGeometry(1.15, 9, 7), 0x2a3b52).scale(1, 0.86, 1.0).translate(0, 0.16, 1.55),
+    colored(new THREE.CylinderGeometry(0.30, 0.16, 4.6, 6), 0x22303f)
+      .rotateX(Math.PI/2).translate(0, 0.34, -3.1),
+    colored(new THREE.BoxGeometry(0.10, 1.30, 0.70), 0x22303f).translate(0, 0.90, -5.10),
+    colored(new THREE.BoxGeometry(1.70, 0.09, 0.42), 0x22303f).translate(0, 1.24, -4.95),
+    colored(new THREE.CylinderGeometry(0.16, 0.16, 0.70, 6), 0x39404a).translate(0, 1.62, 0),
+    colored(new THREE.BoxGeometry(0.10, 0.42, 2.9), 0x2b3542).translate(-0.95, -1.30, 0.2),
+    colored(new THREE.BoxGeometry(0.10, 0.42, 2.9), 0x2b3542).translate( 0.95, -1.30, 0.2),
+    colored(new THREE.BoxGeometry(2.0, 0.09, 0.09), 0x2b3542).translate(0, -1.10, 1.3),
+    colored(new THREE.BoxGeometry(2.0, 0.09, 0.09), 0x2b3542).translate(0, -1.10, -0.9)
+  ];
+  heli.add(new THREE.Mesh(mergeGeos(P), vcMat));
+  const blade = [];
+  for(let k=0;k<4;k++)
+    blade.push(colored(new THREE.BoxGeometry(0.20, 0.035, 11.6), 0x1a1e24).rotateY(k*Math.PI/4));
+  heliRotor = new THREE.Mesh(mergeGeos(blade), vcMat);
+  heliRotor.position.y = 1.96; heli.add(heliRotor);
+  const tb = [];
+  for(let k=0;k<3;k++)
+    tb.push(colored(new THREE.BoxGeometry(0.10, 2.3, 0.028), 0x1a1e24).rotateZ(k*Math.PI/3));
+  heliTail = new THREE.Mesh(mergeGeos(tb), vcMat);
+  heliTail.position.set(0.14, 0.90, -5.10); heli.add(heliTail);
+  heliBeacon = new THREE.Mesh(new THREE.SphereGeometry(0.20, 6, 5),
+    new THREE.MeshBasicMaterial({ color:0xff3b30 }));
+  heliBeacon.position.set(0, -1.34, -0.4); heli.add(heliBeacon);
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 6, 5),
+    new THREE.MeshBasicMaterial({ color:0xfff3d0 }));
+  lamp.position.set(0, -0.2, 2.4); heli.add(lamp);
+  cityGroup.add(heli);
+});
+
+// ---- rain on the ear ----
+let rainGain = null;
+function rainAudio(){
+  if(!actx || rainGain) return;
+  const len = actx.sampleRate * 4;
+  const buf = actx.createBuffer(1, len, actx.sampleRate);
+  const d = buf.getChannelData(0);
+  for(let i=0;i<len;i++) d[i] = (Math.random()*2-1) * 0.6;
+  const src = actx.createBufferSource(); src.buffer = buf; src.loop = true;
+  const hp = actx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 900;
+  const lp = actx.createBiquadFilter(); lp.type = 'lowpass';  lp.frequency.value = 6200;
+  rainGain = actx.createGain(); rainGain.gain.value = 0;
+  src.connect(hp).connect(lp).connect(rainGain).connect(actx.destination);
+  src.start();
+}
+function thunder(){
+  if(!actx) return;
+  const t = actx.currentTime + rr(0.4, 1.7);       // it arrives after the light does
+  const len = Math.floor(actx.sampleRate * 2.6);
+  const buf = actx.createBuffer(1, len, actx.sampleRate);
+  const d = buf.getChannelData(0);
+  let last = 0;
+  for(let i=0;i<len;i++){
+    const w = Math.random()*2-1; last = (last + 0.06*w)/1.06;
+    d[i] = last * 6 * Math.min(1, i/2200) * (1 - i/len)**1.6;
+  }
+  const src = actx.createBufferSource(); src.buffer = buf;
+  const f = actx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 260;
+  const g = actx.createGain(); g.gain.value = 0.55;
+  src.connect(f).connect(g).connect(actx.destination);
+  src.start(t);
+}
+
+function setWeather(i, silent){
+  wxI = (i + WX.length) % WX.length;
+  wxNext = rr(210, 430);
+  if(!player.under) applySky();
+  if(!silent) toast(['The sky clears', 'Cloud comes over', 'It starts to rain',
+                     'The sky opens', 'It begins to snow'][wxI]);
+}
+
+let splCursor = 0, pudCursor = 0;
+function updateWeather(dt, t){
+  const w = WX[wxI];
+
+  // the weather moves on by itself, one step at a time, so it is never the same
+  // walk twice — but it will not jump from clear to a downpour
+  wxNext -= dt;
+  if(wxNext <= 0) setWeather(wxI + (rnd() < 0.55 ? 1 : -1) + (wxI === 0 ? 1 : 0));
+
+  // wet and lying snow lag the sky by about half a minute in each direction
+  const ease = (v, to, up, down) => v + (to - v) * Math.min(1, dt / (to > v ? up : down));
+  const w0 = wet, l0 = lay;
+  wet = ease(wet, w.wet, 9, 26);
+  lay = ease(lay, w.lay, 34, 60);
+  if(Math.abs(wet-w0) > 1e-4 || Math.abs(lay-l0) > 1e-4) applyGround();
+
+  const camX = camera.position.x, camY = camera.position.y, camZ = camera.position.z;
+  const wx = Math.sin(windA.a) * windA.s, wz = Math.cos(windA.a) * windA.s;
+  windA.a += dt * 0.06;                                  // the wind swings round
+
+  // ---- drops ----
+  if(rainMesh){
+    const n = Math.round(RAIN_N * w.rain);
+    rainMesh.count = n;
+    rainMat.opacity = 0.28 + 0.22*w.rain;
+    for(let k=0;k<n;k++){
+      const d = drops[k];
+      d.y -= d.sp * dt; d.x += wx*dt*1.6; d.z += wz*dt*1.6;
+      if(d.y < camY - RAIN_DROP){ d.y += RAIN_H; d.x = camX + rr(-RAIN_R, RAIN_R); d.z = camZ + rr(-RAIN_R, RAIN_R); }
+      if(d.x - camX >  RAIN_R) d.x -= RAIN_R*2;
+      if(d.x - camX < -RAIN_R) d.x += RAIN_R*2;
+      if(d.z - camZ >  RAIN_R) d.z -= RAIN_R*2;
+      if(d.z - camZ < -RAIN_R) d.z += RAIN_R*2;
+      // a streak lies along where it is going, not straight down
+      _we.set(-Math.atan2(wz*1.6, d.sp), 0, Math.atan2(wx*1.6, d.sp));
+      _wq.setFromEuler(_we);
+      _wv.set(d.x, d.y, d.z);
+      _ws.set(1, d.len * d.sp * 0.055, 1);
+      rainMesh.setMatrixAt(k, _wm.compose(_wv, _wq, _ws));
+    }
+    if(n) rainMesh.instanceMatrix.needsUpdate = true;
+  }
+
+  // ---- flakes ----
+  if(snowPts){
+    snowPts.visible = w.snow > 0;
+    if(w.snow > 0){
+      for(let k=0;k<SNOW_N;k++){
+        const f = flakes[k];
+        f.y -= f.sp * dt;
+        // a flake does not fall, it wanders down
+        f.x += (wx*0.55 + Math.sin(t*f.sw + f.ph)*0.9) * dt;
+        f.z += (wz*0.55 + Math.cos(t*f.sw*0.8 + f.ph)*0.9) * dt;
+        if(f.y < camY - 7){ f.y += SNOW_H; f.x = camX + rr(-SNOW_R, SNOW_R); f.z = camZ + rr(-SNOW_R, SNOW_R); }
+        if(f.x - camX >  SNOW_R) f.x -= SNOW_R*2;
+        if(f.x - camX < -SNOW_R) f.x += SNOW_R*2;
+        if(f.z - camZ >  SNOW_R) f.z -= SNOW_R*2;
+        if(f.z - camZ < -SNOW_R) f.z += SNOW_R*2;
+        snowPos[k*3] = f.x; snowPos[k*3+1] = f.y; snowPos[k*3+2] = f.z;
+      }
+      snowPts.geometry.attributes.position.needsUpdate = true;
+    }
+  }
+
+  // ---- splashes ----
+  if(splMesh){
+    splMesh.count = w.rain > 0 && wet > 0.25 ? SPL_N : 0;
+    if(splMesh.count){
+      // start a few new ones every frame rather than all at once, so the ground
+      // is always somewhere in the middle of a hundred separate ripples
+      for(let n=0, want = Math.ceil(SPL_N * w.rain * dt * 6.5); n<want; n++){
+        splCursor = (splCursor + 1) % SPL_N;
+        const s = splashes[splCursor];
+        if(s.t < 1) continue;
+        const x = player.x + rr(-13, 13), z = player.z + rr(-13, 13);
+        if(!isSolidGround(x, z, false) || inParkWater(x, z)) continue;
+        s.x = x; s.z = z; s.y = groundAt(x, z, false) + 0.025; s.t = 0;
+      }
+      for(let k=0;k<SPL_N;k++){
+        const s = splashes[k];
+        if(s.t >= 1){ splMesh.setMatrixAt(k, _wm.makeScale(0,0,0)); continue; }
+        s.t = Math.min(1, s.t + dt * 4.2);
+        const g = (1 - s.t) * 0.80 * w.rain;
+        _wcol.setRGB(g*0.82, g*0.90, g);
+        splMesh.setColorAt(k, _wcol);
+        _wv.set(s.x, s.y, s.z);
+        // a drop throws a ring about a hand across, not a hoop you could step in
+        _ws.setScalar(0.07 + s.t * 0.34);
+        splMesh.setMatrixAt(k, _wm.compose(_wv, _qI, _ws));
+      }
+      splMesh.instanceMatrix.needsUpdate = true;
+      if(splMesh.instanceColor) splMesh.instanceColor.needsUpdate = true;
+    }
+  }
+
+  // ---- puddles ----
+  if(pudMesh){
+    pudMesh.material.opacity = Math.min(0.62, wet * 0.66);
+    pudMesh.visible = wet > 0.06;
+    if(pudMesh.visible){
+      // they read as water because they are the colour of the sky, not of a hole
+      pudMesh.material.color.copy(skyMat.uniforms.bot.value)
+        .lerp(_wcol.setHex(0x0a0d12), night ? 0.30 : 0.12);
+      for(let n=0;n<4;n++){
+        pudCursor = (pudCursor + 1) % PUD_N;
+        const p = puddles[pudCursor];
+        if(p.y < -9000 || Math.hypot(p.x - player.x, p.z - player.z) > 95) relocatePuddle(p);
+      }
+      for(let k=0;k<PUD_N;k++){
+        const p = puddles[k];
+        if(p.y < -9000){ pudMesh.setMatrixAt(k, _wm.makeScale(0,0,0)); continue; }
+        _wq.setFromAxisAngle(_yAx, p.a);
+        _wv.set(p.x, p.y, p.z); _ws.set(p.w, 1, p.d);
+        pudMesh.setMatrixAt(k, _wm.compose(_wv, _wq, _ws));
+      }
+      pudMesh.instanceMatrix.needsUpdate = true;
+    }
+  }
+
+  // ---- spray off the traffic ----
+  if(sprayMesh){
+    let sn = 0;
+    if(wet > 0.35 && !player.under){
+      for(let k=0;k<cars.length && sn < SPRAY_N-1;k++){
+        const c = cars[k], v = c.vel || 0;
+        if(v < 5) continue;                              // parked, or crawling
+        const p = c.g.position;
+        if(Math.abs(p.x - player.x) > 90 || Math.abs(p.z - player.z) > 90) continue;
+        const sa = Math.sin(c.g.rotation.y), ca2 = Math.cos(c.g.rotation.y);
+        const back = -((c.len || 4.4)/2 - 0.5);
+        const amt = Math.min(1, (v - 5)/26) * wet;
+        // one plume off each back wheel, standing up and facing you
+        for(let s=-1; s<=1; s+=2){
+          const ox = sa*back + ca2*s*0.82, oz = ca2*back - sa*s*0.82;
+          _wv.set(p.x + ox, p.y + 0.22, p.z + oz);
+          const g2 = amt * 0.55;
+          _wcol.setRGB(g2*0.88, g2*0.93, g2);
+          sprayMesh.setColorAt(sn, _wcol);
+          _ws.set(1.5 + amt*1.5, 0.9 + amt*1.1, 1);
+          sprayMesh.setMatrixAt(sn++, _wm.compose(_wv, camera.quaternion, _ws));
+        }
+      }
+    }
+    sprayMesh.count = sn;
+    if(sn){ sprayMesh.instanceMatrix.needsUpdate = true;
+            if(sprayMesh.instanceColor) sprayMesh.instanceColor.needsUpdate = true; }
+  }
+
+  // ---- lightning, and what comes after it ----
+  if(bolt > 0){
+    bolt -= dt;
+    // it does not fade evenly — a flash is two or three of them close together
+    const f = Math.max(0, bolt / 0.26) * (0.55 + 0.45*Math.abs(Math.sin(bolt*70)));
+    const base = (night ? SKY.night.ai : SKY.day.ai) * (0.55 + w.light*0.45);
+    ambient.intensity = base + f*3.2;
+    ambient.color.set(0xdce8ff);
+    fill.intensity = (night ? 0.06 : 0.34) * w.light + f*1.4;
+    if(bolt <= 0) applySky();
+  } else if(w.storm && rnd() < dt * 0.085){
+    bolt = 0.26; thunder();
+  }
+
+  // ---- rain on the ear ----
+  if(rainGain) rainGain.gain.value = w.rain * (player.under ? 0.004 : 0.055);
+
+  // ---- the helicopter ----
+  if(heli){
+    HELI.a += dt * HELI.sp;
+    const hx = midX(11) + Math.sin(HELI.a) * HELI.r, hz = midZ(20) + Math.cos(HELI.a) * HELI.r;
+    heli.position.set(hx, HELI.y + Math.sin(HELI.a*2.3)*6, hz);
+    // it banks into the turn, and it flies the way it is pointing
+    heli.rotation.set(0, HELI.a + Math.PI/2, 0);
+    heli.rotateZ(-0.13);
+    heli.rotateX(0.06);
+    heliRotor.rotation.y = t * 42;
+    heliTail.rotation.x = t * 58;
+    heliBeacon.material.color.setHex(Math.sin(t*4.4) > 0.6 ? 0xff3b30 : 0x3a0d0b);
+    heli.visible = w.grey < 0.9;                  // in a real storm it is grounded
+  }
+}
+
 // ---------- staged build ----------
 const loadT = document.getElementById('loadt'), loadF = document.getElementById('loadf');
 const TOTAL = tasks.length;
@@ -7152,11 +8596,18 @@ function start(){
   for(const c of cars) c.g.matrixAutoUpdate = true;
   for(const s of steams) s.spr.matrixAutoUpdate = true;
   for(const f of ferries) f.g.matrixAutoUpdate = true;   // she is not scenery
+  // and neither is the helicopter, whose rotor has to be free to turn
+  if(heli) heli.traverse(o => { o.matrixAutoUpdate = true; });
   // the crowd is instanced: the meshes themselves never move, only the
   // per-instance matrices, so they can stay static like the rest of the city
 
   peds.forEach(relocatePed);
   steams.forEach(s => { s.x = player.x + rr(-70,70); s.z = player.z + rr(-70,70); });
+  // ?rain, ?snow and the rest let you drop straight into the weather you want
+  const WQ = ['clear','overcast','rain','storm','snow'];
+  const wq = WQ.findIndex(n => location.search.includes(n));
+  setWeather(wq < 0 ? 0 : wq, true);
+  wet = WX[wxI].wet; lay = WX[wxI].lay; applyGround();
   setNight(location.search.includes('night'), true);
   renderer.compile(scene, camera);
   document.getElementById('load').style.display = 'none';
