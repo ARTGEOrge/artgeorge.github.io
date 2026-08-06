@@ -3,5 +3,7 @@
 .git
 .claude
 .netlify
+.firebase
+.env*
 scholar-ai
 node_modules

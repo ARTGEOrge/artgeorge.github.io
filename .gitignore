@@ -11,3 +11,4 @@ scholar-ai/
 
 # Firebase deploy cache
 .firebase
+.env*
