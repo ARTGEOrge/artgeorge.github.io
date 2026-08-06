@@ -122,6 +122,7 @@
     .card--shapes  { --accent: #a855f7; --accent-glow: rgba(168,85,247,0.5); }
     .card--ency    { --accent: #1c6ea4; --accent-glow: rgba(28,110,164,0.5); }
     .card--zombie  { --accent: #6d4aff; --accent-glow: rgba(109,74,255,0.55); }
+    .card--kart    { --accent: #ffd23f; --accent-glow: rgba(255,210,63,0.5); }
 
     .card-body { padding: 20px 22px 24px; }
 
@@ -271,6 +272,104 @@
   </header>
 
   <div class="games">
+
+    <a href="/mario-kart/" class="card card--kart">
+      <div class="play-btn">&#9654; PLAY</div>
+      <div class="card-banner">
+        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="kartSky" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#123a86"/>
+              <stop offset="60%" stop-color="#3f80cf"/>
+              <stop offset="100%" stop-color="#a9d7f5"/>
+            </linearGradient>
+            <radialGradient id="kartSun" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#fff3c4"/>
+              <stop offset="100%" stop-color="rgba(255,233,168,0)"/>
+            </radialGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#kartSky)"/>
+          <circle cx="302" cy="36" r="42" fill="url(#kartSun)"/>
+          <circle cx="302" cy="36" r="13" fill="#fff2c0"/>
+          <!-- distant hills -->
+          <path d="M0,95 L34,74 L62,88 L96,66 L132,90 L170,72 L206,92 L244,70 L286,90 L322,76 L360,92 L400,78 L400,95 Z" fill="#3d5f8e"/>
+          <path d="M0,95 L46,84 L84,94 L126,80 L168,95 L214,82 L258,95 L300,84 L344,95 L400,86 L400,95 Z" fill="#33507a"/>
+          <!-- ground -->
+          <rect x="0" y="95" width="400" height="85" fill="#3c8a42"/>
+          <!-- Mode 7 road -->
+          <path d="M200,95 L24,180 L376,180 Z" fill="#494954"/>
+          <!-- kerbs, alternating -->
+          <g>
+            <polygon points="175.4,106.9 173.1,106.9 146.2,118.8 150.7,118.8" fill="#f0f0f4"/>
+            <polygon points="126.1,130.7 119.4,130.7 92.5,142.6 101.4,142.6" fill="#f0f0f4"/>
+            <polygon points="76.8,154.5 65.6,154.5 38.7,166.4 52.2,166.4" fill="#f0f0f4"/>
+            <polygon points="150.7,118.8 146.2,118.8 119.4,130.7 126.1,130.7" fill="#e04a3c"/>
+            <polygon points="101.4,142.6 92.5,142.6 65.6,154.5 76.8,154.5" fill="#e04a3c"/>
+            <polygon points="52.2,166.4 38.7,166.4 8,180 24,180" fill="#e04a3c"/>
+            <polygon points="224.6,106.9 226.9,106.9 253.8,118.8 249.3,118.8" fill="#f0f0f4"/>
+            <polygon points="273.9,130.7 280.6,130.7 307.5,142.6 298.6,142.6" fill="#f0f0f4"/>
+            <polygon points="323.2,154.5 334.4,154.5 361.3,166.4 347.8,166.4" fill="#f0f0f4"/>
+            <polygon points="249.3,118.8 253.8,118.8 280.6,130.7 273.9,130.7" fill="#e04a3c"/>
+            <polygon points="298.6,142.6 307.5,142.6 334.4,154.5 323.2,154.5" fill="#e04a3c"/>
+            <polygon points="347.8,166.4 361.3,166.4 392,180 376,180" fill="#e04a3c"/>
+          </g>
+          <!-- centre dashes -->
+          <g fill="rgba(232,232,240,0.85)">
+            <polygon points="199.1,110.3 200.9,110.3 201.3,117.1 198.7,117.1"/>
+            <polygon points="198.2,125.6 201.8,125.6 202.3,134.1 197.7,134.1"/>
+            <polygon points="197.2,142.6 202.8,142.6 203.4,152.8 196.6,152.8"/>
+            <polygon points="196,163 204,163 204.8,176.6 195.2,176.6"/>
+          </g>
+          <!-- rival karts up the road -->
+          <g>
+            <rect x="160" y="123" width="19" height="10" rx="2" fill="#f2c33c"/>
+            <rect x="157" y="129" width="5" height="6" rx="1.5" fill="#15151d"/>
+            <rect x="177" y="129" width="5" height="6" rx="1.5" fill="#15151d"/>
+            <circle cx="169.5" cy="121" r="4" fill="#f4f4f8"/>
+          </g>
+          <g>
+            <rect x="236" y="134" width="25" height="13" rx="3" fill="#5fd06a"/>
+            <rect x="232" y="142" width="7" height="8" rx="2" fill="#15151d"/>
+            <rect x="258" y="142" width="7" height="8" rx="2" fill="#15151d"/>
+            <circle cx="248.5" cy="131" r="5" fill="#f4f4f8"/>
+          </g>
+          <!-- player kart, rear view -->
+          <g>
+            <ellipse cx="200" cy="176" rx="34" ry="5" fill="rgba(0,0,0,0.3)"/>
+            <rect x="163" y="152" width="15" height="22" rx="4" fill="#101017"/>
+            <rect x="222" y="152" width="15" height="22" rx="4" fill="#101017"/>
+            <rect x="166" y="156" width="9" height="7" rx="2" fill="#4a4a58"/>
+            <rect x="225" y="156" width="9" height="7" rx="2" fill="#4a4a58"/>
+            <path d="M176,172 L179,152 Q200,145 221,152 L224,172 Z" fill="#d8342a"/>
+            <rect x="176" y="141" width="48" height="6" rx="2.5" fill="#a32219"/>
+            <rect x="181" y="145" width="4" height="8" rx="1.5" fill="#8d1d15"/>
+            <rect x="215" y="145" width="4" height="8" rx="1.5" fill="#8d1d15"/>
+            <rect x="182" y="160" width="10" height="4" rx="2" fill="#ff5a4a"/>
+            <rect x="208" y="160" width="10" height="4" rx="2" fill="#ff5a4a"/>
+            <circle cx="200" cy="146" r="10" fill="#f4f4f8"/>
+            <path d="M190,146 A10,10 0 0,1 210,146 Z" fill="#d8342a"/>
+          </g>
+          <!-- speed lines -->
+          <g stroke="rgba(255,255,255,0.35)" stroke-width="2" stroke-linecap="round">
+            <line x1="44" y1="128" x2="18" y2="136"/>
+            <line x1="356" y1="128" x2="382" y2="136"/>
+            <line x1="60" y1="112" x2="42" y2="117"/>
+            <line x1="340" y1="112" x2="358" y2="117"/>
+          </g>
+        </svg>
+      </div>
+      <div class="card-body">
+        <div class="card-tag">New</div>
+        <div class="card-title">Kart Games</div>
+        <p class="card-desc">Seventeen kart racers in one place &mdash; one for every Mario Kart ever released, each built around the trick that game actually introduced. Real Mode 7 for the SNES, pseudo-3D roads for the N64, two riders per kart, anti-gravity tubes, an open world, even a Pac-Man maze. Plus a full grand prix with rivals, boost pads and live race positions.</p>
+        <div class="card-tags">
+          <span class="tag">Racing</span>
+          <span class="tag">17 Games</span>
+          <span class="tag">Retro</span>
+          <span class="tag">Arcade</span>
+        </div>
+      </div>
+    </a>
 
     <a href="/nyc-walk/" class="card card--nyc">
       <div class="play-btn">&#9654; PLAY</div>
