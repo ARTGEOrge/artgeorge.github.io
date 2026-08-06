@@ -572,28 +572,57 @@ function masonry(base, glass, trim, litRatio, mortar){
   const g  = ca.getContext('2d');
   g.fillStyle = base; g.fillRect(0,0,S,S);
   noise(g, S, 22);
-  // brick courses — faint, but they keep flat walls from reading as plastic
+  // brick courses, and the perpends between them. Faint on their own, but a
+  // wall without them reads as poured plastic at any distance you can see it.
   if(mortar){
     g.strokeStyle = mortar; g.lineWidth = 1;
     for(let y = 3; y < S; y += 5){
       g.beginPath(); g.moveTo(0, y+0.5); g.lineTo(S, y+0.5); g.stroke();
+    }
+    // one brick in forty is a shade off the rest, which is what makes it brick
+    for(let y = 3; y < S; y += 5) for(let x = (y/5 % 2) * 5; x < S; x += 10){
+      if(rnd() > 0.16) continue;
+      g.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,.045)' : 'rgba(0,0,0,.055)';
+      g.fillRect(x, y + 1, 9, 3.6);
     }
   }
   const cb = document.createElement('canvas'); cb.width = cb.height = S;
   const e  = cb.getContext('2d');
   e.fillStyle = '#000'; e.fillRect(0,0,S,S);
   for(let y=0;y<cells;y++) for(let x=0;x<cells;x++){
-    const px = x*cell + cell*0.30, py = y*cell + cell*0.20;
-    const pw = cell*0.40,          ph = cell*0.50;
+    /* A New York window is wider and closer to its neighbour than it looks in a
+     * photograph: on a tenement the pier between two windows is narrower than
+     * the windows themselves. Forty per cent of the bay left too much blank
+     * brick and read as an office block from the eighties. */
+    const px = x*cell + cell*0.26, py = y*cell + cell*0.18;
+    const pw = cell*0.48,          ph = cell*0.56;
     g.fillStyle = trim;                                        // lintel above
     g.fillRect(px - 2.5, py - 3.5, pw + 5, 3.5);
     g.fillRect(px - 3.5, py + ph, pw + 7, 4);                  // stone sill
     g.fillStyle = 'rgba(0,0,0,.55)';                           // reveal shadow
     g.fillRect(px - 1.5, py - 1.5, pw + 3, ph + 3);
+    /* A window is not a hole. The top of the pane is tilted up just enough to
+     * catch the sky and comes back nearly white; the bottom is the room behind,
+     * which is dark. Get that one gradient wrong and every building in the city
+     * reads as a slab with rectangles cut out of it. */
     const grd = g.createLinearGradient(0, py, 0, py + ph);
-    grd.addColorStop(0, glass); grd.addColorStop(1, '#151b22');
+    grd.addColorStop(0,    '#a8bed3');
+    grd.addColorStop(0.22, glass);
+    grd.addColorStop(1,    '#12171d');
     g.fillStyle = grd; g.fillRect(px, py, pw, ph);
-    g.fillStyle = 'rgba(255,255,255,.09)'; g.fillRect(px, py, pw, ph*0.18);
+    // and no two windows on a wall are dressed the same: blinds half down here,
+    // right down there, nothing at all next door
+    if(rnd() < 0.33){
+      const bh = ph * rr(0.20, 0.68);
+      g.fillStyle = rnd() < 0.5 ? 'rgba(198,192,176,.62)' : 'rgba(164,162,156,.58)';
+      g.fillRect(px, py, pw, bh);
+      g.fillStyle = 'rgba(0,0,0,.20)';                         // the slat shadow
+      for(let s = py + 2; s < py + bh; s += 2.5) g.fillRect(px, s, pw, 0.9);
+    } else if(rnd() < 0.30){
+      g.fillStyle = 'rgba(0,0,0,.28)';                         // an unwashed one
+      g.fillRect(px, py, pw, ph);
+    }
+    g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(px, py, pw, ph*0.10);
     g.fillStyle = 'rgba(14,18,24,.85)';                        // sash bar
     g.fillRect(px, py + ph*0.5 - 0.9, pw, 1.8);
     if(rnd() < litRatio){
@@ -625,6 +654,18 @@ function curtain(spandrel, glassTop, glassBot, mullion, litRatio){
     // a couple of panes catch the sky at a different angle
     g.fillStyle = 'rgba(255,255,255,.05)';
     g.fillRect(0, y, S, h*0.20);
+    /* Sealed glass is never one flat sheet. Each unit is set in its frame at a
+     * fractionally different angle, so a curtain wall is a patchwork of panes
+     * that are each a shade lighter or darker than the one beside them — and
+     * whichever ones happen to be facing the sky come back almost white. */
+    for(let m=0;m<mull;m++){
+      const r0 = rnd();
+      if(r0 < 0.13)      g.fillStyle = 'rgba(196,214,232,.30)';   // catching sky
+      else if(r0 < 0.26) g.fillStyle = 'rgba(0,0,0,.16)';
+      else if(r0 < 0.40) g.fillStyle = 'rgba(255,255,255,.055)';
+      else continue;
+      g.fillRect(m*mw + 1, y, mw - 2, h);
+    }
     for(let m=0;m<mull;m++){
       if(rnd() < litRatio){
         e.fillStyle = WARM[Math.floor(rnd()*WARM.length)];
@@ -658,10 +699,35 @@ const FACADES = [
 ];
 const TRIM  = [0x7a4231, 0x9a8c73, 0x3a4048, 0x2a343d, 0x5c3a2a, 0xa9a191];
 const GLASSY = new Set([2, 3]);
-const TILE = 20;
+/* Eight window bays and eight floors to every seventeen units of wall. At the
+ * scale the grid is built to that is a bay about ten feet across and a floor
+ * about ten feet high, which is what a New York apartment house measures. It
+ * used to be twenty, and the windows came out too big and too far apart — the
+ * surest sign of a facade nobody measured. */
+const TILE = 17;
+/* Six materials for a whole city means six buildings, repeated two thousand
+ * times. Real blocks are a jumble: the same red brick fired ten years apart is
+ * two different reds, half of Manhattan has been washed once and not since, and
+ * a glass tower's tint is whatever its developer happened to buy.
+ *
+ * The facades take vertex colours now, so every building multiplies its texture
+ * by a tone of its own. It costs nothing at all — the geometry already carried a
+ * colour attribute, it was simply white — and no draw call is added, because the
+ * chunk still merges into one mesh per facade. It is the single biggest thing
+ * standing between a block of these and a block of New York. */
 const matFacade = FACADES.map(f => new THREE.MeshLambertMaterial({
-  map:f.map, emissiveMap:f.emissiveMap, emissive:0x000000
+  map:f.map, emissiveMap:f.emissiveMap, emissive:0x000000, vertexColors:true
 }));
+// how far each facade drifts: brick is all over the place, limestone barely moves
+const TONE_SPREAD = [0.17, 0.15, 0.19, 0.19, 0.15, 0.085];
+function brickTone(variant){
+  const s = TONE_SPREAD[variant];
+  const v = 1 + rr(-s, s*0.7);
+  const warm = rr(-s*0.4, s*0.5);        // how far toward the red end it fired
+  return new THREE.Color().setRGB(Math.max(0.40, v + warm),
+                                  Math.max(0.40, v),
+                                  Math.max(0.40, v - warm*0.85));
+}
 
 const SHOP_TILE = 5.2;
 const SHOP = (() => {
@@ -1340,22 +1406,56 @@ function fireEscape(c, cx, cz, w, d, h){
   }
 }
 
+/* The wooden tank on its steel frame is the most recognisable object in the
+ * city and there is one on nearly every roof above six storeys — the water
+ * pressure in the mains will not reach higher, so the building has to lift its
+ * own. Cedar staves, iron hoops, a conical lid, four or six legs. One in three
+ * roofs was far too few; from any window in Midtown you can count a dozen. */
+function waterTank(c, x, z, top, r){
+  const hgt = r*rr(2.3, 3.0);
+  const lift = rr(2.6, 4.4);                      // how high the frame stands it
+  const stave = rnd() < 0.25 ? 0x7d6a58 : (rnd() < 0.5 ? 0x6b4a35 : 0x5d4230);
+  const body = colored(new THREE.CylinderGeometry(r, r*0.94, hgt, 12), stave);
+  body.translate(x, top+lift+hgt/2, z);
+  const cone = colored(new THREE.ConeGeometry(r*1.14, r*0.95, 12), 0x4a3120);
+  cone.translate(x, top+lift+hgt+r*0.47, z);
+  c.roof.push(body, cone);
+  // the two iron hoops round the staves, which is what catches the light on one
+  for(const f of [0.26, 0.72]){
+    const hoop = colored(new THREE.CylinderGeometry(r*1.03, r*1.03, 0.20, 12), 0x3a3630);
+    hoop.translate(x, top+lift+hgt*f, z);
+    c.roof.push(hoop);
+  }
+  const legs = rnd() < 0.4 ? 6 : 4;
+  for(let k=0;k<legs;k++){
+    const a = k/legs*Math.PI*2 + 0.4;
+    const leg = colored(new THREE.BoxGeometry(0.20, lift, 0.20), 0x4a3427);
+    leg.translate(x+Math.cos(a)*r*0.78, top+lift/2, z+Math.sin(a)*r*0.78);
+    c.roof.push(leg);
+    // the cross-bracing between them, which is most of what you actually see
+    const br = colored(new THREE.BoxGeometry(r*1.5, 0.11, 0.11), 0x453022);
+    br.rotateY(-a + Math.PI/2);
+    br.translate(x+Math.cos(a + Math.PI/legs)*r*0.7, top+lift*0.55,
+                 z+Math.sin(a + Math.PI/legs)*r*0.7);
+    c.roof.push(br);
+  }
+}
+// somewhere on this roof with room for something of that size on it
+function roofSpot(cx, cz, w, d, r){
+  return [cx + rr(-w/2 + r + 0.8, w/2 - r - 0.8),
+          cz + rr(-d/2 + r + 0.8, d/2 - r - 0.8)];
+}
 function roofExtras(c, cx, cz, top, w, d){
-  if(w < 12 || d < 12) return;
-  if(rnd() < 0.34){
-    const r = Math.min(2.2, Math.min(w,d)*0.14), hgt = r*2.6;
-    const ox = rr(-w/2+r+1, w/2-r-1), oz = rr(-d/2+r+1, d/2-r-1);
-    const body = colored(new THREE.CylinderGeometry(r, r*0.92, hgt, 10), 0x6b4a35);
-    body.translate(cx+ox, top+3.2+hgt/2, cz+oz);
-    const cone = colored(new THREE.ConeGeometry(r*1.12, r*0.9, 10), 0x53381f);
-    cone.translate(cx+ox, top+3.2+hgt+r*0.45, cz+oz);
-    c.roof.push(body, cone);
-    for(let k=0;k<4;k++){
-      const a = k/4*Math.PI*2 + 0.4;
-      const leg = colored(new THREE.BoxGeometry(0.22, 3.2, 0.22), 0x4a3427);
-      leg.translate(cx+ox+Math.cos(a)*r*0.75, top+1.6, cz+oz+Math.sin(a)*r*0.75);
-      c.roof.push(leg);
-    }
+  if(w < 9 || d < 9) return;
+  const tr = Math.min(2.4, Math.min(w, d)*0.17);
+  if(rnd() < 0.66){
+    const [tx, tz] = roofSpot(cx, cz, w, d, tr);
+    waterTank(c, tx, tz, top, tr);
+  }
+  // a big roof carries two, at opposite ends, one for each riser
+  if(w > 26 && d > 22 && rnd() < 0.30){
+    const [tx, tz] = roofSpot(cx, cz, w, d, tr);
+    waterTank(c, tx, tz, top, tr);
   }
   // the stair bulkhead: every roof has one, and it is the tallest thing up here
   if(rnd() < 0.72){
@@ -1437,6 +1537,39 @@ function tierMass(w, d, h){
   }
   return tiers;
 }
+/* The ring of roof left over where one tier steps back off the one below. Things
+ * go round the outside of the upper tier and inside the cornice of the lower,
+ * so `spot` picks a side and drops the object into that band. */
+function setbackDeck(c, cx, cz, top, tw, td, nw, nd, ledge, glassy){
+  const spot = (clear) => {
+    const mid = ledge/2, t = rr(-0.36, 0.36);
+    switch(ri(0, 3)){
+      case 0:  return [cx + t*tw, cz - (nd/2 + mid)];
+      case 1:  return [cx + t*tw, cz + (nd/2 + mid)];
+      case 2:  return [cx - (nw/2 + mid), cz + t*td];
+      default: return [cx + (nw/2 + mid), cz + t*td];
+    }
+  };
+  const r = Math.min(1.9, ledge*0.33);
+  if(!glassy && ledge > 4.0 && rnd() < 0.55){
+    const [x, z] = spot();
+    waterTank(c, x, z, top, r);
+  }
+  if(rnd() < 0.5){                                    // the stair head coming up
+    const [x, z] = spot();
+    const bw = Math.min(3.4, ledge*0.62), bh = rr(2.4, 3.2);
+    c.roof.push(colored(new THREE.BoxGeometry(bw, bh, bw), 0x6f6a62)
+                  .translate(x, top + bh/2, z));
+    c.roof.push(colored(new THREE.BoxGeometry(bw + 0.35, 0.26, bw + 0.35), 0x4e4a45)
+                  .translate(x, top + bh + 0.13, z));
+  }
+  for(let k=0, n = ri(1, 3); k<n; k++){                // and the plant room kit
+    const [x, z] = spot();
+    const uw = Math.min(2.4, ledge*0.45), uh = rr(0.7, 1.5);
+    c.roof.push(colored(new THREE.BoxGeometry(uw, uh, uw*rr(0.7, 1.2)), 0x8a8d92)
+                  .translate(x, top + uh/2, z));
+  }
+}
 function building(cx, cz, w, d, h, variant){
   const c = chunkOf(cx, cz);
   const glassy = GLASSY.has(variant);
@@ -1447,16 +1580,25 @@ function building(cx, cz, w, d, h, variant){
   else if(Math.min(w, d) > 13 && rnd() < 0.20) shape = 'soft';
 
   const tiers = tierMass(w, d, h);
+  const tone = brickTone(variant);       // this building's own brick, not the block's
   let y = CURB;
   for(let k=0;k<tiers.length;k++){
     const [tw, td, th] = tiers[k];
     for(const g of massGeo(shape, cx, cz, y, tw, td, th, true))
-      c.bldg[variant].push(colored(g, 0xffffff));
+      c.bldg[variant].push(colored(g, tone));
     // masonry gets a heavy projecting cornice, glass a thin parapet band
     const lip = glassy ? 0.34 : 0.92, ch = glassy ? 0.55 : 1.25;
     massPush(c.roof, shape, cx, cz, y + th - ch*0.65, tw + lip*2, td + lip*2, ch, TRIM[variant]);
     if(!glassy && th > 14)         // string course partway up the shaft
       massPush(c.roof, shape, cx, cz, y + 4.6, tw + 0.5, td + 0.5, 0.45, TRIM[variant]);
+    /* The step of a wedding cake is not decoration, it is a roof — and in New
+     * York every one of them carries a tank, a bulkhead and a row of condensers,
+     * which is why the middle of a setback tower is the busiest part of it. */
+    if(k < tiers.length - 1 && shape !== 'round'){
+      const [nw, nd] = tiers[k+1];
+      const ledge = Math.min((tw - nw)/2, (td - nd)/2);
+      if(ledge > 3.0) setbackDeck(c, cx, cz, y + th, tw, td, nw, nd, ledge, glassy);
+    }
     y += th;
   }
   addSolid(cx, cz, shape === 'round' ? w*0.9 : w, shape === 'round' ? d*0.9 : d);
@@ -1633,7 +1775,9 @@ function splitLot(x1,z1,x2,z2,depth,out,min){
 function rowHouse(c, cx, cz, w, d, h, variant, ang){
   const geo = new THREE.BoxGeometry(w, h, d);
   uvScale(geo, w, h, d);
-  c.bldg[variant].push(colored(geo, 0xffffff).translate(cx, CURB + h/2, cz));
+  // every house on the terrace painted differently from its neighbour, which is
+  // half of what a Brooklyn street looks like
+  c.bldg[variant].push(colored(geo, brickTone(variant)).translate(cx, CURB + h/2, cz));
   // the cornice, which is the thing that makes a row read as one terrace
   c.roof.push(colored(new THREE.BoxGeometry(w + 0.55, 0.9, d + 0.55), TRIM[variant])
                 .translate(cx, CURB + h - 0.25, cz),
@@ -1716,7 +1860,7 @@ function detachedBlock(c, i, j, info){
       const geo = new THREE.BoxGeometry(dw, h, dd);
       uvScale(geo, dw, h, dd);
       const v = pick(info.pal);
-      c.bldg[v].push(colored(geo, 0xffffff).translate(cx, CURB + h/2, cz));
+      c.bldg[v].push(colored(geo, brickTone(v)).translate(cx, CURB + h/2, cz));
       // a hipped roof, which is what says house rather than building
       const roof = colored(new THREE.ConeGeometry(Math.max(dw, dd)*0.78, 2.6, 4),
                            pick([0x5a4a3e, 0x4a4a50, 0x6a4a38]));
@@ -3303,10 +3447,11 @@ const LANDMARKS = { '11|23': empireState, '13|21': chrysler,
 
 function setbackTower(cx, cz, tiers, mastH, variant){
   const c = chunkOf(cx, cz);
+  const tone = brickTone(variant);
   let y = CURB;
   for(const [w,d,h] of tiers){
     const geo = new THREE.BoxGeometry(w,h,d); uvScale(geo,w,h,d);
-    const g = colored(geo, 0xffffff);
+    const g = colored(geo, tone);
     g.translate(cx, y + h/2, cz);
     c.bldg[variant].push(g);
     const p = colored(new THREE.BoxGeometry(w+0.8,1.4,d+0.8), 0x5a5d63);
