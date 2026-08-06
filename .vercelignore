@@ -7,3 +7,4 @@
 .env*
 scholar-ai
 node_modules
+deploy.ps1

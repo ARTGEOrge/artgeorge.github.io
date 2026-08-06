@@ -8,6 +8,7 @@
       "**/node_modules/**",
       "*.zip",
       "*.py",
+      "deploy.ps1",
       "scholar-ai/**",
       ".netlify/**",
       ".vercel/**"
