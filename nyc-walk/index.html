@@ -135,6 +135,7 @@
     <div><b>RMB</b>get in / out of a car</div>
     <div><b>N</b>day / night &nbsp; <b>M</b>city map</div>
     <div><b>R</b>weather &nbsp; <b>E</b>sit on a train</div>
+    <div><b>G</b>graphics quality</div>
   </div>
   <div id="mapwrap"><canvas id="map" width="170" height="170"></canvas></div>
   <div id="prompt">Right-click to drive</div>
@@ -369,6 +370,11 @@ const renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreferenc
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+// The scene is rendered into a float buffer and tone mapped at the very end, in
+// the composite, so bloom has real highlights to work from rather than a
+// clipped white. Nothing here maps tones; that happens once, later.
+renderer.toneMapping = THREE.NoToneMapping;
 
 const scene  = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(72, innerWidth/innerHeight, 0.1, 1400);
@@ -409,14 +415,52 @@ const windA = { a: 0.7, s: 2.6 };            // which way it is blowing, and how
 
 scene.fog = new THREE.FogExp2(SKY.day.fog, 0.0046);
 
+/* ---------- how hard to push the graphics -------------------------------
+ * Shadow maps over a whole city and a bloom pass are not free, and this runs on
+ * whatever machine opens the page. Three settings, on G, kept between visits.
+ *
+ * shadow  how far out from you the sun's shadow map reaches, in metres. 0 is off
+ * map     the resolution of that map
+ * bloom   whether lit windows and signs bleed
+ * px      cap on device pixel ratio
+ */
+const QCFG = [
+  { name:'Low',    shadow:0,   map:0,    bloom:0, px:1.25 },
+  { name:'Medium', shadow:82,  map:1024, bloom:1, px:1.75 },
+  { name:'High',   shadow:120, map:2048, bloom:1, px:2 }
+];
+let qi = 2;
+try { const s = localStorage.getItem('nycwalk.quality'); if(s !== null && QCFG[+s]) qi = +s; } catch(e){}
+
 const ambient = new THREE.AmbientLight(SKY.day.amb, SKY.day.ai);
 scene.add(ambient);
+/* Where the sun is decides how much of the city is in shadow, and 300 up over
+ * 178 across put it 59 degrees high — near noon, which throws almost nothing.
+ * At 44 a building lays a shadow about its own height across the street, which
+ * is what a morning avenue actually looks like. */
+const SUNV = new THREE.Vector3(150, 180, 105);
 const sun = new THREE.DirectionalLight(SKY.day.sun, SKY.day.si);
-sun.position.set(140, 300, 110);
+sun.position.copy(SUNV);
 scene.add(sun);
+/* A directional light's shadow camera sits at the light and looks at its target,
+ * so to shadow the streets around you and nothing else, both have to walk with
+ * you. The ortho box is small on purpose: 240 metres of city at 2048 is a sharp
+ * shadow, and the whole grid at 2048 would be a smear. */
+// far enough back that the tallest thing in the city is still below the light
+const SUN_LIFT = SUNV.clone().normalize().multiplyScalar(700);
+sun.target = new THREE.Object3D();
+scene.add(sun.target);
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 20;
+sun.shadow.camera.far  = 1500;
+// acne on a road this flat is all normal offset, not depth offset
+sun.shadow.bias = -0.00035;
+sun.shadow.normalBias = 0.75;
+
 const bounce = new THREE.HemisphereLight(0xdfeaff, 0x3a3a3a, 0.45);
 scene.add(bounce);
-// soft fill so the shaded side of a street canyon does not go black
+// soft fill so the shaded side of a street canyon does not go black. Once real
+// shadows are on it has to give way, or there is nothing for them to darken.
 const fill = new THREE.DirectionalLight(0xc9d9f0, 0.34);
 fill.position.set(-150, 120, -110);
 scene.add(fill);
@@ -483,7 +527,8 @@ for(let k=0;k<CLOUD_N;k++)
                 y: rr(300, 470), s: rr(190, 460), a: rnd()*6.283, drift: rr(0.8, 2.2) });
 const cloudLit = new THREE.Color(), cloudFar = new THREE.Color(), cloudTmp = new THREE.Color();
 
-const SUN_DIR = new THREE.Vector3(140, 300, 110).normalize();
+// the disc goes where the light actually is, or the shadows point at nothing
+const SUN_DIR = SUNV.clone().normalize();
 const sunTex = (() => {
   const S = 128, ca = document.createElement('canvas'); ca.width = ca.height = S;
   const g = ca.getContext('2d');
@@ -685,6 +730,13 @@ const vcMat  = new THREE.MeshLambertMaterial({ vertexColors:true });
 // anything that emits its own light — a screen, a lit sign, a bulb — is unlit
 // geometry, so it stays bright in a shaded canyon and burns at night
 const litMat = new THREE.MeshBasicMaterial({ vertexColors:true });
+/* Bloom only has something to bleed if the thing glowing is allowed past white.
+ * Every self-lit material registers here with the colour it was authored at, and
+ * applySky scales the lot together — hard past 1.0 after dark, gently by day,
+ * back to exactly as authored when bloom is off. */
+const hdrLit = [];
+const registerLit = (m, gain) => { hdrLit.push({ m, base: m.color.clone(), gain: gain || 1 }); return m; };
+registerLit(litMat);
 // [red@phase0, green@phase0, red@phase1, green@phase1]
 const sigMat = [ new THREE.MeshBasicMaterial({color:0xff3b30}),
                  new THREE.MeshBasicMaterial({color:0x14682a}),
@@ -4230,7 +4282,7 @@ tasks.push(() => {
   }
 
   const boards = new THREE.Mesh(mergeGeos(screens),
-    new THREE.MeshBasicMaterial({map:adTex, vertexColors:true}));
+    registerLit(new THREE.MeshBasicMaterial({map:adTex, vertexColors:true}), 1.15));
   boards.frustumCulled = false;
   cityGroup.add(boards, new THREE.Mesh(mergeGeos(frames), vcMat));
 
@@ -5506,26 +5558,41 @@ tasks.push(() => {
   const head = colored(new THREE.BoxGeometry(0.9,0.3,0.5), 0x22262b).translate(1.3,6.1,0);
   const lampGeo = mergeGeos([pole,arm,head]);
   const glowGeo = new THREE.SphereGeometry(0.34, 8, 6);
-  const glowMat = new THREE.MeshBasicMaterial({color:0xffd27a});
+  const glowMat = registerLit(new THREE.MeshBasicMaterial({color:0xffd27a}), 1.3);
   const parkGeo = parkedGeo();
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(),
         v = new THREE.Vector3(), s = new THREE.Vector3(1,1,1),
         col = new THREE.Color();
 
+  /* A wall both throws a shadow and takes one. A road only ever takes one. A lit
+   * sign does neither — it is its own light source and shadowing it would only
+   * put a stripe across something that is meant to glow.
+   *
+   * Nothing is turned on or off per frame: each chunk is one merged mesh with a
+   * bounding sphere three hundred metres across, and the shadow camera only ever
+   * covers a couple of hundred, so ordinary frustum culling drops every chunk
+   * but the handful around you before a triangle is drawn. */
+  const addMesh = (geos, mat, cast, recv) => {
+    const m = new THREE.Mesh(mergeGeos(geos), mat);
+    m.castShadow = cast; m.receiveShadow = recv;
+    cityGroup.add(m);
+    return m;
+  };
+
   for(const c of chunks.values()){
     for(let v=0; v<c.bldg.length; v++)
-      if(c.bldg[v].length) cityGroup.add(new THREE.Mesh(mergeGeos(c.bldg[v]), matFacade[v]));
-    if(c.road.length)  cityGroup.add(new THREE.Mesh(mergeGeos(c.road),  asphaltMat));
-    if(c.walk.length)  cityGroup.add(new THREE.Mesh(mergeGeos(c.walk),  walkMat));
-    if(c.grass.length) cityGroup.add(new THREE.Mesh(mergeGeos(c.grass), grassMat));
-    if(c.roof.length)  cityGroup.add(new THREE.Mesh(mergeGeos(c.roof),  vcMat));
-    if(c.store.length) cityGroup.add(new THREE.Mesh(mergeGeos(c.store), vcMat));
-    if(c.prop.length)  cityGroup.add(new THREE.Mesh(mergeGeos(c.prop),  vcMat));
-    if(c.glow.length)  cityGroup.add(new THREE.Mesh(mergeGeos(c.glow),  litMat));
-    if(c.mark.length)  cityGroup.add(new THREE.Mesh(mergeGeos(c.mark),  vcMat));
-    if(c.shop.length)  cityGroup.add(new THREE.Mesh(mergeGeos(c.shop),  shopMat));
+      if(c.bldg[v].length) addMesh(c.bldg[v], matFacade[v], true, true);
+    if(c.road.length)  addMesh(c.road,  asphaltMat, false, true);
+    if(c.walk.length)  addMesh(c.walk,  walkMat,    false, true);
+    if(c.grass.length) addMesh(c.grass, grassMat,   false, true);
+    if(c.roof.length)  addMesh(c.roof,  vcMat,      true,  true);
+    if(c.store.length) addMesh(c.store, vcMat,      true,  true);
+    if(c.prop.length)  addMesh(c.prop,  vcMat,      true,  true);
+    if(c.glow.length)  addMesh(c.glow,  litMat,     false, false);
+    if(c.mark.length)  addMesh(c.mark,  vcMat,      false, true);
+    if(c.shop.length)  addMesh(c.shop,  shopMat,    true,  true);
     for(let p=0;p<4;p++)
-      if(c.sig[p].length) cityGroup.add(new THREE.Mesh(mergeGeos(c.sig[p]), sigMat[p]));
+      if(c.sig[p].length) addMesh(c.sig[p], sigMat[p], false, false);
 
     if(c.tree.length){
       const inst = new THREE.InstancedMesh(treeGeo, vcMat, c.tree.length);
@@ -5536,6 +5603,7 @@ tasks.push(() => {
         addSolid(x, z, 0.7, 0.7);
       });
       s.set(1,1,1);
+      inst.castShadow = true; inst.receiveShadow = true;   // a plane tree on a kerb
       cityGroup.add(inst);
     }
     if(c.park.length){
@@ -5562,6 +5630,7 @@ tasks.push(() => {
       // a car is 4.4 long, so pad the box by its half-length either way
       trim.userData.x0 = x0 - 2.4; trim.userData.x1 = x1 + 2.4;
       trim.userData.z0 = z0 - 2.4; trim.userData.z1 = z1 + 2.4;
+      inst.castShadow = true; inst.receiveShadow = true;
       cityGroup.add(inst); cityGroup.add(trim);
       parkedMeshes.push(inst); parkedTrims.push(trim);
     }
@@ -6312,7 +6381,8 @@ const shadowTex = (() => {
 })();
 const shadowMat = new THREE.MeshBasicMaterial({map:shadowTex, transparent:true,
   opacity:0.40, depthWrite:false});
-const SH_X = -0.55, SH_Z = -0.43;              // the way the sun throws them
+// the way the sun throws them, taken off the light rather than guessed at
+const SH_X = -SUN_DIR.x / SUN_DIR.y * 0.72, SH_Z = -SUN_DIR.z / SUN_DIR.y * 0.72;
 const _m4 = new THREE.Matrix4(), _q = new THREE.Quaternion(),
       _v3 = new THREE.Vector3(), _s3 = new THREE.Vector3(),
       _yUp = new THREE.Vector3(0,1,0), _qI = new THREE.Quaternion();
@@ -6681,6 +6751,7 @@ addEventListener('keydown', e => {
   if(e.code === 'KeyE' && ride){ if(ride.seat) standUp(); else sitDown(); }
   if(e.code === 'KeyN') setNight(!night);
   if(e.code === 'KeyR') setWeather(wxI + 1);
+  if(e.code === 'KeyG') cycleQuality();
   if(e.code === 'KeyM') document.getElementById('bigmap').classList.toggle('on');
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
 });
@@ -6828,25 +6899,50 @@ function applySky(){
   // After dark there is not much blue left to take out, so overcast does less
   const g = w.grey * (night ? 0.5 : 1);
   _wcB.setHex(night ? 0x1b2130 : 0x8b939b);          // what a covered sky greys toward
-  skyMat.uniforms.top.value.copy(_wcA.setHex(s.top).lerp(_wcB, g));
-  skyMat.uniforms.bot.value.copy(_wcA.setHex(s.bot).lerp(_wcB, g*0.85));
+  /* The dome is a raw ShaderMaterial, so three never ran an output conversion on
+   * it — every one of these hexes was picked by eye against a pipeline that put
+   * its linear value on screen unencoded, and the composite now encodes properly
+   * at the end. Convert once more going in and the sky stays the blue it was
+   * chosen to be instead of washing out two stops. */
+  skyMat.uniforms.top.value.copy(_wcA.setHex(s.top).lerp(_wcB, g)).convertSRGBToLinear();
+  skyMat.uniforms.bot.value.copy(_wcA.setHex(s.bot).lerp(_wcB, g*0.85)).convertSRGBToLinear();
   scene.fog.color.copy(_wcA.setHex(s.fog).lerp(_wcB, g*0.9));
   scene.fog.density = (night ? 0.0060 : 0.0046) * w.fog;
-  ambient.color.set(s.amb); ambient.intensity = s.ai * (0.55 + w.light*0.45);
+  /* Real shadows and the fill light are doing the same job from opposite ends.
+   * The fill exists to keep a shaded canyon off black; once the sun is actually
+   * casting, it has to step back or it fills the shadows straight back in. And
+   * the sun only casts when there is a sun: overcast is a sky-wide source with
+   * no direction, and after dark there is nothing up there at all. */
+  const casting = QCFG[qi].shadow > 0 && !night && w.grey < 0.55 && !player.under;
+  sun.castShadow = casting;
+  /* A street in shadow is not a street with the lights off — it is still under
+   * the whole sky. Without lifting the two ambient terms, a shadow map turns
+   * every shaded kerb into a black hole, which is worse than no shadow at all. */
+  ambient.color.set(s.amb);
+  ambient.intensity = s.ai * (0.55 + w.light*0.45) * (casting ? 1.30 : 1);
   sun.color.set(s.sun); sun.intensity = s.si * w.light;
-  bounce.intensity = (night ? 0.18 : 0.45) * (0.6 + w.light*0.4);
-  fill.intensity = (night ? 0.06 : 0.34) * w.light;
+  bounce.intensity = (night ? 0.27 : 0.45) * (0.6 + w.light*0.4) * (casting ? 1.55 : 1);
+  fill.intensity = (night ? 0.06 : 0.34) * w.light * (casting ? 0.5 : 1);
   // in weather this bad the lights come on in the middle of the afternoon
   const lit = night || w.grey > 0.7;
+  const glow = QCFG[qi].bloom ? (night ? 1.55 : 1.18) : 1;
   matFacade.forEach(m => { m.emissive.set(lit ? 0xffffff : 0x000000);
-                           m.emissiveIntensity = lit ? (night ? 1 : 0.55) : 0; });
+                           m.emissiveIntensity = lit ? (night ? 1 : 0.55) * glow : 0; });
   shopMat.emissive.set(lit ? 0xffffff : 0x35291c);
+  shopMat.emissiveIntensity = lit ? glow : 1;
+  for(const e of hdrLit) e.m.color.copy(e.base).multiplyScalar(1 + (glow - 1) * e.gain);
+  /* ACES rolls the top off hard, which is what you want on a sunlit facade and
+   * exactly what you do not want on a street at night, where almost everything
+   * sits in the bottom of the curve. Open up after dark and in bad weather. */
+  compMat.uniforms.exposure.value = night ? 1.42 : 1.12 + w.grey * 0.16;
   water.material.color.copy(_wcA.setHex(night ? 0x2a3d52 : 0x9fc6dd)
                                 .lerp(_wcB, w.grey*0.7));
   stars.material.opacity = night ? 0.9 * (1 - w.cloud*0.92) : 0;
   // no sun, no shadows: what is left after dark is the faint pool a streetlight
   // throws, not a hard one from overhead — and cloud does the same thing by day
-  shadowMat.opacity = (night ? 0.13 : 0.40) * (1 - w.grey*0.88);
+  // the painted-on blob under a car is a stand-in for a shadow map; where there
+  // is a real one it only needs to darken the contact patch, not the whole pool
+  shadowMat.opacity = (night ? 0.13 : 0.40) * (1 - w.grey*0.88) * (casting ? 0.55 : 1);
   sunDisc.material.color.set(night ? 0x93a8c8 : 0xffffff);
   sunDisc.material.opacity = (night ? 0.5 : 0.95) * (1 - w.grey);
   sunDisc.scale.setScalar(night ? 70 : 170);
@@ -7136,10 +7232,182 @@ function drawBigMap(){
   bg.beginPath(); bg.arc(px, py, 9, 0, 6.3); bg.stroke();
 }
 
+/* ---------- post ----------------------------------------------------------
+ * The scene no longer goes straight to the canvas. It is drawn into a float
+ * buffer, which means a lit window is allowed to be brighter than white instead
+ * of clipping at it, and three things then happen on the way out:
+ *
+ *   bright   everything over the threshold is pulled out, at half size
+ *   blur     that is smeared, twice, across and then down
+ *   composite the blur is added back, the whole thing is tone mapped once, and
+ *            only then encoded to sRGB
+ *
+ * Tone mapping at the end rather than per-material is the entire point: ACES on
+ * a value of 4.0 rolls a bulb off to a warm white with a halo, where clipping it
+ * at 1.0 first and blurring afterwards gives you grey mush.
+ *
+ * No EffectComposer — the site ships one three.module.js and no examples/, so
+ * this is four short shaders rather than a folder of imports.
+ */
+const POST_VERT = `varying vec2 vUv;
+  void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+
+const brightMat = new THREE.ShaderMaterial({
+  // A lit window is a big flat panel, not a point, so a low threshold sets whole
+  // facades bleeding. Only what is genuinely brighter than white gets through.
+  uniforms:{ tSrc:{value:null}, cut:{value:1.18}, knee:{value:0.55} },
+  vertexShader: POST_VERT,
+  fragmentShader:`uniform sampler2D tSrc; uniform float cut; uniform float knee;
+    varying vec2 vUv;
+    void main(){
+      vec3 c = texture2D(tSrc, vUv).rgb;
+      float l = max(c.r, max(c.g, c.b));
+      float w = clamp((l - cut) / max(knee, 1e-4), 0.0, 1.0);
+      gl_FragColor = vec4(c * w * w, 1.0);
+    }`
+});
+
+const blurMat = new THREE.ShaderMaterial({
+  uniforms:{ tSrc:{value:null}, dir:{value:new THREE.Vector2(1,0)} },
+  vertexShader: POST_VERT,
+  fragmentShader:`uniform sampler2D tSrc; uniform vec2 dir; varying vec2 vUv;
+    void main(){
+      vec3 s = texture2D(tSrc, vUv).rgb * 0.227027;
+      s += (texture2D(tSrc, vUv + dir*1.3846).rgb + texture2D(tSrc, vUv - dir*1.3846).rgb) * 0.316216;
+      s += (texture2D(tSrc, vUv + dir*3.2308).rgb + texture2D(tSrc, vUv - dir*3.2308).rgb) * 0.070270;
+      gl_FragColor = vec4(s, 1.0);
+    }`
+});
+
+const compMat = new THREE.ShaderMaterial({
+  uniforms:{ tScene:{value:null}, tBloom:{value:null}, amt:{value:0.0},
+             exposure:{value:1.12}, vig:{value:0.16}, sat:{value:1.20} },
+  vertexShader: POST_VERT,
+  fragmentShader:`uniform sampler2D tScene; uniform sampler2D tBloom;
+    uniform float amt; uniform float exposure; uniform float vig; uniform float sat;
+    varying vec2 vUv;
+    vec3 aces(vec3 x){
+      return clamp((x*(2.51*x + 0.03)) / (x*(2.43*x + 0.59) + 0.14), 0.0, 1.0);
+    }
+    void main(){
+      vec3 col = texture2D(tScene, vUv).rgb;
+      if(amt > 0.0) col += texture2D(tBloom, vUv).rgb * amt;
+      col = aces(col * exposure);
+      // ACES pays for its highlight roll-off in colour: a blue sky comes out of
+      // it noticeably greyer than it went in, so put the chroma back afterwards
+      float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
+      col = clamp(mix(vec3(l), col, sat), 0.0, 1.0);
+      // a shade of fall-off into the corners, the way a lens gives you
+      vec2 d = vUv - 0.5;
+      col *= 1.0 - vig * dot(d, d) * 2.4;
+      col = mix(col * 12.92,
+                1.055 * pow(max(col, vec3(1e-5)), vec3(1.0/2.4)) - 0.055,
+                step(vec3(0.0031308), col));
+      gl_FragColor = vec4(col, 1.0);
+    }`
+});
+
+const postCam  = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const postQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), brightMat);
+const postScene = new THREE.Scene();
+postScene.add(postQuad);
+
+let rtScene = null, rtA = null, rtB = null;
+function makeRT(w, h, samples){
+  const rt = new THREE.WebGLRenderTarget(Math.max(2, Math.round(w)), Math.max(2, Math.round(h)), {
+    type: THREE.HalfFloatType,
+    format: THREE.RGBAFormat,
+    minFilter: THREE.LinearFilter,
+    magFilter: THREE.LinearFilter,
+    depthBuffer: true,
+    samples: samples || 0
+  });
+  rt.texture.colorSpace = THREE.LinearSRGBColorSpace;   // no encode on the way in
+  rt.texture.generateMipmaps = false;
+  return rt;
+}
+function resizePost(){
+  const px = renderer.getPixelRatio();
+  const w = Math.round(innerWidth * px), h = Math.round(innerHeight * px);
+  if(rtScene){ rtScene.dispose(); rtA.dispose(); rtB.dispose(); }
+  // multisampling on the scene buffer buys back the antialiasing that going
+  // through a render target would otherwise have thrown away
+  rtScene = makeRT(w, h, QCFG[qi].bloom ? 4 : 4);
+  rtA = makeRT(w/2, h/2, 0);
+  rtB = makeRT(w/2, h/2, 0);
+}
+
+function renderPost(){
+  const Q = QCFG[qi];
+  renderer.setRenderTarget(rtScene);
+  renderer.clear();
+  renderer.render(scene, camera);
+
+  if(Q.bloom){
+    // bright pass
+    postQuad.material = brightMat;
+    brightMat.uniforms.tSrc.value = rtScene.texture;
+    renderer.setRenderTarget(rtA);
+    renderer.render(postScene, postCam);
+    // two separable passes, across then down
+    postQuad.material = blurMat;
+    blurMat.uniforms.tSrc.value = rtA.texture;
+    blurMat.uniforms.dir.value.set(1.15 / rtA.width, 0);
+    renderer.setRenderTarget(rtB);
+    renderer.render(postScene, postCam);
+    blurMat.uniforms.tSrc.value = rtB.texture;
+    blurMat.uniforms.dir.value.set(0, 1.15 / rtA.height);
+    renderer.setRenderTarget(rtA);
+    renderer.render(postScene, postCam);
+  }
+
+  postQuad.material = compMat;
+  compMat.uniforms.tScene.value = rtScene.texture;
+  compMat.uniforms.tBloom.value = rtA.texture;
+  compMat.uniforms.amt.value = Q.bloom ? bloomAmt : 0;
+  renderer.setRenderTarget(null);
+  renderer.render(postScene, postCam);
+}
+
+/* ---------- quality ------------------------------------------------------- */
+let bloomAmt = 0.34;
+function applyQuality(initial){
+  const Q = QCFG[qi];
+  renderer.setPixelRatio(Math.min(devicePixelRatio, Q.px));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.shadowMap.enabled = Q.shadow > 0;
+  if(Q.shadow > 0){
+    sun.shadow.mapSize.set(Q.map, Q.map);
+    const c = sun.shadow.camera;
+    c.left = -Q.shadow; c.right = Q.shadow;
+    c.top  =  Q.shadow; c.bottom = -Q.shadow;
+    c.updateProjectionMatrix();
+    // the map object has to go, or three keeps the old resolution
+    if(sun.shadow.map){ sun.shadow.map.dispose(); sun.shadow.map = null; }
+  } else if(sun.shadow.map){
+    // dropping to Low should hand the video memory back, not just stop sampling it
+    sun.shadow.map.dispose(); sun.shadow.map = null;
+  }
+  resizePost();
+  applySky();
+  /* Whether shadows are on is baked into every shader three compiles, so
+   * flipping it after the city is already built does nothing at all until every
+   * material is marked for a rebuild. On the first call nothing has compiled
+   * yet, so this would only be throwing away work that does not exist. */
+  if(!initial) scene.traverse(o => {
+    if(!o.material) return;
+    (Array.isArray(o.material) ? o.material : [o.material]).forEach(m => m.needsUpdate = true);
+  });
+  try { localStorage.setItem('nycwalk.quality', String(qi)); } catch(e){}
+  if(!initial) toast('Graphics: ' + Q.name);
+}
+function cycleQuality(){ qi = (qi + 1) % QCFG.length; applyQuality(); }
+
 addEventListener('resize', () => {
   camera.aspect = innerWidth/innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth, innerHeight);
+  resizePost();
 });
 
 // ---------- main loop ----------
@@ -7204,6 +7472,21 @@ function tick(){
   skyDome.position.set(camera.position.x, 0, camera.position.z);
   stars.position.copy(skyDome.position);
 
+  /* The shadow map covers a couple of hundred metres, so it has to walk with
+   * you. Snapping the box to whole texels first is what stops the edge of every
+   * shadow in the city crawling as you move — without it the map re-samples the
+   * same wall at a slightly different offset each frame and the whole street
+   * shimmers. */
+  if(sun.castShadow){
+    const R = QCFG[qi].shadow, texel = (R*2) / QCFG[qi].map;
+    const sx = Math.round(camera.position.x / texel) * texel;
+    const sz = Math.round(camera.position.z / texel) * texel;
+    sun.target.position.set(sx, 0, sz);
+    sun.position.set(sx + SUN_LIFT.x, SUN_LIFT.y, sz + SUN_LIFT.z);
+    sun.target.updateMatrixWorld();
+    sun.updateMatrixWorld();
+  }
+
   if(night && !player.under){
     let best = [];
     for(let k=0;k<lampSpots.length;k++){
@@ -7251,7 +7534,7 @@ function tick(){
   const [nameA, nameB] = locationName();
   elLoc.textContent = nameA; elSub.textContent = nameB;
   elStats.textContent = `${((hh%12)||12)}:${String(mm).padStart(2,'0')} ${hh<12?'AM':'PM'}`
-                      + ` · ${WX[wxI].name} · ${fps} fps`;
+                      + ` · ${WX[wxI].name} · ${QCFG[qi].name} · ${fps} fps`;
   if(toastT > 0){ toastT -= dt; if(toastT <= 0) elToast.style.opacity = 0; }
   mapT += dt;
   if(mapT > 0.09){
@@ -7259,7 +7542,7 @@ function tick(){
     if(document.getElementById('bigmap').classList.contains('on')) drawBigMap();
   }
 
-  renderer.render(scene, camera);
+  renderPost();
 }
 
 function updateWalking(dt, mf, ms){
@@ -8252,6 +8535,49 @@ tasks.push(() => {
   for(let k=0;k<SPRAY_N;k++) sprayMesh.setColorAt(k, c);
 });
 
+/* ---- what a streetlight does to a wet road -------------------------------
+ * The reflection of a lamp in wet asphalt is not a copy of the lamp: it is a
+ * streak that starts under it and runs toward whoever is looking, because the
+ * road is rough and each facet catches the light at a slightly different angle.
+ * That means the geometry is trivial — a quad on the ground with one end at the
+ * lamp, turned to point at the camera, and longer the further away you stand.
+ *
+ * It is the single thing that makes a wet street at night look wet rather than
+ * dark, and it costs one draw call.
+ */
+const REFL_N = 110;
+let reflMesh = null;
+tasks.push(() => {
+  const W = 32, H = 128, ca = document.createElement('canvas');
+  ca.width = W; ca.height = H;
+  const gg = ca.getContext('2d');
+  const grd = gg.createLinearGradient(0, H, 0, 0);        // bright at the lamp end
+  grd.addColorStop(0,    'rgba(255,255,255,.95)');
+  grd.addColorStop(0.25, 'rgba(255,255,255,.42)');
+  grd.addColorStop(0.62, 'rgba(255,255,255,.13)');
+  grd.addColorStop(1,    'rgba(255,255,255,0)');
+  gg.fillStyle = grd; gg.fillRect(0, 0, W, H);
+  // feather the sides, or it reads as a painted stripe
+  gg.globalCompositeOperation = 'destination-in';
+  const side = gg.createLinearGradient(0, 0, W, 0);
+  side.addColorStop(0, 'rgba(0,0,0,0)');
+  side.addColorStop(0.5, 'rgba(0,0,0,1)');
+  side.addColorStop(1, 'rgba(0,0,0,0)');
+  gg.fillStyle = side; gg.fillRect(0, 0, W, H);
+  const t = new THREE.CanvasTexture(ca); t.colorSpace = THREE.SRGBColorSpace;
+  const g = new THREE.PlaneGeometry(1, 1);
+  g.rotateX(-Math.PI/2);            // lie it flat
+  g.translate(0, 0, 0.5);           // origin at the lamp end, running out along +Z
+  reflMesh = new THREE.InstancedMesh(g, new THREE.MeshBasicMaterial({ map:t,
+    transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+    opacity:0.85, fog:true }), REFL_N);
+  reflMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  reflMesh.frustumCulled = false; reflMesh.count = 0; reflMesh.renderOrder = -1;
+  cityGroup.add(reflMesh);
+  const c = new THREE.Color(0,0,0);
+  for(let k=0;k<REFL_N;k++) reflMesh.setColorAt(k, c);
+});
+
 // ---- umbrellas, over whoever is out in it ----
 const UMB_COL = [0x14161a, 0x14161a, 0x14161a, 0x1d2b45, 0x5a1f22, 0x243d2c,
                  0x4a3a5c, 0x6d5a2a, 0xa8302c, 0x2b4f6b];
@@ -8509,6 +8835,48 @@ function updateWeather(dt, t){
     }
   }
 
+  // ---- lamps reflected in the wet ----
+  if(reflMesh){
+    let rn = 0;
+    const cx = camera.position.x, cz = camera.position.z;
+    if(wet > 0.12 && !player.under && (night || WX[wxI].grey > 0.7)){
+      // a streak runs from under the light toward you, and the flatter your eye
+      // is to the road the further along it the reflection carries
+      const streak = (lx, lz, y, w2, r, g3, b, reach) => {
+        const dx = cx - lx, dz = cz - lz, d = Math.hypot(dx, dz);
+        if(d > reach || d < 1.2) return;
+        const f = wet * (1 - d/reach);
+        _wq.setFromAxisAngle(_yAx, Math.atan2(dx, dz));
+        _wv.set(lx, y, lz);
+        _ws.set(w2, 1, Math.min(22, 5.5 + d*0.36));
+        reflMesh.setMatrixAt(rn, _wm.compose(_wv, _wq, _ws));
+        _wcol.setRGB(r*f, g3*f, b*f);
+        reflMesh.setColorAt(rn++, _wcol);
+      };
+
+      for(let k=0;k<lampSpots.length && rn < REFL_N-2;k++){
+        const lx = lampSpots[k][0], lz = lampSpots[k][1];
+        if(!isSolidGround(lx, lz, false)) continue;
+        streak(lx, lz, groundAt(lx, lz, false) + 0.015, 2.3, 0.78, 0.62, 0.39, 68);
+      }
+      /* And the traffic, which at street level is most of it. Whether you are
+       * looking at a car's headlights or its tail lights decides the colour, so
+       * take the dot of where it is pointing against where you are standing. */
+      for(let k=0;k<cars.length && rn < REFL_N;k++){
+        const c = cars[k], p = c.g.position;
+        if(Math.abs(p.x - cx) > 58 || Math.abs(p.z - cz) > 58) continue;
+        const fx = Math.sin(c.g.rotation.y), fz = Math.cos(c.g.rotation.y);
+        const front = (cx - p.x)*fx + (cz - p.z)*fz > 0;
+        const nose = (c.len || 4.4)/2 * (front ? 1 : -1);
+        if(front) streak(p.x + fx*nose, p.z + fz*nose, p.y + 0.06, 2.0, 0.92, 0.88, 0.72, 58);
+        else      streak(p.x + fx*nose, p.z + fz*nose, p.y + 0.06, 1.7, 0.85, 0.16, 0.12, 46);
+      }
+    }
+    reflMesh.count = rn;
+    if(rn){ reflMesh.instanceMatrix.needsUpdate = true;
+            if(reflMesh.instanceColor) reflMesh.instanceColor.needsUpdate = true; }
+  }
+
   // ---- spray off the traffic ----
   if(sprayMesh){
     let sn = 0;
@@ -8609,6 +8977,10 @@ function start(){
   setWeather(wq < 0 ? 0 : wq, true);
   wet = WX[wxI].wet; lay = WX[wxI].lay; applyGround();
   setNight(location.search.includes('night'), true);
+  // ?low / ?medium / ?high override whatever was chosen last visit
+  const qq = ['low','medium','high'].findIndex(n => location.search.includes(n));
+  if(qq >= 0) qi = qq;
+  applyQuality(true);
   renderer.compile(scene, camera);
   document.getElementById('load').style.display = 'none';
   if(!location.search.includes('auto')) menu.classList.remove('hide');
