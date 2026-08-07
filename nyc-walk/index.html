@@ -5807,11 +5807,38 @@ function updateFerry(dt, t){
  * hold the doors open a few seconds and go on. At the end they change ends.
  */
 const trains = [];
+/* The outside of a car, which is what you watch come in.
+ *
+ * A train arriving is a wall of lit window with a dark shape under it — the
+ * body barely registers, the light does. So the glass is unlit geometry that
+ * runs hot enough to bloom, pane by pane between the door pockets, and
+ * everything else is built to give that band the right silhouette: the ribbed
+ * flank a stainless car actually has, the air conditioning up on the roof, the
+ * black mass of equipment slung under the floor, and two trucks near the ends
+ * rather than four wheels floating where the corners should be.
+ */
 function carGeoSub(col){
-  const P = [];
+  const P = [], L = [];
   P.push(colored(new THREE.BoxGeometry(CAR_W, CAR_H, CAR_L), 0xb0b6bd).translate(0, CAR_H/2, 0));
   P.push(colored(new THREE.BoxGeometry(CAR_W + 0.04, 0.5, CAR_L - 0.6), 0x1f4a8a)
            .translate(0, CAR_H - 0.5, 0));                              // the stripe
+  // the belt ribs down the flank, which is how you know it is stainless
+  for(const ry of [0.62, 0.80, 2.42, 2.58])
+    P.push(colored(new THREE.BoxGeometry(CAR_W + 0.05, 0.07, CAR_L - 0.3), 0x9aa1a8)
+             .translate(0, ry, 0));
+  // the equipment under the floor: the single biggest thing in its silhouette
+  P.push(colored(new THREE.BoxGeometry(CAR_W - 0.30, 0.62, CAR_L - 4.6), 0x1b1e22)
+           .translate(0, 0.30, 0));
+  for(const s of [-1, 1])
+    P.push(colored(new THREE.BoxGeometry(0.22, 0.44, 3.2), 0x24282d)
+             .translate(s*(CAR_W/2 - 0.24), 0.34, s*3.4));
+  // and the air conditioning on the roof, two blisters and the ribs between
+  for(const dz of [-4.4, 4.4])
+    P.push(colored(new THREE.BoxGeometry(CAR_W - 0.55, 0.34, 3.6), 0x8d949b)
+             .translate(0, CAR_H + 0.17, dz));
+  for(let k=-3;k<=3;k++)
+    P.push(colored(new THREE.BoxGeometry(CAR_W - 0.2, 0.06, 0.12), 0x9aa1a8)
+             .translate(0, CAR_H + 0.03, k*2.0));
   const D = [];
   for(const s of [-1, 1]){
     P.push(colored(new THREE.BoxGeometry(0.06, 1.15, CAR_L - 1.6), 0x11161d)
@@ -5836,12 +5863,49 @@ function carGeoSub(col){
       D.push(colored(new THREE.BoxGeometry(0.07, 0.34, 0.30), 0xa2a9b0).translate(ix, 0.42, dz));
     }
   }
-  P.push(colored(new THREE.BoxGeometry(CAR_W - 0.5, 0.9, 0.06), col).translate(0, 2.5, CAR_L/2));
-  for(const [dz] of [[CAR_L/2 - 2.2], [-CAR_L/2 + 2.2]])
-    for(const s of [-1, 1])
-      P.push(colored(new THREE.CylinderGeometry(0.42, 0.42, 0.24, 8), 0x14171a)
-               .rotateZ(Math.PI/2).translate(s*1.0, 0.42, dz));
-  return { body: mergeGeos(P), doors: mergeGeos(D) };
+  /* The windows, pane by pane between the door pockets. A single black band the
+   * length of the car is what a train looks like switched off; what comes into
+   * a station is a run of lit rectangles with a pillar between each pair. */
+  const DOORZ = [-5.2, 0, 5.2];
+  for(const s of [-1, 1]){
+    for(let dz = -7.5; dz <= 7.5; dz += 1.9){
+      if(DOORZ.some(d => Math.abs(dz - d) < 1.5)) continue;
+      L.push(colored(new THREE.BoxGeometry(0.05, 0.96, 1.55), 0xf2ead4)
+               .translate(s*(CAR_W/2 + 0.04), CAR_H - 1.35, dz));
+    }
+  }
+  /* Both ends carry both sets, because both ends of a real car do — which pair
+   * is burning depends on which way the train is being driven. */
+  for(const e of [-1, 1]){
+    const ez = e*(CAR_L/2 + 0.04);
+    for(const s of [-1, 1]){
+      L.push(colored(new THREE.BoxGeometry(0.34, 0.26, 0.05), 0xfff6dc)   // headlight
+               .translate(s*0.95, 0.86, ez));
+      L.push(colored(new THREE.BoxGeometry(0.20, 0.20, 0.05), 0xd8241c)   // marker
+               .translate(s*1.16, 2.34, ez));
+    }
+    // the roll sign over the cab window, and the small one on each flank
+    L.push(colored(new THREE.BoxGeometry(CAR_W - 0.9, 0.52, 0.05), col).translate(0, 2.62, ez));
+    L.push(colored(new THREE.BoxGeometry(CAR_W - 1.5, 0.60, 0.06), 0x0d1116)
+             .translate(0, 1.74, ez));                                    // the cab window
+  }
+  for(const s of [-1, 1])
+    L.push(colored(new THREE.BoxGeometry(0.05, 0.40, 1.1), col)
+             .translate(s*(CAR_W/2 + 0.04), CAR_H - 0.52, CAR_L/2 - 2.0));
+  /* Two trucks near the ends, not four wheels at the corners — a car this long
+   * with wheels under its extremities reads as a bus, and the bogie frame is
+   * most of what you see of the running gear from a platform anyway. */
+  for(const dz of [CAR_L/2 - 2.6, -CAR_L/2 + 2.6]){
+    P.push(colored(new THREE.BoxGeometry(CAR_W - 0.55, 0.34, 3.5), 0x191c20)
+             .translate(0, 0.50, dz));
+    for(const s of [-1, 1]) for(const w of [-1.1, 1.1]){
+      P.push(colored(new THREE.CylinderGeometry(0.40, 0.40, 0.22, 10), 0x14171a)
+               .rotateZ(Math.PI/2).translate(s*1.14, 0.40, dz + w));
+      P.push(colored(new THREE.CylinderGeometry(0.17, 0.17, 0.30, 8), 0x3a4048)
+               .rotateZ(Math.PI/2).translate(s*0.98, 0.40, dz + w));      // the hub
+    }
+  }
+  return { body: mergeGeos(P), doors: mergeGeos(D), lit: mergeGeos(L) };
 }
 /* The inside of a car, which is what you are looking at for the entire ride.
  * What was here was one box in a colour close enough to white, lit by nothing,
@@ -6117,7 +6181,10 @@ tasks.push(() => {
         const g = new THREE.Group();
         const leaves = new THREE.Mesh(veh.doors, carDoorMat);
         const inner = new THREE.Mesh(innerGeo, carInnerMat);
-        g.add(new THREE.Mesh(veh.body, vcMat), inner, leaves);
+        // the glass, the lamps and the roll signs go on litMat, so they burn
+        // rather than being lit — and bloom picks them out coming down a tunnel
+        g.add(new THREE.Mesh(veh.body, vcMat), new THREE.Mesh(veh.lit, litMat),
+              inner, leaves);
         g.visible = false;
         subGroup.add(g);
         t.cars.push({ g, leaves, inner, off: (c - (TRAIN_N-1)/2) * (CAR_L + CAR_GAP) });
