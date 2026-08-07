@@ -3047,6 +3047,283 @@ function buildCentralPark(){
     cpPlaces.push({x:ox, z:oz, r:16, name:"Cleopatra's Needle"});
   }
 
+  /* --- Conservatory Water, and the boats on it -----------------------------
+   * The model-boat pond at Seventy-fourth. A hard stone rim rather than a
+   * planted bank, because people lean on it to push the yachts off, and Alice
+   * on her bronze mushroom at the north end of it. */
+  {
+    const wx = pu(0.815), wz = pv(0.752);
+    const rx = CPW*0.072, rz = CPL*0.0135;
+    cpOpen.push({x:wx, z:wz, rx:rx + 9, rz:rz + 8});
+    cpWaterBody(wx, wz, rx, rz, 'Conservatory Water');
+    cpRing('mark', wx, wz, rx + 1.9, rz + 1.9, 0.10, GY + 0.028, 0xa79c85);
+    const c = cpAt(wx, wz);
+    for(let k=0;k<10;k++){                              // the yachts
+      const a = rnd()*6.283, r = Math.sqrt(rnd())*0.86;
+      const bx = wx + Math.cos(a)*r*rx, bz = wz + Math.sin(a)*r*rz;
+      const ang = rnd()*6.283;
+      const hull = colored(new THREE.BoxGeometry(0.30, 0.16, 0.95), 0xe8e4da);
+      hull.rotateY(ang); hull.translate(bx, GY + 0.09, bz);
+      const sail = colored(new THREE.BoxGeometry(0.03, 1.15, 0.62), 0xf4f2ec);
+      sail.rotateY(ang); sail.translate(bx, GY + 0.72, bz - 0.08);
+      c.prop.push(hull, sail);
+    }
+    // Alice, her mushroom and the ring of smaller ones round it
+    const ax = wx - rx*0.2, az = wz - rz - 4.4;
+    const ac = cpAt(ax, az);
+    ac.prop.push(colored(new THREE.CylinderGeometry(2.4, 2.1, 0.55, 12), 0x5f6b58)
+                   .translate(ax, GY + 0.28, az));
+    for(let k=0;k<5;k++){
+      const a = (k/5)*6.283 + 0.5;
+      ac.prop.push(colored(new THREE.CylinderGeometry(0.62, 0.34, 0.42, 9), 0x55604f)
+        .translate(ax + Math.cos(a)*2.9, GY + 0.21, az + Math.sin(a)*2.9));
+    }
+    ac.prop.push(colored(new THREE.CylinderGeometry(0.45, 0.60, 1.5, 8), 0x66725d)
+                   .translate(ax, GY + 1.30, az),
+                 colored(new THREE.SphereGeometry(0.40, 8, 6), 0x66725d)
+                   .translate(ax, GY + 2.25, az));
+    addSolid(ax, az, 4.6, 4.6);
+    cpPlaces.push({x:ax, z:az, r:14, name:'Alice in Wonderland'});
+  }
+
+  /* --- the Carousel -------------------------------------------------------
+   * Mid-park at Sixty-fifth, in its round brick shed: a conical roof on a ring
+   * of posts, and the horses going round underneath it. */
+  {
+    const kx = pu(0.40), kz = pv(0.888), c = cpAt(kx, kz);
+    cpOpen.push({x:kx, z:kz, rx:15, rz:15});
+    cpDisc('mark', kx, kz, 13, 13, GY + 0.015, 0xa89a80, 26);
+    c.prop.push(colored(new THREE.CylinderGeometry(9.2, 9.2, 0.5, 14), 0x8f8672)
+                  .translate(kx, GY + 0.25, kz));
+    for(let k=0;k<14;k++){                              // the ring of posts
+      const a = (k/14)*6.283;
+      c.prop.push(colored(new THREE.CylinderGeometry(0.20, 0.20, 4.4, 6), 0x9a3f36)
+        .translate(kx + Math.cos(a)*8.4, GY + 2.7, kz + Math.sin(a)*8.4));
+    }
+    c.prop.push(colored(new THREE.CylinderGeometry(9.6, 9.6, 0.35, 14), 0xb4a68c)
+                  .translate(kx, GY + 5.05, kz));
+    c.prop.push(colored(new THREE.ConeGeometry(9.9, 3.6, 14), 0x9c4a3a)
+                  .translate(kx, GY + 7.0, kz));
+    c.prop.push(colored(new THREE.CylinderGeometry(0.5, 0.5, 1.6, 8), 0xc9b98d)
+                  .translate(kx, GY + 9.3, kz));
+    // the horses, on their brass poles, at the height they actually ride
+    for(let k=0;k<12;k++){
+      const a = (k/12)*6.283 + 0.26, r = k % 2 ? 5.2 : 7.0;
+      const hx = kx + Math.cos(a)*r, hz = kz + Math.sin(a)*r;
+      const body = colored(new THREE.BoxGeometry(0.55, 0.85, 1.65), pick([0xe4ded0, 0xc4a07a, 0x6b4a35]));
+      body.rotateY(-a); body.translate(hx, GY + 2.5 + (k % 3)*0.22, hz);
+      c.prop.push(body,
+        colored(new THREE.CylinderGeometry(0.055, 0.055, 4.2, 5), 0xc9a24a)
+          .translate(hx, GY + 2.9, hz));
+    }
+    addSolid(kx, kz, 17, 17);
+    cpPlaces.push({x:kx, z:kz, r:20, name:'The Carousel'});
+  }
+
+  /* --- the Naumburg Bandshell ---------------------------------------------
+   * The half-dome of Indiana limestone that stands off the east side of the
+   * Mall, near the top of it, open westward across the walk. Its own axis is
+   * not the Mall's — it sits beside it and turns to face it. */
+  {
+    const bx = pu(0.625), bz = pv(0.800), c = cpAt(bx, bz);
+    cpOpen.push({x:bx, z:bz, rx:14, rz:11});
+    cpDisc('mark', bx - 5, bz, 13, 9, GY + 0.015, 0xa1937b, 26);
+    c.prop.push(colored(new THREE.BoxGeometry(8, 1.5, 13), 0xb2a68e).translate(bx, GY + 0.75, bz));
+    /* phi runs from +Z toward +X, so half a sphere over half its height leaves
+     * exactly a quarter: solid on the +X side, open to the west and open below,
+     * which is a bandshell without having to rotate anything. */
+    const shell = new THREE.SphereGeometry(6.4, 18, 10, 0, Math.PI, 0, Math.PI/2);
+    c.prop.push(colored(shell, 0xc0b49a).translate(bx, GY + 1.5, bz));
+    const lip = new THREE.TorusGeometry(6.4, 0.35, 6, 20, Math.PI);
+    c.prop.push(colored(lip, 0xaa9e84).rotateY(Math.PI/2).translate(bx, GY + 1.5, bz));
+    for(const s of [-1, 1])
+      c.prop.push(colored(new THREE.CylinderGeometry(0.55, 0.65, 6.6, 9), 0xc0b49a)
+        .translate(bx, GY + 4.8, bz + s*6.6));
+    c.prop.push(colored(new THREE.BoxGeometry(1.2, 0.8, 15), 0xaa9e84).translate(bx, GY + 8.4, bz));
+    addSolid(bx, bz, 8, 13);
+    cpPlaces.push({x:bx, z:bz, r:18, name:'Naumburg Bandshell'});
+  }
+
+  /* --- the Loeb Boathouse, and the rowing boats out on the Lake ------------ */
+  {
+    // clear of the water's east edge, with the landing stage reaching out to it
+    const hx = pu(0.668), hz = pv(0.700), c = cpAt(hx, hz);
+    cpOpen.push({x:hx, z:hz, rx:14, rz:12});
+    c.prop.push(colored(new THREE.BoxGeometry(11, 4.2, 21), 0xd8d2c4).translate(hx, GY + 2.1, hz),
+                colored(new THREE.BoxGeometry(12.4, 0.7, 22.4), 0x3f6b52).translate(hx, GY + 4.5, hz));
+    for(let k=0;k<7;k++)                                   // the arcade on the water side
+      c.prop.push(colored(new THREE.CylinderGeometry(0.32, 0.32, 3.4, 8), 0xeae5da)
+        .translate(hx - 6.2, GY + 1.7, hz - 10.5 + k*3.5));
+    // the landing stage, and the boats tied up along it
+    c.prop.push(colored(new THREE.BoxGeometry(2.4, 0.35, 17), 0x8d7f66)
+                  .translate(hx - 9.5, GY + 0.2, hz));
+    const lakeX = pu(0.46), lakeZ = pv(0.708);
+    const lrx = CPW*0.13, lrz = CPL*0.018;
+    for(let k=0;k<11;k++){
+      const a = rnd()*6.283, r = Math.sqrt(rnd())*0.82;
+      const bx2 = lakeX + Math.cos(a)*r*lrx, bz2 = lakeZ + Math.sin(a)*r*lrz;
+      const ang = rnd()*6.283, bc = cpAt(bx2, bz2);
+      const hull = colored(new THREE.BoxGeometry(1.15, 0.42, 3.4), pick([0x2f6a4a, 0x3b5f86, 0x8a4a32]));
+      hull.rotateY(ang); hull.translate(bx2, GY + 0.20, bz2);
+      const inner = colored(new THREE.BoxGeometry(0.85, 0.22, 2.9), 0xd8d0bc);
+      inner.rotateY(ang); inner.translate(bx2, GY + 0.34, bz2);
+      bc.prop.push(hull, inner);
+    }
+    addSolid(hx, hz, 11, 21);
+    cpPlaces.push({x:hx, z:hz, r:18, name:'The Loeb Boathouse'});
+  }
+
+  /* --- the Delacorte, where they do Shakespeare, beside Turtle Pond -------- */
+  {
+    const dx = pu(0.325), dz = pv(0.622), c = cpAt(dx, dz);
+    cpOpen.push({x:dx, z:dz, rx:15, rz:13});
+    // the raked bank of seats, as a run of stepped arcs open to the stage
+    for(let k=0;k<7;k++){
+      const r = 7.5 + k*1.5;
+      const g = new THREE.RingGeometry(r, r + 1.5, 22, 1, Math.PI*0.15, Math.PI*0.70);
+      g.rotateX(-Math.PI/2); g.translate(dx, GY + 0.2 + k*0.45, dz);
+      c.prop.push(colored(g, 0x6b6a66));
+      const riser = new THREE.CylinderGeometry(r, r, 0.45, 22, 1, true, Math.PI*0.15, Math.PI*0.70);
+      c.prop.push(colored(riser, 0x585754).translate(dx, GY + k*0.45, dz));
+    }
+    c.prop.push(colored(new THREE.BoxGeometry(15, 0.6, 9), 0x7c7468).translate(dx, GY + 0.3, dz - 3),
+                colored(new THREE.BoxGeometry(15, 7.5, 1.4), 0x4e5a4c).translate(dx, GY + 3.9, dz - 7.2));
+    for(const s of [-1, 1])                                 // the lighting towers
+      c.prop.push(colored(new THREE.BoxGeometry(1.0, 9.5, 1.0), 0x3c4148)
+        .translate(dx + s*8.2, GY + 4.8, dz - 6.4));
+    addSolid(dx, dz - 5, 15, 8);
+    cpPlaces.push({x:dx, z:dz, r:22, name:'The Delacorte Theater'});
+  }
+
+  /* --- the Zoo, in the south-east corner ----------------------------------
+   * Red brick round a courtyard, the sea lion pool in the middle of it, and the
+   * Delacorte clock over the arch with its bronze animals going round. */
+  {
+    // north of the Pond, not in it — the Zoo is at Sixty-fourth and the water
+    // starts below Sixty-third, and the two were overlapping by twenty feet
+    const zx = pu(0.875), zz = pv(0.870);
+    cpOpen.push({x:zx, z:zz, rx:19, rz:16});
+    cpDisc('mark', zx, zz, 17, 14, GY + 0.015, 0xa89a80, 28);
+    for(const [ox, oz, w, d] of [[-13,-6,7,13],[13,-6,7,13],[0,-13,20,6]]){
+      const c = cpAt(zx + ox, zz + oz);
+      c.prop.push(colored(new THREE.BoxGeometry(w, 5.4, d), 0x8c4b3c)
+                    .translate(zx + ox, GY + 2.7, zz + oz),
+                  colored(new THREE.BoxGeometry(w + 0.9, 0.6, d + 0.9), 0x5d4a3e)
+                    .translate(zx + ox, GY + 5.6, zz + oz));
+      addSolid(zx + ox, zz + oz, w, d);
+    }
+    // the sea lion pool: a stone basin with a rock in the middle of it
+    const c = cpAt(zx, zz);
+    cpRing('mark', zx, zz, 7.2, 7.2, 0.14, GY + 0.026, 0x9c9280);
+    const pool = new THREE.CircleGeometry(6.3, 24);
+    pool.rotateX(-Math.PI/2); pool.translate(zx, GY + 0.05, zz);
+    cityGroup.add(new THREE.Mesh(pool, parkWaterMat));
+    cpRock(zx, zz, 2.1);
+    for(let k=0;k<8;k++){
+      const a = (k/8)*6.283;
+      cpAt(zx, zz).prop.push(colored(new THREE.CylinderGeometry(0.10, 0.10, 1.0, 5), 0x3f464d)
+        .translate(zx + Math.cos(a)*7.6, GY + 0.5, zz + Math.sin(a)*7.6));
+    }
+    // the Delacorte Music Clock, on its arch on the north side
+    const kx = zx, kz = zz - 11;
+    const kc = cpAt(kx, kz);
+    for(const s of [-1, 1])
+      kc.prop.push(colored(new THREE.CylinderGeometry(0.55, 0.65, 5.2, 8), 0x9c9280)
+        .translate(kx + s*2.6, GY + 2.6, kz));
+    kc.prop.push(colored(new THREE.CylinderGeometry(2.3, 2.3, 1.1, 10), 0x8e8470).translate(kx, GY + 5.7, kz),
+                 colored(new THREE.CylinderGeometry(1.9, 1.9, 0.35, 10), 0xe8e2d2).translate(kx, GY + 6.4, kz),
+                 colored(new THREE.ConeGeometry(2.5, 2.0, 10), 0x5f7a68).translate(kx, GY + 7.3, kz));
+    for(let k=0;k<6;k++){                                   // the bronze animals
+      const a = (k/6)*6.283;
+      kc.prop.push(colored(new THREE.BoxGeometry(0.5, 0.9, 0.5), 0x6d7a63)
+        .translate(kx + Math.cos(a)*2.0, GY + 5.9, kz + Math.sin(a)*2.0));
+    }
+    addSolid(kx, kz, 5, 2);
+    cpPlaces.push({x:zx, z:zz, r:26, name:'The Central Park Zoo'});
+  }
+
+  /* --- the Conservatory Garden, at One Hundred and Fifth and Fifth ---------
+   * The one formal thing in the whole park: clipped hedges on an axis, a lawn
+   * with a fountain, a wisteria pergola across the back and the Vanderbilt
+   * Gate on the avenue. Olmsted would not have had it, and it is beautiful. */
+  {
+    // south of the Meer's bank rather than into it
+    const gx = pu(0.855), gz = pv(0.140), c = cpAt(gx, gz);
+    cpOpen.push({x:gx, z:gz, rx:20, rz:15});
+    cpDisc('mark', gx, gz, 18, 13, GY + 0.014, 0xb0a68c, 4);      // gravel, square
+    // the central lawn and its jet
+    cpDisc('mark', gx, gz, 9, 6.5, GY + 0.017, 0x5d8a3c, 30);
+    const basin = new THREE.CircleGeometry(2.4, 20);
+    basin.rotateX(-Math.PI/2); basin.translate(gx, GY + 0.10, gz);
+    cityGroup.add(new THREE.Mesh(basin, parkWaterMat));
+    c.prop.push(colored(new THREE.CylinderGeometry(2.8, 3.0, 0.55, 20), 0xa79c85).translate(gx, GY + 0.27, gz),
+                colored(new THREE.CylinderGeometry(0.28, 0.40, 1.5, 8), 0x8e846f).translate(gx, GY + 0.9, gz));
+    // the parterre: low clipped box, in a grid, which is the whole look of it
+    for(let a=-1;a<=1;a+=2) for(let b=0;b<5;b++){
+      const hx2 = gx + a*12.5, hz2 = gz - 8 + b*4;
+      cpAt(hx2, hz2).prop.push(colored(new THREE.BoxGeometry(7, 0.85, 2.6), 0x2f5d33)
+        .translate(hx2, GY + 0.42, hz2));
+    }
+    // the wisteria pergola along the west side, on its columns
+    for(let k=0;k<9;k++){
+      const px2 = gx - 19, pz2 = gz - 9 + k*2.3;
+      cpAt(px2, pz2).prop.push(
+        colored(new THREE.CylinderGeometry(0.30, 0.34, 4.0, 8), 0xd0c8b4).translate(px2, GY + 2.0, pz2));
+    }
+    c.prop.push(colored(new THREE.BoxGeometry(1.6, 0.45, 21), 0x6b5a44).translate(gx - 19, GY + 4.2, gz),
+                colored(new THREE.BoxGeometry(3.4, 0.30, 21), 0x3f6b3a).translate(gx - 19, GY + 4.5, gz));
+    // the Vanderbilt Gate, wrought iron, on the Fifth Avenue side
+    for(let k=0;k<13;k++){
+      const bx3 = gx + 19, bz3 = gz - 12 + k*2;
+      cpAt(bx3, bz3).prop.push(colored(new THREE.CylinderGeometry(0.09, 0.09, 3.4, 5), 0x25292e)
+        .translate(bx3, GY + 1.7, bz3));
+    }
+    for(const s of [-1, 1])
+      c.prop.push(colored(new THREE.BoxGeometry(0.9, 5.4, 0.9), 0x25292e)
+        .translate(gx + 19, GY + 2.7, gz + s*13));
+    cpPlaces.push({x:gx, z:gz, r:26, name:'The Conservatory Garden'});
+  }
+
+  /* --- Tavern on the Green, on the West Drive at Sixty-seventh ------------- */
+  {
+    const tx = pu(0.115), tz = pv(0.845), c = cpAt(tx, tz);
+    cpOpen.push({x:tx, z:tz, rx:14, rz:10});
+    c.prop.push(colored(new THREE.BoxGeometry(20, 5.6, 11), 0xd6cfbe).translate(tx, GY + 2.8, tz),
+                colored(new THREE.BoxGeometry(21.4, 0.8, 12.4), 0x2f5d43).translate(tx, GY + 6.0, tz));
+    // the glass room on the park side, which is the reason anybody goes
+    for(let k=0;k<6;k++)
+      c.glow.push(colored(new THREE.BoxGeometry(2.6, 3.0, 0.08), 0xe8e0c4)
+        .translate(tx - 8 + k*3.2, GY + 2.4, tz + 5.6));
+    for(let k=0;k<7;k++)                                    // the lit trees outside
+      c.glow.push(colored(new THREE.SphereGeometry(0.16, 6, 5), 0xffe6a8)
+        .translate(tx - 9 + k*3, GY + 4.6, tz + 8.5));
+    addSolid(tx, tz, 20, 11);
+    cpPlaces.push({x:tx, z:tz, r:20, name:'Tavern on the Green'});
+  }
+
+  /* --- the Ramble ---------------------------------------------------------
+   * Thirty-six acres deliberately made to get lost in. What defines it is not
+   * the trees, it is that the paths double back on themselves and none of them
+   * runs straight for more than twenty feet, so it needs its own tangle rather
+   * than the long crossing walks the rest of the park has. */
+  {
+    const r0x = pu(0.34), r1x = pu(0.70), r0z = pv(0.635), r1z = pv(0.700);
+    // seven, not eleven, and narrow: they are footpaths through undergrowth, and
+    // any more of them turns the whole thirty-six acres into bare earth
+    for(let k=0;k<7;k++){
+      const ax2 = rr(r0x, r1x), az2 = rr(r0z, r1z);
+      const bx2 = rr(r0x, r1x), bz2 = rr(r0z, r1z);
+      if(Math.hypot(bx2-ax2, bz2-az2) < 22) continue;
+      cpRibbon('mark', cpWander(ax2, az2, bx2, bz2, rr(9, 17), 14), 1.9, GY + 0.0135, 0x9c9078);
+    }
+    cpTrees(120, (r0x+r1x)/2, (r0z+r1z)/2, (r1x-r0x)/2, (r1z-r0z)/2, 0.8, 1.5);
+    for(let k=0;k<16;k++){                                  // and the schist it sits on
+      const rx2 = rr(r0x, r1x), rz2 = rr(r0z, r1z);
+      if(inParkWater(rx2, rz2)) continue;
+      cpRock(rx2, rz2, rr(1.4, 3.4));
+    }
+  }
+
   // --- footpaths: they curve, and they cross the whole park ---------------
   const paths = [
     cpWander(pu(0.10), pv(0.05), pu(0.88), pv(0.16), 16, 12),
