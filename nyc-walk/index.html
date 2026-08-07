@@ -6969,15 +6969,21 @@ function roadY(x, z){
 // ---------- pedestrians ----------
 const peds = [];
 const PED_COUNT = 340, PED_KINDS = 14;
-// Everyone is drawn from fourteen instanced bodies plus two instanced legs, so
-// a crowd this size costs sixteen draw calls rather than a thousand — and a
-// face costs fourteen of them rather than three hundred and forty.
-const pedBody = [], pedLegs = [];
+// Everyone is drawn from fourteen instanced bodies plus two instanced legs and
+// two instanced arms, so a crowd this size costs eighteen draw calls rather
+// than a thousand — and a face costs fourteen of them rather than three hundred
+// and forty.
+const pedBody = [], pedLegs = [], pedArms = [];
 const pedHip = new THREE.Object3D();
 const pedLegNode = [new THREE.Object3D(), new THREE.Object3D()];
 pedHip.add(pedLegNode[0], pedLegNode[1]);
 pedLegNode[0].position.set(-0.14, 0.36, 0);
 pedLegNode[1].position.set( 0.14, 0.36, 0);
+// the shoulders, which swing the opposite way to the hips
+const pedArmNode = [new THREE.Object3D(), new THREE.Object3D()];
+pedHip.add(pedArmNode[0], pedArmNode[1]);
+pedArmNode[0].position.set(-0.325, 1.50, 0);
+pedArmNode[1].position.set( 0.325, 1.50, 0);
 const PED_SKIN = [0xf2cdad, 0xe8b48c, 0xd49b71, 0xc98d63, 0xa8703f, 0x8d5a3a,
                   0x6b432a, 0x4a2e1c];
 const PED_HAIR = [0x1a130e, 0x241a12, 0x3a2517, 0x4a2f1c, 0x6b4a2a, 0x8a6a3a,
@@ -7034,14 +7040,11 @@ function pedGeo(){
   box(0.30, 0.09, 0.27, shade(coat, 0.80), 0, 1.575, 0);          // collar
   box(0.16, 0.05, 0.03, shade(coat, 0.6), 0, 1.02, 0.152);        // the hem of it
 
-  // ---- arms, hanging, with a hand on the end ------------------------------
-  for(const s of [-1, 1]){
-    box(0.145, 0.40, 0.19, coat, s*0.325, 1.30, 0);               // upper
-    box(0.125, 0.34, 0.17, coat, s*0.335, 0.95, 0.01);            // fore
-    box(0.13, 0.05, 0.175, shade(coat, 0.72), s*0.335, 0.79, 0.01);  // cuff
-    box(0.10, 0.13, 0.11, skin, s*0.335, 0.72, 0.015);            // hand
+  /* The arms are NOT here. They hang off their own nodes so they can swing, the
+   * way the legs already do — an arm welded to a torso is the thing that makes
+   * a walking figure read as a chess piece being slid along. See pedArmGeo. */
+  for(const s of [-1, 1])
     box(0.155, 0.055, 0.20, shade(coat, 0.86), s*0.322, 1.495, 0);   // shoulder seam
-  }
 
   // ---- neck and head ------------------------------------------------------
   box(0.135, 0.11, 0.13, shade(skin, 0.86), 0, 1.615, 0);
@@ -7118,7 +7121,19 @@ function pedGeo(){
     box(0.30, 0.13, 0.06, shade(bc, 0.78), 0, 1.34, -0.35);
     for(const s of [-1, 1]) box(0.075, 0.42, 0.05, shade(bc, 0.86), s*0.165, 1.31, 0.150);
   }
-  return mergeGeos(P);
+  return { geo: mergeGeos(P), coat };
+}
+/* One arm, hanging from a pivot at the shoulder so the node can swing it. Like
+ * the legs it is shared by everybody and tinted per person, so the sleeve is
+ * white here and the cuff a fraction of it. The hand takes the coat colour too,
+ * which is wrong and is also four pixels across at any distance you see one. */
+function pedArmGeo(){
+  return mergeGeos([
+    colored(new THREE.BoxGeometry(0.145, 0.40, 0.19), 0xffffff).translate(0, -0.20, 0),
+    colored(new THREE.BoxGeometry(0.125, 0.34, 0.17), 0xf4f4f4).translate(0, -0.55, 0.01),
+    colored(new THREE.BoxGeometry(0.13, 0.05, 0.175), 0xb8b8b8).translate(0, -0.71, 0.01),
+    colored(new THREE.BoxGeometry(0.10, 0.13, 0.11), 0xe8e8e8).translate(0, -0.78, 0.015)
+  ]);
 }
 /* The legs are one shared box for everybody, tinted per person — so the shoe
  * has to be near-black in the geometry, and comes out dark whatever colour the
@@ -7131,21 +7146,28 @@ function pedLegGeo(){
     colored(new THREE.BoxGeometry(0.215, 0.035, 0.30), 0x16171a).translate(0, -0.362, 0.05)
   ]);
 }
+const PED_COAT = [];                    // what each kind is wearing, for its sleeves
 tasks.push(() => {
   const cap = Math.ceil(PED_COUNT / PED_KINDS);
   for(let k=0;k<PED_KINDS;k++){
-    const im = new THREE.InstancedMesh(pedGeo(), vcMat, cap);
+    const made = pedGeo();
+    PED_COAT.push(made.coat);
+    const im = new THREE.InstancedMesh(made.geo, vcMat, cap);
     im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     im.frustumCulled = false; im.count = 0;
     cityGroup.add(im); pedBody.push(im);
   }
-  const legMat = new THREE.MeshLambertMaterial({vertexColors:true});
-  const legGeo = pedLegGeo();
+  const limbMat = new THREE.MeshLambertMaterial({vertexColors:true});
+  const legGeo = pedLegGeo(), armGeo = pedArmGeo();
   for(let s=0;s<2;s++){
-    const im = new THREE.InstancedMesh(legGeo, legMat, PED_COUNT);
+    const im = new THREE.InstancedMesh(legGeo, limbMat, PED_COUNT);
     im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     im.frustumCulled = false; im.count = PED_COUNT;
     cityGroup.add(im); pedLegs.push(im);
+    const am = new THREE.InstancedMesh(armGeo, limbMat, PED_COUNT);
+    am.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    am.frustumCulled = false; am.count = PED_COUNT;
+    cityGroup.add(am); pedArms.push(am);
   }
   const col = new THREE.Color();
   for(let k=0;k<PED_COUNT;k++){
@@ -7155,12 +7177,20 @@ tasks.push(() => {
     const p = { kind, slot: pedBody[kind].count++, idx:k, h: rr(0.90, 1.09),
                 i:0, j:0, t:rnd(), speed:0, phase:rnd()*6.28, plaza:0, r:0,
                 // who puts one up when it rains, and who is out with the dog
-                umb: rnd() < 0.82, dog: rnd() < 0.055 };
+                umb: rnd() < 0.82, dog: rnd() < 0.055,
+                /* and one in seven is not going anywhere: stood at a kerb, stood
+                 * looking at a phone, stood because that is what a proportion of
+                 * any crowd is doing at any moment. A street where every single
+                 * person is in motion is a street nobody lives on. */
+                idle: rnd() < 0.14, sway: rr(0.6, 1.5) };
     col.setHex(pick(PED_LEGCOL));
     pedLegs[0].setColorAt(k, col); pedLegs[1].setColorAt(k, col);
+    col.setHex(PED_COAT[kind]);
+    pedArms[0].setColorAt(k, col); pedArms[1].setColorAt(k, col);
     peds.push(p);
   }
   pedLegs.forEach(im => im.instanceColor.needsUpdate = true);
+  pedArms.forEach(im => im.instanceColor.needsUpdate = true);
 });
 function pedPos(p, t){
   if(p.plaza){
@@ -9110,6 +9140,12 @@ function updateTraffic(dt){
       }
       v = 0;
     }
+    /* A car on springs dips its nose when it brakes and sits back when it pulls
+     * away, and that is most of how you read a line of traffic stopping for a
+     * light from across the street. Everything here already knows what it is
+     * doing; it just never showed it. Eased, or the whole street twitches. */
+    const dv = (v - (c.vel || 0)) / Math.max(dt, 1e-3);
+    c.dip = (c.dip || 0) + (Math.max(-1, Math.min(1, dv/26)) - (c.dip || 0)) * Math.min(1, dt*7);
     c.vel = v;                    // what it is actually doing, for fault in a crash
     c.pos += v * c.dir * dt;
     // on a chained road the car is handed to the next leg and keeps going;
@@ -9173,7 +9209,10 @@ function updateTraffic(dt){
 function faceCar(c){
   const s = c.seg, lane = carLane(c), g = c.g;
   g.position.set(s.ox + s.ux*c.pos + s.nx*lane, 0, s.oz + s.uz*c.pos + s.nz*lane);
-  g.rotation.y = c.dir > 0 ? s.ang : s.ang + Math.PI;
+  g.rotation.set(0, c.dir > 0 ? s.ang : s.ang + Math.PI, 0);
+  // nose down under the brakes, tail down on the throttle, and lean out of a turn
+  if(c.dip) g.rotateX(-c.dip * 0.035 * c.dir);
+  if(c.turning) g.rotateZ(Math.max(-0.05, Math.min(0.05, (c.vel || 0) * 0.004)));
   g.position.y = roadY(g.position.x, g.position.z);
 }
 
@@ -9184,16 +9223,28 @@ function updatePeds(dt, t){
   umbN = dogN = 0;
   for(const p of peds){
     if(!p.speed){ relocatePed(p); continue; }
-    p.t = (p.t + p.speed * dt) % 1;
+    // somebody stood still stays where they were put and only shifts their
+    // weight; everybody else walks their block
+    if(!p.idle) p.t = (p.t + p.speed * dt) % 1;
     const [px, pz] = pedPos(p, p.t);
     const [ax, az] = pedPos(p, (p.t + 0.004) % 1);
     const y = p.plaza ? 0 : CURB;
     p.x = px; p.z = pz;
-    pedHip.position.set(px, y, pz);
-    pedHip.rotation.set(0, Math.atan2(ax-px, az-pz), 0);
+    /* A walk is not the legs alone. The whole body rises and falls twice a
+     * stride, the shoulders swing against the hips, and the arms hang off the
+     * shoulders going the opposite way to the leg on their own side. Take any
+     * one of those three away and it reads as a doll being slid along. */
+    const gait = t*5.5 + p.phase;
+    const sw = p.idle ? Math.sin(t*0.9 + p.phase)*0.035 : Math.sin(gait) * 0.5;
+    const bob = p.idle ? 0 : Math.abs(Math.sin(gait)) * 0.035;
+    pedHip.position.set(px, y + bob, pz);
+    pedHip.rotation.set(0, Math.atan2(ax-px, az-pz)
+                         + (p.idle ? Math.sin(t*0.55*p.sway + p.phase)*0.06 : -sw*0.10), 0);
     pedHip.scale.setScalar(p.h || 1);
-    const sw = Math.sin(t*5.5 + p.phase) * 0.5;
     pedLegNode[0].rotation.x = sw; pedLegNode[1].rotation.x = -sw;
+    // the arms trail the legs a little, because a shoulder is not a hip
+    const asw = p.idle ? sw*0.5 : Math.sin(gait - 0.35) * 0.42;
+    pedArmNode[0].rotation.x = -asw; pedArmNode[1].rotation.x = asw;
     // the dog trots at its own rate and it is not their rate
     dogNode.position.y = Math.abs(Math.sin(t*7.4 + p.phase)) * 0.035;
     dogNode.rotation.y = Math.sin(t*2.1 + p.phase) * 0.18;
@@ -9201,6 +9252,8 @@ function updatePeds(dt, t){
     pedBody[p.kind].setMatrixAt(p.slot, pedHip.matrixWorld);
     pedLegs[0].setMatrixAt(p.idx, pedLegNode[0].matrixWorld);
     pedLegs[1].setMatrixAt(p.idx, pedLegNode[1].matrixWorld);
+    pedArms[0].setMatrixAt(p.idx, pedArmNode[0].matrixWorld);
+    pedArms[1].setMatrixAt(p.idx, pedArmNode[1].matrixWorld);
     if(raining && p.umb && umbMesh) umbMesh.setMatrixAt(umbN++, pedHip.matrixWorld);
     if(p.dog && dogMesh) dogMesh.setMatrixAt(dogN++, dogNode.matrixWorld);
     _v3.set(px + SH_X*0.35, y + 0.035, pz + SH_Z*0.35);
@@ -9209,6 +9262,7 @@ function updatePeds(dt, t){
   }
   pedBody.forEach(im => im.instanceMatrix.needsUpdate = true);
   pedLegs.forEach(im => im.instanceMatrix.needsUpdate = true);
+  pedArms.forEach(im => im.instanceMatrix.needsUpdate = true);
   pedShadow.instanceMatrix.needsUpdate = true;
   if(umbMesh){ umbMesh.count = umbN; if(umbN) umbMesh.instanceMatrix.needsUpdate = true; }
   if(dogMesh){ dogMesh.count = dogN; if(dogN) dogMesh.instanceMatrix.needsUpdate = true; }
