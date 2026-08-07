@@ -4368,10 +4368,27 @@ function shopFronts(){
 // a single mesh drawn with an unlit material — bright at noon, blinding at
 // midnight.
 let tsqBall = null;                  // the one on the mast, which turns all year
+let tsqTick = null;                  // set once the square is built
+/* One warm lamp over the middle was the wrong colour and the wrong number. What
+ * actually lights Times Square after dark is a couple of hundred screens, each
+ * a different colour, from both sides at once — so it is a row of lights down
+ * the length of it, drifting through the hues the boards are showing, and the
+ * light on your face changes as you walk. */
 const tsqLight = new THREE.PointLight(0xffd9b0, 0, 190, 2);
 tsqLight.position.set(TSQ.x, 34, TSQ.z);
 tsqLight.visible = false;
 scene.add(tsqLight);
+const tsqSpill = [];
+for(let k=0;k<5;k++){
+  const l = new THREE.PointLight(0xffffff, 0, 95, 2);
+  const a = (k/4 - 0.5) * (TSQ_HALF*1.7);
+  const [lx, lz] = tsqXZ(a, TSQ_LEAN*a);
+  l.position.set(lx, CURB + 15, lz);
+  l.visible = false;
+  l.userData.hue = k*0.19;
+  scene.add(l);
+  tsqSpill.push(l);
+}
 tasks.push(() => {
   /* The plaza has its own paving, not the pavement texture: dark charcoal
    * pavers in a running bond with pale joints and the little steel discs set
@@ -4442,16 +4459,30 @@ tasks.push(() => {
     cityGroup.add(new THREE.Mesh(mergeGeos(floor), plazaMat));
   }
   /* Real advertising, not coloured noise: wordmarks, taglines, a market board,
-   * a news ticker, show posters. The brands are invented -- putting a real
-   * company's name and livery on a billboard is their trademark, not mine to
-   * hang on a building -- but the look is what fills the square. */
-  const A = 1024, cell = A/4;
-  const ca = document.createElement('canvas'); ca.width = ca.height = A;
+   * show posters. The brands are invented -- putting a real company's name and
+   * livery on a billboard is their trademark, not mine to hang on a building --
+   * but the look is what fills the square.
+   *
+   * Two shapes, because the square has two: a wide screen four floors high and a
+   * narrow ribbon eight floors tall. A square cell stretched onto either one
+   * turns every wordmark into something no agency would have signed off, which
+   * is what the old single grid of sixteen squares was doing. Eight landscape
+   * panels down the left of the atlas, eight portrait ones down the right, and
+   * a board takes whichever matches the hole it has to fill.
+   */
+  const AW = 2048, AH = 1024;
+  const ca = document.createElement('canvas'); ca.width = AW; ca.height = AH;
   const g = ca.getContext('2d');
+  const CELLS = [];
+  for(let r=0;r<4;r++) for(let q=0;q<2;q++)                     // 0..7  landscape
+    CELLS.push({x:q*512, y:r*256, w:512, h:256});
+  for(let r=0;r<2;r++) for(let q=0;q<4;q++)                     // 8..15 portrait
+    CELLS.push({x:1024 + q*256, y:r*512, w:256, h:512});
+
   const fit = (txt, px, max) => {            // shrink until it fits the panel
     let s2 = px;
-    do { g.font = 'bold ' + s2 + 'px Helvetica, Arial'; s2 -= 4; }
-    while(g.measureText(txt).width > max && s2 > 10);
+    do { g.font = 'bold ' + s2 + 'px Helvetica, Arial'; s2 -= 3; }
+    while(g.measureText(txt).width > max && s2 > 9);
   };
   const AD = [
     ['NOVARA',      'AUTUMN COLLECTION',   '#0d0d10', '#f4f0e8', '#c8a45c'],
@@ -4464,89 +4495,130 @@ tasks.push(() => {
     ['BIG APPLE',   'BURGERS ALL NIGHT',   '#7a1410', '#ffe14d', '#ffffff'],
     ['STREAMLINE',  'WATCH ANYTHING',      '#12131a', '#ff2d55', '#ffffff'],
     ['VOLT',        'ENERGY, BOTTLED',     '#0f1a0c', '#a8ff3d', '#ffffff'],
+    ['HALCYON',     'THE NEW SEDAN',       '#0a0f14', '#dfe8f0', '#ff8a3d'],
+    ['CASSIA',      'EAU DE PARFUM',       '#1b0f18', '#f6e9f2', '#e0a0c8']
   ];
-  for(let k=0;k<16;k++){
-    const ox = (k%4)*cell, oy = Math.floor(k/4)*cell;
-    g.save(); g.beginPath(); g.rect(ox, oy, cell, cell); g.clip();
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    if(k === 3){                              // the market board
-      g.fillStyle = '#05070a'; g.fillRect(ox, oy, cell, cell);
-      g.textAlign = 'left';
-      const rows = ['NVRA','ZPHR','LMN','STRD','MRDN','SKY','OPTK','VOLT'];
-      for(let r=0;r<rows.length;r++){
-        const y = oy + 26 + r*(cell-40)/rows.length, up = rnd() < 0.55;
-        g.fillStyle = '#8e9aa8'; g.font = 'bold 26px Helvetica, Arial';
-        g.fillText(rows[r], ox + 18, y);
-        g.fillStyle = up ? '#2fe06a' : '#ff3b30';
-        g.font = 'bold 26px Helvetica, Arial';
-        g.fillText((up?'+':'-') + rr(0.1,9.9).toFixed(2) + '%', ox + 118, y);
-        g.fillText(up ? '\u25b2' : '\u25bc', ox + cell - 40, y);
-      }
-      g.textAlign = 'center';
-      g.fillStyle = '#ffd84d'; g.font = 'bold 22px Helvetica, Arial';
-      g.fillText('MARKET LIVE', ox + cell/2, oy + cell - 16);
-    } else if(k === 7){                       // news ticker
-      g.fillStyle = '#0a0a0c'; g.fillRect(ox, oy, cell, cell);
-      g.fillStyle = '#c3122e'; g.fillRect(ox, oy + cell*0.38, cell, cell*0.24);
-      g.fillStyle = '#fff'; g.font = 'bold 30px Helvetica, Arial';
-      g.fillText('BREAKING NEWS', ox + cell/2, oy + cell*0.5);
-      g.fillStyle = '#8e9aa8'; g.font = '22px Helvetica, Arial';
-      g.fillText('CITY SETS RECORD FOR', ox + cell/2, oy + cell*0.72);
-      g.fillText('VISITORS THIS SUMMER',  ox + cell/2, oy + cell*0.80);
-      g.fillStyle = '#ffd84d'; g.font = 'bold 26px Helvetica, Arial';
-      g.fillText('7:41 PM   68\u00b0F', ox + cell/2, oy + cell*0.20);
-    } else if(k === 11 || k === 14){          // a show poster
-      const grd = g.createLinearGradient(ox, oy, ox, oy+cell);
-      grd.addColorStop(0, '#2b0a3d'); grd.addColorStop(1, '#0a0a12');
-      g.fillStyle = grd; g.fillRect(ox, oy, cell, cell);
-      for(let b=0;b<18;b++){                  // marquee bulbs
-        g.fillStyle = b % 2 ? '#ffd84d' : '#fff6cc';
-        g.beginPath(); g.arc(ox + 14 + b*(cell-28)/17, oy + 14, 6, 0, 6.3); g.fill();
-        g.beginPath(); g.arc(ox + 14 + b*(cell-28)/17, oy + cell - 14, 6, 0, 6.3); g.fill();
-      }
-      const title = k === 11 ? 'THE LAST TRAIN' : 'HARLEM NIGHTS';
-      fit(title, 54, cell - 60);
-      g.fillStyle = '#ffd84d'; g.fillText(title, ox + cell/2, oy + cell*0.42);
-      g.fillStyle = '#f0e6ff'; g.font = '24px Helvetica, Arial';
-      g.fillText('A NEW MUSICAL', ox + cell/2, oy + cell*0.56);
-      g.fillStyle = '#ffffff'; g.font = 'bold 22px Helvetica, Arial';
-      g.fillText('NOW PLAYING', ox + cell/2, oy + cell*0.70);
-    } else {                                  // a brand advertisement
-      const [name, line, bg, fg, accent] = AD[k % AD.length];
-      const grd = g.createLinearGradient(ox, oy, ox + cell, oy + cell);
-      grd.addColorStop(0, bg);
-      grd.addColorStop(1, '#000');
-      g.fillStyle = grd; g.fillRect(ox, oy, cell, cell);
-      g.fillStyle = accent;
-      g.fillRect(ox + cell*0.10, oy + cell*0.60, cell*0.80, 5);
-      if(k % 3 === 0){                        // a product block
-        g.fillStyle = accent; g.globalAlpha = 0.22;
-        g.fillRect(ox + cell*0.16, oy + cell*0.10, cell*0.68, cell*0.34);
-        g.globalAlpha = 1;
-      }
-      fit(name, 76, cell - 48);
-      g.fillStyle = fg; g.fillText(name, ox + cell/2, oy + cell*0.52);
-      g.fillStyle = accent; g.font = 'bold 24px Helvetica, Arial';
-      g.fillText(line, ox + cell/2, oy + cell*0.72);
+  const SHOWS = [['THE LAST TRAIN', 'A NEW MUSICAL'], ['HARLEM NIGHTS', 'A NEW MUSICAL'],
+                 ['CROSSTOWN', 'THE PLAY'],           ['MIDNIGHT DINER', 'A NEW MUSICAL']];
+
+  const adBrand = (R, spec) => {
+    const [name, line, bg, fg, accent] = spec;
+    const grd = g.createLinearGradient(R.x, R.y, R.x + R.w, R.y + R.h);
+    grd.addColorStop(0, bg); grd.addColorStop(1, '#000');
+    g.fillStyle = grd; g.fillRect(R.x, R.y, R.w, R.h);
+    g.fillStyle = accent; g.globalAlpha = 0.20;
+    g.fillRect(R.x + R.w*0.12, R.y + R.h*0.08, R.w*0.76, R.h*0.30);
+    g.globalAlpha = 1;
+    g.fillStyle = accent; g.fillRect(R.x + R.w*0.10, R.y + R.h*0.62, R.w*0.80, Math.max(4, R.h*0.014));
+    fit(name, R.h*0.26, R.w - R.w*0.12);
+    g.fillStyle = fg; g.fillText(name, R.x + R.w/2, R.y + R.h*0.52);
+    g.fillStyle = accent; g.font = 'bold ' + Math.round(R.h*0.075) + 'px Helvetica, Arial';
+    g.fillText(line, R.x + R.w/2, R.y + R.h*0.74);
+  };
+  const adMarket = R => {
+    g.fillStyle = '#05070a'; g.fillRect(R.x, R.y, R.w, R.h);
+    g.textAlign = 'left';
+    const rows = ['NVRA','ZPHR','LMN','STRD','MRDN','SKY','OPTK','VOLT'];
+    const fs = Math.round(R.h*0.085);
+    for(let r=0;r<rows.length;r++){
+      const y = R.y + R.h*0.10 + r*R.h*0.10, up = rnd() < 0.55;
+      g.font = 'bold ' + fs + 'px Helvetica, Arial';
+      g.fillStyle = '#8e9aa8'; g.fillText(rows[r], R.x + R.w*0.05, y);
+      g.fillStyle = up ? '#2fe06a' : '#ff3b30';
+      g.fillText((up?'+':'-') + rr(0.1,9.9).toFixed(2) + '%', R.x + R.w*0.34, y);
+      g.fillText(up ? '\u25b2' : '\u25bc', R.x + R.w*0.82, y);
     }
+    g.textAlign = 'center';
+    g.fillStyle = '#ffd84d'; g.font = 'bold ' + Math.round(R.h*0.075) + 'px Helvetica, Arial';
+    g.fillText('MARKET LIVE', R.x + R.w/2, R.y + R.h*0.95);
+  };
+  const adShow = (R, show) => {
+    const grd = g.createLinearGradient(R.x, R.y, R.x, R.y + R.h);
+    grd.addColorStop(0, '#2b0a3d'); grd.addColorStop(1, '#0a0a12');
+    g.fillStyle = grd; g.fillRect(R.x, R.y, R.w, R.h);
+    const br = Math.max(4, Math.min(R.w, R.h)*0.022), n = Math.round(R.w/(br*4));
+    for(let b=0;b<=n;b++){
+      g.fillStyle = b % 2 ? '#ffd84d' : '#fff6cc';
+      const bx = R.x + br*2 + b*(R.w - br*4)/n;
+      g.beginPath(); g.arc(bx, R.y + br*2, br, 0, 6.3); g.fill();
+      g.beginPath(); g.arc(bx, R.y + R.h - br*2, br, 0, 6.3); g.fill();
+    }
+    fit(show[0], R.h*0.19, R.w*0.86);
+    g.fillStyle = '#ffd84d'; g.fillText(show[0], R.x + R.w/2, R.y + R.h*0.42);
+    g.fillStyle = '#f0e6ff'; g.font = Math.round(R.h*0.07) + 'px Helvetica, Arial';
+    g.fillText(show[1], R.x + R.w/2, R.y + R.h*0.58);
+    g.fillStyle = '#ffffff'; g.font = 'bold ' + Math.round(R.h*0.062) + 'px Helvetica, Arial';
+    g.fillText('NOW PLAYING', R.x + R.w/2, R.y + R.h*0.72);
+  };
+
+  for(let k=0;k<CELLS.length;k++){
+    const R = CELLS[k];
+    g.save(); g.beginPath(); g.rect(R.x, R.y, R.w, R.h); g.clip();
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    if(k === 2)                    adMarket(R);
+    else if(k === 5 || k === 10 || k === 13) adShow(R, SHOWS[k % SHOWS.length]);
+    else                           adBrand(R, AD[k % AD.length]);
     g.restore();
     g.strokeStyle = 'rgba(0,0,0,.85)'; g.lineWidth = 6;
-    g.strokeRect(ox+3, oy+3, cell-6, cell-6);
+    g.strokeRect(R.x+3, R.y+3, R.w-6, R.h-6);
   }
   const adTex = new THREE.CanvasTexture(ca);
   adTex.colorSpace = THREE.SRGBColorSpace;
+  adTex.anisotropy = 4;
 
-  const screens = [], frames = [];
-  // one screen, facing the plaza, showing atlas cell `ci`
-  const board = (x, z, y, w, h, face, ci, post) => {
+  /* ---- the zipper ---------------------------------------------------------
+   * A separate strip that scrolls, because a news band that does not move is
+   * the one thing in the square that instantly reads as a photograph. It is its
+   * own texture on repeat, and all that happens per frame is that its offset
+   * advances \u2014 no canvas is redrawn and nothing is uploaded. */
+  const tickTex = (() => {
+    const W = 2048, H = 96;
+    const cb = document.createElement('canvas'); cb.width = W; cb.height = H;
+    const t2 = cb.getContext('2d');
+    t2.fillStyle = '#08090c'; t2.fillRect(0, 0, W, H);
+    t2.textBaseline = 'middle'; t2.textAlign = 'left';
+    const line = '  CITY SETS RECORD FOR VISITORS THIS SUMMER  \u2022  ' +
+                 'INDEX CLOSES UP 1.4% ON THE DAY  \u2022  ' +
+                 'SUBWAY LINE REOPENS AFTER SIX MONTHS  \u2022  ' +
+                 'RAIN EXPECTED BY THE WEEKEND, 68\u00b0F  \u2022 ';
+    t2.font = 'bold 52px Helvetica, Arial';
+    let x = 0;
+    while(x < W){                       // laid down twice so it wraps seamlessly
+      t2.fillStyle = '#ffcf3d'; t2.fillText(line, x, H/2);
+      x += t2.measureText(line).width;
+    }
+    const t = new THREE.CanvasTexture(cb);
+    t.wrapS = THREE.RepeatWrapping;
+    t.wrapT = THREE.ClampToEdgeWrapping;
+    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  })();
+
+  const screens = [], frames = [], ticks = [];
+  /* Every board records where its vertices land in the merged buffer and what
+   * its corner UVs were before the atlas was applied, which is all that is
+   * needed to re-aim it at a different panel later. Six floats a corner, and a
+   * screen in Times Square changes what it is showing every few seconds. */
+  const slots = [];
+  let vTotal = 0;
+  const paint = (uvAttr, off, slot, ci) => {
+    const R = CELLS[(slot.land ? 0 : 8) + (ci & 7)];
+    const u0 = R.x/AW, u1 = (R.x + R.w)/AW;
+    const v0 = 1 - (R.y + R.h)/AH, v1 = 1 - R.y/AH;   // the canvas loads flipped
+    for(let q=0;q<slot.n;q++)
+      uvAttr.setXY(off + q, u0 + slot.base[q*2]*(u1 - u0),
+                            v0 + slot.base[q*2+1]*(v1 - v0));
+  };
+  const board = (x, z, y, w, h, face, post) => {
     const pl = new THREE.PlaneGeometry(w, h);
-    const uv = pl.attributes.uv;
-    const col = ci % 4, row = Math.floor(ci / 4);
-    // the canvas is flipped on load, so the V band counts down from the top
-    for(let q=0;q<uv.count;q++)
-      uv.setXY(q, (col + uv.getX(q))/4, (3 - row + uv.getY(q))/4);
     pl.rotateY(face); pl.translate(x, y + h/2, z);
-    screens.push(colored(pl, 0xffffff));
+    const geo = colored(pl, 0xffffff);
+    const n = geo.attributes.position.count;
+    const slot = { start: vTotal, n, base: Float32Array.from(geo.attributes.uv.array),
+                   land: w >= h, wait: rr(3, 16) };
+    paint(geo.attributes.uv, 0, slot, Math.floor(rnd()*8));
+    slots.push(slot); vTotal += n;
+    screens.push(geo);
     const bk = new THREE.BoxGeometry(w + 1.4, h + 1.4, 1.0);
     bk.rotateY(face);
     bk.translate(x - Math.sin(face)*0.8, y + h/2, z - Math.cos(face)*0.8);
@@ -4556,6 +4628,22 @@ tasks.push(() => {
       p2.translate(x, y/2, z);
       frames.push(p2);
     }
+  };
+  /* The strip is 2048 by 96, so it is twenty-one times as wide as it is tall.
+   * Wrap any other number of copies across a band and the letters come out
+   * stretched or squeezed; take the band's own aspect and divide, and they stay
+   * the shape they were drawn. */
+  const TICK_AR = 2048/96;
+  const tickBoard = (x, z, y, w, h, face) => {
+    const pl = new THREE.PlaneGeometry(w, h);
+    const uv = pl.attributes.uv, reps = (w/h)/TICK_AR;
+    for(let q=0;q<uv.count;q++) uv.setXY(q, uv.getX(q)*reps, uv.getY(q));
+    pl.rotateY(face); pl.translate(x, y + h/2, z);
+    ticks.push(colored(pl, 0xffffff));
+    const bk = new THREE.BoxGeometry(w + 0.8, h + 0.8, 0.9);
+    bk.rotateY(face);
+    bk.translate(x - Math.sin(face)*0.7, y + h/2, z - Math.cos(face)*0.7);
+    frames.push(colored(bk, 0x14171c));
   };
   const glow = [];                                  // anything lit from within
   const north = Math.atan2(-TSQ.ux, -TSQ.uz);       // looking up the square
@@ -4573,8 +4661,7 @@ tasks.push(() => {
       let y = rr(5.5, 10);
       for(let s = 0, n = ri(3, 5); s < n; s++){     // stacked up the facade
         const h = rr(7, 13) * (s === 0 ? 1 : rr(0.7, 1.0));
-        board(x, z, y, w * (s === 0 ? 1 : rr(0.7, 1.0)), h, face,
-              Math.floor(rnd()*16), s === 0);
+        board(x, z, y, w * (s === 0 ? 1 : rr(0.7, 1.0)), h, face, s === 0);
         y += h + rr(1.0, 3.0);
         if(y > 66) break;
       }
@@ -4582,12 +4669,12 @@ tasks.push(() => {
       if(rnd() < 0.5){
         const off = (rnd() < 0.5 ? -1 : 1) * (w/2 + rr(3, 6));
         const [rx, rz] = tsqXZ(a + off, tsqEdge(a, side, rr(1.4, 5)));
-        board(rx, rz, rr(8, 14), rr(5, 8), rr(16, 28), face, Math.floor(rnd()*16), true);
+        board(rx, rz, rr(8, 14), rr(5, 8), rr(16, 28), face, true);
       }
       // the ticker band at eye level under the lowest screen
       if(rnd() < 0.4){
         const [tx, tz] = tsqXZ(a, tsqEdge(a, side, 1.0));
-        board(tx, tz, 5.4, rr(9, 14), 2.0, face, 7, false);
+        tickBoard(tx, tz, 5.4, rr(9, 14), 2.0, face);
       }
     }
   }
@@ -4609,7 +4696,7 @@ tasks.push(() => {
     while(y < OTS_H - 6){
       const h = rr(5, 9);
       const [fx, fz] = tsqXZ(OTS_A - OTS_D/2 - 0.6, b0);
-      board(fx, fz, y, OTS_W - 1.2, h, north, Math.floor(rnd()*16), false);
+      board(fx, fz, y, OTS_W - 1.2, h, north, false);
       y += h + 0.8;
     }
     // and down both flanks
@@ -4618,7 +4705,7 @@ tasks.push(() => {
       while(yy < OTS_H - 8){
         const h = rr(6, 11);
         const [fx, fz] = tsqXZ(OTS_A + rr(-5, 5), b0 + s*(OTS_W/2 + 0.6));
-        board(fx, fz, yy, rr(9, 16), h, tsqFace(s), Math.floor(rnd()*16), false);
+        board(fx, fz, yy, rr(9, 16), h, tsqFace(s), false);
         yy += h + rr(1.5, 4);
       }
     }
@@ -4627,7 +4714,7 @@ tasks.push(() => {
       const t = k/14, ang = t*6.283;
       const ex = Math.cos(ang)*(OTS_W/2 + 0.5), ez = Math.sin(ang)*(OTS_D/2 + 0.5);
       const [zx, zz] = tsqXZ(OTS_A + ez, b0 + ex);
-      board(zx, zz, 9.4, 5.4, 1.9, Math.atan2(ex, ez) + south, 7, false);
+      tickBoard(zx, zz, 9.4, 5.4, 1.9, Math.atan2(ex, ez) + south);
     }
     // the mast, the ball, and the numerals under it
     const mast = colored(new THREE.CylinderGeometry(0.5, 0.9, 20, 8), 0x30363d);
@@ -4692,8 +4779,8 @@ tasks.push(() => {
       .rotateY(face).translate(x + fx*2.1, CURB + 6.4, z + fz*2.1));
     frames.push(colored(new THREE.BoxGeometry(1.5, 8.5, 1.5), 0x14171b)
       .rotateY(face).translate(x + fx*0.4, CURB + 11.4, z + fz*0.4));
-    board(x + fx*4.25, z + fz*4.25, CURB + 4.3, 10.4, 2.0, face, rnd() < 0.5 ? 11 : 14, false);
-    board(x + fx*1.0,  z + fz*1.0,  CURB + 7.6, 1.4, 7.6, face, rnd() < 0.5 ? 11 : 14, false);
+    board(x + fx*4.25, z + fz*4.25, CURB + 4.3, 10.4, 2.0, face, false);
+    board(x + fx*1.0,  z + fz*1.0,  CURB + 7.6, 1.4, 7.6, face, false);
     for(let k=0;k<14;k++){                                     // the bulbs
       const o = (k/13 - 0.5)*10.4;
       glow.push(colored(new THREE.SphereGeometry(0.16, 6, 5), 0xffe9a8)
@@ -4703,10 +4790,64 @@ tasks.push(() => {
     }
   }
 
+  /* ---- the drum ----------------------------------------------------------
+   * The other thing everybody pictures and nobody can name: the cylinder of
+   * screen wrapped round the corner of the tower on the east side, eight floors
+   * of it, curved so the whole square can read it at once. Three bands of the
+   * scrolling strip round a drum does the job, and because it is the same
+   * texture as the zippers it scrolls with them for nothing. */
+  {
+    const DA = TSQ_HALF - 44, DR = 9.5;
+    const [dx, dz] = tsqXZ(DA, tsqEdge(DA, 1, -DR - 1));
+    const H0 = CURB + 14;
+    frames.push(colored(new THREE.CylinderGeometry(DR + 0.7, DR + 0.7, H0 - CURB, 20), 0x1a1e24)
+                  .translate(dx, (CURB + H0)/2, dz));
+    for(let k=0;k<3;k++){
+      const bh = 7.5, by = H0 + k*(bh + 1.1);
+      const drum = new THREE.CylinderGeometry(DR, DR, bh, 30, 1, true);
+      const uv = drum.attributes.uv;
+      // the same rule as the flat bands: the drum's circumference over its own
+      // height, divided by the strip's aspect, or it reads as a yellow barrel
+      const reps = (2*Math.PI*DR/bh)/TICK_AR;
+      for(let q=0;q<uv.count;q++) uv.setXY(q, uv.getX(q)*reps + k*0.37, uv.getY(q));
+      ticks.push(colored(drum, 0xffffff).translate(dx, by + bh/2, dz));
+      frames.push(colored(new THREE.CylinderGeometry(DR + 0.5, DR + 0.5, 1.0, 20), 0x14171c)
+                    .translate(dx, by - 0.5, dz));
+    }
+    frames.push(colored(new THREE.CylinderGeometry(DR + 0.8, DR + 0.5, 1.4, 20), 0x22262c)
+                  .translate(dx, H0 + 3*(7.5 + 1.1) + 0.2, dz));
+    addSolid(dx, dz, DR*2, DR*2);
+  }
+
   const boards = new THREE.Mesh(mergeGeos(screens),
     registerLit(new THREE.MeshBasicMaterial({map:adTex, vertexColors:true}), 1.15));
   boards.frustumCulled = false;
-  cityGroup.add(boards, new THREE.Mesh(mergeGeos(frames), vcMat));
+  const zipper = new THREE.Mesh(mergeGeos(ticks),
+    registerLit(new THREE.MeshBasicMaterial({map:tickTex, vertexColors:true,
+                                             side:THREE.DoubleSide}), 1.25));
+  zipper.frustumCulled = false;
+  cityGroup.add(boards, zipper, new THREE.Mesh(mergeGeos(frames), vcMat));
+
+  /* Nothing in the square holds still. The zipper runs, and every few seconds
+   * another handful of screens cut to a different advertisement — which is only
+   * six UV pairs rewritten each, so the whole square keeps changing for the cost
+   * of a sixteen-kilobyte buffer update a few times a second. */
+  const uvAttr = boards.geometry.attributes.uv;
+  let adCursor = 0;
+  tsqTick = (dt) => {
+    tickTex.offset.x -= dt * 0.055;
+    let changed = false;
+    for(let k=0;k<6 && k<slots.length;k++){
+      adCursor = (adCursor + 1) % slots.length;
+      const s = slots[adCursor];
+      s.wait -= dt * slots.length / 6;
+      if(s.wait > 0) continue;
+      s.wait = rr(6, 20);
+      paint(uvAttr, s.start, s, Math.floor(rnd()*8));
+      changed = true;
+    }
+    if(changed) uvAttr.needsUpdate = true;
+  };
 
   /* What actually fills the square at street level: café tables and chairs
    * people sit in all day facing the screens, the long granite benches, the
@@ -7370,7 +7511,8 @@ function applySky(){
   sunDisc.scale.setScalar(night ? 70 : 170);
   cloudMat.opacity = 0.55 + 0.44 * w.cloud;
   lampGlows.forEach(g2 => g2.visible = lit);
-  tsqLight.visible = night; tsqLight.intensity = night ? 2.4 : 0;
+  tsqLight.visible = night; tsqLight.intensity = night ? 1.5 : 0;
+  tsqSpill.forEach(l => { l.visible = night; l.intensity = night ? 2.6 : 0; });
   if(tsqBall) tsqBall.material.color.set(night ? 0xffffff : 0xd8cfae);
   roamLights.forEach(l => { l.visible = night; l.intensity = night ? 1.5 : 0; });
   applyGround();
@@ -7889,6 +8031,14 @@ function tick(){
   const bOn = Math.sin(t*2.2) > 0;
   for(const b of beacons) b.material.color.setHex(bOn ? 0xff5252 : 0x551111);
   if(tsqBall) tsqBall.rotation.y = t*0.22;      // it turns up there all year round
+  if(tsqTick && !player.under) tsqTick(dt);
+  // each lamp drifts through the hues at its own rate, so the square never
+  // settles on one colour the way a single fixed light does
+  if(night) for(let k=0;k<tsqSpill.length;k++){
+    const l = tsqSpill[k];
+    if(!l.visible) continue;
+    l.color.setHSL((l.userData.hue + t*0.021*(1 + k*0.13)) % 1, 0.62, 0.60);
+  }
   waterTex.offset.x = t * 0.004;
   waterTex.offset.y = t * 0.0025;
   skyDome.position.set(camera.position.x, 0, camera.position.z);
