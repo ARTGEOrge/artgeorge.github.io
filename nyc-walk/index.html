@@ -5167,6 +5167,150 @@ function tabletTex(name, bullet, col, dirTxt){
   return t;
 }
 
+/* ---------- what is on a platform besides the platform --------------------
+ * All of this is shared by every station in the system: one canvas each, built
+ * the first time a station asks for it. A station is three merged meshes, so
+ * anything drawn on a shared material is free of both texture memory and draw
+ * calls no matter how many stations there are.
+ */
+let subAdTex = null, subAdMat = null, subClkMat = null;
+function subAds(){
+  if(subAdTex) return subAdTex;
+  const W = 768, H = 512;
+  const ca = document.createElement('canvas'); ca.width = W; ca.height = H;
+  const g = ca.getContext('2d');
+  const POSTER = [
+    ['SEE IT.', 'SAY IT.',       '#1d55a8', '#ffffff', '#ffcf3d'],
+    ['CASSIA',  'EAU DE PARFUM', '#e8dce4', '#3a2030', '#a85c84'],
+    ['THE LAST TRAIN', 'NOW PLAYING', '#5c2088', '#ffd84d', '#f0e6ff']
+  ];
+  for(let k=0;k<3;k++){
+    const x = k*256, [a, b, bg, fg, ac] = POSTER[k];
+    g.fillStyle = bg; g.fillRect(x, 0, 256, H);
+    g.fillStyle = ac; g.globalAlpha = 0.18;
+    g.fillRect(x + 22, 40, 212, 210); g.globalAlpha = 1;
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    let px = 42;
+    do { g.font = 'bold ' + px + 'px Helvetica, Arial'; px -= 2; }
+    while(g.measureText(a).width > 214 && px > 12);
+    g.fillStyle = fg; g.fillText(a, x + 128, 320);
+    g.fillStyle = ac; g.font = 'bold 22px Helvetica, Arial';
+    g.fillText(b, x + 128, 372);
+    g.strokeStyle = 'rgba(0,0,0,.6)'; g.lineWidth = 8;
+    g.strokeRect(x + 4, 4, 248, H - 8);
+  }
+  subAdTex = new THREE.CanvasTexture(ca);
+  subAdTex.colorSpace = THREE.SRGBColorSpace; subAdTex.anisotropy = 4;
+  return subAdTex;
+}
+/* The countdown clock. One canvas for the whole system, redrawn every couple of
+ * seconds with the minutes stepped down — a board frozen on "2 min" for ever is
+ * the sort of thing you only notice once, and then cannot stop noticing. */
+const subClock = { tex:null, ctx:null, t:0, mins:[0, 4, 9] };
+function subClockTex(){
+  if(subClock.tex) return subClock.tex;
+  const ca = document.createElement('canvas'); ca.width = 512; ca.height = 160;
+  subClock.ctx = ca.getContext('2d');
+  subClock.tex = new THREE.CanvasTexture(ca);
+  subClock.tex.colorSpace = THREE.SRGBColorSpace;
+  drawSubClock();
+  return subClock.tex;
+}
+function drawSubClock(){
+  const g = subClock.ctx; if(!g) return;
+  const W = 512, H = 160;
+  g.fillStyle = '#07080a'; g.fillRect(0, 0, W, H);
+  g.textBaseline = 'middle';
+  g.textAlign = 'left';
+  const LABEL = ['ARRIVING', 'DOWNTOWN', 'DOWNTOWN'];
+  for(let r=0;r<3;r++){
+    const y = 32 + r*44;
+    g.fillStyle = '#ffb020'; g.font = 'bold 30px Helvetica, Arial';
+    g.fillText(String(r + 1), 22, y);
+    g.fillStyle = '#ffd070'; g.font = 'bold 26px Helvetica, Arial';
+    g.fillText(LABEL[r], 66, y);
+    g.textAlign = 'right';
+    const m = subClock.mins[r];
+    g.fillStyle = m === 0 ? '#ff8a20' : '#ffd070';
+    g.fillText(m === 0 ? 'now' : m + ' min', W - 24, y);
+    g.textAlign = 'left';
+  }
+  subClock.tex.needsUpdate = true;
+}
+function updateSubClock(dt){
+  if(!subClock.tex) return;
+  subClock.t -= dt;
+  if(subClock.t > 0) return;
+  subClock.t = 2.4;
+  /* Count every one of them down, and when the first train arrives drop it off
+   * the top and put another on the back. Stepping only the leading entry and
+   * copying the next one over it, as this did, walks the whole board upward —
+   * which is the one thing a countdown clock never does. */
+  const m = subClock.mins;
+  for(let k=0;k<m.length;k++) m[k] -= 1;
+  if(m[0] < 0){ m.shift(); m.push(m[m.length - 1] + ri(4, 8)); }
+  drawSubClock();
+}
+
+/* ---------- the rats -------------------------------------------------------
+ * They live in the trough between the rails, they run the length of the station
+ * and stop dead, and they are the single most reliable thing about the New York
+ * subway. Same trick as the pigeons: one instanced mesh, relocated round you.
+ */
+const RAT_N = 14;
+const rats = [];
+let ratMesh = null;
+function relocateRat(r){
+  if(!stations.length) return;
+  const st = stations[Math.floor(rnd()*stations.length)];
+  if(Math.abs(st.x - player.x) > 200 && Math.abs(st.z - player.z) > 200) return;
+  const s = rnd() < 0.5 ? -1 : 1, u = rr(-PLAT_HL, PLAT_HL);
+  const off = s*(TRACK_V + rr(-1.6, 1.6));
+  const uu = u*st.flip;
+  r.x = st.ax === 'z' ? st.x + off : st.x + uu;
+  r.z = st.ax === 'z' ? st.z + uu : st.z + off;
+  r.y = RAIL_Y - 0.62;
+  r.ang = st.ax === 'z' ? (st.flip > 0 ? 0 : Math.PI) : (st.flip > 0 ? Math.PI/2 : -Math.PI/2);
+  r.ang += rnd() < 0.5 ? 0 : Math.PI;
+  r.go = rr(0.2, 1.4); r.rest = 0;
+}
+tasks.push(() => {
+  const P = [
+    colored(new THREE.BoxGeometry(0.10, 0.09, 0.24), 0x2e2a26).translate(0, 0.06, 0),
+    colored(new THREE.BoxGeometry(0.08, 0.07, 0.09), 0x35302b).translate(0, 0.06, 0.15),
+    colored(new THREE.BoxGeometry(0.03, 0.03, 0.16), 0x4a4038).rotateX(0.5).translate(0, 0.05, -0.18)
+  ];
+  ratMesh = new THREE.InstancedMesh(mergeGeos(P), vcMat, RAT_N);
+  ratMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  ratMesh.frustumCulled = false; ratMesh.count = 0;
+  scene.add(ratMesh);
+  for(let k=0;k<RAT_N;k++) rats.push({x:0, y:-999, z:0, ang:0, go:0, rest:rr(0, 2)});
+});
+function updateRats(dt, t){
+  if(!ratMesh) return;
+  if(!player.under){ ratMesh.count = 0; return; }
+  let n = 0;
+  for(const r of rats){
+    if(r.y < -900 || Math.hypot(r.x - player.x, r.z - player.z) > 120){ relocateRat(r); }
+    if(r.y < -900) continue;
+    // a rat is either flat out or completely still, and never anything between
+    if(r.go > 0){
+      r.go -= dt;
+      r.x += Math.sin(r.ang)*dt*3.4; r.z += Math.cos(r.ang)*dt*3.4;
+      if(r.go <= 0) r.rest = rr(0.3, 2.2);
+    } else {
+      r.rest -= dt;
+      if(r.rest <= 0){ r.go = rr(0.25, 1.5); if(rnd() < 0.35) r.ang += Math.PI; }
+    }
+    _q.setFromAxisAngle(_yUp, r.ang);
+    _v3.set(r.x, r.y + (r.go > 0 ? Math.abs(Math.sin(t*22))*0.02 : 0), r.z);
+    _s3.setScalar(1);
+    ratMesh.setMatrixAt(n++, _m4.compose(_v3, _q, _s3));
+  }
+  ratMesh.count = n;
+  if(n) ratMesh.instanceMatrix.needsUpdate = true;
+}
+
 function stationName(line, i, j){
   const [sx, sz] = line.ax === 'z' ? [line.at, roadZ(j)] : [roadX(i), line.at];
   if(tsqDist(sx, sz) < TSQ_R + 90) return 'Times Sq–42 St';
@@ -5233,10 +5377,17 @@ function buildStation(line, i, j, flip){
   for(let u = -PLAT_HL + 4; u < STAIR0 - 3; u += 6.2){
     for(const s of [-1, 1]){
       box(S, u, s*3.5, PLAT_Y + 2.2, 0.55, 0.55, 4.4, STEEL);
+      // painted from the waist down and stencilled, the way every one of them
+      // is — in a duller coat than the route bullet, which is enamel, not paint
+      box(S, u, s*3.5, PLAT_Y + 0.9, 0.60, 0.60, 1.8, shade(line.col, 0.5));
+      box(L, u, s*3.5 - 0.32, PLAT_Y + 2.9, 0.42, 0.05, 0.42, line.col);
       const [cx, , cz] = P(u, s*3.5, 0);
       underSolid.push({x1:cx-0.6, x2:cx+0.6, z1:cz-0.6, z2:cz+0.6});
     }
-    if(u % 12 < 6.2) box(L, u, 0, PLAT_Y + 4.15, 3.6, 1.1, 0.12, 0xfff2d0);  // strip light
+    // a near-continuous run of fluorescent, not one tube every other bay
+    box(L, u, 0, PLAT_Y + 4.15, 5.6, 1.1, 0.12, 0xfff2d0);
+    for(const s of [-1, 1])                       // and the run over each track
+      box(L, u, s*(BOX_HW + PLAT_HW)/2, PLAT_Y + 4.02, 5.6, 0.5, 0.1, 0xe8dcc0);
   }
   // ---- the name tablets, one on each wall --------------------------------
   const dirTxt = line.ax === 'z' ? 'DOWNTOWN & BROOKLYN' : 'QUEENS & TIMES SQ';
@@ -5250,6 +5401,72 @@ function buildStation(line, i, j, flip){
     const m = new THREE.Mesh(pl, tabMat);
     st.group.add(m);
   }
+  /* ---- the advertising, which covers as much wall as the tile does ------- */
+  {
+    const ads = [];
+    const AD_AT = [-34, -27, -11, -4, 3, 21, 27];
+    for(const s of [-1, 1]) for(const u of AD_AT){
+      if(Math.abs(u + 18) < 5 || Math.abs(u - 14) < 5) continue;   // clear of a tablet
+      const k = Math.floor(rnd()*3);
+      const pl = new THREE.PlaneGeometry(2.1, 3.9);
+      const uv = pl.attributes.uv;
+      for(let q=0;q<uv.count;q++) uv.setXY(q, (k + uv.getX(q))/3, uv.getY(q));
+      pl.rotateY(line.ax === 'z' ? (s > 0 ? -Math.PI/2 : Math.PI/2)
+                                 : (s > 0 ? Math.PI : 0));
+      const [ax2, ay2, az2] = P(u, s*(BOX_HW - 0.07), RAIL_Y + 2.35);
+      pl.translate(ax2, ay2, az2);
+      ads.push(pl);
+      /* The frame goes BEHIND the poster, between it and the tile — at
+       * BOX_HW-0.14 it sat a hand's breadth further into the platform than the
+       * poster did and covered every one of them with a blank steel slab. */
+      box(S, u, s*(BOX_HW - 0.02), RAIL_Y + 2.35, 2.5, 0.1, 4.3, 0x6e767e);
+    }
+    if(ads.length){
+      // a platform poster is a light box, not a print: it is lit from behind and
+      // is one of the brighter things down there
+      subAdMat = subAdMat ||
+        registerLit(new THREE.MeshBasicMaterial({map: subAds()}), 1.1);
+      st.group.add(new THREE.Mesh(mergeGeos(ads.map(a => colored(a, 0xffffff))), subAdMat));
+    }
+  }
+
+  /* ---- the countdown clocks ---------------------------------------------
+   * Hung across the platform so you read them walking in, and facing the way
+   * you came down the stairs. Every clock in the system shares one canvas and
+   * they all count down together. */
+  {
+    subClkMat = subClkMat || new THREE.MeshBasicMaterial({map: subClockTex()});
+    const face = line.ax === 'z' ? (flip > 0 ? Math.PI : 0)
+                                 : (flip > 0 ? -Math.PI/2 : Math.PI/2);
+    const clk = [];
+    for(const u of [-14, 12]){
+      const pl = new THREE.PlaneGeometry(3.7, 1.16);
+      pl.rotateY(face);
+      // clear of the housing it is set into, or the box swallows the screen
+      const [cx2, cy2, cz2] = P(u - 0.31, 0, PLAT_Y + 3.35);
+      pl.translate(cx2, cy2, cz2);
+      clk.push(colored(pl, 0xffffff));
+      box(S, u, 0, PLAT_Y + 3.35, 3.9, 0.55, 1.4, 0x1a1e24);       // the housing
+      for(const v2 of [-1.4, 1.4])                                  // its hangers
+        box(S, u, v2, PLAT_Y + 4.0, 0.09, 0.09, 1.2, STEEL);
+    }
+    st.group.add(new THREE.Mesh(mergeGeos(clk), subClkMat));
+  }
+
+  /* ---- the way out, lit, because it is the one sign that has to be ------- */
+  for(const u of [STAIR0 - 5, -PLAT_HL + 6]){
+    box(S, u, 0, PLAT_Y + 3.0, 2.9, 0.5, 0.95, 0x16191d);
+    box(L, u, 0.28, PLAT_Y + 3.0, 2.6, 0.06, 0.72, 0xe8f0e0);
+    box(L, u, -0.28, PLAT_Y + 3.0, 2.6, 0.06, 0.72, 0xe8f0e0);
+  }
+
+  /* ---- what is down on the trackbed, which is where you always look ------ */
+  for(const s of [-1, 1]) for(let k=0, n=ri(5, 9); k<n; k++){
+    const u = rr(-PLAT_HL, PLAT_HL), v = s*(TRACK_V + rr(-2.4, 2.4));
+    box(S, u, v, RAIL_Y - 0.66, rr(0.12, 0.4), rr(0.12, 0.34), rr(0.04, 0.16),
+        pick([0xb8b2a4, 0xd8d2c2, 0x8a3f36, 0x33383f, 0x6b7a4a]));
+  }
+
   // ---- benches, bins and a couple of signs on the platform ---------------
   for(const u of [-24, -6, 20]){
     box(S, u, 0, PLAT_Y + 0.45, 3.4, 1.3, 0.12, 0x5a4a38);
@@ -7440,19 +7657,36 @@ function setUnder(v){
   if(player.under === v) return;
   player.under = v;
   if(v){
-    scene.fog.color.set(0x05070b);
-    scene.fog.density = 0.055;
-    ambient.color.set(0x9fb0c2); ambient.intensity = 0.46;
-    sun.intensity = 0.04; bounce.intensity = 0.10; fill.intensity = 0.03;
+    /* At 0.055 the tunnel went black about fifteen metres out, which took the
+     * far half of the platform, the floor and the ceiling with it — the station
+     * read as two lit walls floating in nothing. You can see the length of a
+     * real platform; it is the tunnel past the end of it that goes dark. */
+    scene.fog.color.set(0x0a0d13);
+    scene.fog.density = 0.019;
+    /* The tubes overhead are unlit geometry — they look like light without
+     * casting any — so every surface down here is lit by the ambient terms
+     * alone, and at 0.46 a concrete box lit by nothing else renders black. A
+     * station is not a dark place: it is a flatly, greenly over-lit one. */
+    ambient.color.set(0xcdd8e2); ambient.intensity = 1.05;
+    sun.intensity = 0.04; bounce.intensity = 0.42; fill.intensity = 0.03;
+    bounce.color.set(0xe4ecf4); bounce.groundColor.set(0x2b2724);
     skyDome.visible = stars.visible = sunDisc.visible = cloudMesh.visible = false;
     cityGroup.visible = false;
+    /* A platform is lit by fluorescent tubes and nothing else, which puts the
+     * whole image down at the bottom of the tone curve where ACES has least to
+     * work with. Without opening up going down the stairs, the station renders
+     * as a black rectangle with a few bright strips in it. */
+    compMat.uniforms.exposure.value = 1.35;
+    compMat.uniforms.vig.value = 0.10;
     // the rain is up there, not down here — but you can still just hear it
     if(rainGain) rainGain.gain.value = WX[wxI].rain * 0.004;
   } else {
     skyDome.visible = sunDisc.visible = cloudMesh.visible = true;
     stars.visible = true;
     cityGroup.visible = true;
-    applySky();
+    compMat.uniforms.vig.value = 0.16;
+    bounce.color.set(0xdfeaff); bounce.groundColor.set(0x3a3a3a);   // sky, not tile
+    applySky();                       // which puts the exposure back for daylight
   }
 }
 const _wcA = new THREE.Color(), _wcB = new THREE.Color();
@@ -8003,6 +8237,8 @@ function tick(){
   else      updateWalking(dt, mf, ms);
 
   updateSubway(dt);
+  updateSubClock(dt);
+  updateRats(dt, t);
   if(!player.under){
     updateTraffic(dt);
     updateCarShadows();
