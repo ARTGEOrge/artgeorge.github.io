@@ -5899,19 +5899,59 @@ const trains = [];
  */
 function carGeoSub(col){
   const P = [], L = [];
-  P.push(colored(new THREE.BoxGeometry(CAR_W, CAR_H, CAR_L), 0xb0b6bd).translate(0, CAR_H/2, 0));
+  const DOORZ = [-5.2, 0, 5.2];
+  /* The body is a solid box from y=0 to the roof across the full width, and the
+   * group sits at RAIL_Y + 0.44 — so local y=0 is the underside and the rail
+   * head is at local y = -0.44. Everything that is meant to be seen under the
+   * floor has to live in that band. Put it at a positive y, as the first pass
+   * did, and it is inside the body: invisible, and paid for on every car. */
+  const UNDER = -0.44;                       // the rail head, in the car's frame
+  /* The shell is NOT one box. A doorway has to be a hole, and a solid box has
+   * no holes in it — so with the leaves slid back you were looking at the black
+   * glass band where the opening should be, and the lit interior this car has
+   * been carrying all along was sealed inside where nobody could ever see it.
+   *
+   * Floor slab, header above the door line, an end wall each end, and the sides
+   * built as the four runs of wall that fall between the three door pockets. */
+  const DOOR_HW = 0.95, DSILL = 0.10, DHEAD = 2.20;
+  const SEG = [];                            // the z runs where there IS wall
+  {
+    let z = -CAR_L/2;
+    for(const d of DOORZ){ SEG.push([z, d - DOOR_HW]); z = d + DOOR_HW; }
+    SEG.push([z, CAR_L/2]);
+  }
+  P.push(colored(new THREE.BoxGeometry(CAR_W, DSILL, CAR_L), 0x9aa1a8)
+           .translate(0, DSILL/2, 0));                                  // floor slab
+  P.push(colored(new THREE.BoxGeometry(CAR_W, CAR_H - DHEAD, CAR_L), 0xb0b6bd)
+           .translate(0, (DHEAD + CAR_H)/2, 0));                        // above the doors
+  for(const e of [-1, 1])
+    P.push(colored(new THREE.BoxGeometry(CAR_W, DHEAD - DSILL, 0.12), 0xb0b6bd)
+             .translate(0, (DSILL + DHEAD)/2, e*(CAR_L/2 - 0.06)));     // the ends
+  for(const [z0, z1] of SEG){
+    const len = z1 - z0;
+    if(len < 0.05) continue;
+    for(const s of [-1, 1])
+      P.push(colored(new THREE.BoxGeometry(0.10, DHEAD - DSILL, len), 0xb0b6bd)
+               .translate(s*(CAR_W/2 - 0.05), (DSILL + DHEAD)/2, (z0 + z1)/2));
+  }
   P.push(colored(new THREE.BoxGeometry(CAR_W + 0.04, 0.5, CAR_L - 0.6), 0x1f4a8a)
            .translate(0, CAR_H - 0.5, 0));                              // the stripe
-  // the belt ribs down the flank, which is how you know it is stainless
-  for(const ry of [0.62, 0.80, 2.42, 2.58])
-    P.push(colored(new THREE.BoxGeometry(CAR_W + 0.05, 0.07, CAR_L - 0.3), 0x9aa1a8)
-             .translate(0, ry, 0));
-  // the equipment under the floor: the single biggest thing in its silhouette
-  P.push(colored(new THREE.BoxGeometry(CAR_W - 0.30, 0.62, CAR_L - 4.6), 0x1b1e22)
-           .translate(0, 0.30, 0));
-  for(const s of [-1, 1])
-    P.push(colored(new THREE.BoxGeometry(0.22, 0.44, 3.2), 0x24282d)
-             .translate(s*(CAR_W/2 - 0.24), 0.34, s*3.4));
+  /* The belt ribs run BETWEEN the door pockets. Run them the length of the car
+   * and they cut straight through every sliding door, because the leaves stand
+   * proud of the flank by more than the rib does. */
+  for(const ry of [2.27, 2.37])
+    for(let dz = -7.4; dz <= 7.4; dz += 1.0){
+      if(DOORZ.some(d => Math.abs(dz - d) < 1.6)) continue;
+      P.push(colored(new THREE.BoxGeometry(CAR_W + 0.05, 0.06, 0.95), 0x9aa1a8)
+               .translate(0, ry, dz));
+    }
+  // the equipment under the floor, hanging in the gap between body and rail
+  P.push(colored(new THREE.BoxGeometry(CAR_W - 0.34, 0.32, CAR_L - 4.6), 0x1b1e22)
+           .translate(0, UNDER + 0.22, 0));
+  for(const dz of [-3.2, 3.2])                       // the boxes either side of it
+    for(const s of [-1, 1])
+      P.push(colored(new THREE.BoxGeometry(0.24, 0.26, 2.6), 0x24282d)
+               .translate(s*(CAR_W/2 - 0.30), UNDER + 0.19, dz));
   // and the air conditioning on the roof, two blisters and the ribs between
   for(const dz of [-4.4, 4.4])
     P.push(colored(new THREE.BoxGeometry(CAR_W - 0.55, 0.34, 3.6), 0x8d949b)
@@ -5921,8 +5961,13 @@ function carGeoSub(col){
              .translate(0, CAR_H + 0.03, k*2.0));
   const D = [];
   for(const s of [-1, 1]){
-    P.push(colored(new THREE.BoxGeometry(0.06, 1.15, CAR_L - 1.6), 0x11161d)
-             .translate(s*(CAR_W/2 + 0.02), CAR_H - 1.35, 0));          // glass band
+    // the black glass band, in the same runs as the wall — carried across the
+    // doorways it is exactly what was filling the openings
+    for(const [z0, z1] of SEG){
+      if(z1 - z0 < 0.05) continue;
+      P.push(colored(new THREE.BoxGeometry(0.06, 1.15, z1 - z0), 0x11161d)
+               .translate(s*(CAR_W/2 + 0.02), CAR_H - 1.35, (z0 + z1)/2));
+    }
     for(let k=-1;k<=1;k++) for(const h of [-1, 1]){                    // door leaves
       const dz = k*5.2 + h*0.48, dx = s*(CAR_W/2 + 0.02);
       D.push(colored(new THREE.BoxGeometry(0.10, 2.10, 0.92), 0x939aa2).translate(dx, 1.15, dz));
@@ -5946,7 +5991,6 @@ function carGeoSub(col){
   /* The windows, pane by pane between the door pockets. A single black band the
    * length of the car is what a train looks like switched off; what comes into
    * a station is a run of lit rectangles with a pillar between each pair. */
-  const DOORZ = [-5.2, 0, 5.2];
   for(const s of [-1, 1]){
     for(let dz = -7.5; dz <= 7.5; dz += 1.9){
       if(DOORZ.some(d => Math.abs(dz - d) < 1.5)) continue;
@@ -5972,18 +6016,24 @@ function carGeoSub(col){
   for(const s of [-1, 1])
     L.push(colored(new THREE.BoxGeometry(0.05, 0.40, 1.1), col)
              .translate(s*(CAR_W/2 + 0.04), CAR_H - 0.52, CAR_L/2 - 2.0));
-  /* Two trucks near the ends, not four wheels at the corners — a car this long
-   * with wheels under its extremities reads as a bus, and the bogie frame is
-   * most of what you see of the running gear from a platform anyway. */
+  /* Two trucks near the ends, not four wheels at the corners. A wheel rests ON
+   * the rail, so its centre is one radius above the rail head and not wherever
+   * happens to be convenient — at y=0.40 the whole truck was sitting inside the
+   * body with its tyres a foot and a half clear of the track. */
+  const WR = 0.36;
   for(const dz of [CAR_L/2 - 2.6, -CAR_L/2 + 2.6]){
-    P.push(colored(new THREE.BoxGeometry(CAR_W - 0.55, 0.34, 3.5), 0x191c20)
-             .translate(0, 0.50, dz));
+    P.push(colored(new THREE.BoxGeometry(CAR_W - 0.55, 0.22, 3.5), 0x191c20)
+             .translate(0, UNDER + 0.60, dz));
     for(const s of [-1, 1]) for(const w of [-1.1, 1.1]){
-      P.push(colored(new THREE.CylinderGeometry(0.40, 0.40, 0.22, 10), 0x14171a)
-               .rotateZ(Math.PI/2).translate(s*1.14, 0.40, dz + w));
-      P.push(colored(new THREE.CylinderGeometry(0.17, 0.17, 0.30, 8), 0x3a4048)
-               .rotateZ(Math.PI/2).translate(s*0.98, 0.40, dz + w));      // the hub
+      P.push(colored(new THREE.CylinderGeometry(WR, WR, 0.22, 12), 0x14171a)
+               .rotateZ(Math.PI/2).translate(s*1.20, UNDER + WR, dz + w));
+      P.push(colored(new THREE.CylinderGeometry(0.15, 0.15, 0.30, 8), 0x3a4048)
+               .rotateZ(Math.PI/2).translate(s*1.04, UNDER + WR, dz + w));   // the hub
     }
+    // the journal boxes over each axle, which is the shape you actually read
+    for(const s of [-1, 1])
+      P.push(colored(new THREE.BoxGeometry(0.30, 0.30, 3.0), 0x22262b)
+               .translate(s*1.18, UNDER + 0.52, dz));
   }
   return { body: mergeGeos(P), doors: mergeGeos(D), lit: mergeGeos(L) };
 }
