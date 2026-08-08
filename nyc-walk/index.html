@@ -3573,6 +3573,141 @@ function oneWTC(c, cx, cz){
   b.position.set(cx, y + 56, cz); cityGroup.add(b); beacons.push(b);
   addSolid(cx, cz, 34, 34);
 }
+/* ---------- the World Trade Center memorial ------------------------------
+ * The block south of the tower. Two square voids where the two towers stood,
+ * the same size as the buildings were and set out the way they were set out:
+ * water falls the full depth of all four walls of each and goes into a smaller
+ * square at the centre that you cannot see the bottom of. A bronze parapet
+ * runs round each rim, and the names are cut through it.
+ *
+ * The names are engraved bronze here and nothing else. Every name on that
+ * parapet belongs to somebody, and generating plausible-looking ones to fill a
+ * texture is not a thing to do, so what is modelled is the parapet and the cut
+ * band, and no lettering is invented.
+ *
+ * Round the pools: the plaza and its grove of white oaks, the museum pavilion,
+ * and the transit hall east of it — the white ribbed one everybody pictures.
+ *
+ * The plaza lays its own paving in tiles, skipping the two footprints, because
+ * a single slab over the cell caps both voids and the whole point of them is
+ * that they are open.
+ */
+let wtcPlace = null;                 // for the location readout
+function wtcMemorial(c, cx, cz){
+  const S = BLOCK + WALK*2, H = CURB;
+  const R = 7.2, DEEP = 6.6;
+  // one north-west of the other, as the towers stood
+  const POOLS = [[cx - 12, cz - 9], [cx + 7, cz + 10]];
+  const onPool = (x, z, pad) => POOLS.some(p =>
+    Math.abs(x - p[0]) < R + (pad || 0) && Math.abs(z - p[1]) < R + (pad || 0));
+  wtcPlace = { x: cx, z: cz, r: 46 };
+
+  /* --- the ground ---------------------------------------------------------
+   * The roadbed goes round the outside as four strips rather than one sheet
+   * under everything, and the plaza is tiled so the two footprints can be left
+   * out of it. A tile is dropped if any part of it would reach a pool, not just
+   * if its centre does — at three metres across, testing the centre left a
+   * course of paving lying over the void. */
+  {
+    const roadRect = (x, z, w, d) => {
+      const g = new THREE.PlaneGeometry(w, d);
+      g.rotateX(-Math.PI/2);
+      const uv = g.attributes.uv;
+      for(let q=0;q<uv.count;q++)
+        uv.setXY(q, 0.5 + ((x - cx) + (uv.getX(q) - 0.5)*w)/PITCH,
+                    0.5 + ((z - cz) + (uv.getY(q) - 0.5)*d)/PITCH);
+      g.translate(x, 0, z);
+      c.road.push(colored(g, 0xffffff));
+    };
+    const ring = (PITCH - S)/2;
+    roadRect(cx, cz - S/2 - ring/2, PITCH, ring);
+    roadRect(cx, cz + S/2 + ring/2, PITCH, ring);
+    roadRect(cx - S/2 - ring/2, cz, ring, S);
+    roadRect(cx + S/2 + ring/2, cz, ring, S);
+  }
+  const N = 32, ts = S/N;
+  for(let a=0;a<N;a++) for(let b=0;b<N;b++){
+    const tx = cx - S/2 + (a+0.5)*ts, tz = cz - S/2 + (b+0.5)*ts;
+    if(onPool(tx, tz, ts*0.55)) continue;
+    walkSlab(c, tx, tz, ts, ts);
+  }
+
+  for(const [px, pz] of POOLS){
+    for(const [sx, sz] of [[0,-1],[0,1],[-1,0],[1,0]]){
+      // the granite wall of the shaft
+      c.prop.push(colored(new THREE.BoxGeometry(sx ? 0.7 : R*2, DEEP, sz ? 0.7 : R*2), 0x35322e)
+        .translate(px + sx*R, H - DEEP/2, pz + sz*R));
+      // and the water coming down the whole face of it, which is the idea
+      c.prop.push(colored(new THREE.BoxGeometry(sx ? 0.14 : R*2 - 1.4, DEEP - 0.6,
+                                                sz ? 0.14 : R*2 - 1.4), 0xd2dde2)
+        .translate(px + sx*(R - 0.4), H - DEEP/2 - 0.3, pz + sz*(R - 0.4)));
+      // the bronze parapet, and the band round its top the names are cut into
+      /* The collar. The paving is cut back clear of the void, so between the
+       * shaft and the first whole tile there is no ground at all — and what
+       * shows through the gap is the harbour plane, which runs under the whole
+       * island. This plugs it, and the parapet sits on top of it. */
+      c.prop.push(colored(new THREE.BoxGeometry(sx ? 2.4 : R*2 + 4.8, 0.30,
+                                                sz ? 2.4 : R*2 + 4.8), 0x8e8b84)
+        .translate(px + sx*(R + 1.2), H - 0.14, pz + sz*(R + 1.2)));
+      const w = sx ? 1.15 : R*2 + 2.3, d = sz ? 1.15 : R*2 + 2.3;
+      c.prop.push(colored(new THREE.BoxGeometry(w, 0.95, d), 0x4a3f33)
+        .translate(px + sx*(R + 0.58), H + 0.48, pz + sz*(R + 0.58)));
+      c.prop.push(colored(new THREE.BoxGeometry(sx ? 1.2 : R*2 + 1.1, 0.30,
+                                                sz ? 1.2 : R*2 + 1.1), 0x6d5b42)
+        .translate(px + sx*(R + 0.58), H + 0.80, pz + sz*(R + 0.58)));
+      addSolid(px + sx*(R + 0.58), pz + sz*(R + 0.58), w, d);
+    }
+    // the pool at the bottom, and the square at the centre of it
+    const bot = new THREE.PlaneGeometry(R*2 - 1.0, R*2 - 1.0);
+    bot.rotateX(-Math.PI/2); bot.translate(px, H - DEEP + 0.12, pz);
+    cityGroup.add(new THREE.Mesh(bot, parkWaterMat));
+    const vr = R*0.28;
+    c.prop.push(colored(new THREE.BoxGeometry(vr*2, 0.10, vr*2), 0x07090b)
+      .translate(px, H - DEEP + 0.20, pz));
+  }
+
+  /* --- the transit hall, east of the plaza ------------------------------- */
+  {
+    /* Ribs rising steeply to a spine and carrying on past it as spikes. Splayed
+     * off a wide base they came out as a fan lying over; the shape only reads
+     * when the ribs are steep and the spine is well above where they cross. */
+    const ox = cx + 20, oz = cz + 4, LEN = 22, HIGH = 13.5;
+    for(let k=0;k<=15;k++){
+      const t = k/15, dz = (t - 0.5)*LEN;
+      const f = 1 - Math.pow(Math.abs(t - 0.5)*2, 2.2);
+      const h = 1.6 + HIGH*f;
+      for(const s of [-1, 1]){
+        strut(ox + s*5.6, H, ox + s*0.9, H + h, oz + dz, 0.24, 0xe8ecef);
+        strut(ox + s*0.9, H + h, ox + s*1.9, H + h + 2.2, oz + dz, 0.15, 0xe8ecef);
+      }
+    }
+    c.prop.push(colored(new THREE.BoxGeometry(0.9, 0.45, LEN + 1.5), 0xdfe4e8)
+      .translate(ox, H + HIGH + 1.0, oz));
+    addSolid(ox, oz, 11, LEN);
+  }
+
+  /* --- the museum pavilion, between the pools ---------------------------- */
+  {
+    const mx = cx + 1, mz = cz - 5;
+    c.prop.push(colored(new THREE.BoxGeometry(8.5, 6.2, 6.5), 0x39454f)
+      .translate(mx, H + 3.1, mz));
+    for(let k=0;k<5;k++)
+      c.glow.push(colored(new THREE.BoxGeometry(1.3, 4.4, 0.08), 0xdce6ee)
+        .translate(mx - 3.0 + k*1.5, H + 3.0, mz + 3.3));
+    addSolid(mx, mz, 8.5, 6.5);
+  }
+
+  /* --- the grove, and the one tree that was already here ----------------- */
+  for(let k=0;k<52;k++){
+    const tx = cx + rr(-S/2 + 3, S/2 - 3), tz = cz + rr(-S/2 + 3, S/2 - 3);
+    if(onPool(tx, tz, 4.2)) continue;
+    if(Math.abs(tx - (cx + 20)) < 9 && Math.abs(tz - (cz + 4)) < 12) continue;
+    if(Math.abs(tx - (cx + 1)) < 6 && Math.abs(tz - (cz - 5)) < 5) continue;
+    c.tree.push([tx, tz, rr(0.8, 1.1)]);
+  }
+  c.tree.push([cx - 2, cz + 1, 1.5]);        // the one that was dug out and replanted
+}
+
 /* The Flatiron: the wedge left over where Broadway crosses Fifth, six feet
  * across at the point, and the whole reason anybody photographs that corner. */
 function flatiron(c, cx, cz){
@@ -3820,7 +3955,10 @@ const LANDMARKS = { '11|23': empireState, '13|21': chrysler,
                     '11|20': rockefeller, '12|20': stPatricks,
                     '12|19': parkAve432,  '13|19': citicorp,
                     '12|21': grandCentral,'14|21': unSecretariat,
-                    '12|30': woolworth,   '13|14': guggenheim };
+                    '12|30': woolworth,   '13|14': guggenheim,
+                    '10|31': wtcMemorial };
+// cells that pave themselves: a slab over the whole block would cap the voids
+const OWN_GROUND = new Set(['10|31']);
 
 function setbackTower(cx, cz, tiers, mastH, variant){
   const c = chunkOf(cx, cz);
@@ -4248,11 +4386,15 @@ function buildCell(i, j){
 
     if(t === LIBERTY){ buildStatue(i, j); return; }
 
-    // asphalt apron + sidewalk
-    const road = new THREE.PlaneGeometry(PITCH, PITCH);
-    road.rotateX(-Math.PI/2);
-    road.translate(midX(i), 0, midZ(j));
-    c.road.push(colored(road, 0xffffff));
+    /* asphalt apron + sidewalk. A cell that lays its own ground gets neither:
+     * both are unbroken sheets across the whole block, and a void cut in the
+     * pavement is still capped by the asphalt lying under it. */
+    if(!OWN_GROUND.has(skey(i, j))){
+      const road = new THREE.PlaneGeometry(PITCH, PITCH);
+      road.rotateX(-Math.PI/2);
+      road.translate(midX(i), 0, midZ(j));
+      c.road.push(colored(road, 0xffffff));
+    }
 
     if(t === PARK){ buildPark(i, j); }
     else {
@@ -4262,7 +4404,11 @@ function buildCell(i, j){
       const holed = holeCells.has(skey(i, j));
       const cut = holed || laneEdge(midX(i), midZ(j)) < S/2 + 2 ||
                   tsqDist(midX(i), midZ(j)) < S/2 + TSQ_R;
-      if(cut){
+      // a cell that lays its own ground lays ALL of it — this branch tiles the
+      // pavement too, so guarding only the plain-slab case below left a course
+      // of paving lying across the voids
+      if(OWN_GROUND.has(skey(i, j))){ /* the landmark does it */ }
+      else if(cut){
         // finer tiles where a station mouth has to come through it
         const N = holed ? 16 : 10, ts = S/N;
         for(let a=0;a<N;a++) for(let b=0;b<N;b++){
@@ -8155,6 +8301,8 @@ function locationName(){
   const b = bridgeAt(player.x, player.z);
   if(b) return [b.name, 'over the river'];
   if(tsqDist(player.x, player.z) < TSQ_R + 16) return ['Times Square', 'the crossroads of the world'];
+  if(wtcPlace && Math.hypot(player.x - wtcPlace.x, player.z - wtcPlace.z) < wtcPlace.r)
+    return ['9/11 Memorial', 'world trade center'];
   // below Houston the streets have names, not coordinates
   {
     const L = laneAt(player.x, player.z, 7);
