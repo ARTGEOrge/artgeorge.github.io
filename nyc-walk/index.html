@@ -3502,41 +3502,143 @@ function lmMass(c, v, cx, cz, y, w, d, h){
 function lmBand(c, cx, cz, y, w, d, h, col){
   c.roof.push(colored(new THREE.BoxGeometry(w, h, d), col).translate(cx, y + h/2, cz));
 }
-/* The Empire State: a five-storey base out to the lot line, the great
- * setbacks, an eighty-storey shaft, the crown stepping in, and the mooring
- * mast built for airships that never moored one. */
+/* The Empire State Building.
+ *
+ * Every level in it below is the real one, in metres above Fifth Avenue, and
+ * that is the whole building: a five-storey base out to the lot line, the great
+ * setbacks climbing to the thirtieth floor, and only then forty-two floors of
+ * unbroken shaft. Build it as a base, a box and a hat and you get a wedding
+ * cake. You do not get this. Almost two thirds of its height is one single
+ * uninterrupted run, and nothing else in the skyline does that.
+ *
+ * The two things everyone pictures are both above the shaft, and both of them
+ * were missing. The eighty-sixth floor observatory steps OUT over the tower
+ * rather than in — an open deck with a colonnade round it — which is why the
+ * top has a waist. And above that the mooring mast, streamlined and round where
+ * every single thing below it is square, built for airships that never moored
+ * to it, with the little glazed room of the hundred-and-second floor at the top
+ * and the broadcast antenna over that.
+ *
+ * The stone runs in unbroken vertical strips of window and aluminium spandrel
+ * from the sixth floor to the eighty-fifth. Horizontal banding would make it a
+ * different and much duller building.
+ */
 function empireState(c, cx, cz){
-  const V = 5, T = TRIM[5];
+  const V = 5, T = TRIM[5], STONE = 0xd6cfbe, LIT = 0xffe6bd;
+  // metres above the street: the base, the setbacks, the shaft, the two decks
+  const F5   = realH(20),  F20  = realH(78),  F30 = realH(118), F72 = realH(268),
+        F81  = realH(300), F86  = realH(320), F102 = realH(373),
+        ROOF = realH(381), TIP  = realH(443);
+
+  /* The mullions. They run up every face of every tier, not just the two long
+   * ones, and they are the reason the shaft reads as vertical instead of as a
+   * stack of floors. Only the base goes without: those five storeys are shops
+   * and a lobby, and they are stone straight across. */
+  /* The mullions. They run up every face of every tier, not just the two long
+   * ones, and they are the reason the shaft reads as vertical instead of as a
+   * stack of floors. Only the base goes without: those five storeys are shops
+   * and a lobby, and they are stone straight across.
+   *
+   * Above the seventy-second they are the floodlighting as well. Every night
+   * since 1964 the top thirty floors have been washed with light, and what that
+   * picks out is the piers — the windows between them stay dark, because there
+   * is nothing behind a window to light. So the same geometry does both jobs:
+   * pale stone piers by day, and after dark they burn and the building goes
+   * striped, which is the whole of what it looks like at night. Lighting the
+   * wall instead would have been a lit panel over the windows, and the top of
+   * the building would have lost every window it has in broad daylight. */
+  const mullions = (y0, h, w, d, lit) => {
+    const b = lit ? (x, z, ww, dd) =>
+                      c.glow.push(colored(new THREE.BoxGeometry(ww, h, dd), LIT)
+                                    .translate(x, y0 + h/2, z))
+                  : (x, z, ww, dd) => lmBand(c, x, z, y0, ww, dd, h, T);
+    const nx = Math.max(3, Math.round(w/4.6)), nz = Math.max(3, Math.round(d/4.6));
+    const t = lit ? 1.5 : 1.0;
+    for(let k=0;k<nx;k++){
+      const px = cx + (k + 0.5 - nx/2)*(w/nx);
+      for(const sz of [-1, 1]) b(px, cz + sz*(d/2 + 0.2), t, 0.5);
+    }
+    for(let k=0;k<nz;k++){
+      const pz = cz + (k + 0.5 - nz/2)*(d/nz);
+      for(const sx of [-1, 1]) b(cx + sx*(w/2 + 0.2), pz, 0.5, t);
+    }
+  };
+  // and the fixtures themselves, on the ledge each setback leaves behind
+  const floods = (top, w, d) => {
+    for(let k=0;k<7;k++){
+      const t = (k + 0.5)/7 - 0.5;
+      for(const sz of [-1, 1])
+        c.glow.push(colored(new THREE.BoxGeometry(0.75, 0.34, 0.34), LIT)
+                      .translate(cx + t*w*0.92, CURB + top + 0.4, cz + sz*d/2));
+      for(const sx of [-1, 1])
+        c.glow.push(colored(new THREE.BoxGeometry(0.34, 0.34, 0.75), LIT)
+                      .translate(cx + sx*w/2, CURB + top + 0.4, cz + t*d*0.92));
+    }
+  };
+
+  // width, depth, and the floor it stops at. The base is the lot line.
+  const TIERS = [[48, 40, F5], [44, 34, F20], [34, 27, F30],
+                 [26, 21, F72], [22, 18, F81], [18.5, 15.5, F86]];
   let y = CURB;
-  for(const [w,d,h] of [[48,42,14],[40,35,7],[33,29,5]]){
+  TIERS.forEach(([w, d, top], k) => {
+    const h = CURB + top - y;
     lmMass(c, V, cx, cz, y, w, d, h);
-    lmBand(c, cx, cz, y + h - 0.7, w + 1.3, d + 1.3, 1.4, T);
-    y += h;
+    if(k) mullions(y, h, w, d, k >= 4);       // the top two tiers are the lit ones
+    lmBand(c, cx, cz, CURB + top - 0.9, w + 1.3, d + 1.3, 1.7, T);   // the cornice
+    y = CURB + top;
+  });
+  floods(F72, 22, 18);
+  floods(F81, 18.5, 15.5);
+
+  /* The eighty-sixth. It steps out over the tower, it is open on all four sides
+   * behind a stone parapet, and it is the only floor of the building you can
+   * pick out at night from a mile away because of it. */
+  const OW = 21, OD = 18, DECK = CURB + F86;
+  lmBand(c, cx, cz, DECK, OW, OD, 0.9, T);
+  c.glow.push(colored(new THREE.BoxGeometry(OW - 2.2, 2.7, OD - 2.2), 0x7c6f57)
+                .translate(cx, DECK + 2.25, cz));                  // the lit deck
+  for(const sx of [-1, 1]) for(let k=0;k<5;k++)                     // the colonnade
+    lmBand(c, cx + sx*(OW/2 - 0.55), cz - OD/2 + 1.3 + k*(OD - 2.6)/4,
+           DECK + 0.9, 1.1, 1.1, 2.7, STONE);
+  for(const sz of [-1, 1]) for(let k=1;k<5;k++)
+    lmBand(c, cx - OW/2 + 1.3 + k*(OW - 2.6)/5, cz + sz*(OD/2 - 0.55),
+           DECK + 0.9, 1.1, 1.1, 2.7, STONE);
+  lmBand(c, cx, cz, DECK + 3.6, OW, OD, 1.5, T);                   // the parapet
+  floods(F86 + 4.4, OW - 5, OD - 5);
+
+  /* Above the deck, four square floors, and then the mast. The mast is SLENDER
+   * — about a third of the width of the deck it stands on, and three times as
+   * tall as it is wide. Draw it as a broad cone off the parapet and the top of
+   * the building turns into a pyramid, which is the one shape it is not. */
+  let my = DECK + 5.1;
+  lmMass(c, V, cx, cz, my, 11, 10, 3.5);
+  mullions(my, 3.5, 11, 10, true);
+  lmBand(c, cx, cz, my + 3.5, 12, 11, 0.9, T);
+  my += 4.4;
+  const MH = (CURB + F102 - my)/3;
+  for(const [r0, r1] of [[3.5, 3.1], [3.1, 2.7], [2.7, 2.3]]){
+    const g = new THREE.CylinderGeometry(r1, r0, MH, 14);
+    cylUV(g, (r0 + r1)/2, MH);
+    c.bldg[V].push(colored(g, 0xffffff).translate(cx, my + MH/2, cz));
+    c.roof.push(colored(new THREE.CylinderGeometry(r1*1.14, r1*1.14, 0.6, 14), T)
+                  .translate(cx, my + MH, cz));
+    my += MH;
   }
-  /* 443 metres to the tip of the antenna. The shaft is whatever is left of that
-   * once the base, the crown and the mast have taken their share. */
-  const SHAFT = realH(443) - 26 - 21 - 44;
-  lmMass(c, V, cx, cz, y, 26, 22, SHAFT);         // the shaft
-  for(let k=0;k<5;k++)                            // the vertical piers on it
-    for(const sx of [-1, 1])
-      lmBand(c, cx + sx*(13.2), cz - 8 + k*4, y, 0.7, 1.6, SHAFT, T);
-  lmBand(c, cx, cz, y + SHAFT - 1, 28, 24, 2, T);
-  y += SHAFT;
-  for(const [w,d,h] of [[21,18,9],[16,14,7],[12,10,5]]){   // the crown
-    lmMass(c, V, cx, cz, y, w, d, h);
-    lmBand(c, cx, cz, y + h - 0.6, w + 1.1, d + 1.1, 1.2, T);
-    y += h;
-  }
-  const mast = colored(new THREE.CylinderGeometry(1.5, 3.4, 14, 12), 0xa9a191);
-  mast.translate(cx, y + 7, cz); c.roof.push(mast);
-  c.roof.push(colored(new THREE.CylinderGeometry(1.0, 1.0, 4, 10), 0x8d949b)
-                .translate(cx, y + 16, cz));
-  const ant = colored(new THREE.CylinderGeometry(0.22, 0.5, 26, 6), 0xb8bec4);
-  ant.translate(cx, y + 31, cz); c.roof.push(ant);
+  // the hundred-and-second: the last room in the building anyone stands in
+  c.glow.push(colored(new THREE.CylinderGeometry(2.1, 2.1, 2.6, 14), 0x8a7d63)
+                .translate(cx, my + 1.3, cz));
+  c.roof.push(colored(new THREE.CylinderGeometry(2.5, 2.5, 0.6, 14), T)
+                .translate(cx, my + 2.9, cz));
+  my = CURB + ROOF;
+  const AH = CURB + TIP - my;                    // and the antenna over the lot
+  c.roof.push(colored(new THREE.CylinderGeometry(0.62, 1.35, AH*0.34, 10), 0xb0b6bc)
+                .translate(cx, my + AH*0.17, cz));
+  c.roof.push(colored(new THREE.CylinderGeometry(0.16, 0.62, AH*0.66, 6), 0xb8bec4)
+                .translate(cx, my + AH*0.67, cz));
   const b = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 8),
     new THREE.MeshBasicMaterial({color:0xff4444}));
-  b.position.set(cx, y + 44.5, cz); cityGroup.add(b); beacons.push(b);
-  addSolid(cx, cz, 48, 42);
+  b.position.set(cx, CURB + TIP + 1, cz); cityGroup.add(b); beacons.push(b);
+  addSolid(cx, cz, 48, 40);
 }
 /* The Chrysler: brick shaft, then the seven stainless arches stacked one
  * inside the next with the triangular windows in them, then the needle. */
