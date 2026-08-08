@@ -1050,7 +1050,8 @@ const onLane = (x, z) => laneEdge(x, z) < 0;
  */
 const XS_ON = new Set([MID, UPPER, HARLEM, VILLAGE]);
 const XS_HW = 4.5;                      // half the roadbed of a cross street
-const LM_CELLS = new Set(['11|23','13|21','10|30','11|25']);   // keep their blocks whole
+// filled from LANDMARKS once that exists, so the two can never drift apart
+const LM_CELLS = new Set();                     // keep their blocks whole
 function crossEdge(x, z){
   const i = idxX(x), j = idxZ(z);
   if(i < 0 || j < 0 || i >= GX || j >= GZ) return 1e9;
@@ -4032,13 +4033,43 @@ function guggenheim(c, cx, cz){
   addSolid(cx - 6, cz, 36, 36);
   addSolid(cx + 12, cz + 4, 18, 34);
 }
-const LANDMARKS = { '11|23': empireState, '13|21': chrysler,
-                    '10|30': oneWTC,      '11|25': flatiron,
-                    '11|20': rockefeller, '12|20': stPatricks,
-                    '12|19': parkAve432,  '13|19': citicorp,
-                    '12|21': grandCentral,'14|21': unSecretariat,
-                    '12|30': woolworth,   '13|14': guggenheim,
+/* Seven of these used to sit in rows nineteen to twenty-one — three consecutive
+ * blocks, several of them in touching cells — when the seven of them span
+ * Forty-second Street to Fifty-sixth, and you can walk twenty minutes between
+ * the ends of that. They were on the wrong avenues as well: 432 Park was on
+ * Madison, the Chrysler on Park, Grand Central on Madison, Citicorp on Park.
+ *
+ * Laid out north to south the way they actually run now, and every one on the
+ * avenue it belongs to:
+ *
+ *   56th & Park          432 Park
+ *   53rd & Lexington     Citicorp
+ *   49th-50th, 5th/6th   Rockefeller Center, and St Patrick's facing it across
+ *                        Fifth — those two ARE next to each other
+ *   42nd-48th, far east  the UN, out on the river
+ *   42nd & Park          Grand Central
+ *   42nd & Lexington     the Chrysler, a block from it
+ *   34th & 5th           the Empire State, eight blocks further down
+ *   23rd & 5th/Broadway  the Flatiron, in the fork
+ */
+/* One caveat on the rows. Broadway crosses Fifth Avenue's column at rows 23 and
+ * 24, so the Empire State cannot stand clear of it anywhere on its own avenue —
+ * and the roadbed it clips at 23 comes down to under three metres once it is
+ * nudged, against ten at 24. It stays at 23, and Grand Central and the Chrysler
+ * move up to 22 instead, which keeps them north of it as they should be. */
+const LANDMARKS = { '13|19': parkAve432,
+                    '14|20': citicorp,
+                    '10|21': rockefeller, '11|21': stPatricks,
+                    '14|21': unSecretariat,
+                    '13|22': grandCentral,'14|22': chrysler,
+                    '11|23': empireState,
+                    '11|25': flatiron,
+                    '13|14': guggenheim,
+                    '10|30': oneWTC,      '12|30': woolworth,
                     '10|31': wtcMemorial };
+// a cross street through the middle of a landmark's block would cut the
+// building in half. Only four of the thirteen were listed; take them all.
+for(const k of Object.keys(LANDMARKS)) LM_CELLS.add(k);
 // cells that pave themselves: a slab over the whole block would cap the voids
 const OWN_GROUND = new Set(['10|31']);
 
