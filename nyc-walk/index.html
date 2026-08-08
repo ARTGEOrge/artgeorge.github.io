@@ -3595,9 +3595,12 @@ function oneWTC(c, cx, cz){
 let wtcPlace = null;                 // for the location readout
 function wtcMemorial(c, cx, cz){
   const S = BLOCK + WALK*2, H = CURB;
-  const R = 7.2, DEEP = 6.6;
-  // one north-west of the other, as the towers stood
-  const POOLS = [[cx - 12, cz - 9], [cx + 7, cz + 10]];
+  /* The footprints are a bigger share of the site than they were — an acre each
+   * out of eight, and at seven metres they were reading as ornamental ponds.
+   * One north-west of the other, as the towers stood, and both in the western
+   * half of the block with the transit hall clear to the east of them. */
+  const R = 8.2, DEEP = 7.4;
+  const POOLS = [[cx - 15, cz - 10], [cx - 2, cz + 12]];
   const onPool = (x, z, pad) => POOLS.some(p =>
     Math.abs(x - p[0]) < R + (pad || 0) && Math.abs(z - p[1]) < R + (pad || 0));
   wtcPlace = { x: cx, z: cz, r: 46 };
@@ -3637,10 +3640,17 @@ function wtcMemorial(c, cx, cz){
       // the granite wall of the shaft
       c.prop.push(colored(new THREE.BoxGeometry(sx ? 0.7 : R*2, DEEP, sz ? 0.7 : R*2), 0x35322e)
         .translate(px + sx*R, H - DEEP/2, pz + sz*R));
-      // and the water coming down the whole face of it, which is the idea
-      c.prop.push(colored(new THREE.BoxGeometry(sx ? 0.14 : R*2 - 1.4, DEEP - 0.6,
-                                                sz ? 0.14 : R*2 - 1.4), 0xd2dde2)
-        .translate(px + sx*(R - 0.4), H - DEEP/2 - 0.3, pz + sz*(R - 0.4)));
+      /* The water coming down the whole face of it, which is the idea of the
+       * thing. It goes on the lit bucket rather than the lambert one: falling
+       * water is the brightest thing in that hole by a long way, and shaded
+       * like a wall it just read as a pale stripe of stone. */
+      c.glow.push(colored(new THREE.BoxGeometry(sx ? 0.16 : R*2 - 1.2, DEEP - 0.5,
+                                                sz ? 0.16 : R*2 - 1.2), 0xc4d2da)
+        .translate(px + sx*(R - 0.42), H - DEEP/2 - 0.25, pz + sz*(R - 0.42)));
+      // the lip it comes over, a hand's breadth proud of the wall
+      c.prop.push(colored(new THREE.BoxGeometry(sx ? 0.34 : R*2 - 0.9, 0.18,
+                                                sz ? 0.34 : R*2 - 0.9), 0x9aa1a6)
+        .translate(px + sx*(R - 0.32), H - 0.12, pz + sz*(R - 0.32)));
       // the bronze parapet, and the band round its top the names are cut into
       /* The collar. The paving is cut back clear of the void, so between the
        * shaft and the first whole tile there is no ground at all — and what
@@ -3657,44 +3667,112 @@ function wtcMemorial(c, cx, cz){
         .translate(px + sx*(R + 0.58), H + 0.80, pz + sz*(R + 0.58)));
       addSolid(px + sx*(R + 0.58), pz + sz*(R + 0.58), w, d);
     }
-    // the pool at the bottom, and the square at the centre of it
-    const bot = new THREE.PlaneGeometry(R*2 - 1.0, R*2 - 1.0);
-    bot.rotateX(-Math.PI/2); bot.translate(px, H - DEEP + 0.12, pz);
-    cityGroup.add(new THREE.Mesh(bot, parkWaterMat));
-    const vr = R*0.28;
-    c.prop.push(colored(new THREE.BoxGeometry(vr*2, 0.10, vr*2), 0x07090b)
-      .translate(px, H - DEEP + 0.20, pz));
+    /* The floor, and the second void at the centre of it. That one is a hole,
+     * not a dark tile: the water goes over its edge as well and you cannot see
+     * the bottom of it, which is the whole point of there being two. */
+    const vr = R*0.26, fy = H - DEEP + 0.12;
+    for(const [ax, az] of [[0,-1],[0,1],[-1,0],[1,0]]){
+      const bw = ax ? (R - vr) : R*2 - 1.0, bd = az ? (R - vr) : R*2 - 1.0;
+      const bot = new THREE.PlaneGeometry(bw, bd);
+      bot.rotateX(-Math.PI/2);
+      bot.translate(px + ax*(vr + (R - vr)/2 - 0.5), fy, pz + az*(vr + (R - vr)/2 - 0.5));
+      cityGroup.add(new THREE.Mesh(bot, parkWaterMat));
+      // the wall of the inner void, and the water going over into it
+      c.prop.push(colored(new THREE.BoxGeometry(ax ? 0.4 : vr*2, 3.4, az ? 0.4 : vr*2), 0x2a2724)
+        .translate(px + ax*vr, fy - 1.7, pz + az*vr));
+      c.glow.push(colored(new THREE.BoxGeometry(ax ? 0.12 : vr*2 - 0.5, 3.0,
+                                                az ? 0.12 : vr*2 - 0.5), 0xb9c8d1)
+        .translate(px + ax*(vr - 0.22), fy - 1.6, pz + az*(vr - 0.22)));
+    }
+    c.prop.push(colored(new THREE.BoxGeometry(vr*2 - 0.7, 0.2, vr*2 - 0.7), 0x05070a)
+      .translate(px, fy - 3.3, pz));                       // no bottom to be seen
   }
 
-  /* --- the transit hall, east of the plaza ------------------------------- */
+  /* --- the transit hall, east of the plaza -------------------------------
+   * It kept coming out as a fan of parallel bars lying over, and the reason was
+   * that it had straight ribs off a base the same width the whole way along —
+   * which is a prism, and a prism reads as a prism from every angle except the
+   * two it is symmetrical about.
+   *
+   * The thing is an ellipse in plan. The ribs stand furthest apart at the waist
+   * and converge to a point at each end, and each one is an arc rather than a
+   * straight member: it leaves the ground almost upright and leans in as it
+   * rises, meeting the spine and carrying on past it as a spike. Both of those
+   * together are what make it read from anywhere.
+   */
   {
-    /* Ribs rising steeply to a spine and carrying on past it as spikes. Splayed
-     * off a wide base they came out as a fan lying over; the shape only reads
-     * when the ribs are steep and the spine is well above where they cross. */
-    const ox = cx + 20, oz = cz + 4, LEN = 22, HIGH = 13.5;
-    for(let k=0;k<=15;k++){
-      const t = k/15, dz = (t - 0.5)*LEN;
-      const f = 1 - Math.pow(Math.abs(t - 0.5)*2, 2.2);
-      const h = 1.6 + HIGH*f;
+    const ox = cx + 21, oz = cz + 3, LEN = 26, HW = 6.6, HIGH = 12.5;
+    const RIBS = 22, SEG = 5;
+    const halfW = u => 0.55 + HW*Math.sqrt(Math.max(0, 1 - u*u));
+    const ridge = u => 2.4 + HIGH*Math.sqrt(Math.max(0, 1 - u*u*0.74));
+    for(let k=0;k<=RIBS;k++){
+      const u = (k/RIBS)*2 - 1, dz = u*LEN/2;
+      const hw = halfW(u), h = ridge(u);
       for(const s of [-1, 1]){
-        strut(ox + s*5.6, H, ox + s*0.9, H + h, oz + dz, 0.24, 0xe8ecef);
-        strut(ox + s*0.9, H + h, ox + s*1.9, H + h + 2.2, oz + dz, 0.15, 0xe8ecef);
+        let px = ox + s*hw, py = H;
+        for(let q=1;q<=SEG;q++){                 // the arc, in five chords
+          const a = (q/SEG)*Math.PI/2;
+          const nx = ox + s*(0.5 + (hw - 0.5)*Math.cos(a));
+          const ny = H + h*Math.sin(a);
+          strut(px, py, nx, ny, oz + dz, 0.21, 0xe8ecef);
+          px = nx; py = ny;
+        }
+        strut(px, py, ox + s*1.8, H + h + 2.3, oz + dz, 0.12, 0xe8ecef);
       }
     }
-    c.prop.push(colored(new THREE.BoxGeometry(0.9, 0.45, LEN + 1.5), 0xdfe4e8)
-      .translate(ox, H + HIGH + 1.0, oz));
-    addSolid(ox, oz, 11, LEN);
+    // the spine, which arcs with the ribs rather than lying flat over them
+    let prev = null;
+    for(let k=0;k<=RIBS;k++){
+      const u = (k/RIBS)*2 - 1;
+      const cur = [H + ridge(u) + 0.3, oz + u*LEN/2];
+      if(prev) crossStrut(ox, prev[0], prev[1], cur[0], cur[1], 0.40, 0xdfe4e8);
+      prev = cur;
+    }
+    // the plinth it stands on, cut to the same ellipse
+    for(let k=0;k<RIBS;k++){
+      const u = (k/RIBS)*2 - 1, hw = halfW(u);
+      c.prop.push(colored(new THREE.BoxGeometry(hw*2 + 1.2, 0.55, LEN/RIBS + 0.2), 0xc8cdd2)
+        .translate(ox, H + 0.24, oz + (u + 1/RIBS)*LEN/2));
+    }
+    addSolid(ox, oz, HW*2, LEN*0.86);
   }
 
-  /* --- the museum pavilion, between the pools ---------------------------- */
+  /* --- the museum pavilion ------------------------------------------------
+   * Not a box: it leans, and the two halves of it lean opposite ways, which is
+   * the only reason you would look at it twice. */
   {
-    const mx = cx + 1, mz = cz - 5;
-    c.prop.push(colored(new THREE.BoxGeometry(8.5, 6.2, 6.5), 0x39454f)
-      .translate(mx, H + 3.1, mz));
-    for(let k=0;k<5;k++)
-      c.glow.push(colored(new THREE.BoxGeometry(1.3, 4.4, 0.08), 0xdce6ee)
-        .translate(mx - 3.0 + k*1.5, H + 3.0, mz + 3.3));
-    addSolid(mx, mz, 8.5, 6.5);
+    const mx = cx + 8, mz = cz - 6;
+    for(const s of [-1, 1]){
+      const wall = colored(new THREE.BoxGeometry(0.5, 7.4, 7.0), 0x8d959c);
+      wall.rotateZ(s*0.13);
+      wall.translate(mx + s*3.4, H + 3.7, mz);
+      c.prop.push(wall);
+    }
+    c.prop.push(colored(new THREE.BoxGeometry(7.4, 0.4, 7.2), 0x6e767d)
+      .translate(mx, H + 7.3, mz));
+    // the back and the ends, or two leaning walls under a slab read as a table
+    c.prop.push(colored(new THREE.BoxGeometry(7.2, 7.2, 0.45), 0x808991)
+      .translate(mx, H + 3.6, mz - 3.4));
+    for(const s of [-1, 1])
+      c.prop.push(colored(new THREE.BoxGeometry(1.6, 7.0, 6.8), 0x8d959c)
+        .translate(mx + s*2.9, H + 3.5, mz));
+    for(let k=0;k<4;k++)                                   // the glazing between
+      c.glow.push(colored(new THREE.BoxGeometry(0.9, 6.0, 0.10), 0xdce6ee)
+        .translate(mx - 1.5 + k*1.0, H + 3.3, mz + 3.45));
+    addSolid(mx, mz, 8.0, 7.2);
+  }
+
+  /* --- the benches round the plaza --------------------------------------- */
+  for(let k=0;k<10;k++){
+    const a = (k/10)*6.283 + 0.4, br = 25;
+    const bx = cx + Math.cos(a)*br, bz = cz + Math.sin(a)*br;
+    if(onPool(bx, bz, 3) || Math.abs(bx - (cx + 21)) < 9) continue;
+    const b = colored(new THREE.BoxGeometry(4.6, 0.45, 1.1), 0x9aa0a6);
+    b.rotateY(-a);
+    b.translate(bx, H + 0.46, bz);
+    c.prop.push(b, colored(new THREE.BoxGeometry(3.9, 0.42, 0.7), 0x7d838a)
+      .rotateY(-a).translate(bx, H + 0.21, bz));
+    addSolid(bx, bz, 4.6, 4.6);
   }
 
   /* --- the grove, and the one tree that was already here ----------------- */
