@@ -1085,7 +1085,11 @@ function solidOverlaps(x, z, w, d){
 function lotClearOfLanes(bx, bz, lw, ld, pad){
   const p = pad === undefined ? 0.6 : pad;
   if(streetEdge(bx, bz) < p) return false;
-  const nx = Math.max(1, Math.ceil(lw/7)), nz = Math.max(1, Math.ceil(ld/7));
+  /* Every seven metres along the outline was too coarse: a lane crossing a
+   * small lot between two sample points was missed entirely, and the building
+   * went up in the road. Sample twice as finely — a lot that fails is not lost,
+   * `place` halves it and tries both halves. */
+  const nx = Math.max(2, Math.ceil(lw/3.5)), nz = Math.max(2, Math.ceil(ld/3.5));
   for(let a=0;a<=nx;a++) for(let b=0;b<=nz;b++){
     if(a > 0 && a < nx && b > 0 && b < nz) continue;      // outline only
     if(streetEdge(bx - lw/2 + lw*a/nx, bz - ld/2 + ld*b/nz) < p) return false;
@@ -4038,6 +4042,56 @@ const LANDMARKS = { '11|23': empireState, '13|21': chrysler,
 // cells that pave themselves: a slab over the whole block would cap the voids
 const OWN_GROUND = new Set(['10|31']);
 
+/* ---------- keeping a landmark out of the road ---------------------------
+ * Every other building on the island is measured against the lane list before
+ * it is placed. A landmark was not: it went down at the middle of its cell and
+ * asked nothing about what ran through it, so the Empire State stood nearly
+ * seven metres inside Broadway's kerb, One World Trade five inside Greenwich
+ * Street's, and the Woolworth four inside Broadway's.
+ *
+ * Score a candidate centre by how deep the worst corner of the footprint sits
+ * inside a roadbed, and take the best of a ring search around the middle of the
+ * cell. Two things that matters for:
+ *
+ *   it scores the CORNERS, not the centre. Walking the centre up the gradient
+ *   of the lane distance moved nothing at the Empire State, whose middle is
+ *   already well clear while its corner is seven metres into Broadway
+ *
+ *   it can only improve. Downtown has a dozen lanes crossing each other, and
+ *   pushing the Woolworth off Broadway walked it straight into Chambers Street
+ *   and left it worse than it started. A candidate has to beat the position it
+ *   came from or it is not taken, so a landmark with nowhere better to go stays
+ *   where it was put
+ *
+ * Two are exempt. The Flatiron IS the wedge left in the fork — putting it beside
+ * the junction instead of in it would be getting the one thing about it wrong.
+ * And the memorial lays its own paving relative to its cell, so moving its
+ * centre would slide the plaza off the ground underneath it.
+ */
+const LM_FIXED = new Set(['11|25', '10|31']);
+const LM_HALF = 16;
+function lmScore(x, z){
+  let worst = 0;
+  for(const ax of [-1, 0, 1]) for(const az of [-1, 0, 1]){
+    const d = laneEdge(x + ax*LM_HALF, z + az*LM_HALF);
+    if(d < 0 && -d > worst) worst = -d;
+  }
+  return worst;
+}
+function lmCentre(i, j){
+  const x0 = midX(i), z0 = midZ(j);
+  if(LM_FIXED.has(skey(i, j))) return [x0, z0];
+  let best = [x0, z0], score = lmScore(x0, z0);
+  if(score <= 0) return best;
+  for(let r = 2; r <= 12; r += 2) for(let a = 0; a < 16; a++){
+    const th = (a/16)*6.2832;
+    const x = x0 + Math.cos(th)*r, z = z0 + Math.sin(th)*r;
+    const s = lmScore(x, z);
+    if(s < score - 0.01){ score = s; best = [x, z]; }
+  }
+  return best;
+}
+
 function setbackTower(cx, cz, tiers, mastH, variant){
   const c = chunkOf(cx, cz);
   const tone = brickTone(variant);
@@ -4529,7 +4583,7 @@ function buildCell(i, j){
        * from Manhattan looking back at it. */
       if(TALL_CELLS.has(skey(i, j))) info = D.tallOuter;
       const lm = LANDMARKS[skey(i, j)];
-      if(lm){ lm(c, midX(i), midZ(j)); addProps(c, i, j); }
+      if(lm){ const [lx, lz] = lmCentre(i, j); lm(c, lx, lz); addProps(c, i, j); }
       // a whole borough of terraced houses rather than two slabs to a block
       else if(info.row && !cut){
         (info.detached ? detachedBlock : rowBlock)(c, i, j, info);
@@ -5896,10 +5950,23 @@ function buildStation(line, i, j, flip){
     box(S, (HEAD0 + HEAD1)/2, HEAD_V + s*2.1, (MEZZ_Y + CURB)/2 + 0.6,
         HEAD1 - HEAD0, 0.2, 6.0, 0x1b1e22);                  // shaft side walls
   box(S, (HEAD0 + HEAD1)/2 - 2, HEAD_V, MEZZ_Y + 4.2, HEAD1 - HEAD0 + 6, 4.6, 0.4, 0x2a2f35);
-  // and the head of it up on the sidewalk, with its railings and green globe
+  /* and the head of it up on the sidewalk, with its railings and green globe.
+   * It used to surface wherever the stair happened to end, which took no
+   * account of the old lanes downtown — three stations were coming up in the
+   * middle of a roadbed. Try the far end of the stair, then the near end, then
+   * the other side of the platform, and take the first that lands on pavement;
+   * if none of them does, keep the original rather than move it somewhere
+   * arbitrary. */
   {
-    const [hx, , hz] = P(HEAD1 - 2.5, HEAD_V, 0);
     const ang = line.ax === 'z' ? (flip > 0 ? Math.PI : 0) : (flip > 0 ? -Math.PI/2 : Math.PI/2);
+    let hx, hz, bestD = -1e9;
+    for(const [u, v] of [[HEAD1 - 2.5, HEAD_V], [HEAD0 + 2.5, HEAD_V],
+                         [HEAD1 - 2.5, -HEAD_V], [HEAD0 + 2.5, -HEAD_V]]){
+      const [tx, , tz] = P(u, v, 0);
+      const d = laneEdge(tx, tz);
+      if(d > bestD){ bestD = d; hx = tx; hz = tz; }
+      if(d > 3) break;
+    }
     subwayEntrance({prop: S, glow: L}, hx, hz, ang, line.col);
     st.headX = hx; st.headZ = hz;
   }
