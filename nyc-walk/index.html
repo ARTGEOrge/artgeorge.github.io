@@ -803,11 +803,12 @@ const litMat = new THREE.MeshBasicMaterial({ vertexColors:true });
 const hdrLit = [];
 const registerLit = (m, gain) => { hdrLit.push({ m, base: m.color.clone(), gain: gain || 1 }); return m; };
 registerLit(litMat);
-// [red@phase0, green@phase0, red@phase1, green@phase1]
-const sigMat = [ new THREE.MeshBasicMaterial({color:0xff3b30}),
-                 new THREE.MeshBasicMaterial({color:0x14682a}),
-                 new THREE.MeshBasicMaterial({color:0x8a1414}),
-                 new THREE.MeshBasicMaterial({color:0x2fe06a}) ];
+/* Six lens materials: red, amber and green for each of the two phases. The
+ * amber used to be a dark box that never lit and the lights snapped straight
+ * from green to red, which no signal anywhere has ever done. */
+const SIG_LENS = 6;
+const sigMat = [];
+for(let k=0;k<SIG_LENS;k++) sigMat.push(new THREE.MeshBasicMaterial({color:0x222222}));
 
 function uvScale(geo, w, h, d){
   const uv = geo.attributes.uv;
@@ -1200,7 +1201,7 @@ function chunkOf(x, z){
   const ci = Math.floor((x - OFF_X) / (PITCH*CHUNK)), cj = Math.floor((z - OFF_Z) / (PITCH*CHUNK));
   const k = ci + '|' + cj;
   let c = chunks.get(k);
-  if(!c){ c = {roof:[], store:[], shop:[], mark:[], prop:[], sig:[[],[],[],[]],
+  if(!c){ c = {roof:[], store:[], shop:[], mark:[], prop:[], sig:[[],[],[],[],[],[]],
                tree:[], lamp:[], park:[], road:[], walk:[], grass:[], glow:[],
                bldg:FACADES.map(() => [])};
     chunks.set(k, c); }
@@ -2252,15 +2253,28 @@ function signalHead(c, x, z, armAng, faceAng, ph, len){
   c.prop.push(arm);
   const hx = x + Math.sin(armAng)*L, hz = z + Math.cos(armAng)*L;
   const hy = CURB + SIG_H - 1.25;
+  /* The backplate behind it, which is what makes a signal readable against a
+   * lit facade, and the visor hooding each lens so the sun cannot make a red
+   * look lit. Both are on nearly every head in the city and neither was here. */
+  const plate = colored(new THREE.BoxGeometry(0.92, 2.10, 0.06), 0x14171b);
+  plate.rotateY(faceAng); plate.translate(hx - Math.sin(faceAng)*0.24, hy, hz - Math.cos(faceAng)*0.24);
+  c.prop.push(plate);
   const box = colored(new THREE.BoxGeometry(0.52, 1.62, 0.44), 0x1d2126);
   box.rotateY(faceAng); box.translate(hx, hy, hz);
   c.prop.push(box);
-  const fx = Math.sin(faceAng)*0.25, fz = Math.cos(faceAng)*0.25;
+  const fx = Math.sin(faceAng), fz = Math.cos(faceAng);
   const lens = (dy, col) => colored(new THREE.SphereGeometry(0.14, 8, 6), col)
-                              .translate(hx + fx, hy + dy, hz + fz);
-  c.sig[ph*2].push(lens(0.48, 0xffffff));            // red, top
-  c.prop.push(lens(0, 0x4a3a12));                    // amber, dark between phases
-  c.sig[ph*2+1].push(lens(-0.48, 0xffffff));         // green, bottom
+                              .translate(hx + fx*0.25, hy + dy, hz + fz*0.25);
+  for(const dy of [0.48, 0, -0.48]){
+    const hood = colored(new THREE.CylinderGeometry(0.21, 0.21, 0.26, 10, 1, true,
+                                                    Math.PI*0.05, Math.PI*0.90), 0x191d22);
+    hood.rotateX(Math.PI/2); hood.rotateY(faceAng + Math.PI);
+    hood.translate(hx + fx*0.34, hy + dy + 0.04, hz + fz*0.34);
+    c.prop.push(hood);
+  }
+  c.sig[ph*3    ].push(lens( 0.48, 0xffffff));       // red, top
+  c.sig[ph*3 + 1].push(lens( 0,    0xffffff));       // amber, middle
+  c.sig[ph*3 + 2].push(lens(-0.48, 0xffffff));       // green, bottom
 }
 /* A signal goes on the FAR side of the crossing from the traffic it stops, so
  * a driver held at the near stop line is looking straight at it, and it hangs
@@ -2319,7 +2333,7 @@ function crossing(c, i, j){
   const arterial = (i+1) % 3 === 0 || (j+1) % 3 === 0;
   if(gridded || arterial){
     signalSet(c, X, Z);
-    streetBlades(c, X - SIG_E, Z - SIG_E);
+    streetBlades(c, X - SIG_E, Z - SIG_E, i, j);
     signalAt.add(skey(i, j));
     signalXZ.set(skey(i, j), [X, Z]);
     // Manhattan corners are candidates for a subway entrance
@@ -2530,12 +2544,53 @@ function trashPile(c, x, z){
   }
 }
 // The green blades that tell you where you are, on the signal pole
-function streetBlades(c, x, z){
-  for(const [w, d, dx, dz] of [[2.6,0.07,0.9,0], [0.07,2.6,0,0.9]]){
-    const bl = colored(new THREE.BoxGeometry(w, 0.42, d), 0x1e6b3c);
-    bl.translate(x + dx, CURB + 5.15, z + dz);
-    c.prop.push(bl);
+/* ---------- the street name blades ---------------------------------------
+ * They were two green boxes with nothing written on them, which is a shape, not
+ * a sign. A New York blade is white Highway Gothic on green with a white border
+ * and the name of the street it is telling you about — and you read them
+ * constantly, because they are how you know where you are.
+ *
+ * Every distinct name gets one cell of a shared atlas, assigned as the city is
+ * built. The canvas itself is drawn afterwards, once the full set of names is
+ * known, and the whole city's blades end up as one mesh and one draw call.
+ */
+/* Seven avenues, and a street name for every row of the grid in both the W and
+ * the E form — call it eighty distinct names across the city. Sixty-four cells
+ * ran out partway through and quietly gave the rest somebody else's name. */
+const BLADE_COLS = 8, BLADE_ROWS = 16, BLADE_N = BLADE_COLS*BLADE_ROWS;
+const bladeIdx = new Map();
+const bladeGeos = [];
+function bladeCell(name){
+  if(bladeIdx.has(name)) return bladeIdx.get(name);
+  if(bladeIdx.size >= BLADE_N) return 0;            // atlas full: reuse the first
+  bladeIdx.set(name, bladeIdx.size);
+  return bladeIdx.size - 1;
+}
+// one blade, readable from both sides — the back is its own plane with the
+// horizontal flipped, or the name comes out mirrored on half the corners
+function bladePlate(name, x, y, z, ang){
+  const cell = bladeCell(name);
+  const cu = (cell % BLADE_COLS)/BLADE_COLS, cv = 1 - Math.floor(cell/BLADE_COLS + 1)/BLADE_ROWS;
+  for(const back of [0, 1]){
+    const pl = new THREE.PlaneGeometry(2.6, 0.65);      // 4:1, the cell's shape
+    const uv = pl.attributes.uv;
+    for(let q=0;q<uv.count;q++){
+      const u = back ? 1 - uv.getX(q) : uv.getX(q);
+      uv.setXY(q, cu + u/BLADE_COLS, cv + uv.getY(q)/BLADE_ROWS);
+    }
+    pl.rotateY(ang + (back ? Math.PI : 0));
+    pl.translate(x, y, z);
+    bladeGeos.push(colored(pl, 0xffffff));
   }
+}
+function streetBlades(c, x, z, i, j){
+  const ave = AVES[Math.max(0, Math.min(AVES.length-1, i - AVE_I0))];
+  const st  = (i <= FIFTH_I ? 'W ' : 'E ') + ORD(Math.max(1, ST_AT_J0 + ST_J0 - j)) + ' St';
+  // the avenue blade reads across the avenue, the street blade across the street
+  bladePlate(ave, x + 0.95, CURB + 5.35, z, 0);
+  bladePlate(st,  x, CURB + 4.80, z + 0.95, Math.PI/2);
+  c.prop.push(colored(new THREE.CylinderGeometry(0.05, 0.05, 1.5, 5), 0x2b3036)
+                .translate(x, CURB + 4.9, z));
 }
 
 // ---------- waterfront ----------
@@ -6523,6 +6578,34 @@ tasks.push(() => {
 tasks.push(buildCentralPark);
 tasks.push(() => bridges.forEach(buildBridge));
 
+/* Every blade in the city, once the full set of names is known: one canvas, one
+ * material, one mesh. The geometry already carries the UVs of its own cell. */
+tasks.push(() => {
+  if(!bladeGeos.length) return;
+  const CW = 256, CH = 64, W = CW*BLADE_COLS, H = CH*BLADE_ROWS;
+  const ca = document.createElement('canvas'); ca.width = W; ca.height = H;
+  const g = ca.getContext('2d');
+  g.fillStyle = '#1e6b3c'; g.fillRect(0, 0, W, H);
+  g.textAlign = 'center'; g.textBaseline = 'middle';
+  for(const [name, cell] of bladeIdx){
+    const x = (cell % BLADE_COLS)*CW, y = Math.floor(cell/BLADE_COLS)*CH;
+    g.fillStyle = '#1e6b3c'; g.fillRect(x, y, CW, CH);
+    g.strokeStyle = '#f2f4f0'; g.lineWidth = 3;
+    g.strokeRect(x + 6, y + 6, CW - 12, CH - 12);
+    let px = 40;
+    do { g.font = 'bold ' + px + 'px Helvetica, Arial'; px -= 2; }
+    while(g.measureText(name).width > CW - 40 && px > 11);
+    g.fillStyle = '#f6f8f4';
+    g.fillText(name, x + CW/2, y + CH/2 + 1);
+  }
+  const tex = new THREE.CanvasTexture(ca);
+  tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const mesh = new THREE.Mesh(mergeGeos(bladeGeos),
+    new THREE.MeshLambertMaterial({map:tex, vertexColors:true}));
+  mesh.castShadow = false; mesh.receiveShadow = true;
+  cityGroup.add(mesh);
+});
+
 // finalise every chunk into a handful of draw calls
 tasks.push(() => {
   const trunk = colored(new THREE.CylinderGeometry(0.15,0.24,3.6,6), 0x54402e).translate(0,1.8,0);
@@ -6568,7 +6651,7 @@ tasks.push(() => {
     if(c.glow.length)  addMesh(c.glow,  litMat,     false, false);
     if(c.mark.length)  addMesh(c.mark,  vcMat,      false, true);
     if(c.shop.length)  addMesh(c.shop,  shopMat,    true,  true);
-    for(let p=0;p<4;p++)
+    for(let p=0;p<SIG_LENS;p++)
       if(c.sig[p].length) addMesh(c.sig[p], sigMat[p], false, false);
 
     if(c.tree.length){
@@ -8439,13 +8522,33 @@ addEventListener('resize', () => {
 const clock = new THREE.Clock();
 let fpsT = 0, fpsN = 0, fps = 0, clock24 = 9.5, bumpCool = 0, mapT = 0;
 let carCursor = 0, pedCursor = 0;
+/* ---------- the signal cycle ---------------------------------------------
+ * One axis is served at a time: green, then amber, then a moment of all-red
+ * before the other axis gets its green. The all-red is not decoration — it is
+ * what stops a car that entered late from meeting one that started early.
+ *
+ * sigPhase  which axis is being served, 0 = avenues, 1 = cross streets
+ * sigState  0 green, 1 amber, 2 all-red
+ * greenPhase is what traffic obeys, and is -1 through amber and all-red, so
+ * everybody is stopping. Police only book you for a light that is properly red.
+ */
+const SIG_GREEN = 5.4, SIG_AMBER = 1.5, SIG_ALLRED = 0.7;
+const SIG_STEP = SIG_GREEN + SIG_AMBER + SIG_ALLRED;
+let sigPhase = 0, sigState = 0;
 let greenPhase = 0;                    // 0 = avenues green, 1 = cross streets
 
 function tick(){
   requestAnimationFrame(tick);
   const dt = Math.min(0.05, clock.getDelta());
   const t  = clock.elapsedTime;
-  greenPhase = Math.floor(t / 6) % 2;  // set before traffic reads it
+  // set before traffic reads it
+  {
+    const into = t % (SIG_STEP*2);
+    sigPhase = into < SIG_STEP ? 0 : 1;
+    const w = into % SIG_STEP;
+    sigState = w < SIG_GREEN ? 0 : (w < SIG_GREEN + SIG_AMBER ? 1 : 2);
+    greenPhase = sigState === 0 ? sigPhase : -1;
+  }
   const paused = !locked && !isTouch;
 
   let mf = 0, ms = 0;
@@ -8485,11 +8588,16 @@ function tick(){
       : Math.abs(st.headX - player.x) < 46 && Math.abs(st.headZ - player.z) < 46;
   }
 
-  // signals + beacons — greenPhase is what the lenses show and what traffic obeys
-  const gph = greenPhase;
+  /* Each phase shows exactly one lit lens and two dark ones. A dark lens is not
+   * black — it is the unlit glass, which still carries its own colour. */
+  const LIT  = [0xff3b30, 0xffb020, 0x2fe06a];      // lens order: red, amber, green
+  const DARK = [0x5a1512, 0x5a3f10, 0x14682a];
+  // sigState counts 0 green, 1 amber, 2 all-red — the opposite way round to the
+  // lenses, so it has to be mapped and not used as an index
+  const LENS_OF = [2, 1, 0];
   for(let p=0;p<2;p++){
-    sigMat[p*2].color.setHex(gph === p ? 0x8a1414 : 0xff3b30);      // red bulb
-    sigMat[p*2+1].color.setHex(gph === p ? 0x2fe06a : 0x14682a);    // green bulb
+    const litK = p === sigPhase ? LENS_OF[sigState] : 0;   // the other axis holds red
+    for(let k=0;k<3;k++) sigMat[p*3 + k].color.setHex(k === litK ? LIT[k] : DARK[k]);
   }
   const bOn = Math.sin(t*2.2) > 0;
   for(const b of beacons) b.material.color.setHex(bOn ? 0xff5252 : 0x551111);
@@ -8821,7 +8929,11 @@ function checkRedLight(px, pz, heading, speed){
   if(chase.cool > 0 || speed < 6) return;
   const d = [Math.sin(heading), Math.cos(heading)];
   const ew = Math.abs(d[0]) > Math.abs(d[1]);     // travelling east-west?
-  if((ew ? 1 : 0) === greenPhase) return;         // your light is green
+  /* Not `=== greenPhase`: that is -1 all through amber, so crossing on an amber
+   * would have had you booked for running a red. You are only running a red
+   * when the light really is red — your axis is not the one being served, or it
+   * is and the all-red has already started. */
+  if((ew ? 1 : 0) === sigPhase && sigState < 2) return;
   const i = idxX(px), j = idxZ(pz);
   for(const ii of [i-1, i]) for(const jj of [j-1, j]){
     const at = signalXZ.get(skey(ii, jj));
