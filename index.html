@@ -256,6 +256,10 @@
       .card--wide { grid-column: span 1; }
       .nav-links { gap: 16px; }
       .hero { padding-top: 56px; }
+      /* Narrow viewports stack the chapter, which can exceed the 100vh stage
+         and get clipped by its overflow. Drop the pin and read normally. */
+      .js-motion .chapter--pin { height: auto; padding: 84px 0; }
+      .js-motion .chapter--pin .pin { position: static; height: auto; overflow: visible; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -1929,10 +1933,17 @@
     var parallax = document.querySelector('[data-parallax]');
 
     // Cached geometry: offsetTop/offsetHeight would otherwise reflow per frame.
-    var geo = { top: 0, height: 0, vh: 0 };
+    var geo = { top: 0, height: 0, vh: 0, pinned: false };
     function measure() {
       geo.vh = window.innerHeight;
-      if (scene) { geo.top = scene.offsetTop; geo.height = scene.offsetHeight; }
+      if (scene) {
+        geo.top = scene.offsetTop;
+        geo.height = scene.offsetHeight;
+        // Matches the <=820px rule that un-pins the scene; without this the
+        // progress transforms would keep firing on a section that no longer pins.
+        var pin = scene.querySelector('.pin');
+        geo.pinned = !!pin && getComputedStyle(pin).position === 'sticky';
+      }
     }
     measure();
     window.addEventListener('resize', measure, { passive: true });
@@ -1954,7 +1965,12 @@
       }
 
       // Pinned scene: one stage, children mapped onto 0->1 progress.
-      if (scene) {
+      if (scene && !geo.pinned && sceneArt && sceneArt.style.transform) {
+        sceneArt.style.transform = '';
+        sceneArt.style.opacity = '';
+        if (nav && lastDark) { nav.classList.remove('is-dark'); lastDark = false; }
+      }
+      if (scene && geo.pinned) {
         var end = geo.top + geo.height - geo.vh;
         var pr = mapRange(smoothed, geo.top, end, 0, 1);
 
