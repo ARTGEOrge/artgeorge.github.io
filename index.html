@@ -148,28 +148,30 @@
       letter-spacing: -0.015em; text-align: center; margin-bottom: 10px;
     }
     .bento .sub { text-align: center; color: var(--ink-2); font-size: 19px; margin-bottom: 46px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; }
+    /* A bento of tiles, not a stack of article cards. Each tile is art +
+       a name + one clamped line, so the eye scans the grid instead of
+       reading 17 paragraphs. Deliberately NOT the old card shape. */
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(224px, 1fr)); gap: 16px; }
     .card {
       background: var(--white); border-radius: 18px; overflow: hidden;
-      display: flex; flex-direction: column; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      display: flex; flex-direction: column; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
       transition: transform .3s cubic-bezier(.25,.1,.25,1), box-shadow .3s;
     }
-    .card:hover { transform: translateY(-5px); box-shadow: 0 18px 40px -14px rgba(0,0,0,0.22); }
+    .card:hover { transform: translateY(-4px); box-shadow: 0 16px 34px -14px rgba(0,0,0,0.20); }
     .card--wide { grid-column: span 2; }
     .card-banner { line-height: 0; }
     .card-banner svg { width: 100%; height: auto; display: block; }
-    .card-body { padding: 22px 24px 26px; display: flex; flex-direction: column; flex: 1; }
+    .card-body { padding: 14px 16px 17px; display: flex; flex-direction: column; flex: 1; }
     .card-tag {
-      font-size: 12px; font-weight: 600; color: var(--ink-2);
-      margin-bottom: 7px; text-transform: uppercase; letter-spacing: .02em;
+      font-size: 11px; font-weight: 600; color: var(--ink-2);
+      margin-bottom: 4px; text-transform: uppercase; letter-spacing: .03em;
     }
-    .card-title { font-size: 21px; font-weight: 600; letter-spacing: -0.01em; }
-    .card-desc { margin-top: 9px; font-size: 15px; line-height: 1.5; color: var(--ink-2); }
-    .card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
-    .tag { font-size: 11px; padding: 4px 10px; border-radius: 99px; background: var(--gray); color: var(--ink-2); }
-    /* Link-style CTA, always visible: no hover-only affordance. */
-    .card-cta { margin-top: auto; padding-top: 18px; color: var(--blue); font-size: 15px; }
-    .card:hover .card-cta { text-decoration: underline; }
+    .card-title { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; }
+    .card-desc {
+      margin-top: 5px; font-size: 13px; line-height: 1.45; color: var(--ink-2);
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
 
     /* --------------------------------------------------------- footer */
     .foot { background: var(--gray); border-top: 1px solid var(--hair); padding: 44px 0 56px; }
@@ -522,7 +524,7 @@
   <section class="chapter reveal">
     <div class="chapter-in">
       <div class="ch-text">
-        <p class="ch-eyebrow"></p>
+        <p class="ch-eyebrow">Minecraft</p>
         <h2 class="ch-title wipe">Eaglercraft 1.12</h2>
         <p class="ch-desc">Minecraft 1.12.2 running entirely in your browser. Build, explore, and survive — no download needed.</p>
         <a class="ch-cta" href="/eaglercraft/">Play Eaglercraft 1.12 &rsaquo;</a>
@@ -649,11 +651,9 @@
           </g>
         </svg></div>
             <div class="card-body">
-              <p class="card-tag"></p>
+              <p class="card-tag">Reference</p>
               <h2 class="card-title">Encyclopædia</h2>
-              <p class="card-desc">A free online encyclopedia in the classic Britannica style. Search millions of articles, browse by subject, and read with a table of contents and Fast Facts — powered live by Wikipedia.</p>
-              <div class="card-tags"><span class="tag">Reference</span><span class="tag">Wikipedia</span><span class="tag">Knowledge</span><span class="tag">Search</span></div>
-              <span class="card-cta">Open &rsaquo;</span>
+              <p class="card-desc">A free online encyclopedia in the classic Britannica style.</p>
             </div>
           </a>
           <a class="card reveal" href="/aria/3d-shapes/">
@@ -737,8 +737,6 @@
               <p class="card-tag">3D · CAD</p>
               <h2 class="card-title">3D Shapes Studio</h2>
               <p class="card-desc">An Onshape-style Part Studio in your browser — Features tree, view cube, multi-project workspaces, primitives with Solid/Hole modes, STL export.</p>
-              <div class="card-tags"><span class="tag">CAD</span><span class="tag">Onshape</span><span class="tag">3D Print</span><span class="tag">STL</span></div>
-              <span class="card-cta">Open &rsaquo;</span>
             </div>
           </a>
           <a class="card reveal" href="/escape-road-2/">
@@ -783,11 +781,9 @@
           <rect x="202" y="155" width="16" height="5"  rx="1" fill="rgba(160,230,255,0.7)"/>
         </svg></div>
             <div class="card-body">
-              <p class="card-tag"></p>
+              <p class="card-tag">City Chase</p>
               <h2 class="card-title">Escape Road City 2</h2>
-              <p class="card-desc">Hit the streets and outrun the cops through a sprawling city. Speed, strategy, and survival — all in one.</p>
-              <div class="card-tags"><span class="tag">Driving</span><span class="tag">Chase</span><span class="tag">City</span><span class="tag">Arcade</span></div>
-              <span class="card-cta">Play &rsaquo;</span>
+              <p class="card-desc">Hit the streets and outrun the cops through a sprawling city.</p>
             </div>
           </a>
           <a class="card reveal" href="/Snow%20Rider%203D.html">
@@ -834,11 +830,9 @@
           <line x1="105" y1="151" x2="168" y2="147" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
         </svg></div>
             <div class="card-body">
-              <p class="card-tag"></p>
+              <p class="card-tag">3D</p>
               <h2 class="card-title">Snow Rider 3D</h2>
-              <p class="card-desc">Strap in and race down snowy mountain slopes on a sled. Dodge trees, grab gifts, and go for the highest score!</p>
-              <div class="card-tags"><span class="tag">3D</span><span class="tag">Sled</span><span class="tag">Snow</span><span class="tag">Arcade</span></div>
-              <span class="card-cta">Play &rsaquo;</span>
+              <p class="card-desc">Strap in and race down snowy mountain slopes on a sled.</p>
             </div>
           </a>
           <a class="card reveal" href="/evolving-bombs-3d/">
@@ -887,9 +881,7 @@
             <div class="card-body">
               <p class="card-tag">Action</p>
               <h2 class="card-title">Evolving Bombs 3D</h2>
-              <p class="card-desc">Toss bombs that grow with every kill. Wipe out waves of enemies in a chaotic 3D arena and chase the highest combo.</p>
-              <div class="card-tags"><span class="tag">3D</span><span class="tag">Action</span><span class="tag">Arena</span><span class="tag">Arcade</span></div>
-              <span class="card-cta">Play &rsaquo;</span>
+              <p class="card-desc">Toss bombs that grow with every kill.</p>
             </div>
           </a>
           <a class="card reveal" href="/crossy-road/">
@@ -946,9 +938,7 @@
             <div class="card-body">
               <p class="card-tag">Hopper</p>
               <h2 class="card-title">Crossy Road</h2>
-              <p class="card-desc">Hop across endless lanes of traffic, rivers, and railways. How far can your blocky chicken make it without getting splatted?</p>
-              <div class="card-tags"><span class="tag">3D</span><span class="tag">Casual</span><span class="tag">Endless</span><span class="tag">Arcade</span></div>
-              <span class="card-cta">Play &rsaquo;</span>
+              <p class="card-desc">Hop across endless lanes of traffic, rivers, and railways.</p>
             </div>
           </a>
           <a class="card reveal" href="/block-blast/">
@@ -1023,9 +1013,7 @@
             <div class="card-body">
               <p class="card-tag">Puzzle</p>
               <h2 class="card-title">Block Blast</h2>
-              <p class="card-desc">Drag and drop colorful blocks onto the grid. Clear lines, chain combos, and keep the board alive as long as you can.</p>
-              <div class="card-tags"><span class="tag">Puzzle</span><span class="tag">Blocks</span><span class="tag">Casual</span><span class="tag">Brain</span></div>
-              <span class="card-cta">Play &rsaquo;</span>
+              <p class="card-desc">Drag and drop colorful blocks onto the grid.</p>
             </div>
           </a>
           <a class="card reveal" href="/mob-control/">
@@ -1093,9 +1081,7 @@
             <div class="card-body">
               <p class="card-tag">Crowd</p>
               <h2 class="card-title">Mob Control</h2>
-              <p class="card-desc">Aim your gate, multiply your crowd, and overwhelm the enemy stickmen. Time your shots to grow the biggest mob and storm the tower.</p>
-              <div class="card-tags"><span class="tag">Crowd</span><span class="tag">Casual</span><span class="tag">Strategy</span><span class="tag">3D</span></div>
-              <span class="card-cta">Play &rsaquo;</span>
+              <p class="card-desc">Aim your gate, multiply your crowd, and overwhelm the enemy stickmen.</p>
             </div>
           </a>
           <a class="card reveal" href="/death-run-3d/">
@@ -1169,9 +1155,7 @@
             <div class="card-body">
               <p class="card-tag">Runner</p>
               <h2 class="card-title">Death Run 3D</h2>
-              <p class="card-desc">Sprint down a deadly 3D corridor full of spikes, blades, and gaps. Switch lanes, time your jumps, and stay alive.</p>
-              <div class="card-tags"><span class="tag">3D</span><span class="tag">Runner</span><span class="tag">Reflexes</span><span class="tag">Arcade</span></div>
-              <span class="card-cta">Play &rsaquo;</span>
+              <p class="card-desc">Sprint down a deadly 3D corridor full of spikes, blades, and gaps.</p>
             </div>
           </a>
           <a class="card reveal" href="/bridge-race/">
@@ -1249,9 +1233,7 @@
             <div class="card-body">
               <p class="card-tag">Race</p>
               <h2 class="card-title">Bridge Race</h2>
-              <p class="card-desc">Collect blocks of your color and build a bridge to the next platform. Outpace your rivals and reach the top of the tower first.</p>
-              <div class="card-tags"><span class="tag">3D</span><span class="tag">Race</span><span class="tag">Casual</span><span class="tag">Multiplayer</span></div>
-              <span class="card-cta">Play &rsaquo;</span>
+              <p class="card-desc">Collect blocks of your color and build a bridge to the next platform.</p>
             </div>
           </a>
           <a class="card reveal" href="/color-water-sort-3d/">
@@ -1327,9 +1309,7 @@
             <div class="card-body">
               <p class="card-tag">Puzzle</p>
               <h2 class="card-title">Color Water Sort 3D</h2>
-              <p class="card-desc">Pour colored liquids between tubes until each one holds a single color. A relaxing puzzle with surprisingly tricky levels.</p>
-              <div class="card-tags"><span class="tag">Puzzle</span><span class="tag">Sort</span><span class="tag">Casual</span><span class="tag">Brain</span></div>
-              <span class="card-cta">Play &rsaquo;</span>
+              <p class="card-desc">Pour colored liquids between tubes until each one holds a single color.</p>
             </div>
           </a>
           <a class="card reveal" href="/bazooka-boy/">
@@ -1413,9 +1393,7 @@
             <div class="card-body">
               <p class="card-tag">Action</p>
               <h2 class="card-title">Bazooka Boy</h2>
-              <p class="card-desc">Aim, fire, and blow stuff up. Bounce rockets off walls to reach the target with as few shots as possible.</p>
-              <div class="card-tags"><span class="tag">Action</span><span class="tag">Physics</span><span class="tag">Aim</span><span class="tag">Casual</span></div>
-              <span class="card-cta">Play &rsaquo;</span>
+              <p class="card-desc">Aim, fire, and blow stuff up.</p>
             </div>
           </a>
           <a class="card reveal" href="/basket-random/">
@@ -1504,9 +1482,7 @@
             <div class="card-body">
               <p class="card-tag">Sports</p>
               <h2 class="card-title">Basket Random</h2>
-              <p class="card-desc">Wobbly ragdoll basketball where every shot is chaos. Tap to jump, dunk, and out-flail your opponent.</p>
-              <div class="card-tags"><span class="tag">Sports</span><span class="tag">Ragdoll</span><span class="tag">2 Player</span><span class="tag">Casual</span></div>
-              <span class="card-cta">Play &rsaquo;</span>
+              <p class="card-desc">Wobbly ragdoll basketball where every shot is chaos.</p>
             </div>
           </a>
           <a class="card reveal" href="/geometry-dash-lite/">
@@ -1585,9 +1561,7 @@
             <div class="card-body">
               <p class="card-tag">Rhythm</p>
               <h2 class="card-title">Geometry Dash Lite</h2>
-              <p class="card-desc">Tap to jump your cube through spikes, blocks, and gravity flips. Pure twitchy rhythm-platformer chaos.</p>
-              <div class="card-tags"><span class="tag">Rhythm</span><span class="tag">Platformer</span><span class="tag">Reflexes</span><span class="tag">Arcade</span></div>
-              <span class="card-cta">Play &rsaquo;</span>
+              <p class="card-desc">Tap to jump your cube through spikes, blocks, and gravity flips.</p>
             </div>
           </a>
           <a class="card reveal" href="/subway-surfers-remake/">
@@ -1688,9 +1662,7 @@
             <div class="card-body">
               <p class="card-tag">Endless Runner · 3D</p>
               <h2 class="card-title">Subway Surfers Remake</h2>
-              <p class="card-desc">A real 3D WebGL endless runner. Sprint down the subway tunnel, dodge oncoming trains, and grab coins. Jump, slide, switch — survive as long as you can.</p>
-              <div class="card-tags"><span class="tag">Runner</span><span class="tag">Endless</span><span class="tag">Reflexes</span><span class="tag">3D</span></div>
-              <span class="card-cta">Play &rsaquo;</span>
+              <p class="card-desc">A real 3D WebGL endless runner.</p>
             </div>
           </a>
           <a class="card reveal" href="/tennis/">
@@ -1757,9 +1729,7 @@
             <div class="card-body">
               <p class="card-tag">Sports</p>
               <h2 class="card-title">Tennis 3D</h2>
-              <p class="card-desc">3D arcade tennis with a real court, net and ball physics. Mouse or A/D to move (VS AI), or P1 = A/D / P2 = ←/→ on one keyboard. Timed match or first to 7.</p>
-              <div class="card-tags"><span class="tag">Sports</span><span class="tag">3D</span><span class="tag">Tennis</span><span class="tag">Mouse</span></div>
-              <span class="card-cta">Play &rsaquo;</span>
+              <p class="card-desc">3D arcade tennis with a real court, net and ball physics.</p>
             </div>
           </a>
           <a class="card reveal" href="/ping-pong/">
@@ -1819,9 +1789,7 @@
             <div class="card-body">
               <p class="card-tag">Sports</p>
               <h2 class="card-title">Ping Pong</h2>
-              <p class="card-desc">Classic table tennis in your browser. Play VS AI (mouse or W/S) or grab a friend (P1 = W/S, P2 = &uarr;/&darr;). SPACE to serve. Timed match or first-to-7.</p>
-              <div class="card-tags"><span class="tag">Sports</span><span class="tag">Pong</span><span class="tag">Arcade</span><span class="tag">2P</span></div>
-              <span class="card-cta">Play &rsaquo;</span>
+              <p class="card-desc">Classic table tennis in your browser.</p>
             </div>
           </a>
         </div>
