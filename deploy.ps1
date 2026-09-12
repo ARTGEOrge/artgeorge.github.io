@@ -1,19 +1,19 @@
 <#
 .SYNOPSIS
-  Publish this site to all six live hosts, then check that each one really
+  Publish this site to all five live hosts, then check that each one really
   serves what is on disk.
 
 .DESCRIPTION
-  Only GitHub Pages redeploys itself when you push. The other five each need an
-  explicit command, so "publish everywhere" is six separate steps and it is easy
+  Only GitHub Pages redeploys itself when you push. The other four each need an
+  explicit command, so "publish everywhere" is five separate steps and it is easy
   to leave one behind. This runs all of them and then proves it.
 
-  The five CLI hosts upload the WORKING DIRECTORY. GitHub Pages serves the
+  The four CLI hosts upload the WORKING DIRECTORY. GitHub Pages serves the
   COMMIT. Deploy with uncommitted changes and the hosts silently disagree with
   each other, so this refuses to run on a dirty tree unless you insist.
 
 .PARAMETER Only
-  Deploy just these targets. Names: github, vercel, netlify, surge, surge-mirror,
+  Deploy just these targets. Names: github, netlify, surge, surge-mirror,
   firebase.
 
 .PARAMETER Skip
@@ -44,7 +44,7 @@
   Do nothing; just report which hosts are already current.
 
 .EXAMPLE
-  .\deploy.ps1 -Only github,vercel -Canary nyc-walk/index.html
+  .\deploy.ps1 -Only github,netlify -Canary nyc-walk/index.html
 #>
 [CmdletBinding()]
 param(
@@ -70,11 +70,6 @@ $Targets = @(
     Name = 'github'; Tool = 'git'; Url = 'https://artgeorge.github.io'
     What = 'push main -> GitHub Pages'
     Run  = { git push origin main }
-  },
-  [ordered]@{
-    Name = 'vercel'; Tool = 'npx'; Url = 'https://artgeorge.vercel.app'
-    What = 'vercel production'
-    Run  = { npx -y vercel@latest deploy --prod --yes }
   },
   [ordered]@{
     Name = 'netlify'; Tool = 'netlify'; Url = 'https://argeorge.netlify.app'
@@ -185,7 +180,7 @@ if ($dirty) {
   # A dry run touches nothing, so there is nothing to protect it from.
   if (-not $AllowDirty -and -not $DryRun) {
     Write-Host ''
-    Write-Host 'Refusing to deploy. The five CLI hosts upload these files; GitHub Pages will not' -ForegroundColor Red
+    Write-Host 'Refusing to deploy. The four CLI hosts upload these files; GitHub Pages will not' -ForegroundColor Red
     Write-Host 'have them, so your hosts would disagree. Commit and push, or pass -AllowDirty.' -ForegroundColor Red
     exit 1
   }
