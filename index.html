@@ -3,255 +3,294 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Twenty-one games that run in your browser. No downloads, no installs — just press play." />
   <title>ARTGEOrge — Games</title>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
+    :root {
+      --white: #ffffff;
+      --gray:  #f5f5f7;
+      --ink:   #1d1d1f;
+      --ink-2: #6e6e73;
+      --blue:  #0071e3;
+      --blue-d:#2997ff;
+      --hair:  rgba(0,0,0,0.10);
+      --nav-h: 48px;
+    }
+
+    /* No `scroll-behavior: smooth` -- confirmed ABSENT on apple.com.
+       They lerp a shadow scroll value instead; native scroll stays untouched. */
+
     body {
-      min-height: 100vh;
-      background: #050510;
-      color: #fff;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--white);
+      transition: color .6s linear;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
+                   'Helvetica Neue', 'Segoe UI', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
       overflow-x: hidden;
     }
 
-    #stars {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 0;
+    a { color: inherit; text-decoration: none; }
+
+    :focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; border-radius: 6px; }
+
+    .wrap { max-width: 1024px; margin: 0 auto; padding: 0 22px; }
+
+    /* ------------------------------------------------------------ nav */
+    /* Transparent at the top, frosting in on scroll -- the apple.com behaviour. */
+    .nav {
+      position: sticky; top: 0; z-index: 9999; height: var(--nav-h);
+      background: rgba(255,255,255,0);
+      border-bottom: 1px solid transparent;
+      transition: background .4s ease, border-color .4s ease, backdrop-filter .4s ease;
     }
-
-    .container {
-      position: relative;
-      z-index: 1;
-      max-width: 960px;
-      margin: 0 auto;
-      padding: 60px 24px 80px;
+    .nav.is-stuck {
+      background: rgba(255,255,255,0.72);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      backdrop-filter: saturate(180%) blur(20px);
+      border-bottom-color: var(--hair);
     }
-
-    header {
-      text-align: center;
-      margin-bottom: 64px;
+    /* While the dark scene owns the viewport the nav inverts with it. */
+    .nav.is-dark .nav-mark, .nav.is-dark .nav-links a, .nav.is-dark .apps-btn { color: var(--gray); }
+    .nav.is-dark.is-stuck {
+      background: rgba(29,29,31,0.72);
+      border-bottom-color: rgba(255,255,255,0.12);
     }
-
-    .logo {
-      display: inline-block;
-      font-size: 12px;
-      letter-spacing: 6px;
-      text-transform: uppercase;
-      color: #8a93a8;
-      margin-bottom: 16px;
+    .nav.is-dark .apps-btn:hover { background: rgba(255,255,255,0.12); }
+    .nav-in {
+      max-width: 1024px; margin: 0 auto; padding: 0 22px; height: 100%;
+      display: flex; align-items: center; gap: 26px;
     }
+    .nav-mark { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+    .nav-links { display: flex; gap: 24px; margin-left: auto; }
+    .nav-links a { font-size: 13px; color: var(--ink); opacity: .85; }
+    .nav-links a:hover { opacity: 1; }
 
-    h1 {
-      font-size: clamp(36px, 6vw, 64px);
-      font-weight: 900;
-      letter-spacing: -1px;
-      background: linear-gradient(135deg, #ffd700 0%, #ff8c00 50%, #ff4466 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      line-height: 1.1;
-    }
-
-    .tagline {
-      margin-top: 14px;
-      font-size: 15px;
-      color: #98a2b8;
-      letter-spacing: 1px;
-    }
-
-    .games {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 28px;
-    }
-
-    .card {
-      position: relative;
-      background: #0a0a1e;
-      border: 1px solid #1a1a3a;
-      border-radius: 16px;
-      overflow: hidden;
-      transition: transform 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
-      text-decoration: none;
-      color: inherit;
-      display: block;
-    }
-
-    .card:hover {
-      transform: translateY(-6px);
-      border-color: var(--accent);
-      box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.7);
-    }
-
-    .card-banner {
-      height: 180px;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .card-banner svg {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-    }
-
-    .card--escape { --accent: #ffd700; --accent-glow: rgba(255,180,0,0.4); }
-    .card--neon   { --accent: #22d3ee; --accent-glow: rgba(34,211,238,0.4); }
-    .card--escape2 { --accent: #ff6600; --accent-glow: rgba(255,102,0,0.4); }
-    .card--snow    { --accent: #aaddff; --accent-glow: rgba(170,221,255,0.4); }
-    .card--eagle   { --accent: #55cc55; --accent-glow: rgba(85,204,85,0.4); }
-    .card--bombs   { --accent: #ff3322; --accent-glow: rgba(255,80,40,0.45); }
-    .card--nyc     { --accent: #f5c518; --accent-glow: rgba(245,197,24,0.45); }
-    .card--crossy  { --accent: #ffcc33; --accent-glow: rgba(255,204,51,0.45); }
-    .card--blocks  { --accent: #4d7cff; --accent-glow: rgba(77,124,255,0.45); }
-    .card--mob     { --accent: #c84dff; --accent-glow: rgba(200,77,255,0.45); }
-    .card--ai      { --accent: #10b981; --accent-glow: rgba(16,185,129,0.45); }
-    .card--death   { --accent: #b91c1c; --accent-glow: rgba(220,38,38,0.5); }
-    .card--bridge  { --accent: #ff7a1a; --accent-glow: rgba(255,122,26,0.45); }
-    .card--water   { --accent: #38bdf8; --accent-glow: rgba(56,189,248,0.45); }
-    .card--bazooka { --accent: #f59e0b; --accent-glow: rgba(245,158,11,0.5); }
-    .card--basket  { --accent: #ff8c1a; --accent-glow: rgba(255,140,26,0.5); }
-    .card--gdash   { --accent: #00e5ff; --accent-glow: rgba(0,229,255,0.5); }
-    .card--subway  { --accent: #22c55e; --accent-glow: rgba(34,197,94,0.5); }
-    .card--tennis  { --accent: #d4ed31; --accent-glow: rgba(212,237,49,0.5); }
-    .card--pong    { --accent: #ff5577; --accent-glow: rgba(255,85,119,0.5); }
-    .card--shapes  { --accent: #a855f7; --accent-glow: rgba(168,85,247,0.5); }
-    .card--ency    { --accent: #1c6ea4; --accent-glow: rgba(28,110,164,0.5); }
-    .card--zombie  { --accent: #6d4aff; --accent-glow: rgba(109,74,255,0.55); }
-    .card--kart    { --accent: #ffd23f; --accent-glow: rgba(255,210,63,0.5); }
-
-    .card-body { padding: 20px 22px 24px; }
-
-    .card-tag {
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 3px;
-      text-transform: uppercase;
-      color: var(--accent);
-      margin-bottom: 8px;
-    }
-
-    .card-title {
-      font-size: 22px;
-      font-weight: 800;
-      margin-bottom: 10px;
-    }
-
-    .card-desc {
-      font-size: 14px;
-      color: #95a1cc;
-      line-height: 1.65;
-      margin-bottom: 18px;
-    }
-
-    .card-tags {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-    }
-
-    .tag {
-      font-size: 11px;
-      padding: 3px 10px;
-      border-radius: 99px;
-      background: rgba(255,255,255,0.05);
-      color: #778899;
-      border: 1px solid rgba(255,255,255,0.08);
-    }
-
-    .play-btn {
-      position: absolute;
-      top: 14px;
-      right: 14px;
-      background: var(--accent);
-      color: #000;
-      font-size: 11px;
-      font-weight: 800;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      padding: 6px 14px;
-      border-radius: 99px;
-      z-index: 2;
-      opacity: 0;
-      transform: scale(0.88);
-      transition: opacity 0.2s, transform 0.2s;
-    }
-
-    .card:hover .play-btn {
-      opacity: 1;
-      transform: scale(1);
-    }
-
-    footer {
-      text-align: center;
-      margin-top: 72px;
-      color: #7a8299;
-      font-size: 12px;
-      letter-spacing: 1px;
-    }
-
-    footer a { color: #8a93a8; text-decoration: none; }
-    footer a:hover { color: #ffd700; }
-
-    /* Apps launcher (9-dot grid, top-right) */
-    .apps-launcher { position: fixed; top: 18px; right: 20px; z-index: 50; }
+    .apps-launcher { position: relative; }
     .apps-btn {
-      width: 46px; height: 46px; border-radius: 50%;
-      border: 1px solid #1a1a3a; background: rgba(15,15,32,0.6);
-      color: #8899bb; cursor: pointer; display: flex; align-items: center;
-      justify-content: center; backdrop-filter: blur(6px);
-      transition: background .2s, border-color .2s, color .2s;
+      width: 34px; height: 34px; border-radius: 50%; border: none;
+      background: transparent; color: var(--ink); cursor: pointer;
+      display: flex; align-items: center; justify-content: center; transition: background .2s;
     }
-    .apps-btn:hover { background: rgba(40,40,70,0.85); border-color: #ffd700; color: #ffd700; }
-    .apps-btn svg { width: 22px; height: 22px; fill: currentColor; }
+    .apps-btn:hover { background: rgba(0,0,0,0.06); }
+    .apps-btn svg { width: 18px; height: 18px; fill: currentColor; }
     .apps-menu {
-      position: absolute; top: 56px; right: 0; width: 248px;
-      background: #0a0a1e; border: 1px solid #1a1a3a; border-radius: 18px;
-      padding: 14px; display: none; grid-template-columns: repeat(2, 1fr);
-      gap: 4px; box-shadow: 0 24px 60px rgba(0,0,0,0.65);
+      position: absolute; top: 42px; right: 0; width: 260px;
+      background: rgba(255,255,255,0.86);
+      -webkit-backdrop-filter: saturate(180%) blur(20px);
+      backdrop-filter: saturate(180%) blur(20px);
+      border: 1px solid var(--hair); border-radius: 18px; padding: 12px;
+      display: none; grid-template-columns: repeat(2, 1fr); gap: 2px;
+      box-shadow: 0 18px 50px rgba(0,0,0,0.16);
     }
     .apps-menu.open { display: grid; }
     .apps-app {
-      display: flex; flex-direction: column; align-items: center; gap: 8px;
-      padding: 16px 6px; border-radius: 14px; text-decoration: none;
-      color: #cdd6f4; font-size: 12.5px; text-align: center; transition: background .15s;
+      display: flex; flex-direction: column; align-items: center; gap: 7px;
+      padding: 14px 6px; border-radius: 12px; color: var(--ink);
+      font-size: 12px; text-align: center; transition: background .15s;
     }
-    .apps-app:hover { background: rgba(255,255,255,0.06); }
-    .apps-app .ai { font-size: 28px; line-height: 1; }
+    .apps-app:hover { background: rgba(0,0,0,0.05); }
+    .apps-app .ai { font-size: 26px; line-height: 1; }
 
-    /* Touch devices have no hover: the primary affordance must be visible. */
-    @media (hover: none) {
-      .play-btn { opacity: 1; transform: scale(1); }
+    /* ----------------------------------------------------------- hero */
+    .hero { text-align: center; padding: 78px 0 0; background: var(--white); }
+    .hero h1 {
+      font-size: clamp(40px, 7.2vw, 88px); font-weight: 700;
+      letter-spacing: -0.018em; line-height: 1.05;
+    }
+    .hero .tagline {
+      margin: 18px auto 0; max-width: 30ch; color: var(--ink-2);
+      font-size: clamp(19px, 2.3vw, 28px); font-weight: 400; line-height: 1.3;
+    }
+    .ctas { margin-top: 26px; display: flex; justify-content: center; gap: 30px; flex-wrap: wrap; }
+    .cta { color: var(--blue); font-size: 17px; }
+    .cta:hover { text-decoration: underline; }
+    .hero-art {
+      margin: 54px auto 0; max-width: 860px; border-radius: 22px; overflow: hidden;
+      line-height: 0; box-shadow: 0 24px 64px -18px rgba(0,0,0,0.28);
+    }
+    .hero-art svg { width: 100%; height: auto; display: block; }
+
+    /* ------------------------------------------------------- chapters */
+    .chapter { padding: 128px 0; }
+    .chapter--dark { background: var(--ink); color: var(--gray); }
+    .chapter--dark .ch-desc { color: #a1a1a6; }
+    .chapter--dark .ch-eyebrow, .chapter--dark .ch-cta { color: var(--blue-d); }
+    .chapter-in {
+      max-width: 1024px; margin: 0 auto; padding: 0 22px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center;
+    }
+    .chapter--flip .ch-text { order: 2; }
+    .ch-eyebrow {
+      font-size: 13px; font-weight: 600; letter-spacing: .02em;
+      color: var(--blue); margin-bottom: 12px; text-transform: uppercase;
+    }
+    .ch-title {
+      font-size: clamp(32px, 4.6vw, 60px); font-weight: 700;
+      letter-spacing: -0.015em; line-height: 1.07;
+    }
+    .ch-desc { margin-top: 18px; font-size: 19px; line-height: 1.55; color: var(--ink-2); }
+    .ch-cta { display: inline-block; margin-top: 22px; color: var(--blue); font-size: 17px; }
+    .ch-cta:hover { text-decoration: underline; }
+    .ch-art {
+      border-radius: 20px; overflow: hidden; line-height: 0;
+      box-shadow: 0 20px 50px -16px rgba(0,0,0,0.3);
+    }
+    .ch-art svg { width: 100%; height: auto; display: block; }
+
+    /* ---------------------------------------------------------- bento */
+    .bento { background: var(--gray); padding: 116px 0 128px; }
+    /* Scoped by class, not `.bento h2` -- the card titles are h2 as well. */
+    .bento-head {
+      font-size: clamp(30px, 3.8vw, 46px); font-weight: 700;
+      letter-spacing: -0.015em; text-align: center; margin-bottom: 10px;
+    }
+    .bento .sub { text-align: center; color: var(--ink-2); font-size: 19px; margin-bottom: 46px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; }
+    .card {
+      background: var(--white); border-radius: 18px; overflow: hidden;
+      display: flex; flex-direction: column; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+      transition: transform .3s cubic-bezier(.25,.1,.25,1), box-shadow .3s;
+    }
+    .card:hover { transform: translateY(-5px); box-shadow: 0 18px 40px -14px rgba(0,0,0,0.22); }
+    .card--wide { grid-column: span 2; }
+    .card-banner { line-height: 0; }
+    .card-banner svg { width: 100%; height: auto; display: block; }
+    .card-body { padding: 22px 24px 26px; display: flex; flex-direction: column; flex: 1; }
+    .card-tag {
+      font-size: 12px; font-weight: 600; color: var(--ink-2);
+      margin-bottom: 7px; text-transform: uppercase; letter-spacing: .02em;
+    }
+    .card-title { font-size: 21px; font-weight: 600; letter-spacing: -0.01em; }
+    .card-desc { margin-top: 9px; font-size: 15px; line-height: 1.5; color: var(--ink-2); }
+    .card-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+    .tag { font-size: 11px; padding: 4px 10px; border-radius: 99px; background: var(--gray); color: var(--ink-2); }
+    /* Link-style CTA, always visible: no hover-only affordance. */
+    .card-cta { margin-top: auto; padding-top: 18px; color: var(--blue); font-size: 15px; }
+    .card:hover .card-cta { text-decoration: underline; }
+
+    /* --------------------------------------------------------- footer */
+    .foot { background: var(--gray); border-top: 1px solid var(--hair); padding: 44px 0 56px; }
+    .foot-cols {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 28px; padding-bottom: 30px; border-bottom: 1px solid var(--hair);
+    }
+    .foot h3 { font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 11px; }
+    .foot ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
+    .foot a { font-size: 12px; color: var(--ink-2); }
+    .foot a:hover { color: var(--ink); text-decoration: underline; }
+    .foot-legal { padding-top: 20px; font-size: 12px; color: var(--ink-2); }
+
+    /* --------------------------------------------------------- reveal
+       Scroll-driven CSS, not JS. The resting state is VISIBLE: a browser
+       without `animation-timeline` simply shows the content, and no script
+       failure, blocked observer or throttled timer can ever leave the page
+       blank. The animation only ever adds. */
+    @media (prefers-reduced-motion: no-preference) {
+      @supports (animation-timeline: view()) {
+        @keyframes reveal-in {
+          from { opacity: 0; transform: translateY(26px); }
+          to   { opacity: 1; transform: none; }
+        }
+        @keyframes wipe-in {
+          from { clip-path: inset(0 0 100% 0); }
+          to   { clip-path: inset(0 0 0 0); }
+        }
+        .reveal {
+          animation: reveal-in linear both;
+          animation-timeline: view();
+          animation-range: entry 0% entry 55%;
+        }
+        .wipe {
+          animation: wipe-in linear both;
+          animation-timeline: view();
+          animation-range: entry 5% entry 60%;
+        }
+      }
     }
 
-    /* Respect the OS reduced-motion setting (HIG). */
+    /* ------------------------------------------------- pinned scene
+       A tall sentinel holds a sticky full-viewport stage; the damped
+       scroll engine maps 0->1 progress onto the children. Only applied
+       once JS confirms motion is wanted -- otherwise the chapter stays
+       an ordinary section and the page reads normally. */
+    /* The scene keeps its own dark background: text is never left sitting on a
+       half-morphed body colour. The register change comes from the pin itself. */
+    .js-motion .chapter--pin { height: 260vh; padding: 0; }
+    .js-motion .chapter--pin .pin { background: var(--ink); }
+    .js-motion .chapter--pin .pin {
+      position: sticky; top: 0; height: 100vh;
+      display: flex; align-items: center; overflow: hidden;
+    }
+    .js-motion .chapter--pin .chapter-in { width: 100%; }
+
+    /* ---------------------------------------------- clip-path wipe
+       Reads as purposeful revelation rather than a generic fade. */
+    .js-motion .wipe { clip-path: inset(0 0 100% 0); }
+    .js-motion .wipe.in {
+      clip-path: inset(0 0 0 0);
+      transition: clip-path 1s cubic-bezier(.22,.61,.36,1);
+    }
+
+    /* ------------------------------------------------ ambient float
+       6-12px over 4-7s so the page breathes when scrolling stops. */
+    @keyframes float-y {
+      from { transform: translateY(-7px); }
+      to   { transform: translateY(7px); }
+    }
+    .js-motion .float { animation: float-y 6.5s ease-in-out infinite alternate; }
+
+    /* --------------------------------------------- pointer-reactive
+       Desktop polish only: a real pointer, and hover actually works. */
+    @media (hover: hover) and (pointer: fine) {
+      .js-motion .card { transform-style: preserve-3d; }
+      .js-motion .card.tilt { transition: transform .1s linear, box-shadow .3s; }
+    }
+
+    @media (max-width: 820px) {
+      .chapter { padding: 84px 0; }
+      .chapter-in { grid-template-columns: 1fr; gap: 34px; }
+      .chapter--flip .ch-text { order: 0; }
+      .card--wide { grid-column: span 1; }
+      .nav-links { gap: 16px; }
+      .hero { padding-top: 56px; }
+    }
+
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
         transition-duration: 0.01ms !important;
         animation-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
       }
+      .reveal { opacity: 1; transform: none; animation: none; }
+      .wipe { clip-path: none; animation: none; }
+      .float, .js-motion .float { animation: none; }
       .card:hover { transform: none; }
+      /* The pinned scene collapses back to an ordinary section. */
+      .chapter--pin, .js-motion .chapter--pin { height: auto; padding: 84px 0; }
+      .chapter--pin .pin, .js-motion .chapter--pin .pin { position: static; height: auto; }
     }
   </style>
 </head>
 <body>
 
-<canvas id="stars"></canvas>
-
-<!-- Apps launcher (9-dot grid) -->
-<div class="apps-launcher">
-  <button class="apps-btn" id="appsBtn" aria-label="Apps" title="Apps">
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="5" cy="5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="5" r="2"/>
-      <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
-      <circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
-    </svg>
-  </button>
+  <header class="nav" id="nav">
+    <div class="nav-in">
+      <a class="nav-mark" href="/">ARTGEOrge</a>
+      <nav class="nav-links">
+        <a href="#games">Games</a>
+        <a href="https://github.com/ARTGEOrge">GitHub</a>
+      </nav>
+      <div class="apps-launcher">
+        <button class="apps-btn" id="appsBtn" aria-label="Apps" aria-expanded="false" aria-haspopup="true" title="Apps">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="5" cy="5" r="2"/><circle cx="12" cy="5" r="2"/><circle cx="19" cy="5" r="2"/>
+            <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
+            <circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
+          </svg>
+        </button>
   <div class="apps-menu" id="appsMenu">
     <a class="apps-app" href="/search/"><span class="ai">🔎</span><span>Search</span></a>
     <a class="apps-app" href="https://www.youtube.com"><span class="ai">▶️</span><span>YouTube</span></a>
@@ -267,31 +306,25 @@
     <a class="apps-app" href="/os/"><span class="ai">🖥️</span><span>ArtOS</span></a>
     <a class="apps-app" href="/designs/"><span class="ai">🖨️</span><span>MakerVault</span></a>
   </div>
-</div>
-<script>
-  (function () {
-    var btn = document.getElementById('appsBtn');
-    var menu = document.getElementById('appsMenu');
-    btn.addEventListener('click', function (e) { e.stopPropagation(); menu.classList.toggle('open'); });
-    menu.addEventListener('click', function (e) { e.stopPropagation(); });
-    document.addEventListener('click', function () { menu.classList.remove('open'); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') menu.classList.remove('open'); });
-  })();
-</script>
-
-<div class="container">
-  <header>
-    <div class="logo">ARTGEOrge</div>
-    <h1>GAME ARCADE</h1>
-    <p class="tagline">Pick a game &amp; play instantly in your browser</p>
+      </div>
+    </div>
   </header>
 
-  <div class="games">
-
-    <a href="/mario-kart/" class="card card--kart">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <!-- Deliberately NOT a .wipe: the hero headline is the page's most
+             important element and must never be gated behind a script or an
+             observer callback. Wipes are for the below-fold chapter heads. -->
+        <h1>Game Arcade</h1>
+        <p class="tagline">Twenty-one games. No downloads. Just press play.</p>
+        <div class="ctas">
+          <a class="cta" href="/mario-kart/">Play Kart Games &rsaquo;</a>
+          <a class="cta" href="#games">Browse all games &rsaquo;</a>
+        </div>
+        <!-- parallax on the frame, ambient float on the inner layer, so the
+             two transforms never fight over the same element -->
+        <div class="hero-art" data-parallax><div class="float"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="kartSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#123a86"/>
@@ -371,25 +404,64 @@
             <line x1="60" y1="112" x2="42" y2="117"/>
             <line x1="340" y1="112" x2="358" y2="117"/>
           </g>
-        </svg>
+        </svg></div></div>
       </div>
-      <div class="card-body">
-        <div class="card-tag">New</div>
-        <h2 class="card-title">Kart Games</h2>
-        <p class="card-desc">Seventeen kart racers in one place &mdash; one for every Mario Kart ever released, each built around the trick that game actually introduced. Real Mode 7 for the SNES, pseudo-3D roads for the N64, two riders per kart, anti-gravity tubes, an open world, even a Pac-Man maze. Plus a full grand prix with rivals, boost pads and live race positions.</p>
-        <div class="card-tags">
-          <span class="tag">Racing</span>
-          <span class="tag">17 Games</span>
-          <span class="tag">Retro</span>
-          <span class="tag">Arcade</span>
-        </div>
-      </div>
-    </a>
+    </section>
 
-    <a href="/nyc-walk/" class="card card--nyc">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+  <section class="chapter reveal">
+    <div class="chapter-in">
+      <div class="ch-text">
+        <p class="ch-eyebrow">New</p>
+        <h2 class="ch-title wipe">Zombie Apocalypse</h2>
+        <p class="ch-desc">Survive endless zombie hordes in GOD MODE. Auto-fire your growing arsenal, pick a weapon each level from 25 rarities up to Godly &amp; Universal, and crush bosses every 5 levels.</p>
+        <a class="ch-cta" href="/zombie-survivors/">Play Zombie Apocalypse &rsaquo;</a>
+      </div>
+      <div class="ch-art float"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="zombGrad" cx="50%" cy="55%" r="70%">
+              <stop offset="0%" stop-color="#1a0a2e"/>
+              <stop offset="100%" stop-color="#050510"/>
+            </radialGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#zombGrad)"/>
+          <!-- grid floor -->
+          <g stroke="rgba(109,74,255,0.14)" stroke-width="1">
+            <path d="M0,120 H400 M0,145 H400 M0,175 H400"/>
+            <path d="M60,120 L20,180 M140,120 L120,180 M220,120 L230,180 M300,120 L340,180"/>
+          </g>
+          <!-- muzzle flash -->
+          <circle cx="200" cy="92" r="70" fill="none" stroke="rgba(109,74,255,0.18)" stroke-width="16"/>
+          <circle cx="200" cy="92" r="42" fill="none" stroke="rgba(109,74,255,0.3)" stroke-width="10"/>
+          <!-- player -->
+          <rect x="186" y="78" width="28" height="28" rx="4" fill="#6d4aff"/>
+          <circle cx="194" cy="88" r="3" fill="#fff"/><circle cx="206" cy="88" r="3" fill="#fff"/>
+          <!-- tracer -->
+          <line x1="214" y1="92" x2="330" y2="60" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="330" cy="60" r="6" fill="#ffcc33"/>
+          <!-- zombies -->
+          <g fill="#3f8f3f">
+            <rect x="46" y="66" width="24" height="24" rx="3"/>
+            <rect x="92" y="104" width="24" height="24" rx="3"/>
+            <rect x="316" y="106" width="24" height="24" rx="3"/>
+          </g>
+          <g fill="#f33"><circle cx="52" cy="74" r="2.5"/><circle cx="64" cy="74" r="2.5"/><circle cx="98" cy="112" r="2.5"/><circle cx="110" cy="112" r="2.5"/></g>
+          <!-- boss zombie -->
+          <rect x="344" y="60" width="40" height="40" rx="4" fill="#6a0dad"/>
+          <circle cx="354" cy="74" r="3.5" fill="#f33"/><circle cx="374" cy="74" r="3.5" fill="#f33"/>
+        </svg></div>
+    </div>
+  </section>
+
+  <section class="chapter chapter--dark chapter--pin chapter--flip" data-scene>
+    <div class="pin">
+      <div class="chapter-in">
+      <div class="ch-text">
+        <p class="ch-eyebrow">Open World</p>
+        <h2 class="ch-title wipe">NYC Walk</h2>
+        <p class="ch-desc">Walk a procedural New York &mdash; Manhattan, Brooklyn, Queens, the Bronx and Staten Island, two rivers and six bridges. Right-click any moving cab to take the wheel and drive across town, day or night.</p>
+        <a class="ch-cta" href="/nyc-walk/">Play NYC Walk &rsaquo;</a>
+      </div>
+      <div class="ch-art" data-scene-art><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="nycSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0b1430"/>
@@ -449,75 +521,82 @@
           <rect x="128" y="86" width="4" height="60" fill="#161a20"/>
           <rect x="128" y="86" width="22" height="4" fill="#161a20"/>
           <circle cx="150" cy="92" r="6" fill="#ffd27a" opacity=".9"/>
-        </svg>
+        </svg></div>
       </div>
-      <div class="card-body">
-        <div class="card-tag">Open World</div>
-        <h2 class="card-title">NYC Walk</h2>
-        <p class="card-desc">Walk a procedural New York &mdash; Manhattan, Brooklyn, Queens, the Bronx and Staten Island, two rivers and six bridges. Right-click any moving cab to take the wheel and drive across town, day or night.</p>
-        <div class="card-tags">
-          <span class="tag">3D</span>
-          <span class="tag">Explore</span>
-          <span class="tag">Driving</span>
-          <span class="tag">First Person</span>
-        </div>
-      </div>
-    </a>
+    </div>
+  </section>
 
-    <a href="/zombie-survivors/" class="card card--zombie">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+  <section class="chapter reveal">
+    <div class="chapter-in">
+      <div class="ch-text">
+        <p class="ch-eyebrow"></p>
+        <h2 class="ch-title wipe">Eaglercraft 1.12</h2>
+        <p class="ch-desc">Minecraft 1.12.2 running entirely in your browser. Build, explore, and survive — no download needed.</p>
+        <a class="ch-cta" href="/eaglercraft/">Play Eaglercraft 1.12 &rsaquo;</a>
+      </div>
+      <div class="ch-art float"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
-            <radialGradient id="zombGrad" cx="50%" cy="55%" r="70%">
-              <stop offset="0%" stop-color="#1a0a2e"/>
-              <stop offset="100%" stop-color="#050510"/>
-            </radialGradient>
+            <linearGradient id="mcSky" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#5588cc"/>
+              <stop offset="100%" stop-color="#88aadd"/>
+            </linearGradient>
           </defs>
-          <rect width="400" height="180" fill="url(#zombGrad)"/>
-          <!-- grid floor -->
-          <g stroke="rgba(109,74,255,0.14)" stroke-width="1">
-            <path d="M0,120 H400 M0,145 H400 M0,175 H400"/>
-            <path d="M60,120 L20,180 M140,120 L120,180 M220,120 L230,180 M300,120 L340,180"/>
-          </g>
-          <!-- muzzle flash -->
-          <circle cx="200" cy="92" r="70" fill="none" stroke="rgba(109,74,255,0.18)" stroke-width="16"/>
-          <circle cx="200" cy="92" r="42" fill="none" stroke="rgba(109,74,255,0.3)" stroke-width="10"/>
-          <!-- player -->
-          <rect x="186" y="78" width="28" height="28" rx="4" fill="#6d4aff"/>
-          <circle cx="194" cy="88" r="3" fill="#fff"/><circle cx="206" cy="88" r="3" fill="#fff"/>
-          <!-- tracer -->
-          <line x1="214" y1="92" x2="330" y2="60" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
-          <circle cx="330" cy="60" r="6" fill="#ffcc33"/>
-          <!-- zombies -->
-          <g fill="#3f8f3f">
-            <rect x="46" y="66" width="24" height="24" rx="3"/>
-            <rect x="92" y="104" width="24" height="24" rx="3"/>
-            <rect x="316" y="106" width="24" height="24" rx="3"/>
-          </g>
-          <g fill="#f33"><circle cx="52" cy="74" r="2.5"/><circle cx="64" cy="74" r="2.5"/><circle cx="98" cy="112" r="2.5"/><circle cx="110" cy="112" r="2.5"/></g>
-          <!-- boss zombie -->
-          <rect x="344" y="60" width="40" height="40" rx="4" fill="#6a0dad"/>
-          <circle cx="354" cy="74" r="3.5" fill="#f33"/><circle cx="374" cy="74" r="3.5" fill="#f33"/>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">New</div>
-        <h2 class="card-title">Zombie Apocalypse</h2>
-        <p class="card-desc">Survive endless zombie hordes in GOD MODE. Auto-fire your growing arsenal, pick a weapon each level from 25 rarities up to Godly &amp; Universal, and crush bosses every 5 levels.</p>
-        <div class="card-tags">
-          <span class="tag">Survival</span>
-          <span class="tag">Shooter</span>
-          <span class="tag">Roguelite</span>
-          <span class="tag">Zombies</span>
-        </div>
-      </div>
-    </a>
+          <rect width="400" height="180" fill="url(#mcSky)"/>
+          <!-- Ground -->
+          <rect x="0" y="130" width="400" height="50" fill="#5a8a3a"/>
+          <rect x="0" y="130" width="400" height="8"  fill="#7ab84a"/>
+          <!-- Dirt beneath -->
+          <rect x="0" y="138" width="400" height="42" fill="#8b5a2b"/>
+          <!-- Minecraft-style blocks (pixel art) -->
+          <!-- Tree trunk -->
+          <rect x="60"  y="90"  width="20" height="40" fill="#6b3a1a"/>
+          <rect x="44"  y="66"  width="52" height="30" fill="#2d6b1a"/>
+          <rect x="52"  y="52"  width="36" height="20" fill="#2d6b1a"/>
+          <rect x="60"  y="42"  width="20" height="16" fill="#2d6b1a"/>
+          <!-- Tree 2 -->
+          <rect x="280" y="95"  width="20" height="35" fill="#6b3a1a"/>
+          <rect x="264" y="72"  width="52" height="28" fill="#336b1a"/>
+          <rect x="272" y="58"  width="36" height="18" fill="#336b1a"/>
+          <rect x="280" y="46"  width="20" height="16" fill="#336b1a"/>
+          <!-- Cobblestone wall -->
+          <rect x="150" y="100" width="100" height="30" fill="#888"/>
+          <rect x="150" y="100" width="100" height="2"  fill="#666"/>
+          <rect x="150" y="115" width="100" height="2"  fill="#666"/>
+          <rect x="170" y="100" width="2"   height="15" fill="#666"/>
+          <rect x="200" y="100" width="2"   height="15" fill="#666"/>
+          <rect x="230" y="100" width="2"   height="15" fill="#666"/>
+          <rect x="160" y="115" width="2"   height="15" fill="#666"/>
+          <rect x="190" y="115" width="2"   height="15" fill="#666"/>
+          <rect x="220" y="115" width="2"   height="15" fill="#666"/>
+          <!-- Steve-like character -->
+          <rect x="192" y="74"  width="16" height="16" fill="#f5c98a"/>
+          <rect x="190" y="90"  width="20" height="24" fill="#3a5acc"/>
+          <rect x="184" y="90"  width="8"  height="20" fill="#3a5acc"/>
+          <rect x="208" y="90"  width="8"  height="20" fill="#3a5acc"/>
+          <rect x="192" y="114" width="8"  height="16" fill="#5a3a1a"/>
+          <rect x="200" y="114" width="8"  height="16" fill="#5a3a1a"/>
+          <!-- Sun -->
+          <rect x="330" y="18"  width="28" height="28" fill="#ffdd00"/>
+          <rect x="336" y="12"  width="16" height="6"  fill="#ffdd00"/>
+          <rect x="336" y="46"  width="16" height="6"  fill="#ffdd00"/>
+          <rect x="324" y="24"  width="6"  height="16" fill="#ffdd00"/>
+          <rect x="358" y="24"  width="6"  height="16" fill="#ffdd00"/>
+          <!-- Clouds (blocky) -->
+          <rect x="20"  y="22"  width="70" height="16" fill="rgba(255,255,255,0.9)"/>
+          <rect x="30"  y="14"  width="50" height="12" fill="rgba(255,255,255,0.9)"/>
+          <rect x="200" y="18"  width="60" height="14" fill="rgba(255,255,255,0.85)"/>
+          <rect x="208" y="10"  width="44" height="12" fill="rgba(255,255,255,0.85)"/>
+        </svg></div>
+    </div>
+  </section>
 
-    <a href="/encyclopedia/" class="card card--ency">
-      <div class="play-btn">&#9654; OPEN</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    <section class="bento" id="games">
+      <div class="wrap">
+        <h2 class="bento-head wipe">All games</h2>
+        <p class="sub">Every one runs in the browser.</p>
+        <div class="grid">
+          <a class="card card--wide reveal" href="/encyclopedia/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="encyBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#1a2740"/>
@@ -575,25 +654,17 @@
             <path d="M0,-12c-2 3-2 6 0 9c2-3 2-6 0-9z" fill="#a98fce"/>
             <path d="M-8,10c2 6 14 6 16 0" stroke="#7fa86b" stroke-width="2" fill="none" stroke-linecap="round"/>
           </g>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag" style="color:#1c6ea4">Reference</div>
-        <h2 class="card-title">Encyclopædia</h2>
-        <p class="card-desc">A free online encyclopedia in the classic Britannica style. Search millions of articles, browse by subject, and read with a table of contents and Fast Facts — powered live by Wikipedia.</p>
-        <div class="card-tags">
-          <span class="tag">Reference</span>
-          <span class="tag">Wikipedia</span>
-          <span class="tag">Knowledge</span>
-          <span class="tag">Search</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/aria/3d-shapes/" class="card card--shapes">
-      <div class="play-btn">&#9654; OPEN</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag"></p>
+              <h2 class="card-title">Encyclopædia</h2>
+              <p class="card-desc">A free online encyclopedia in the classic Britannica style. Search millions of articles, browse by subject, and read with a table of contents and Fast Facts — powered live by Wikipedia.</p>
+              <div class="card-tags"><span class="tag">Reference</span><span class="tag">Wikipedia</span><span class="tag">Knowledge</span><span class="tag">Search</span></div>
+              <span class="card-cta">Open &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/aria/3d-shapes/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="shapesBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#1a0f3a"/>
@@ -668,25 +739,17 @@
             <circle cx="200" cy="172" r="2"/>
             <circle cx="350" cy="158" r="2"/>
           </g>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">3D · CAD</div>
-        <h2 class="card-title">3D Shapes Studio</h2>
-        <p class="card-desc">An Onshape-style Part Studio in your browser — Features tree, view cube, multi-project workspaces, primitives with Solid/Hole modes, STL export.</p>
-        <div class="card-tags">
-          <span class="tag">CAD</span>
-          <span class="tag">Onshape</span>
-          <span class="tag">3D Print</span>
-          <span class="tag">STL</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/escape-road-2/" class="card card--escape2">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag">3D · CAD</p>
+              <h2 class="card-title">3D Shapes Studio</h2>
+              <p class="card-desc">An Onshape-style Part Studio in your browser — Features tree, view cube, multi-project workspaces, primitives with Solid/Hole modes, STL export.</p>
+              <div class="card-tags"><span class="tag">CAD</span><span class="tag">Onshape</span><span class="tag">3D Print</span><span class="tag">STL</span></div>
+              <span class="card-cta">Open &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/escape-road-2/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <radialGradient id="erc2Grad" cx="50%" cy="100%" r="80%">
               <stop offset="0%" stop-color="#3a1a00" stop-opacity="0.9"/>
@@ -725,25 +788,17 @@
           <!-- Player car (orange) -->
           <rect x="200" y="153" width="20" height="13" rx="3" fill="#ff6600"/>
           <rect x="202" y="155" width="16" height="5"  rx="1" fill="rgba(160,230,255,0.7)"/>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag" style="color:#ff6600">City Chase</div>
-        <h2 class="card-title">Escape Road City 2</h2>
-        <p class="card-desc">Hit the streets and outrun the cops through a sprawling city. Speed, strategy, and survival — all in one.</p>
-        <div class="card-tags">
-          <span class="tag">Driving</span>
-          <span class="tag">Chase</span>
-          <span class="tag">City</span>
-          <span class="tag">Arcade</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/Snow%20Rider%203D.html" class="card card--snow">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag"></p>
+              <h2 class="card-title">Escape Road City 2</h2>
+              <p class="card-desc">Hit the streets and outrun the cops through a sprawling city. Speed, strategy, and survival — all in one.</p>
+              <div class="card-tags"><span class="tag">Driving</span><span class="tag">Chase</span><span class="tag">City</span><span class="tag">Arcade</span></div>
+              <span class="card-cta">Play &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/Snow%20Rider%203D.html">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="snowSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0a1a30"/>
@@ -784,25 +839,17 @@
           <!-- Speed lines -->
           <line x1="100" y1="145" x2="165" y2="140" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/>
           <line x1="105" y1="151" x2="168" y2="147" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag" style="color:#aaddff">3D</div>
-        <h2 class="card-title">Snow Rider 3D</h2>
-        <p class="card-desc">Strap in and race down snowy mountain slopes on a sled. Dodge trees, grab gifts, and go for the highest score!</p>
-        <div class="card-tags">
-          <span class="tag">3D</span>
-          <span class="tag">Sled</span>
-          <span class="tag">Snow</span>
-          <span class="tag">Arcade</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/evolving-bombs-3d/" class="card card--bombs">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag"></p>
+              <h2 class="card-title">Snow Rider 3D</h2>
+              <p class="card-desc">Strap in and race down snowy mountain slopes on a sled. Dodge trees, grab gifts, and go for the highest score!</p>
+              <div class="card-tags"><span class="tag">3D</span><span class="tag">Sled</span><span class="tag">Snow</span><span class="tag">Arcade</span></div>
+              <span class="card-cta">Play &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/evolving-bombs-3d/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <radialGradient id="bombGrad" cx="50%" cy="55%" r="70%">
               <stop offset="0%" stop-color="#5a1a0a"/>
@@ -843,25 +890,17 @@
           <circle cx="186" cy="40" r="1.5" fill="#ffcc44"/>
           <!-- Ground line -->
           <rect x="0" y="160" width="400" height="20" fill="rgba(0,0,0,0.5)"/>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">Action</div>
-        <h2 class="card-title">Evolving Bombs 3D</h2>
-        <p class="card-desc">Toss bombs that grow with every kill. Wipe out waves of enemies in a chaotic 3D arena and chase the highest combo.</p>
-        <div class="card-tags">
-          <span class="tag">3D</span>
-          <span class="tag">Action</span>
-          <span class="tag">Arena</span>
-          <span class="tag">Arcade</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/crossy-road/" class="card card--crossy">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag">Action</p>
+              <h2 class="card-title">Evolving Bombs 3D</h2>
+              <p class="card-desc">Toss bombs that grow with every kill. Wipe out waves of enemies in a chaotic 3D arena and chase the highest combo.</p>
+              <div class="card-tags"><span class="tag">3D</span><span class="tag">Action</span><span class="tag">Arena</span><span class="tag">Arcade</span></div>
+              <span class="card-cta">Play &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/crossy-road/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="crSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#7ec8ff"/>
@@ -910,25 +949,17 @@
           <rect x="40"  y="20" width="60" height="12" fill="rgba(255,255,255,0.95)"/>
           <rect x="50"  y="14" width="42" height="10" fill="rgba(255,255,255,0.95)"/>
           <rect x="200" y="26" width="50" height="10" fill="rgba(255,255,255,0.85)"/>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">Hopper</div>
-        <h2 class="card-title">Crossy Road</h2>
-        <p class="card-desc">Hop across endless lanes of traffic, rivers, and railways. How far can your blocky chicken make it without getting splatted?</p>
-        <div class="card-tags">
-          <span class="tag">3D</span>
-          <span class="tag">Casual</span>
-          <span class="tag">Endless</span>
-          <span class="tag">Arcade</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/block-blast/" class="card card--blocks">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag">Hopper</p>
+              <h2 class="card-title">Crossy Road</h2>
+              <p class="card-desc">Hop across endless lanes of traffic, rivers, and railways. How far can your blocky chicken make it without getting splatted?</p>
+              <div class="card-tags"><span class="tag">3D</span><span class="tag">Casual</span><span class="tag">Endless</span><span class="tag">Arcade</span></div>
+              <span class="card-cta">Play &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/block-blast/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="bbBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#16204a"/>
@@ -995,25 +1026,17 @@
             <circle cx="345" cy="50"  r="2"/>
             <circle cx="55"  cy="160" r="1.5"/>
           </g>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">Puzzle</div>
-        <h2 class="card-title">Block Blast</h2>
-        <p class="card-desc">Drag and drop colorful blocks onto the grid. Clear lines, chain combos, and keep the board alive as long as you can.</p>
-        <div class="card-tags">
-          <span class="tag">Puzzle</span>
-          <span class="tag">Blocks</span>
-          <span class="tag">Casual</span>
-          <span class="tag">Brain</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/mob-control/" class="card card--mob">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag">Puzzle</p>
+              <h2 class="card-title">Block Blast</h2>
+              <p class="card-desc">Drag and drop colorful blocks onto the grid. Clear lines, chain combos, and keep the board alive as long as you can.</p>
+              <div class="card-tags"><span class="tag">Puzzle</span><span class="tag">Blocks</span><span class="tag">Casual</span><span class="tag">Brain</span></div>
+              <span class="card-cta">Play &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/mob-control/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="mcBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#3a1a55"/>
@@ -1073,25 +1096,17 @@
             <circle cx="206" cy="130" r="1.5"/>
             <circle cx="194" cy="132" r="1.5"/>
           </g>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">Crowd</div>
-        <h2 class="card-title">Mob Control</h2>
-        <p class="card-desc">Aim your gate, multiply your crowd, and overwhelm the enemy stickmen. Time your shots to grow the biggest mob and storm the tower.</p>
-        <div class="card-tags">
-          <span class="tag">Crowd</span>
-          <span class="tag">Casual</span>
-          <span class="tag">Strategy</span>
-          <span class="tag">3D</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/death-run-3d/" class="card card--death">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag">Crowd</p>
+              <h2 class="card-title">Mob Control</h2>
+              <p class="card-desc">Aim your gate, multiply your crowd, and overwhelm the enemy stickmen. Time your shots to grow the biggest mob and storm the tower.</p>
+              <div class="card-tags"><span class="tag">Crowd</span><span class="tag">Casual</span><span class="tag">Strategy</span><span class="tag">3D</span></div>
+              <span class="card-cta">Play &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/death-run-3d/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="drBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#1a0608"/>
@@ -1157,25 +1172,17 @@
             <line x1="340" y1="160" x2="380" y2="170"/>
             <line x1="320" y1="170" x2="360" y2="178"/>
           </g>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">Runner</div>
-        <h2 class="card-title">Death Run 3D</h2>
-        <p class="card-desc">Sprint down a deadly 3D corridor full of spikes, blades, and gaps. Switch lanes, time your jumps, and stay alive.</p>
-        <div class="card-tags">
-          <span class="tag">3D</span>
-          <span class="tag">Runner</span>
-          <span class="tag">Reflexes</span>
-          <span class="tag">Arcade</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/bridge-race/" class="card card--bridge">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag">Runner</p>
+              <h2 class="card-title">Death Run 3D</h2>
+              <p class="card-desc">Sprint down a deadly 3D corridor full of spikes, blades, and gaps. Switch lanes, time your jumps, and stay alive.</p>
+              <div class="card-tags"><span class="tag">3D</span><span class="tag">Runner</span><span class="tag">Reflexes</span><span class="tag">Arcade</span></div>
+              <span class="card-cta">Play &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/bridge-race/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="brSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#3a7ec8"/>
@@ -1245,25 +1252,17 @@
           <rect x="40"  y="20" width="50" height="10" fill="rgba(255,255,255,0.85)"/>
           <rect x="50"  y="14" width="34" height="10" fill="rgba(255,255,255,0.85)"/>
           <rect x="280" y="24" width="50" height="9"  fill="rgba(255,255,255,0.8)"/>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">Race</div>
-        <h2 class="card-title">Bridge Race</h2>
-        <p class="card-desc">Collect blocks of your color and build a bridge to the next platform. Outpace your rivals and reach the top of the tower first.</p>
-        <div class="card-tags">
-          <span class="tag">3D</span>
-          <span class="tag">Race</span>
-          <span class="tag">Casual</span>
-          <span class="tag">Multiplayer</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/color-water-sort-3d/" class="card card--water">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag">Race</p>
+              <h2 class="card-title">Bridge Race</h2>
+              <p class="card-desc">Collect blocks of your color and build a bridge to the next platform. Outpace your rivals and reach the top of the tower first.</p>
+              <div class="card-tags"><span class="tag">3D</span><span class="tag">Race</span><span class="tag">Casual</span><span class="tag">Multiplayer</span></div>
+              <span class="card-cta">Play &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/color-water-sort-3d/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="cwBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0c1f3a"/>
@@ -1331,25 +1330,17 @@
           <circle cx="248" cy="82"  r="2" fill="#3b82f6"/>
           <circle cx="256" cy="78"  r="1.5" fill="#3b82f6"/>
           <circle cx="244" cy="88"  r="1.5" fill="#3b82f6"/>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">Puzzle</div>
-        <h2 class="card-title">Color Water Sort 3D</h2>
-        <p class="card-desc">Pour colored liquids between tubes until each one holds a single color. A relaxing puzzle with surprisingly tricky levels.</p>
-        <div class="card-tags">
-          <span class="tag">Puzzle</span>
-          <span class="tag">Sort</span>
-          <span class="tag">Casual</span>
-          <span class="tag">Brain</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/bazooka-boy/" class="card card--bazooka">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag">Puzzle</p>
+              <h2 class="card-title">Color Water Sort 3D</h2>
+              <p class="card-desc">Pour colored liquids between tubes until each one holds a single color. A relaxing puzzle with surprisingly tricky levels.</p>
+              <div class="card-tags"><span class="tag">Puzzle</span><span class="tag">Sort</span><span class="tag">Casual</span><span class="tag">Brain</span></div>
+              <span class="card-cta">Play &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/bazooka-boy/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="bzSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#f59e0b"/>
@@ -1425,25 +1416,17 @@
             <circle cx="246" cy="110" r="9"/>
             <circle cx="270" cy="112" r="9"/>
           </g>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">Action</div>
-        <h2 class="card-title">Bazooka Boy</h2>
-        <p class="card-desc">Aim, fire, and blow stuff up. Bounce rockets off walls to reach the target with as few shots as possible.</p>
-        <div class="card-tags">
-          <span class="tag">Action</span>
-          <span class="tag">Physics</span>
-          <span class="tag">Aim</span>
-          <span class="tag">Casual</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/basket-random/" class="card card--basket">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag">Action</p>
+              <h2 class="card-title">Bazooka Boy</h2>
+              <p class="card-desc">Aim, fire, and blow stuff up. Bounce rockets off walls to reach the target with as few shots as possible.</p>
+              <div class="card-tags"><span class="tag">Action</span><span class="tag">Physics</span><span class="tag">Aim</span><span class="tag">Casual</span></div>
+              <span class="card-cta">Play &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/basket-random/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="brkBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#3a1a08"/>
@@ -1524,25 +1507,17 @@
           </g>
           <!-- Motion arc -->
           <path d="M148,118 Q174,72 200,80" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="1.5" stroke-dasharray="3,4"/>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">Sports</div>
-        <h2 class="card-title">Basket Random</h2>
-        <p class="card-desc">Wobbly ragdoll basketball where every shot is chaos. Tap to jump, dunk, and out-flail your opponent.</p>
-        <div class="card-tags">
-          <span class="tag">Sports</span>
-          <span class="tag">Ragdoll</span>
-          <span class="tag">2 Player</span>
-          <span class="tag">Casual</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/geometry-dash-lite/" class="card card--gdash">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag">Sports</p>
+              <h2 class="card-title">Basket Random</h2>
+              <p class="card-desc">Wobbly ragdoll basketball where every shot is chaos. Tap to jump, dunk, and out-flail your opponent.</p>
+              <div class="card-tags"><span class="tag">Sports</span><span class="tag">Ragdoll</span><span class="tag">2 Player</span><span class="tag">Casual</span></div>
+              <span class="card-cta">Play &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/geometry-dash-lite/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="gdSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0a0a2a"/>
@@ -1613,25 +1588,17 @@
             <polygon points="220,140 270,90  320,140"/>
             <polygon points="300,140 360,80  400,140"/>
           </g>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">Rhythm</div>
-        <h2 class="card-title">Geometry Dash Lite</h2>
-        <p class="card-desc">Tap to jump your cube through spikes, blocks, and gravity flips. Pure twitchy rhythm-platformer chaos.</p>
-        <div class="card-tags">
-          <span class="tag">Rhythm</span>
-          <span class="tag">Platformer</span>
-          <span class="tag">Reflexes</span>
-          <span class="tag">Arcade</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/subway-surfers-remake/" class="card card--subway">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag">Rhythm</p>
+              <h2 class="card-title">Geometry Dash Lite</h2>
+              <p class="card-desc">Tap to jump your cube through spikes, blocks, and gravity flips. Pure twitchy rhythm-platformer chaos.</p>
+              <div class="card-tags"><span class="tag">Rhythm</span><span class="tag">Platformer</span><span class="tag">Reflexes</span><span class="tag">Arcade</span></div>
+              <span class="card-cta">Play &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/subway-surfers-remake/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="ssSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0c1832"/>
@@ -1724,25 +1691,17 @@
             <ellipse cx="170" cy="154" rx="6" ry="2.5" fill="#fff"/>
             <ellipse cx="180" cy="154" rx="6" ry="2.5" fill="#fff"/>
           </g>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">Endless Runner · 3D</div>
-        <h2 class="card-title">Subway Surfers Remake</h2>
-        <p class="card-desc">A real 3D WebGL endless runner. Sprint down the subway tunnel, dodge oncoming trains, and grab coins. Jump, slide, switch — survive as long as you can.</p>
-        <div class="card-tags">
-          <span class="tag">Runner</span>
-          <span class="tag">Endless</span>
-          <span class="tag">Reflexes</span>
-          <span class="tag">3D</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/tennis/" class="card card--tennis">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag">Endless Runner · 3D</p>
+              <h2 class="card-title">Subway Surfers Remake</h2>
+              <p class="card-desc">A real 3D WebGL endless runner. Sprint down the subway tunnel, dodge oncoming trains, and grab coins. Jump, slide, switch — survive as long as you can.</p>
+              <div class="card-tags"><span class="tag">Runner</span><span class="tag">Endless</span><span class="tag">Reflexes</span><span class="tag">3D</span></div>
+              <span class="card-cta">Play &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/tennis/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="tnsBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0a1530"/>
@@ -1801,25 +1760,17 @@
           <circle cx="190" cy="110" r="8" fill="#e6e040" stroke="#5a5800" stroke-width="1"/>
           <path d="M186,107 Q190,114 194,107" stroke="#fff" stroke-width="1.5" fill="none"/>
           <path d="M194,107 Q190,100 186,107" stroke="#fff" stroke-width="1.5" fill="none"/>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">Sports</div>
-        <h2 class="card-title">Tennis 3D</h2>
-        <p class="card-desc">3D arcade tennis with a real court, net and ball physics. Mouse or A/D to move (VS AI), or P1 = A/D / P2 = ←/→ on one keyboard. Timed match or first to 7.</p>
-        <div class="card-tags">
-          <span class="tag">Sports</span>
-          <span class="tag">3D</span>
-          <span class="tag">Tennis</span>
-          <span class="tag">Mouse</span>
-        </div>
-      </div>
-    </a>
-
-    <a href="/ping-pong/" class="card card--pong">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag">Sports</p>
+              <h2 class="card-title">Tennis 3D</h2>
+              <p class="card-desc">3D arcade tennis with a real court, net and ball physics. Mouse or A/D to move (VS AI), or P1 = A/D / P2 = ←/→ on one keyboard. Timed match or first to 7.</p>
+              <div class="card-tags"><span class="tag">Sports</span><span class="tag">3D</span><span class="tag">Tennis</span><span class="tag">Mouse</span></div>
+              <span class="card-cta">Play &rsaquo;</span>
+            </div>
+          </a>
+          <a class="card reveal" href="/ping-pong/">
+            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="ppBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#050a18"/>
@@ -1871,142 +1822,181 @@
           <!-- Ball -->
           <circle cx="185" cy="108" r="7" fill="#ffce4f" stroke="#6a4a00" stroke-width="1"/>
           <circle cx="183" cy="106" r="2" fill="rgba(255,255,255,0.6)"/>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag">Sports</div>
-        <h2 class="card-title">Ping Pong</h2>
-        <p class="card-desc">Classic table tennis in your browser. Play VS AI (mouse or W/S) or grab a friend (P1 = W/S, P2 = &uarr;/&darr;). SPACE to serve. Timed match or first-to-7.</p>
-        <div class="card-tags">
-          <span class="tag">Sports</span>
-          <span class="tag">Pong</span>
-          <span class="tag">Arcade</span>
-          <span class="tag">2P</span>
+        </svg></div>
+            <div class="card-body">
+              <p class="card-tag">Sports</p>
+              <h2 class="card-title">Ping Pong</h2>
+              <p class="card-desc">Classic table tennis in your browser. Play VS AI (mouse or W/S) or grab a friend (P1 = W/S, P2 = &uarr;/&darr;). SPACE to serve. Timed match or first-to-7.</p>
+              <div class="card-tags"><span class="tag">Sports</span><span class="tag">Pong</span><span class="tag">Arcade</span><span class="tag">2P</span></div>
+              <span class="card-cta">Play &rsaquo;</span>
+            </div>
+          </a>
         </div>
       </div>
-    </a>
+    </section>
+  </main>
 
-    <a href="/eaglercraft/" class="card card--eagle">
-      <div class="play-btn">&#9654; PLAY</div>
-      <div class="card-banner">
-        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="mcSky" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stop-color="#5588cc"/>
-              <stop offset="100%" stop-color="#88aadd"/>
-            </linearGradient>
-          </defs>
-          <rect width="400" height="180" fill="url(#mcSky)"/>
-          <!-- Ground -->
-          <rect x="0" y="130" width="400" height="50" fill="#5a8a3a"/>
-          <rect x="0" y="130" width="400" height="8"  fill="#7ab84a"/>
-          <!-- Dirt beneath -->
-          <rect x="0" y="138" width="400" height="42" fill="#8b5a2b"/>
-          <!-- Minecraft-style blocks (pixel art) -->
-          <!-- Tree trunk -->
-          <rect x="60"  y="90"  width="20" height="40" fill="#6b3a1a"/>
-          <rect x="44"  y="66"  width="52" height="30" fill="#2d6b1a"/>
-          <rect x="52"  y="52"  width="36" height="20" fill="#2d6b1a"/>
-          <rect x="60"  y="42"  width="20" height="16" fill="#2d6b1a"/>
-          <!-- Tree 2 -->
-          <rect x="280" y="95"  width="20" height="35" fill="#6b3a1a"/>
-          <rect x="264" y="72"  width="52" height="28" fill="#336b1a"/>
-          <rect x="272" y="58"  width="36" height="18" fill="#336b1a"/>
-          <rect x="280" y="46"  width="20" height="16" fill="#336b1a"/>
-          <!-- Cobblestone wall -->
-          <rect x="150" y="100" width="100" height="30" fill="#888"/>
-          <rect x="150" y="100" width="100" height="2"  fill="#666"/>
-          <rect x="150" y="115" width="100" height="2"  fill="#666"/>
-          <rect x="170" y="100" width="2"   height="15" fill="#666"/>
-          <rect x="200" y="100" width="2"   height="15" fill="#666"/>
-          <rect x="230" y="100" width="2"   height="15" fill="#666"/>
-          <rect x="160" y="115" width="2"   height="15" fill="#666"/>
-          <rect x="190" y="115" width="2"   height="15" fill="#666"/>
-          <rect x="220" y="115" width="2"   height="15" fill="#666"/>
-          <!-- Steve-like character -->
-          <rect x="192" y="74"  width="16" height="16" fill="#f5c98a"/>
-          <rect x="190" y="90"  width="20" height="24" fill="#3a5acc"/>
-          <rect x="184" y="90"  width="8"  height="20" fill="#3a5acc"/>
-          <rect x="208" y="90"  width="8"  height="20" fill="#3a5acc"/>
-          <rect x="192" y="114" width="8"  height="16" fill="#5a3a1a"/>
-          <rect x="200" y="114" width="8"  height="16" fill="#5a3a1a"/>
-          <!-- Sun -->
-          <rect x="330" y="18"  width="28" height="28" fill="#ffdd00"/>
-          <rect x="336" y="12"  width="16" height="6"  fill="#ffdd00"/>
-          <rect x="336" y="46"  width="16" height="6"  fill="#ffdd00"/>
-          <rect x="324" y="24"  width="6"  height="16" fill="#ffdd00"/>
-          <rect x="358" y="24"  width="6"  height="16" fill="#ffdd00"/>
-          <!-- Clouds (blocky) -->
-          <rect x="20"  y="22"  width="70" height="16" fill="rgba(255,255,255,0.9)"/>
-          <rect x="30"  y="14"  width="50" height="12" fill="rgba(255,255,255,0.9)"/>
-          <rect x="200" y="18"  width="60" height="14" fill="rgba(255,255,255,0.85)"/>
-          <rect x="208" y="10"  width="44" height="12" fill="rgba(255,255,255,0.85)"/>
-        </svg>
-      </div>
-      <div class="card-body">
-        <div class="card-tag" style="color:#55cc55">Minecraft</div>
-        <h2 class="card-title">Eaglercraft 1.12</h2>
-        <p class="card-desc">Minecraft 1.12.2 running entirely in your browser. Build, explore, and survive — no download needed.</p>
-        <div class="card-tags">
-          <span class="tag">Minecraft</span>
-          <span class="tag">Sandbox</span>
-          <span class="tag">3D</span>
-          <span class="tag">Survival</span>
+  <footer class="foot">
+    <div class="wrap">
+      <div class="foot-cols">
+        <div>
+          <h3>Arcade</h3>
+          <ul>
+            <li><a href="#games">All games</a></li>
+            <li><a href="/zombie-survivors/">Zombie Apocalypse</a></li>
+            <li><a href="/nyc-walk/">NYC Walk</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3>Apps</h3>
+          <ul>
+            <li><a href="/search/">Search</a></li>
+            <li><a href="/docs/">Docs</a></li>
+            <li><a href="/os/">ArtOS</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3>Tools</h3>
+          <ul>
+            <li><a href="/playground/">Playground</a></li>
+            <li><a href="/cipher/">Cipher</a></li>
+            <li><a href="/designs/">MakerVault</a></li>
+          </ul>
+        </div>
+        <div>
+          <h3>More</h3>
+          <ul>
+            <li><a href="https://github.com/ARTGEOrge">GitHub</a></li>
+            <li><a href="/news/">News</a></li>
+          </ul>
         </div>
       </div>
-    </a>
-
-  </div>
-
-  <footer>
-    <p>Made by <a href="https://github.com/ARTGEOrge">ARTGEOrge</a> &nbsp;&middot;&nbsp; More games coming soon</p>
+      <p class="foot-legal">Made by ARTGEOrge. More games coming soon.</p>
+    </div>
   </footer>
-</div>
 
 <script>
-  const canvas = document.getElementById('stars');
-  const ctx = canvas.getContext('2d');
-  const stars = Array.from({ length: 150 }, () => ({
-    x: Math.random(), y: Math.random(),
-    r: Math.random() * 1.4 + 0.3,
-    speed: Math.random() * 0.00008 + 0.00002,
-    phase: Math.random() * Math.PI * 2,
-  }));
+  var btn = document.getElementById('appsBtn'), menu = document.getElementById('appsMenu');
+  btn.addEventListener('click', function (e) {
+    e.stopPropagation();
+    var open = menu.classList.toggle('open');
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  document.addEventListener('click', function () {
+    menu.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      menu.classList.remove('open');
+      btn.setAttribute('aria-expanded', 'false');
+    }
+  });
 
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var motionOK = !reduce.matches;
+  if (motionOK) { document.documentElement.className += ' js-motion'; }
 
-  function resize() {
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
-    if (reduceMotion.matches) paint(0);
-  }
-  window.addEventListener('resize', resize);
-  resize();
+  // Reveals and wipes are pure CSS (animation-timeline: view()). No observer,
+  // no timer, no class toggling -- nothing here can hide content.
 
-  function paint(ts) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (const s of stars) {
-      // Reduced motion: keep the starfield, drop the twinkle.
-      const alpha = reduceMotion.matches
-        ? 0.5
-        : 0.25 + 0.55 * Math.sin(s.phase + ts * s.speed * 1000);
-      ctx.fillStyle = `rgba(180,200,255,${alpha})`;
-      ctx.beginPath();
-      ctx.arc(s.x * canvas.width, s.y * canvas.height, s.r, 0, Math.PI * 2);
-      ctx.fill();
+  /* ----------------------------------------------------------------------
+     Damped scroll-progress engine.
+
+     NOT scroll-jacking: this smooths the READ scroll value only. Nothing
+     calls preventDefault, nothing sets overflow:hidden, nothing moves
+     content manually. Native scrollbar, trackpad momentum, iOS rubber-band,
+     keyboard scroll and assistive tech all stay intact -- only the animated
+     transforms lag behind via the lerp.
+     -------------------------------------------------------------------- */
+  if (motionOK) {
+    var DAMPING = 0.1;                 // Lenis-default feel; 0.08-0.12 typical
+    var target = window.pageYOffset;
+    var smoothed = target;
+
+    window.addEventListener('scroll', function () {
+      target = window.pageYOffset;
+    }, { passive: true });
+
+    function mapRange(v, inA, inB, outA, outB) {
+      var t = Math.max(0, Math.min(1, (v - inA) / (inB - inA)));
+      return outA + t * (outB - outA);
+    }
+
+    var nav = document.getElementById('nav');
+    var scene = document.querySelector('[data-scene]');
+    var sceneArt = document.querySelector('[data-scene-art]');
+    var parallax = document.querySelector('[data-parallax]');
+
+    // Cached geometry: offsetTop/offsetHeight would otherwise reflow per frame.
+    var geo = { top: 0, height: 0, vh: 0 };
+    function measure() {
+      geo.vh = window.innerHeight;
+      if (scene) { geo.top = scene.offsetTop; geo.height = scene.offsetHeight; }
+    }
+    measure();
+    window.addEventListener('resize', measure, { passive: true });
+
+    var lastStuck = null, lastDark = null;
+
+    function tick() {
+      smoothed += (target - smoothed) * DAMPING;
+
+      if (nav) {
+        var stuck = smoothed > 12;
+        if (stuck !== lastStuck) { nav.classList.toggle('is-stuck', stuck); lastStuck = stuck; }
+      }
+
+      // Hero art drifts up as you leave the hero.
+      if (parallax) {
+        parallax.style.transform =
+          'translateY(' + mapRange(smoothed, 0, geo.vh, 0, -70).toFixed(2) + 'px)';
+      }
+
+      // Pinned scene: one stage, children mapped onto 0->1 progress.
+      if (scene) {
+        var end = geo.top + geo.height - geo.vh;
+        var pr = mapRange(smoothed, geo.top, end, 0, 1);
+
+        if (sceneArt) {
+          sceneArt.style.transform =
+            'translateY(' + mapRange(pr, 0, 1, 54, -54).toFixed(2) + 'px)' +
+            ' scale(' + mapRange(pr, 0, 1, 0.88, 1.06).toFixed(3) + ')';
+          sceneArt.style.opacity = mapRange(pr, 0, 0.14, 0.15, 1).toFixed(3);
+        }
+
+        // Invert the nav only while the dark stage actually owns the viewport.
+        if (nav) {
+          var dark = smoothed >= geo.top - 8 && smoothed <= end + 8;
+          if (dark !== lastDark) { nav.classList.toggle('is-dark', dark); lastDark = dark; }
+        }
+      }
+
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+
+    /* Pointer-reactive card tilt -- desktop polish, done last and gated on a
+       real pointer so touch devices never get it. */
+    if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+      var MAX_TILT = 6;
+      Array.prototype.forEach.call(document.querySelectorAll('.card'), function (card) {
+        card.addEventListener('pointermove', function (e) {
+          var r = card.getBoundingClientRect();
+          var rx = mapRange((e.clientY - r.top) / r.height, 0, 1, MAX_TILT, -MAX_TILT);
+          var ry = mapRange((e.clientX - r.left) / r.width, 0, 1, -MAX_TILT, MAX_TILT);
+          card.classList.add('tilt');
+          card.style.transform =
+            'perspective(900px) rotateX(' + rx.toFixed(2) + 'deg) rotateY(' +
+            ry.toFixed(2) + 'deg) translateY(-5px)';
+        });
+        card.addEventListener('pointerleave', function () {
+          card.classList.remove('tilt');
+          card.style.transform = '';
+        });
+      });
     }
   }
-
-  function draw(ts) {
-    paint(ts);
-    if (!reduceMotion.matches) requestAnimationFrame(draw);
-  }
-  requestAnimationFrame(draw);
-
-  reduceMotion.addEventListener('change', () => {
-    if (reduceMotion.matches) paint(0);
-    else requestAnimationFrame(draw);
-  });
 </script>
 </body>
 </html>
