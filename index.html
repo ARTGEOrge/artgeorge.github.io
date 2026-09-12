@@ -11,7 +11,7 @@
       min-height: 100vh;
       background: #050510;
       color: #fff;
-      font-family: 'Segoe UI', system-ui, monospace;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
       overflow-x: hidden;
     }
 
@@ -40,7 +40,7 @@
       font-size: 12px;
       letter-spacing: 6px;
       text-transform: uppercase;
-      color: #445;
+      color: #8a93a8;
       margin-bottom: 16px;
     }
 
@@ -58,7 +58,7 @@
     .tagline {
       margin-top: 14px;
       font-size: 15px;
-      color: #445566;
+      color: #98a2b8;
       letter-spacing: 1px;
     }
 
@@ -83,7 +83,7 @@
     .card:hover {
       transform: translateY(-6px);
       border-color: var(--accent);
-      box-shadow: 0 0 36px -4px var(--accent-glow);
+      box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.7);
     }
 
     .card-banner {
@@ -143,7 +143,7 @@
 
     .card-desc {
       font-size: 14px;
-      color: #5566aa;
+      color: #95a1cc;
       line-height: 1.65;
       margin-bottom: 18px;
     }
@@ -189,12 +189,12 @@
     footer {
       text-align: center;
       margin-top: 72px;
-      color: #222233;
+      color: #7a8299;
       font-size: 12px;
       letter-spacing: 1px;
     }
 
-    footer a { color: #334455; text-decoration: none; }
+    footer a { color: #8a93a8; text-decoration: none; }
     footer a:hover { color: #ffd700; }
 
     /* Apps launcher (9-dot grid, top-right) */
@@ -222,6 +222,21 @@
     }
     .apps-app:hover { background: rgba(255,255,255,0.06); }
     .apps-app .ai { font-size: 28px; line-height: 1; }
+
+    /* Touch devices have no hover: the primary affordance must be visible. */
+    @media (hover: none) {
+      .play-btn { opacity: 1; transform: scale(1); }
+    }
+
+    /* Respect the OS reduced-motion setting (HIG). */
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+      }
+      .card:hover { transform: none; }
+    }
   </style>
 </head>
 <body>
@@ -276,7 +291,7 @@
     <a href="/mario-kart/" class="card card--kart">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="kartSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#123a86"/>
@@ -360,7 +375,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">New</div>
-        <div class="card-title">Kart Games</div>
+        <h2 class="card-title">Kart Games</h2>
         <p class="card-desc">Seventeen kart racers in one place &mdash; one for every Mario Kart ever released, each built around the trick that game actually introduced. Real Mode 7 for the SNES, pseudo-3D roads for the N64, two riders per kart, anti-gravity tubes, an open world, even a Pac-Man maze. Plus a full grand prix with rivals, boost pads and live race positions.</p>
         <div class="card-tags">
           <span class="tag">Racing</span>
@@ -374,7 +389,7 @@
     <a href="/nyc-walk/" class="card card--nyc">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="nycSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0b1430"/>
@@ -438,7 +453,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">Open World</div>
-        <div class="card-title">NYC Walk</div>
+        <h2 class="card-title">NYC Walk</h2>
         <p class="card-desc">Walk a procedural New York &mdash; Manhattan, Brooklyn, Queens, the Bronx and Staten Island, two rivers and six bridges. Right-click any moving cab to take the wheel and drive across town, day or night.</p>
         <div class="card-tags">
           <span class="tag">3D</span>
@@ -452,7 +467,7 @@
     <a href="/zombie-survivors/" class="card card--zombie">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <radialGradient id="zombGrad" cx="50%" cy="55%" r="70%">
               <stop offset="0%" stop-color="#1a0a2e"/>
@@ -488,7 +503,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">New</div>
-        <div class="card-title">Zombie Apocalypse</div>
+        <h2 class="card-title">Zombie Apocalypse</h2>
         <p class="card-desc">Survive endless zombie hordes in GOD MODE. Auto-fire your growing arsenal, pick a weapon each level from 25 rarities up to Godly &amp; Universal, and crush bosses every 5 levels.</p>
         <div class="card-tags">
           <span class="tag">Survival</span>
@@ -502,7 +517,7 @@
     <a href="/encyclopedia/" class="card card--ency">
       <div class="play-btn">&#9654; OPEN</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="encyBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#1a2740"/>
@@ -564,7 +579,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag" style="color:#1c6ea4">Reference</div>
-        <div class="card-title">Encyclopædia</div>
+        <h2 class="card-title">Encyclopædia</h2>
         <p class="card-desc">A free online encyclopedia in the classic Britannica style. Search millions of articles, browse by subject, and read with a table of contents and Fast Facts — powered live by Wikipedia.</p>
         <div class="card-tags">
           <span class="tag">Reference</span>
@@ -578,7 +593,7 @@
     <a href="/aria/3d-shapes/" class="card card--shapes">
       <div class="play-btn">&#9654; OPEN</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="shapesBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#1a0f3a"/>
@@ -657,7 +672,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">3D · CAD</div>
-        <div class="card-title">3D Shapes Studio</div>
+        <h2 class="card-title">3D Shapes Studio</h2>
         <p class="card-desc">An Onshape-style Part Studio in your browser — Features tree, view cube, multi-project workspaces, primitives with Solid/Hole modes, STL export.</p>
         <div class="card-tags">
           <span class="tag">CAD</span>
@@ -671,7 +686,7 @@
     <a href="/escape-road-2/" class="card card--escape2">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <radialGradient id="erc2Grad" cx="50%" cy="100%" r="80%">
               <stop offset="0%" stop-color="#3a1a00" stop-opacity="0.9"/>
@@ -714,7 +729,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag" style="color:#ff6600">City Chase</div>
-        <div class="card-title">Escape Road City 2</div>
+        <h2 class="card-title">Escape Road City 2</h2>
         <p class="card-desc">Hit the streets and outrun the cops through a sprawling city. Speed, strategy, and survival — all in one.</p>
         <div class="card-tags">
           <span class="tag">Driving</span>
@@ -728,7 +743,7 @@
     <a href="/Snow%20Rider%203D.html" class="card card--snow">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="snowSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0a1a30"/>
@@ -773,7 +788,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag" style="color:#aaddff">3D</div>
-        <div class="card-title">Snow Rider 3D</div>
+        <h2 class="card-title">Snow Rider 3D</h2>
         <p class="card-desc">Strap in and race down snowy mountain slopes on a sled. Dodge trees, grab gifts, and go for the highest score!</p>
         <div class="card-tags">
           <span class="tag">3D</span>
@@ -787,7 +802,7 @@
     <a href="/evolving-bombs-3d/" class="card card--bombs">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <radialGradient id="bombGrad" cx="50%" cy="55%" r="70%">
               <stop offset="0%" stop-color="#5a1a0a"/>
@@ -832,7 +847,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">Action</div>
-        <div class="card-title">Evolving Bombs 3D</div>
+        <h2 class="card-title">Evolving Bombs 3D</h2>
         <p class="card-desc">Toss bombs that grow with every kill. Wipe out waves of enemies in a chaotic 3D arena and chase the highest combo.</p>
         <div class="card-tags">
           <span class="tag">3D</span>
@@ -846,7 +861,7 @@
     <a href="/crossy-road/" class="card card--crossy">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="crSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#7ec8ff"/>
@@ -899,7 +914,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">Hopper</div>
-        <div class="card-title">Crossy Road</div>
+        <h2 class="card-title">Crossy Road</h2>
         <p class="card-desc">Hop across endless lanes of traffic, rivers, and railways. How far can your blocky chicken make it without getting splatted?</p>
         <div class="card-tags">
           <span class="tag">3D</span>
@@ -913,7 +928,7 @@
     <a href="/block-blast/" class="card card--blocks">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="bbBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#16204a"/>
@@ -984,7 +999,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">Puzzle</div>
-        <div class="card-title">Block Blast</div>
+        <h2 class="card-title">Block Blast</h2>
         <p class="card-desc">Drag and drop colorful blocks onto the grid. Clear lines, chain combos, and keep the board alive as long as you can.</p>
         <div class="card-tags">
           <span class="tag">Puzzle</span>
@@ -998,7 +1013,7 @@
     <a href="/mob-control/" class="card card--mob">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="mcBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#3a1a55"/>
@@ -1062,7 +1077,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">Crowd</div>
-        <div class="card-title">Mob Control</div>
+        <h2 class="card-title">Mob Control</h2>
         <p class="card-desc">Aim your gate, multiply your crowd, and overwhelm the enemy stickmen. Time your shots to grow the biggest mob and storm the tower.</p>
         <div class="card-tags">
           <span class="tag">Crowd</span>
@@ -1076,7 +1091,7 @@
     <a href="/death-run-3d/" class="card card--death">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="drBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#1a0608"/>
@@ -1146,7 +1161,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">Runner</div>
-        <div class="card-title">Death Run 3D</div>
+        <h2 class="card-title">Death Run 3D</h2>
         <p class="card-desc">Sprint down a deadly 3D corridor full of spikes, blades, and gaps. Switch lanes, time your jumps, and stay alive.</p>
         <div class="card-tags">
           <span class="tag">3D</span>
@@ -1160,7 +1175,7 @@
     <a href="/bridge-race/" class="card card--bridge">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="brSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#3a7ec8"/>
@@ -1234,7 +1249,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">Race</div>
-        <div class="card-title">Bridge Race</div>
+        <h2 class="card-title">Bridge Race</h2>
         <p class="card-desc">Collect blocks of your color and build a bridge to the next platform. Outpace your rivals and reach the top of the tower first.</p>
         <div class="card-tags">
           <span class="tag">3D</span>
@@ -1248,7 +1263,7 @@
     <a href="/color-water-sort-3d/" class="card card--water">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="cwBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0c1f3a"/>
@@ -1320,7 +1335,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">Puzzle</div>
-        <div class="card-title">Color Water Sort 3D</div>
+        <h2 class="card-title">Color Water Sort 3D</h2>
         <p class="card-desc">Pour colored liquids between tubes until each one holds a single color. A relaxing puzzle with surprisingly tricky levels.</p>
         <div class="card-tags">
           <span class="tag">Puzzle</span>
@@ -1334,7 +1349,7 @@
     <a href="/bazooka-boy/" class="card card--bazooka">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="bzSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#f59e0b"/>
@@ -1414,7 +1429,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">Action</div>
-        <div class="card-title">Bazooka Boy</div>
+        <h2 class="card-title">Bazooka Boy</h2>
         <p class="card-desc">Aim, fire, and blow stuff up. Bounce rockets off walls to reach the target with as few shots as possible.</p>
         <div class="card-tags">
           <span class="tag">Action</span>
@@ -1428,7 +1443,7 @@
     <a href="/basket-random/" class="card card--basket">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="brkBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#3a1a08"/>
@@ -1513,7 +1528,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">Sports</div>
-        <div class="card-title">Basket Random</div>
+        <h2 class="card-title">Basket Random</h2>
         <p class="card-desc">Wobbly ragdoll basketball where every shot is chaos. Tap to jump, dunk, and out-flail your opponent.</p>
         <div class="card-tags">
           <span class="tag">Sports</span>
@@ -1527,7 +1542,7 @@
     <a href="/geometry-dash-lite/" class="card card--gdash">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="gdSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0a0a2a"/>
@@ -1602,7 +1617,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">Rhythm</div>
-        <div class="card-title">Geometry Dash Lite</div>
+        <h2 class="card-title">Geometry Dash Lite</h2>
         <p class="card-desc">Tap to jump your cube through spikes, blocks, and gravity flips. Pure twitchy rhythm-platformer chaos.</p>
         <div class="card-tags">
           <span class="tag">Rhythm</span>
@@ -1616,7 +1631,7 @@
     <a href="/subway-surfers-remake/" class="card card--subway">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="ssSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0c1832"/>
@@ -1713,7 +1728,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">Endless Runner · 3D</div>
-        <div class="card-title">Subway Surfers Remake</div>
+        <h2 class="card-title">Subway Surfers Remake</h2>
         <p class="card-desc">A real 3D WebGL endless runner. Sprint down the subway tunnel, dodge oncoming trains, and grab coins. Jump, slide, switch — survive as long as you can.</p>
         <div class="card-tags">
           <span class="tag">Runner</span>
@@ -1727,7 +1742,7 @@
     <a href="/tennis/" class="card card--tennis">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="tnsBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0a1530"/>
@@ -1790,7 +1805,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">Sports</div>
-        <div class="card-title">Tennis 3D</div>
+        <h2 class="card-title">Tennis 3D</h2>
         <p class="card-desc">3D arcade tennis with a real court, net and ball physics. Mouse or A/D to move (VS AI), or P1 = A/D / P2 = ←/→ on one keyboard. Timed match or first to 7.</p>
         <div class="card-tags">
           <span class="tag">Sports</span>
@@ -1804,7 +1819,7 @@
     <a href="/ping-pong/" class="card card--pong">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="ppBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#050a18"/>
@@ -1860,7 +1875,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag">Sports</div>
-        <div class="card-title">Ping Pong</div>
+        <h2 class="card-title">Ping Pong</h2>
         <p class="card-desc">Classic table tennis in your browser. Play VS AI (mouse or W/S) or grab a friend (P1 = W/S, P2 = &uarr;/&darr;). SPACE to serve. Timed match or first-to-7.</p>
         <div class="card-tags">
           <span class="tag">Sports</span>
@@ -1874,7 +1889,7 @@
     <a href="/eaglercraft/" class="card card--eagle">
       <div class="play-btn">&#9654; PLAY</div>
       <div class="card-banner">
-        <svg viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+        <svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="mcSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#5588cc"/>
@@ -1930,7 +1945,7 @@
       </div>
       <div class="card-body">
         <div class="card-tag" style="color:#55cc55">Minecraft</div>
-        <div class="card-title">Eaglercraft 1.12</div>
+        <h2 class="card-title">Eaglercraft 1.12</h2>
         <p class="card-desc">Minecraft 1.12.2 running entirely in your browser. Build, explore, and survive — no download needed.</p>
         <div class="card-tags">
           <span class="tag">Minecraft</span>
@@ -1958,25 +1973,40 @@
     phase: Math.random() * Math.PI * 2,
   }));
 
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+
   function resize() {
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
+    if (reduceMotion.matches) paint(0);
   }
   window.addEventListener('resize', resize);
   resize();
 
-  function draw(ts) {
+  function paint(ts) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     for (const s of stars) {
-      const alpha = 0.25 + 0.55 * Math.sin(s.phase + ts * s.speed * 1000);
+      // Reduced motion: keep the starfield, drop the twinkle.
+      const alpha = reduceMotion.matches
+        ? 0.5
+        : 0.25 + 0.55 * Math.sin(s.phase + ts * s.speed * 1000);
       ctx.fillStyle = `rgba(180,200,255,${alpha})`;
       ctx.beginPath();
       ctx.arc(s.x * canvas.width, s.y * canvas.height, s.r, 0, Math.PI * 2);
       ctx.fill();
     }
-    requestAnimationFrame(draw);
+  }
+
+  function draw(ts) {
+    paint(ts);
+    if (!reduceMotion.matches) requestAnimationFrame(draw);
   }
   requestAnimationFrame(draw);
+
+  reduceMotion.addEventListener('change', () => {
+    if (reduceMotion.matches) paint(0);
+    else requestAnimationFrame(draw);
+  });
 </script>
 </body>
 </html>
