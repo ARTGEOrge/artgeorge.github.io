@@ -132,34 +132,13 @@
     .tile--half .t-sub { font-size: 21px; line-height: 1.19; letter-spacing: 0.011em; }
     .tile--half .t-art { width: min(560px, 88%); padding-top: 36px; }
 
-    /* ---------------------------------------------------------- grid */
-    .bento { padding: 92px 0 112px; }
-    .bento-in { max-width: 1024px; margin: 0 auto; padding: 0 22px; }
-    .bento-head {
-      font-size: 48px; font-weight: 600; line-height: 1.08;
-      letter-spacing: -0.003em; margin-bottom: 36px;
-    }
-    .bento-head span { color: var(--ink-2); }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(224px, 1fr)); gap: 12px; }
-    .card {
-      background: var(--gray); border-radius: 18px; overflow: hidden;
-      display: flex; flex-direction: column;
-    }
-    .card--wide { grid-column: span 2; }
-    .card-banner { line-height: 0; overflow: hidden; }
-    .card-banner svg {
-      display: block; width: 100%; height: auto;
-      transition: transform .6s cubic-bezier(.25,.1,.25,1);
-    }
-    /* The only hover: art settles slightly closer. No lift, no shadow, no tilt. */
-    .card:hover .card-banner svg { transform: scale(1.035); }
-    .card-body { padding: 15px 18px 20px; }
-    .card-tag { font-size: 12px; color: var(--ink-2); margin-bottom: 3px; }
-    .card-title { font-size: 17px; font-weight: 600; line-height: 1.24; letter-spacing: -0.022em; }
-    .card-desc {
-      margin-top: 4px; font-size: 14px; line-height: 1.43; color: var(--ink-2);
-      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-    }
+    /* Half tiles alternate grey and white row by row, as apple.com does, so a
+       long run of two-up rows never turns into one flat grey wall. */
+    .duo:nth-of-type(even) .tile--half { background: var(--white); }
+
+    /* The only hover: art settles slightly closer. No lift, no shadow. */
+    .t-art svg { transition: transform .6s cubic-bezier(.25,.1,.25,1); transform-origin: 50% 100%; }
+    .tile:hover .t-art svg { transform: scale(1.02); }
 
     /* -------------------------------------------------------- footer */
     .foot { background: var(--gray); padding: 40px 0 52px; font-size: 12px; color: var(--ink-2); }
@@ -206,16 +185,13 @@
       .duo { grid-template-columns: 1fr; }
       .tile--half { min-height: 480px; }
       .tile--half .t-title { font-size: 32px; }
-      .bento { padding: 64px 0 80px; }
-      .bento-head { font-size: 32px; }
-      .card--wide { grid-column: span 1; }
       .nav-links { gap: 20px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after { transition-duration: 0.01ms !important; animation: none !important; }
       .reveal { opacity: 1; transform: none; }
-      .card:hover .card-banner svg { transform: none; }
+      .tile:hover .t-art svg { transform: none; }
     }
   </style>
 </head>
@@ -333,13 +309,13 @@
           </g>
         </svg></div>
     </section>
-    <section class="tile tile--dark" data-scene>
+    <section class="tile tile--dark" id="games" data-rise>
       <div class="reveal">
         <h2 class="t-title">NYC Walk</h2>
         <p class="t-sub">All five boroughs. Walk it, or take the wheel.</p>
         <div class="pills"><a class="pill pill--fill" href="/nyc-walk/" aria-label="Play NYC Walk">Play</a></div>
       </div>
-      <div class="t-art" data-scene-art><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="nycSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0b1430"/>
@@ -444,72 +420,11 @@
     </section>
     <section class="tile tile--gray tile--half">
       <div class="reveal">
-        <h2 class="t-title">Eaglercraft 1.12</h2>
-        <p class="t-sub">Minecraft 1.12, right in your browser.</p>
-        <div class="pills"><a class="pill pill--fill" href="/eaglercraft/" aria-label="Play Eaglercraft 1.12">Play</a></div>
+        <h2 class="t-title">Encyclopædia</h2>
+        <p class="t-sub">The classic Britannica style, powered by Wikipedia.</p>
+        <div class="pills"><a class="pill pill--fill" href="/encyclopedia/" aria-label="Open Encyclopædia">Open</a></div>
       </div>
       <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <linearGradient id="mcSky" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stop-color="#5588cc"/>
-              <stop offset="100%" stop-color="#88aadd"/>
-            </linearGradient>
-          </defs>
-          <rect width="400" height="180" fill="url(#mcSky)"/>
-          <!-- Ground -->
-          <rect x="0" y="130" width="400" height="50" fill="#5a8a3a"/>
-          <rect x="0" y="130" width="400" height="8"  fill="#7ab84a"/>
-          <!-- Dirt beneath -->
-          <rect x="0" y="138" width="400" height="42" fill="#8b5a2b"/>
-          <!-- Minecraft-style blocks (pixel art) -->
-          <!-- Tree trunk -->
-          <rect x="60"  y="90"  width="20" height="40" fill="#6b3a1a"/>
-          <rect x="44"  y="66"  width="52" height="30" fill="#2d6b1a"/>
-          <rect x="52"  y="52"  width="36" height="20" fill="#2d6b1a"/>
-          <rect x="60"  y="42"  width="20" height="16" fill="#2d6b1a"/>
-          <!-- Tree 2 -->
-          <rect x="280" y="95"  width="20" height="35" fill="#6b3a1a"/>
-          <rect x="264" y="72"  width="52" height="28" fill="#336b1a"/>
-          <rect x="272" y="58"  width="36" height="18" fill="#336b1a"/>
-          <rect x="280" y="46"  width="20" height="16" fill="#336b1a"/>
-          <!-- Cobblestone wall -->
-          <rect x="150" y="100" width="100" height="30" fill="#888"/>
-          <rect x="150" y="100" width="100" height="2"  fill="#666"/>
-          <rect x="150" y="115" width="100" height="2"  fill="#666"/>
-          <rect x="170" y="100" width="2"   height="15" fill="#666"/>
-          <rect x="200" y="100" width="2"   height="15" fill="#666"/>
-          <rect x="230" y="100" width="2"   height="15" fill="#666"/>
-          <rect x="160" y="115" width="2"   height="15" fill="#666"/>
-          <rect x="190" y="115" width="2"   height="15" fill="#666"/>
-          <rect x="220" y="115" width="2"   height="15" fill="#666"/>
-          <!-- Steve-like character -->
-          <rect x="192" y="74"  width="16" height="16" fill="#f5c98a"/>
-          <rect x="190" y="90"  width="20" height="24" fill="#3a5acc"/>
-          <rect x="184" y="90"  width="8"  height="20" fill="#3a5acc"/>
-          <rect x="208" y="90"  width="8"  height="20" fill="#3a5acc"/>
-          <rect x="192" y="114" width="8"  height="16" fill="#5a3a1a"/>
-          <rect x="200" y="114" width="8"  height="16" fill="#5a3a1a"/>
-          <!-- Sun -->
-          <rect x="330" y="18"  width="28" height="28" fill="#ffdd00"/>
-          <rect x="336" y="12"  width="16" height="6"  fill="#ffdd00"/>
-          <rect x="336" y="46"  width="16" height="6"  fill="#ffdd00"/>
-          <rect x="324" y="24"  width="6"  height="16" fill="#ffdd00"/>
-          <rect x="358" y="24"  width="6"  height="16" fill="#ffdd00"/>
-          <!-- Clouds (blocky) -->
-          <rect x="20"  y="22"  width="70" height="16" fill="rgba(255,255,255,0.9)"/>
-          <rect x="30"  y="14"  width="50" height="12" fill="rgba(255,255,255,0.9)"/>
-          <rect x="200" y="18"  width="60" height="14" fill="rgba(255,255,255,0.85)"/>
-          <rect x="208" y="10"  width="44" height="12" fill="rgba(255,255,255,0.85)"/>
-        </svg></div>
-    </section>
-    </div>
-
-    <section class="bento" id="games">
-      <div class="bento-in">
-        <h2 class="bento-head reveal">All games. <span>Every one runs in the browser.</span></h2>
-        <div class="grid">
-          <a class="card card--wide reveal" href="/encyclopedia/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="encyBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#1a2740"/>
@@ -568,14 +483,16 @@
             <path d="M-8,10c2 6 14 6 16 0" stroke="#7fa86b" stroke-width="2" fill="none" stroke-linecap="round"/>
           </g>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">Reference</p>
-              <h3 class="card-title">Encyclopædia</h3>
-              <p class="card-desc">A free online encyclopedia in the classic Britannica style.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/aria/3d-shapes/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    </div>
+    <div class="duo">
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">3D Shapes Studio</h2>
+        <p class="t-sub">A Part Studio in your browser. Export to STL.</p>
+        <div class="pills"><a class="pill pill--fill" href="/aria/3d-shapes/" aria-label="Open 3D Shapes Studio">Open</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="shapesBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#1a0f3a"/>
@@ -651,14 +568,14 @@
             <circle cx="350" cy="158" r="2"/>
           </g>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">3D · CAD</p>
-              <h3 class="card-title">3D Shapes Studio</h3>
-              <p class="card-desc">An Onshape-style Part Studio in your browser — Features tree, view cube, multi-project workspaces, primitives with Solid/Hole modes, STL export.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/escape-road-2/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Escape Road City 2</h2>
+        <p class="t-sub">Outrun the cops across a sprawling city.</p>
+        <div class="pills"><a class="pill pill--fill" href="/escape-road-2/" aria-label="Play Escape Road City 2">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <radialGradient id="erc2Grad" cx="50%" cy="100%" r="80%">
               <stop offset="0%" stop-color="#3a1a00" stop-opacity="0.9"/>
@@ -698,14 +615,16 @@
           <rect x="200" y="153" width="20" height="13" rx="3" fill="#ff6600"/>
           <rect x="202" y="155" width="16" height="5"  rx="1" fill="rgba(160,230,255,0.7)"/>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">City Chase</p>
-              <h3 class="card-title">Escape Road City 2</h3>
-              <p class="card-desc">Hit the streets and outrun the cops through a sprawling city.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/Snow%20Rider%203D.html">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    </div>
+    <div class="duo">
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Snow Rider 3D</h2>
+        <p class="t-sub">Race down snowy slopes on a sled.</p>
+        <div class="pills"><a class="pill pill--fill" href="/Snow%20Rider%203D.html" aria-label="Play Snow Rider 3D">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="snowSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0a1a30"/>
@@ -747,14 +666,14 @@
           <line x1="100" y1="145" x2="165" y2="140" stroke="rgba(255,255,255,0.4)" stroke-width="1.5"/>
           <line x1="105" y1="151" x2="168" y2="147" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">3D</p>
-              <h3 class="card-title">Snow Rider 3D</h3>
-              <p class="card-desc">Strap in and race down snowy mountain slopes on a sled.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/evolving-bombs-3d/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Evolving Bombs 3D</h2>
+        <p class="t-sub">Bombs that grow with every kill.</p>
+        <div class="pills"><a class="pill pill--fill" href="/evolving-bombs-3d/" aria-label="Play Evolving Bombs 3D">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <radialGradient id="bombGrad" cx="50%" cy="55%" r="70%">
               <stop offset="0%" stop-color="#5a1a0a"/>
@@ -796,14 +715,16 @@
           <!-- Ground line -->
           <rect x="0" y="160" width="400" height="20" fill="rgba(0,0,0,0.5)"/>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">Action</p>
-              <h3 class="card-title">Evolving Bombs 3D</h3>
-              <p class="card-desc">Toss bombs that grow with every kill.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/crossy-road/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    </div>
+    <div class="duo">
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Crossy Road</h2>
+        <p class="t-sub">How far can your chicken hop?</p>
+        <div class="pills"><a class="pill pill--fill" href="/crossy-road/" aria-label="Play Crossy Road">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="crSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#7ec8ff"/>
@@ -853,14 +774,14 @@
           <rect x="50"  y="14" width="42" height="10" fill="rgba(255,255,255,0.95)"/>
           <rect x="200" y="26" width="50" height="10" fill="rgba(255,255,255,0.85)"/>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">Hopper</p>
-              <h3 class="card-title">Crossy Road</h3>
-              <p class="card-desc">Hop across endless lanes of traffic, rivers, and railways.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/block-blast/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Block Blast</h2>
+        <p class="t-sub">Drop blocks. Clear lines. Keep going.</p>
+        <div class="pills"><a class="pill pill--fill" href="/block-blast/" aria-label="Play Block Blast">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="bbBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#16204a"/>
@@ -928,14 +849,76 @@
             <circle cx="55"  cy="160" r="1.5"/>
           </g>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">Puzzle</p>
-              <h3 class="card-title">Block Blast</h3>
-              <p class="card-desc">Drag and drop colorful blocks onto the grid.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/mob-control/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    </div>
+    <section class="tile tile--dark" data-rise>
+      <div class="reveal">
+        <h2 class="t-title">Eaglercraft 1.12</h2>
+        <p class="t-sub">Minecraft 1.12, right in your browser.</p>
+        <div class="pills"><a class="pill pill--fill" href="/eaglercraft/" aria-label="Play Eaglercraft 1.12">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="mcSky" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stop-color="#5588cc"/>
+              <stop offset="100%" stop-color="#88aadd"/>
+            </linearGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#mcSky)"/>
+          <!-- Ground -->
+          <rect x="0" y="130" width="400" height="50" fill="#5a8a3a"/>
+          <rect x="0" y="130" width="400" height="8"  fill="#7ab84a"/>
+          <!-- Dirt beneath -->
+          <rect x="0" y="138" width="400" height="42" fill="#8b5a2b"/>
+          <!-- Minecraft-style blocks (pixel art) -->
+          <!-- Tree trunk -->
+          <rect x="60"  y="90"  width="20" height="40" fill="#6b3a1a"/>
+          <rect x="44"  y="66"  width="52" height="30" fill="#2d6b1a"/>
+          <rect x="52"  y="52"  width="36" height="20" fill="#2d6b1a"/>
+          <rect x="60"  y="42"  width="20" height="16" fill="#2d6b1a"/>
+          <!-- Tree 2 -->
+          <rect x="280" y="95"  width="20" height="35" fill="#6b3a1a"/>
+          <rect x="264" y="72"  width="52" height="28" fill="#336b1a"/>
+          <rect x="272" y="58"  width="36" height="18" fill="#336b1a"/>
+          <rect x="280" y="46"  width="20" height="16" fill="#336b1a"/>
+          <!-- Cobblestone wall -->
+          <rect x="150" y="100" width="100" height="30" fill="#888"/>
+          <rect x="150" y="100" width="100" height="2"  fill="#666"/>
+          <rect x="150" y="115" width="100" height="2"  fill="#666"/>
+          <rect x="170" y="100" width="2"   height="15" fill="#666"/>
+          <rect x="200" y="100" width="2"   height="15" fill="#666"/>
+          <rect x="230" y="100" width="2"   height="15" fill="#666"/>
+          <rect x="160" y="115" width="2"   height="15" fill="#666"/>
+          <rect x="190" y="115" width="2"   height="15" fill="#666"/>
+          <rect x="220" y="115" width="2"   height="15" fill="#666"/>
+          <!-- Steve-like character -->
+          <rect x="192" y="74"  width="16" height="16" fill="#f5c98a"/>
+          <rect x="190" y="90"  width="20" height="24" fill="#3a5acc"/>
+          <rect x="184" y="90"  width="8"  height="20" fill="#3a5acc"/>
+          <rect x="208" y="90"  width="8"  height="20" fill="#3a5acc"/>
+          <rect x="192" y="114" width="8"  height="16" fill="#5a3a1a"/>
+          <rect x="200" y="114" width="8"  height="16" fill="#5a3a1a"/>
+          <!-- Sun -->
+          <rect x="330" y="18"  width="28" height="28" fill="#ffdd00"/>
+          <rect x="336" y="12"  width="16" height="6"  fill="#ffdd00"/>
+          <rect x="336" y="46"  width="16" height="6"  fill="#ffdd00"/>
+          <rect x="324" y="24"  width="6"  height="16" fill="#ffdd00"/>
+          <rect x="358" y="24"  width="6"  height="16" fill="#ffdd00"/>
+          <!-- Clouds (blocky) -->
+          <rect x="20"  y="22"  width="70" height="16" fill="rgba(255,255,255,0.9)"/>
+          <rect x="30"  y="14"  width="50" height="12" fill="rgba(255,255,255,0.9)"/>
+          <rect x="200" y="18"  width="60" height="14" fill="rgba(255,255,255,0.85)"/>
+          <rect x="208" y="10"  width="44" height="12" fill="rgba(255,255,255,0.85)"/>
+        </svg></div>
+    </section>
+    <div class="duo">
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Mob Control</h2>
+        <p class="t-sub">Multiply your crowd. Storm the tower.</p>
+        <div class="pills"><a class="pill pill--fill" href="/mob-control/" aria-label="Play Mob Control">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="mcBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#3a1a55"/>
@@ -996,14 +979,14 @@
             <circle cx="194" cy="132" r="1.5"/>
           </g>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">Crowd</p>
-              <h3 class="card-title">Mob Control</h3>
-              <p class="card-desc">Aim your gate, multiply your crowd, and overwhelm the enemy stickmen.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/death-run-3d/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Death Run 3D</h2>
+        <p class="t-sub">Spikes, blades and gaps. Stay alive.</p>
+        <div class="pills"><a class="pill pill--fill" href="/death-run-3d/" aria-label="Play Death Run 3D">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="drBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#1a0608"/>
@@ -1070,14 +1053,16 @@
             <line x1="320" y1="170" x2="360" y2="178"/>
           </g>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">Runner</p>
-              <h3 class="card-title">Death Run 3D</h3>
-              <p class="card-desc">Sprint down a deadly 3D corridor full of spikes, blades, and gaps.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/bridge-race/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    </div>
+    <div class="duo">
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Bridge Race</h2>
+        <p class="t-sub">Build your bridge. Beat them to the top.</p>
+        <div class="pills"><a class="pill pill--fill" href="/bridge-race/" aria-label="Play Bridge Race">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="brSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#3a7ec8"/>
@@ -1148,14 +1133,14 @@
           <rect x="50"  y="14" width="34" height="10" fill="rgba(255,255,255,0.85)"/>
           <rect x="280" y="24" width="50" height="9"  fill="rgba(255,255,255,0.8)"/>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">Race</p>
-              <h3 class="card-title">Bridge Race</h3>
-              <p class="card-desc">Collect blocks of your color and build a bridge to the next platform.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/color-water-sort-3d/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Color Water Sort 3D</h2>
+        <p class="t-sub">One colour per tube. Surprisingly tricky.</p>
+        <div class="pills"><a class="pill pill--fill" href="/color-water-sort-3d/" aria-label="Play Color Water Sort 3D">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="cwBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0c1f3a"/>
@@ -1224,14 +1209,16 @@
           <circle cx="256" cy="78"  r="1.5" fill="#3b82f6"/>
           <circle cx="244" cy="88"  r="1.5" fill="#3b82f6"/>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">Puzzle</p>
-              <h3 class="card-title">Color Water Sort 3D</h3>
-              <p class="card-desc">Pour colored liquids between tubes until each one holds a single color.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/bazooka-boy/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    </div>
+    <div class="duo">
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Bazooka Boy</h2>
+        <p class="t-sub">Aim, fire, and bounce rockets off the walls.</p>
+        <div class="pills"><a class="pill pill--fill" href="/bazooka-boy/" aria-label="Play Bazooka Boy">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="bzSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#f59e0b"/>
@@ -1308,14 +1295,14 @@
             <circle cx="270" cy="112" r="9"/>
           </g>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">Action</p>
-              <h3 class="card-title">Bazooka Boy</h3>
-              <p class="card-desc">Aim, fire, and blow stuff up.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/basket-random/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Basket Random</h2>
+        <p class="t-sub">Ragdoll basketball. Every shot is chaos.</p>
+        <div class="pills"><a class="pill pill--fill" href="/basket-random/" aria-label="Play Basket Random">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="brkBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#3a1a08"/>
@@ -1397,14 +1384,16 @@
           <!-- Motion arc -->
           <path d="M148,118 Q174,72 200,80" fill="none" stroke="rgba(255,255,255,0.45)" stroke-width="1.5" stroke-dasharray="3,4"/>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">Sports</p>
-              <h3 class="card-title">Basket Random</h3>
-              <p class="card-desc">Wobbly ragdoll basketball where every shot is chaos.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/geometry-dash-lite/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    </div>
+    <div class="duo">
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Geometry Dash Lite</h2>
+        <p class="t-sub">Tap to jump. Spikes, blocks, gravity flips.</p>
+        <div class="pills"><a class="pill pill--fill" href="/geometry-dash-lite/" aria-label="Play Geometry Dash Lite">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="gdSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0a0a2a"/>
@@ -1476,14 +1465,14 @@
             <polygon points="300,140 360,80  400,140"/>
           </g>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">Rhythm</p>
-              <h3 class="card-title">Geometry Dash Lite</h3>
-              <p class="card-desc">Tap to jump your cube through spikes, blocks, and gravity flips.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/subway-surfers-remake/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Subway Surfers Remake</h2>
+        <p class="t-sub">Dodge the trains. Grab the coins.</p>
+        <div class="pills"><a class="pill pill--fill" href="/subway-surfers-remake/" aria-label="Play Subway Surfers Remake">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="ssSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0c1832"/>
@@ -1577,14 +1566,16 @@
             <ellipse cx="180" cy="154" rx="6" ry="2.5" fill="#fff"/>
           </g>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">Endless Runner · 3D</p>
-              <h3 class="card-title">Subway Surfers Remake</h3>
-              <p class="card-desc">A real 3D WebGL endless runner.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/tennis/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    </div>
+    <div class="duo">
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Tennis 3D</h2>
+        <p class="t-sub">A real court, a real net. First to seven.</p>
+        <div class="pills"><a class="pill pill--fill" href="/tennis/" aria-label="Play Tennis 3D">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="tnsBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0a1530"/>
@@ -1644,14 +1635,14 @@
           <path d="M186,107 Q190,114 194,107" stroke="#fff" stroke-width="1.5" fill="none"/>
           <path d="M194,107 Q190,100 186,107" stroke="#fff" stroke-width="1.5" fill="none"/>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">Sports</p>
-              <h3 class="card-title">Tennis 3D</h3>
-              <p class="card-desc">3D arcade tennis with a real court, net and ball physics.</p>
-            </div>
-          </a>
-          <a class="card reveal" href="/ping-pong/">
-            <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    </section>
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Ping Pong</h2>
+        <p class="t-sub">Classic table tennis, solo or with a friend.</p>
+        <div class="pills"><a class="pill pill--fill" href="/ping-pong/" aria-label="Play Ping Pong">Play</a></div>
+      </div>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="ppBg" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#050a18"/>
@@ -1704,15 +1695,8 @@
           <circle cx="185" cy="108" r="7" fill="#ffce4f" stroke="#6a4a00" stroke-width="1"/>
           <circle cx="183" cy="106" r="2" fill="rgba(255,255,255,0.6)"/>
         </svg></div>
-            <div class="card-body">
-              <p class="card-tag">Sports</p>
-              <h3 class="card-title">Ping Pong</h3>
-              <p class="card-desc">Classic table tennis in your browser.</p>
-            </div>
-          </a>
-        </div>
-      </div>
     </section>
+    </div>
   </main>
 
   <footer class="foot">
@@ -1722,7 +1706,7 @@
           <h2 class="foot-h">Arcade</h2>
           <ul>
             <li><a href="#games">All games</a></li>
-            <li><a href="/zombie-survivors/">Zombie Apocalypse</a></li>
+            <li><a href="/mario-kart/">Kart Games</a></li>
             <li><a href="/nyc-walk/">NYC Walk</a></li>
           </ul>
         </div>
@@ -1778,15 +1762,17 @@
     }
 
     var nav = document.getElementById('nav');
-    var scene = document.querySelector('[data-scene]');
-    var sceneArt = document.querySelector('[data-scene-art]');
     var heroArt = document.querySelector('[data-parallax]');
+    // Every black tile: its art rises into place, and the nav darkens over it.
+    var darks = Array.prototype.map.call(document.querySelectorAll('[data-rise]'), function (el) {
+      return { el: el, art: el.querySelector('.t-art'), top: 0, height: 0 };
+    });
 
-    var geo = { top: 0, height: 0, vh: 0, navH: 0 };
+    var geo = { vh: 0, navH: 0 };
     function measure() {
       geo.vh = window.innerHeight;
       geo.navH = nav ? nav.offsetHeight : 0;
-      if (scene) { geo.top = scene.offsetTop; geo.height = scene.offsetHeight; }
+      darks.forEach(function (d) { d.top = d.el.offsetTop; d.height = d.el.offsetHeight; });
     }
     measure();
     window.addEventListener('resize', measure, { passive: true });
@@ -1801,22 +1787,20 @@
         heroArt.style.transform = 'scale(' + mapRange(smoothed, 0, geo.vh, 1, 1.05).toFixed(4) + ')';
       }
 
-      // Dark tile: art rises into place as the tile enters. It settles at 0,
-      // so the rounded top never lifts off the tile's bottom edge.
-      if (scene && sceneArt) {
-        var pr = mapRange(smoothed, geo.top - geo.vh, geo.top + geo.height, 0, 1);
-        sceneArt.style.transform =
-          'translateY(' + mapRange(pr, 0, 0.5, 60, 0).toFixed(2) + 'px)' +
-          ' scale(' + mapRange(pr, 0, 0.5, 0.94, 1).toFixed(4) + ')';
-      }
-
-      // Nav turns dark over the black tile. Real scroll, not smoothed: the nav
-      // itself never lags.
-      if (nav && scene) {
-        var under = target + geo.navH / 2;
-        var dark = under >= geo.top && under <= geo.top + geo.height;
-        if (dark !== lastDark) { nav.classList.toggle('is-dark', dark); lastDark = dark; }
-      }
+      var under = target + geo.navH / 2;   // real scroll: the nav itself never lags
+      var dark = false;
+      darks.forEach(function (d) {
+        // Art rises as the tile enters and settles at 0, so its rounded top
+        // never lifts off the tile's bottom edge.
+        if (d.art) {
+          var pr = mapRange(smoothed, d.top - geo.vh, d.top + d.height, 0, 1);
+          d.art.style.transform =
+            'translateY(' + mapRange(pr, 0, 0.5, 60, 0).toFixed(2) + 'px)' +
+            ' scale(' + mapRange(pr, 0, 0.5, 0.94, 1).toFixed(4) + ')';
+        }
+        if (under >= d.top && under <= d.top + d.height) { dark = true; }
+      });
+      if (nav && dark !== lastDark) { nav.classList.toggle('is-dark', dark); lastDark = dark; }
 
       requestAnimationFrame(tick);
     }
