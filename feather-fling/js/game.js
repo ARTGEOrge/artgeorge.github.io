@@ -1,0 +1,444 @@
+/* Feather Fling — game flow: menus, slingshot input, bird abilities, turns, scoring. */
+(function () {
+  'use strict';
+  var E = window.FFEngine, ART = window.ART, LEVELS = window.LEVELS, pl = window.planck;
+  var $ = function (id) { return document.getElementById(id); };
+
+  var REST = { x: 0, y: 2.95 };       // pouch rest position (world)
+  var FORK_BACK = { x: 0.42, y: 3.15 }, FORK_FRONT = { x: -0.42, y: 3.15 };
+  var MAX_PULL = 2.1, POWER = 10.2, GRAB_RADIUS = 1.8;
+  var HINTS = {
+    rusty: 'Drag the bird back and let go',
+    zip: 'Zip: tap while flying to dash',
+    trio: 'Trio: tap while flying to split into three',
+    boomer: 'Boomer: tap to explode (or wait after it lands)',
+    tank: 'Tank: heavy and strong against stone'
+  };
+
+  var canvas = $('stage'), ctx = canvas.getContext('2d');
+  var S = null;                         // current play state
+  var progress = loadProgress();
+  var paused = false;
+
+  /* -------------------------------------------------------------- progress */
+  function loadProgress() {
+    try { var p = JSON.parse(localStorage.getItem('featherFling.v1')); if (p && p.stars) return p; } catch (e) {}
+    return { stars: [] };
+  }
+  function saveProgress() {
+    try { localStorage.setItem('featherFling.v1', JSON.stringify(progress)); } catch (e) {}
+  }
+  function unlocked(i) { return i === 0 || (progress.stars[i - 1] || 0) > 0; }
+
+  /* ----------------------------------------------------------------- sound */
+  var AC = null;
+  function tone(freq, dur, type, vol, slide) {
+    try {
+      AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+      var o = AC.createOscillator(), g = AC.createGain(), t = AC.currentTime;
+      o.type = type || 'sine'; o.frequency.setValueAtTime(freq, t);
+      if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, freq * slide), t + dur);
+      g.gain.setValueAtTime(vol || 0.12, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + dur);
+    } catch (e) {}
+  }
+  var SFX = {
+    stretch: function () { tone(220, 0.12, 'triangle', 0.05, 1.6); },
+    launch: function () { tone(520, 0.25, 'sawtooth', 0.06, 0.4); },
+    break: function () { tone(180 + Math.random() * 80, 0.12, 'square', 0.05, 0.5); },
+    bandit: function () { tone(660, 0.18, 'sine', 0.1, 1.8); },
+    boom: function () { tone(90, 0.5, 'sawtooth', 0.14, 0.3); },
+    win: function () { [523, 659, 784, 1046].forEach(function (f, i) { setTimeout(function () { tone(f, 0.22, 'triangle', 0.09); }, i * 120); }); },
+    lose: function () { [392, 330, 262].forEach(function (f, i) { setTimeout(function () { tone(f, 0.3, 'triangle', 0.08); }, i * 180); }); }
+  };
+  E.onEvent = function (type) { if (SFX[type]) SFX[type](); };
+
+  /* --------------------------------------------------------------- screens */
+  var SCREENS = ['title', 'levels', 'pause', 'win', 'lose'];
+  function show(id) {
+    SCREENS.forEach(function (s) { $(s).classList.toggle('hidden', s !== id); });
+    $('hud').classList.toggle('hidden', !S || id === 'title' || id === 'levels');
+  }
+
+  function buildLevelGrid() {
+    var grid = $('levelGrid');
+    grid.innerHTML = '';
+    LEVELS.forEach(function (lv, i) {
+      var b = document.createElement('button');
+      var open = unlocked(i), st = progress.stars[i] || 0;
+      b.className = 'lvl' + (open ? '' : ' locked');
+      b.setAttribute('aria-label', 'Level ' + (i + 1) + ': ' + lv.name + (open ? ', ' + st + ' stars' : ', locked'));
+      if (open) {
+        var stars = '';
+        for (var k = 0; k < 3; k++) stars += '<span class="' + (k < st ? '' : 'off') + '">★</span>';
+        b.innerHTML = '<span>' + (i + 1) + '</span><span class="stars">' + stars + '</span>';
+        b.onclick = function () { startLevel(i); };
+      } else {
+        b.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 10V8a5 5 0 0 1 10 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V8a3 3 0 0 0-6 0z"/></svg>';
+      }
+      grid.appendChild(b);
+    });
+  }
+
+  /* ----------------------------------------------------------------- level */
+  function startLevel(i) {
+    var lv = LEVELS[i];
+    E.load(lv);
+    var bandits = E.bandits.length, blockValue = 0;
+    E.blocks.forEach(function (b) { var ud = b.getUserData(); blockValue += ud.kind === 'tnt' ? 1000 : ({ wood: 500, stone: 800, ice: 300 })[ud.m]; });
+    var P = bandits * 5000 + blockValue;
+    S = {
+      index: i, level: lv, queue: lv.birds.slice(), loaded: null, flying: [],
+      phase: 'aim', pull: null, dragging: false, wait: 0, ended: false,
+      thresholds: [bandits * 5000, Math.round(P * 0.5 / 1000) * 1000, Math.round((P * 0.75 + 10000) / 1000) * 1000]
+    };
+    $('lvlName').textContent = (i + 1) + '. ' + lv.name;
+    $('pauseSub').textContent = 'Level ' + (i + 1) + ': ' + lv.name;
+    buildStarMarkers();
+    loadNextBird();
+    paused = false;
+    show(null);
+  }
+
+  function buildStarMarkers() {
+    var bar = $('scoreBar');
+    Array.prototype.slice.call(bar.querySelectorAll('b')).forEach(function (n) { n.remove(); });
+    S.thresholds.forEach(function (t, k) {
+      var m = document.createElement('b');
+      m.style.left = Math.min(100, (t / S.thresholds[2]) * 100) + '%';
+      m.innerHTML = ART.starSVG(false);
+      m.dataset.k = k;
+      bar.appendChild(m);
+    });
+  }
+
+  function renderCards() {
+    var el = $('cards');
+    el.innerHTML = '';
+    var list = (S.loaded ? [S.loaded] : []).concat(S.queue);
+    list.slice(0, 5).forEach(function (type, k) {
+      var c = document.createElement('div');
+      c.className = 'bcard' + (k === 0 && S.loaded ? ' next' : '');
+      var icon = document.createElement('canvas');
+      icon.width = icon.height = 128;
+      icon.getContext('2d').drawImage(ART.birdIcon(type), 0, 0);
+      c.appendChild(icon);
+      el.appendChild(c);
+    });
+  }
+
+  function loadNextBird() {
+    S.loaded = S.queue.length ? S.queue.shift() : null;
+    S.phase = S.loaded ? 'aim' : 'out';
+    S.pull = null;
+    E.frameCam(false);
+    if (S.loaded) {
+      $('hint').textContent = HINTS[S.loaded];
+      $('hint').style.opacity = 1;
+    }
+    renderCards();
+  }
+
+  /* ----------------------------------------------------------------- input */
+  function worldFromEvent(e) {
+    var r = canvas.getBoundingClientRect();
+    return E.toWorld(e.clientX - r.left, e.clientY - r.top);
+  }
+
+  canvas.addEventListener('pointerdown', function (e) {
+    if (!S || paused || S.ended) return;
+    var w = worldFromEvent(e);
+    if (S.phase === 'aim' && S.loaded) {
+      var dx = w.x - REST.x, dy = w.y - REST.y;
+      if (dx * dx + dy * dy < GRAB_RADIUS * GRAB_RADIUS || w.x < 2) {
+        S.dragging = true;
+        try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+        updatePull(w);
+        SFX.stretch();
+      }
+    } else if (S.phase === 'flying') {
+      useAbility();
+    }
+  });
+  canvas.addEventListener('pointermove', function (e) {
+    if (S && S.dragging) updatePull(worldFromEvent(e));
+  });
+  canvas.addEventListener('pointerup', function () {
+    if (!S || !S.dragging) return;
+    S.dragging = false;
+    var p = S.pull;
+    if (!p || Math.hypot(p.x, p.y) < 0.35) { S.pull = null; return; }
+    launch(-p.x * POWER, -p.y * POWER);
+  });
+  canvas.addEventListener('pointercancel', function () { if (S) { S.dragging = false; S.pull = null; } });
+
+  function updatePull(w) {
+    var dx = w.x - REST.x, dy = w.y - REST.y, len = Math.hypot(dx, dy);
+    if (len > MAX_PULL) { dx *= MAX_PULL / len; dy *= MAX_PULL / len; }
+    // don't let the pouch sink into the ground
+    if (REST.y + dy < 0.6) dy = 0.6 - REST.y;
+    S.pull = { x: dx, y: dy };
+  }
+
+  window.addEventListener('keydown', function (e) {
+    if (!S || S.ended) return;
+    if (e.key === ' ' && S.phase === 'flying') { e.preventDefault(); useAbility(); }
+    if (e.key === 'r' || e.key === 'R') startLevel(S.index);
+    if (e.key === 'Escape') togglePause();
+  });
+
+  /* ---------------------------------------------------------------- flight */
+  function launch(vx, vy) {
+    var type = S.loaded, px = REST.x + S.pull.x, py = REST.y + S.pull.y;
+    var body = E.addBird(type, px, py);
+    body.setLinearVelocity(pl.Vec2(vx, vy));
+    body.getUserData().launched = true;
+    S.flying = [body];
+    S.loaded = null; S.pull = null;
+    S.phase = 'flying'; S.abilityUsed = false; S.wait = 0;
+    $('hint').style.opacity = 0;
+    renderCards();
+    SFX.launch();
+  }
+
+  function useAbility() {
+    if (S.abilityUsed || !S.flying.length) return;
+    var b = S.flying[0], ud = b.getUserData();
+    if (ud.hit && ud.type !== 'boomer') return;
+    var p = b.getPosition(), v = b.getLinearVelocity();
+    if (ud.type === 'zip') {
+      b.setLinearVelocity(pl.Vec2(v.x * 2.3, v.y * 2.3));
+      E.burst(p.x, p.y, 'puff', ['#ffffff'], 6, 0.3, 2);
+      SFX.launch();
+    } else if (ud.type === 'trio') {
+      [-0.2, 0.2].forEach(function (off) {
+        var c = Math.cos(off), s = Math.sin(off);
+        var nb = E.addBird('trio', p.x, p.y + off * 2.2);
+        nb.setLinearVelocity(pl.Vec2(v.x * c - v.y * s, v.x * s + v.y * c));
+        nb.getUserData().launched = true;
+        S.flying.push(nb);
+      });
+      E.burst(p.x, p.y, 'feather', [ART.BIRDS.trio.base], 6, 0.2, 3);
+    } else if (ud.type === 'boomer') {
+      E.explode(p.x, p.y, 3.6, 48);
+      E.removeBird(b);
+      S.flying.splice(0, 1);
+    } else {
+      return;
+    }
+    S.abilityUsed = true;
+  }
+
+  function touching(body) {
+    for (var ce = body.getContactList(); ce; ce = ce.next) if (ce.contact.isTouching()) return true;
+    return false;
+  }
+
+  function updateFlight(dt) {
+    for (var i = S.flying.length - 1; i >= 0; i--) {
+      var b = S.flying[i], ud = b.getUserData(), p = b.getPosition(), v = b.getLinearVelocity();
+      ud.age += dt;
+      if (!ud.hit && touching(b)) {
+        ud.hit = true; ud.hitAt = ud.age;
+        E.burst(p.x, p.y, 'feather', [ART.BIRDS[ud.type].base, ART.BIRDS[ud.type].belly], 4, 0.18, 2);
+      }
+      if (!ud.hit && (ud.trail.length === 0 || Math.hypot(p.x - ud.trail[ud.trail.length - 1].x, p.y - ud.trail[ud.trail.length - 1].y) > 0.55)) {
+        ud.trail.push({ x: p.x, y: p.y });
+      }
+      // Boomer blows up on its own shortly after landing
+      if (ud.type === 'boomer' && ud.hit && !S.abilityUsed && ud.age - ud.hitAt > 1.4) {
+        E.explode(p.x, p.y, 3.6, 48); E.removeBird(b); S.flying.splice(i, 1); S.abilityUsed = true; continue;
+      }
+      var speed = Math.hypot(v.x, v.y);
+      ud.still = speed < 0.6 ? ud.still + dt : 0;
+      var gone = ud.still > 1.1 || ud.age > 11 || p.y < -3 || p.x > E.extentX + 25 || p.x < -20;
+      if (gone) { E.removeBird(b); S.flying.splice(i, 1); }
+    }
+    if (S.flying.length) {
+      var lead = S.flying[0].getPosition();
+      E.followPoint(lead.x, lead.y);
+    } else {
+      S.phase = 'settling'; S.wait = 0;
+      E.frameCam(false);
+    }
+  }
+
+  function updateSettling(dt) {
+    S.wait += dt;
+    if (S.wait < 0.8) return;
+    if (E.bandits.length === 0 && (E.settled() || S.wait > 2.5)) return win();
+    if (!E.settled() && S.wait < 4) return;
+    if (E.bandits.length === 0) return win();
+    if (S.queue.length === 0) return lose();
+    loadNextBird();
+  }
+
+  /* ---------------------------------------------------------------- endings */
+  function win() {
+    S.ended = true; S.phase = 'done';
+    var remaining = (S.loaded ? 1 : 0) + S.queue.length;
+    var delay = 0;
+    for (var k = 0; k < remaining; k++) {
+      (function (k) {
+        setTimeout(function () {
+          E.score += 10000;
+          E.popup(-1.2 - k * 1.1, 1.4, '10000', '#ffd23f', 0.75);
+          SFX.bandit();
+        }, 500 + k * 450);
+      })(k);
+      delay = 500 + k * 450;
+    }
+    setTimeout(function () {
+      var score = E.score, st = 1;
+      if (score >= S.thresholds[1]) st = 2;
+      if (score >= S.thresholds[2]) st = 3;
+      progress.stars[S.index] = Math.max(progress.stars[S.index] || 0, st);
+      saveProgress();
+      $('winScore').textContent = score.toLocaleString();
+      $('winStars').innerHTML = [0, 1, 2].map(function (k) { return ART.starSVG(k < st); }).join('');
+      Array.prototype.forEach.call($('winStars').querySelectorAll('.s-on'), function (s, k) { s.style.animationDelay = (0.25 + k * 0.3) + 's'; });
+      $('winNext').classList.toggle('hidden', S.index >= LEVELS.length - 1);
+      SFX.win();
+      show('win');
+    }, delay + 900);
+  }
+
+  function lose() {
+    S.ended = true; S.phase = 'done';
+    setTimeout(function () { SFX.lose(); show('lose'); }, 500);
+  }
+
+  function togglePause() {
+    if (!S || S.ended) return;
+    paused = !paused;
+    show(paused ? 'pause' : null);
+  }
+
+  /* ------------------------------------------------------------------- HUD */
+  var shownScore = 0;
+  function updateHud() {
+    shownScore += (E.score - shownScore) * 0.2;
+    if (Math.abs(E.score - shownScore) < 5) shownScore = E.score;
+    $('scoreVal').textContent = Math.round(shownScore).toLocaleString();
+    $('scoreFill').style.width = Math.min(100, (shownScore / S.thresholds[2]) * 100) + '%';
+    Array.prototype.forEach.call($('scoreBar').querySelectorAll('b'), function (m) {
+      var on = shownScore >= S.thresholds[+m.dataset.k];
+      if (m.dataset.on !== String(on)) { m.dataset.on = String(on); m.innerHTML = ART.starSVG(on); }
+    });
+  }
+
+  /* ---------------------------------------------------------------- render */
+  function pouchPos() {
+    return S && S.pull ? { x: REST.x + S.pull.x, y: REST.y + S.pull.y } : REST;
+  }
+
+  var hooks = {
+    behindSling: function (at) {
+      // waiting birds hop in line behind the slingshot
+      // spaced by size so a long queue stays on screen
+      var qx = -0.9;
+      S.queue.forEach(function (type, k) {
+        var r = ART.BIRDS[type].r, hop = Math.max(0, Math.sin(E.t * 3 + k * 1.3)) * 0.25;
+        qx -= r + 0.18;
+        var x = qx;
+        at(x, r + hop, 0, function () { ART.drawBird(ctx, type, r, { t: E.t, blink: ((E.t + k) % 4) < 0.1 }); });
+        qx -= r;
+      });
+      var p = pouchPos();
+      at(0, 0, 0, function () { ART.drawBand(ctx, FORK_BACK.x, -FORK_BACK.y, p.x, -p.y, false); });
+    },
+    loaded: function (at) {
+      var p = pouchPos();
+      at(0, 0, 0, function () { ART.drawPouch(ctx, p.x, -p.y, 0); });
+      if (S.loaded) {
+        var r = ART.BIRDS[S.loaded].r;
+        var ang = S.pull ? Math.atan2(-S.pull.y, -S.pull.x) : 0;
+        at(p.x + (S.pull ? 0 : 0.05), p.y, ang, function () {
+          ART.drawBird(ctx, S.loaded, r, { t: E.t, squash: S.dragging ? 0.06 : 0 });
+        });
+      }
+    },
+    frontBand: function (at) {
+      var p = pouchPos();
+      at(0, 0, 0, function () { ART.drawBand(ctx, FORK_FRONT.x, -FORK_FRONT.y, p.x, -p.y, true); });
+      if (S.pull && S.loaded && Math.hypot(S.pull.x, S.pull.y) > 0.35) {
+        var vx = -S.pull.x * POWER, vy = -S.pull.y * POWER, x = p.x, y = p.y;
+        for (var i = 0; i < 26; i++) {
+          x += vx * 0.07; vy -= 10 * 0.07; y += vy * 0.07;
+          if (y < 0) break;
+          (function (x, y, i) {
+            at(x, y, 0, function () {
+              ctx.globalAlpha = 1 - i / 30;
+              ctx.fillStyle = '#ffffff';
+              ctx.beginPath(); ctx.arc(0, 0, 0.1, 0, Math.PI * 2); ctx.fill();
+              ctx.globalAlpha = 1;
+            });
+          })(x, y, i);
+        }
+      }
+    }
+  };
+
+  /* ------------------------------------------------------------------ loop */
+  function resize() {
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(innerWidth * dpr);
+    canvas.height = Math.round(innerHeight * dpr);
+    E.resize(innerWidth, innerHeight);
+  }
+  window.addEventListener('resize', resize);
+
+  var last = performance.now(), acc = 0;
+  function frame(now) {
+    var dt = Math.min(0.05, (now - last) / 1000);
+    last = now;
+    if (S && !paused) {
+      acc += dt;
+      while (acc >= 1 / 60) {
+        acc -= 1 / 60;
+        E.step(1 / 60);
+        if (!S.ended) {
+          if (S.phase === 'flying') updateFlight(1 / 60);
+          else if (S.phase === 'settling' || S.phase === 'out') updateSettling(1 / 60);
+        }
+      }
+      E.updateCam(dt);
+      updateHud();
+    }
+    if (S) E.render(ctx, hooks);
+    else drawAttract(now / 1000);
+    requestAnimationFrame(frame);
+  }
+
+  // Title backdrop: the scenery with a few birds, no physics.
+  function drawAttract(t) {
+    var dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight, pal = ART.theme(0);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var gy = H * 0.78;
+    ART.drawSky(ctx, W, H, pal, gy);
+    ART.drawParallax(ctx, W, H, pal, { x: t * 1.5, zoom: 40 }, gy, t);
+    ctx.fillStyle = pal.grass; ctx.fillRect(0, gy, W, 14);
+    ctx.fillStyle = pal.dirt; ctx.fillRect(0, gy + 14, W, H - gy);
+    var s = Math.max(40, H / 14);
+    [['rusty', 0.22], ['zip', 0.36], ['boomer', 0.64], ['tank', 0.8]].forEach(function (b, k) {
+      var r = ART.BIRDS[b[0]].r, hop = Math.max(0, Math.sin(t * 3 + k)) * 0.35;
+      ctx.setTransform(s * dpr, 0, 0, s * dpr, W * b[1] * dpr, (gy - (r + hop) * s) * dpr);
+      ART.drawBird(ctx, b[0], r, { t: t, blink: ((t + k) % 4) < 0.1 });
+    });
+  }
+
+  /* -------------------------------------------------------------- wiring */
+  $('playBtn').onclick = function () { buildLevelGrid(); show('levels'); };
+  $('levelsBack').onclick = function () { S = null; show('title'); };
+  $('pauseBtn').onclick = togglePause;
+  $('restartBtn').onclick = function () { if (S) startLevel(S.index); };
+  $('pauseResume').onclick = togglePause;
+  $('pauseRestart').onclick = function () { startLevel(S.index); };
+  $('pauseMenu').onclick = function () { S = null; paused = false; buildLevelGrid(); show('levels'); };
+  $('winMenu').onclick = $('loseMenu').onclick = function () { S = null; buildLevelGrid(); show('levels'); };
+  $('winRetry').onclick = $('loseRetry').onclick = function () { startLevel(S.index); };
+  $('winNext').onclick = function () { startLevel(Math.min(LEVELS.length - 1, S.index + 1)); };
+
+  resize();
+  requestAnimationFrame(frame);
+})();
