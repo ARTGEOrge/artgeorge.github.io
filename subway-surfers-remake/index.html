@@ -92,7 +92,6 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass }     from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { AfterimagePass } from 'three/addons/postprocessing/AfterimagePass.js';
 import { OutputPass }     from 'three/addons/postprocessing/OutputPass.js';
 
 window.addEventListener('error', () => {
@@ -115,7 +114,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 if (THREE.SRGBColorSpace) renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.15;
+renderer.toneMappingExposure = 1.0;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0c1730);
@@ -125,18 +124,16 @@ const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 200);
 camera.position.set(0, 4.2, 8.5);
 camera.lookAt(0, 1.8, -4);
 
-// ============== POST-PROCESSING (bloom + motion blur) ==============
+// ============== POST-PROCESSING (bloom) ==============
 const composer = new EffectComposer(renderer);
 const renderPass = new RenderPass(scene, camera);
 composer.addPass(renderPass);
 
-// Subtle frame-blend motion blur — accumulates previous frames for a sense of speed
-const afterimagePass = new AfterimagePass();
-afterimagePass.uniforms['damp'].value = 0.78;   // lower = sharper, higher = more trail
-composer.addPass(afterimagePass);
+// No frame-blend motion blur: accumulating previous frames smeared coins into
+// streaks, doubled the runner and turned street lamps into long bars.
 
 // Bloom glow on neon / emissives
-const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.85, 0.85);
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.28, 0.35, 0.92);
 // strength, radius, threshold — only the brightest pixels (neon trim, lit windows, coins) bleed
 composer.addPass(bloomPass);
 
@@ -227,25 +224,9 @@ const NEON_PALETTE = [0xff3399, 0x33ddff, 0xffcc22, 0x9933ff, 0x22ff88, 0xff5522
 }
 
 // ============== WORLD: SWEEPING SEARCHLIGHTS ==============
+// Removed: four translucent coloured cones read as flat pink/cyan/yellow
+// triangles across the sky. The update loop below iterates an empty list.
 const searchLights = [];
-const SEARCHLIGHT_COLORS = [0xff3399, 0x33ddff, 0xffcc22, 0x9933ff];
-for (let i = 0; i < 4; i++) {
-  const cone = new THREE.Mesh(
-    new THREE.ConeGeometry(7, 35, 18, 1, true),
-    new THREE.MeshBasicMaterial({
-      color: SEARCHLIGHT_COLORS[i],
-      transparent: true, opacity: 0.18,
-      side: THREE.DoubleSide,
-      depthWrite: false
-    })
-  );
-  cone.position.set((i - 1.5) * 28, 22, -60);
-  cone.rotation.x = Math.PI;
-  cone.userData.phase = Math.random() * Math.PI * 2;
-  cone.userData.freq  = 0.0007 + Math.random() * 0.0008;
-  scene.add(cone);
-  searchLights.push(cone);
-}
 
 // ============== WORLD: MOON (huge glowing orb in the distance) ==============
 const moonGroup = new THREE.Group();
@@ -658,6 +639,7 @@ function makeBuildingRow(side) {
       const eZ = (Math.random() < 0.5 ? -1 : 1) * (w / 2 - 0.35);
       edge.position.set(facadeX - side * 0.1, podiumH + bodyH / 2, z + eZ);
       edge.userData.phase = Math.random() * Math.PI * 2;
+      edge.userData.baseColor = neonColor;
       g.add(edge);
       animatedNeon.push(edge);
     }
@@ -674,6 +656,7 @@ function makeBuildingRow(side) {
       const bbX = topCenterX - side * (topD / 2) - side * 0.1;
       bb.position.set(bbX, topY + 1.0, z);
       bb.userData.phase = Math.random() * Math.PI * 2;
+      bb.material.emissiveIntensity = 0.9;
       g.add(bb);
       animatedBillboards.push(bb);
       // Billboard frame
@@ -701,6 +684,7 @@ function makeBuildingRow(side) {
       );
       tipLight.position.set(topCenterX, topY + 2.85, z);
       tipLight.userData.phase = Math.random() * Math.PI * 2;
+      tipLight.userData.baseColor = 0xff3030;
       g.add(tipLight);
       animatedNeon.push(tipLight);
     }
@@ -1206,6 +1190,7 @@ for (let i = 0; i < 3; i++) {
   );
   t.position.set(0, 1.2, 0.5 + i * 0.6);
   t.rotation.y = Math.PI;
+  t.visible = false;   // ghost trail disabled: it read as a translucent copy of the runner
   playerGroup.add(t);
   playerTrails.push(t);
 }
@@ -2129,10 +2114,10 @@ function makeStation() {
 function makeCoin(lane, yOff) {
   const m = new THREE.Mesh(
     new THREE.TorusGeometry(0.28, 0.09, 10, 18),
-    new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0x665500, metalness: 0.8, roughness: 0.25 })
+    new THREE.MeshStandardMaterial({ color: 0xffd700, emissive: 0x5a4200, metalness: 0.8, roughness: 0.25 })
   );
   m.castShadow = true;
-  m.rotation.y = Math.PI / 2;
+  m.rotation.y = Math.random() * Math.PI;   // staggered so a row never lines up edge-on
   m.position.set((lane - 1) * LANE_WIDTH, 1 + yOff, 0);
   scene.add(m);
   return { mesh: m, lane, yOff };
@@ -2469,6 +2454,7 @@ function update(dt) {
   }
   // Cop position
   cop.group.position.z = copZ;
+  cop.group.visible = copZ < 4.2;
   cop.group.position.x += (player.displayX - cop.group.position.x) * Math.min(1, dt * 8);
   // Cop run animation (faster cadence than player so it looks intense)
   const ct = performance.now() * 0.018;
@@ -2570,26 +2556,13 @@ function update(dt) {
   for (let i = 0; i < animatedNeon.length; i++) {
     const m = animatedNeon[i];
     const pulse = 0.55 + 0.45 * Math.sin(tSec * 2.4 + m.userData.phase);
-    m.material.color.setScalar(1);
-    // Use color tint by setting material color via HSL cycle
-    const hue = ((tSec * 30 + i * 7) % 360) / 360;
-    m.material.color.setHSL(hue, 1.0, 0.4 + pulse * 0.25);
+    m.material.color.setHex(m.userData.baseColor).multiplyScalar(0.6 + pulse * 0.4);
   }
 
-  // Color-cycling billboards
+  // Billboards breathe softly
   for (let i = 0; i < animatedBillboards.length; i++) {
     const bb = animatedBillboards[i];
-    const hue = ((tSec * 40 + i * 25 + bb.userData.phase * 60) % 360) / 360;
-    const lum = 0.45 + 0.2 * Math.sin(tSec * 3 + bb.userData.phase);
-    bb.material.color.setHSL(hue, 1.0, lum);
-    bb.material.emissive.setHSL(hue, 1.0, lum * 0.6);
-  }
-
-  // Color-cycling coins (rainbow shimmer)
-  for (let i = 0; i < coins.length; i++) {
-    const c = coins[i];
-    const hue = ((tSec * 60 + i * 17) % 360) / 360;
-    c.mesh.material.emissive.setHSL(hue, 1.0, 0.45);
+    bb.material.emissiveIntensity = 0.75 + 0.25 * Math.sin(tSec * 1.5 + bb.userData.phase);
   }
 
   // Cop danger aura — pulses size and opacity, brightens as he closes
@@ -2611,22 +2584,13 @@ function update(dt) {
   const cl = 0.55 + 0.45 * Math.sin(tSec * 5);
   centerLineMat.color.setRGB(0.2 * cl, 0.85 * cl, 1.0 * cl);
 
-  // Cycle street-lamp bulb hues every now and then for a disco effect
-  for (let i = 0; i < streetLamps.length; i++) {
-    const lamp = streetLamps[i];
-    const bulb = lamp.children[3]; // bulb mesh added 4th in makeStreetLamp loop
-    if (!bulb) continue;
-    const hue = ((tSec * 8 + i * 14) % 360) / 360;
-    bulb.material.color.setHSL(hue, 0.6, 0.75);
-  }
-
   // Move world toward camera
   const dz = speed * dt;
   lastSpawnZ += dz;  // keep the spawn cursor anchored to the world so new rows keep coming
   for (const o of obstacles) o.mesh.position.z += dz;
   for (const c of coins) {
     c.mesh.position.z += dz;
-    c.mesh.rotation.x += dt * 6;
+    c.mesh.rotation.y += dt * 4;
   }
   for (const f of floors) {
     f.position.z += dz;
@@ -2823,8 +2787,6 @@ function frame(t) {
   const dt = Math.min(0.05, (t - lastTime) / 1000);
   lastTime = t;
   update(dt);
-  // Modulate motion-blur strength with speed for a stronger "sense of velocity" at high speeds
-  afterimagePass.uniforms['damp'].value = 0.62 + Math.min(0.28, (speed - 14) * 0.012);
   composer.render();
   requestAnimationFrame(frame);
 }
