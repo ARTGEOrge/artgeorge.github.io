@@ -220,7 +220,9 @@
        an ordinary section and the page reads normally. */
     /* The scene keeps its own dark background: text is never left sitting on a
        half-morphed body colour. The register change comes from the pin itself. */
-    .js-motion .chapter--pin { height: 260vh; padding: 0; }
+    /* 150vh = 50vh of held scroll. It was 260vh (160vh held), which in
+       practice meant ~6s of scrolling with the page apparently stuck. */
+    .js-motion .chapter--pin { height: 150vh; padding: 0; }
     .js-motion .chapter--pin .pin { background: var(--ink); }
     .js-motion .chapter--pin .pin {
       position: sticky; top: 0; height: 100vh;
@@ -1904,6 +1906,8 @@
     }
     measure();
     window.addEventListener('resize', measure, { passive: true });
+    // Fonts and images can still move the scene after this script runs.
+    window.addEventListener('load', measure);
 
     var lastStuck = null, lastDark = null;
 
