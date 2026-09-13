@@ -13,254 +13,209 @@
       --gray:  #f5f5f7;
       --ink:   #1d1d1f;
       --ink-2: #6e6e73;
-      --blue:  #0071e3;
-      --blue-d:#2997ff;
-      --hair:  rgba(0,0,0,0.10);
-      --nav-h: 48px;
+      --blue:  #0071e3;   /* pill fill */
+      --link:  #0066cc;   /* blue text on light grounds (passes AA on #f5f5f7) */
+      --blue-d:#2997ff;   /* blue text on black */
+      --hair:  rgba(0,0,0,0.08);
     }
-
-    /* No `scroll-behavior: smooth` -- confirmed ABSENT on apple.com.
-       They lerp a shadow scroll value instead; native scroll stays untouched. */
 
     body {
       background: var(--white);
-      transition: color .6s linear;
       color: var(--ink);
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
                    'Helvetica Neue', 'Segoe UI', system-ui, sans-serif;
+      font-size: 17px; line-height: 1.47; letter-spacing: -0.022em;
       -webkit-font-smoothing: antialiased;
       overflow-x: hidden;
     }
-
     a { color: inherit; text-decoration: none; }
+    :focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; border-radius: 8px; }
 
-    :focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; border-radius: 6px; }
-
-    .wrap { max-width: 1024px; margin: 0 auto; padding: 0 22px; }
-
-    /* ------------------------------------------------------------ nav */
-    /* Transparent at the top, frosting in on scroll -- the apple.com behaviour. */
+    /* ------------------------------------------------------------ nav
+       Frosted at all times, as on apple.com -- not transparent-then-frosted. */
     .nav {
-      position: sticky; top: 0; z-index: 9999; height: var(--nav-h);
-      background: rgba(255,255,255,0);
-      border-bottom: 1px solid transparent;
-      transition: background .4s ease, border-color .4s ease, backdrop-filter .4s ease;
-    }
-    .nav.is-stuck {
-      background: rgba(255,255,255,0.72);
+      position: sticky; top: 0; z-index: 9999; height: 44px;
+      background: rgba(245,245,247,0.8);
       -webkit-backdrop-filter: saturate(180%) blur(20px);
       backdrop-filter: saturate(180%) blur(20px);
-      border-bottom-color: var(--hair);
+      transition: background-color .35s ease;
     }
-    /* While the dark scene owns the viewport the nav inverts with it. */
-    .nav.is-dark .nav-mark, .nav.is-dark .nav-links a, .nav.is-dark .apps-btn { color: var(--gray); }
-    .nav.is-dark.is-stuck {
-      background: rgba(29,29,31,0.72);
-      border-bottom-color: rgba(255,255,255,0.12);
-    }
-    .nav.is-dark .apps-btn:hover { background: rgba(255,255,255,0.12); }
     .nav-in {
-      max-width: 1024px; margin: 0 auto; padding: 0 22px; height: 100%;
-      display: flex; align-items: center; gap: 26px;
+      max-width: 1024px; height: 100%; margin: 0 auto; padding: 0 22px;
+      display: flex; align-items: center; gap: 30px;
     }
-    .nav-mark { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
-    .nav-links { display: flex; gap: 24px; margin-left: auto; }
-    .nav-links a { font-size: 13px; color: var(--ink); opacity: .85; }
-    .nav-links a:hover { opacity: 1; }
+    .nav-mark { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--ink); }
+    .nav-links { display: flex; gap: 30px; margin-left: auto; }
+    .nav-links a { font-size: 12px; letter-spacing: -0.01em; color: rgba(0,0,0,0.8); transition: color .2s; }
+    .nav-links a:hover { color: #000; }
+    .nav.is-dark { background: rgba(22,22,23,0.8); }
+    .nav.is-dark .nav-mark { color: #f5f5f7; }
+    .nav.is-dark .nav-links a { color: rgba(255,255,255,0.8); }
+    .nav.is-dark .nav-links a:hover { color: #fff; }
+    .nav.is-dark .apps-btn { color: rgba(255,255,255,0.8); }
 
     .apps-launcher { position: relative; }
     .apps-btn {
-      width: 34px; height: 34px; border-radius: 50%; border: none;
-      background: transparent; color: var(--ink); cursor: pointer;
+      width: 32px; height: 32px; border-radius: 50%; border: none; background: transparent;
+      color: rgba(0,0,0,0.8); cursor: pointer;
       display: flex; align-items: center; justify-content: center; transition: background .2s;
     }
     .apps-btn:hover { background: rgba(0,0,0,0.06); }
-    .apps-btn svg { width: 18px; height: 18px; fill: currentColor; }
+    .nav.is-dark .apps-btn:hover { background: rgba(255,255,255,0.12); }
+    .apps-btn svg { width: 16px; height: 16px; fill: currentColor; }
     .apps-menu {
-      position: absolute; top: 42px; right: 0; width: 196px;
-      background: rgba(255,255,255,0.86);
+      position: absolute; top: 40px; right: 0; width: 196px; padding: 10px;
+      background: rgba(255,255,255,0.9);
       -webkit-backdrop-filter: saturate(180%) blur(20px);
       backdrop-filter: saturate(180%) blur(20px);
-      border: 1px solid var(--hair); border-radius: 18px; padding: 12px;
+      border: 1px solid var(--hair); border-radius: 18px;
       display: none; grid-template-columns: repeat(2, 1fr); gap: 2px;
-      box-shadow: 0 18px 50px rgba(0,0,0,0.16);
+      box-shadow: 0 12px 40px rgba(0,0,0,0.12);
     }
     .apps-menu.open { display: grid; }
     .apps-app {
       display: flex; flex-direction: column; align-items: center; gap: 7px;
-      padding: 14px 6px; border-radius: 12px; color: var(--ink);
-      font-size: 12px; text-align: center; transition: background .15s;
+      padding: 14px 6px; border-radius: 12px; font-size: 12px; color: var(--ink);
+      text-align: center; transition: background .15s;
     }
     .apps-app:hover { background: rgba(0,0,0,0.05); }
     .apps-app .ai { font-size: 26px; line-height: 1; }
 
-    /* ----------------------------------------------------------- hero */
-    .hero { text-align: center; padding: 78px 0 0; background: var(--white); }
-    .hero h1 {
-      font-size: clamp(40px, 7.2vw, 88px); font-weight: 700;
-      letter-spacing: -0.018em; line-height: 1.05;
+    /* ---------------------------------------------------------- tiles
+       Full-width blocks stacked with 12px gaps. Centred copy at the top,
+       art rising from the bottom edge. No shadows anywhere: separation comes
+       from the ground colour and the gap, which is what keeps it calm. */
+    .tile {
+      position: relative; overflow: hidden; text-align: center;
+      min-height: 692px; padding: 58px 24px 0; margin-bottom: 12px;
+      display: flex; flex-direction: column; align-items: center;
     }
-    .hero .tagline {
-      margin: 18px auto 0; max-width: 30ch; color: var(--ink-2);
-      font-size: clamp(19px, 2.3vw, 28px); font-weight: 400; line-height: 1.3;
-    }
-    .ctas { margin-top: 26px; display: flex; justify-content: center; gap: 30px; flex-wrap: wrap; }
-    .cta { color: var(--blue); font-size: 17px; }
-    .cta:hover { text-decoration: underline; }
-    .hero-art {
-      margin: 54px auto 0; max-width: 860px; border-radius: 22px; overflow: hidden;
-      line-height: 0; box-shadow: 0 24px 64px -18px rgba(0,0,0,0.28);
-    }
-    .hero-art svg { width: 100%; height: auto; display: block; }
+    .tile--gray { background: var(--gray); }
+    .tile--dark { background: #000; color: var(--gray); }
 
-    /* ------------------------------------------------------- chapters */
-    .chapter { padding: 128px 0; }
-    .chapter--dark { background: var(--ink); color: var(--gray); }
-    .chapter--dark .ch-desc { color: #a1a1a6; }
-    .chapter--dark .ch-eyebrow, .chapter--dark .ch-cta { color: var(--blue-d); }
-    .chapter-in {
-      max-width: 1024px; margin: 0 auto; padding: 0 22px;
-      display: grid; grid-template-columns: 1fr 1fr; gap: 64px; align-items: center;
+    .t-title {
+      font-size: 56px; font-weight: 600; line-height: 1.07; letter-spacing: -0.005em;
     }
-    .chapter--flip .ch-text { order: 2; }
-    .ch-eyebrow {
-      font-size: 13px; font-weight: 600; letter-spacing: .02em;
-      color: var(--blue); margin-bottom: 12px; text-transform: uppercase;
+    .t-sub {
+      margin-top: 6px; font-size: 28px; font-weight: 400;
+      line-height: 1.14; letter-spacing: 0.007em;
     }
-    .ch-title {
-      font-size: clamp(32px, 4.6vw, 60px); font-weight: 700;
-      letter-spacing: -0.015em; line-height: 1.07;
+    .pills { margin-top: 18px; display: flex; justify-content: center; gap: 14px; flex-wrap: wrap; }
+    .pill {
+      display: inline-block; font-size: 17px; line-height: 1.18; font-weight: 400;
+      padding: 11px 21px; border-radius: 980px; border: 1px solid transparent;
+      transition: background-color .2s ease, color .2s ease, border-color .2s ease;
     }
-    .ch-desc { margin-top: 18px; font-size: 19px; line-height: 1.55; color: var(--ink-2); }
-    .ch-cta { display: inline-block; margin-top: 22px; color: var(--blue); font-size: 17px; }
-    .ch-cta:hover { text-decoration: underline; }
-    .ch-art {
-      border-radius: 20px; overflow: hidden; line-height: 0;
-      box-shadow: 0 20px 50px -16px rgba(0,0,0,0.3);
-    }
-    .ch-art svg { width: 100%; height: auto; display: block; }
+    .pill--fill { background: var(--blue); color: #fff; }
+    .pill--fill:hover { background: #0077ed; }
+    .pill--line { border-color: var(--link); color: var(--link); }
+    .pill--line:hover { background: var(--link); color: #fff; }
+    .tile--dark .pill--line { border-color: var(--blue-d); color: var(--blue-d); }
+    .tile--dark .pill--line:hover { background: var(--blue-d); color: #000; }
 
-    /* ---------------------------------------------------------- bento */
-    .bento { background: var(--gray); padding: 116px 0 128px; }
-    /* Scoped by class, not `.bento h2` -- the card titles are h2 as well. */
+    .t-art {
+      margin-top: auto; padding-top: 44px; width: min(900px, 92%);
+      transform-origin: 50% 100%;
+    }
+    .t-art svg {
+      display: block; width: 100%; height: auto;
+      border-radius: 22px 22px 0 0;   /* rises out of the tile edge */
+    }
+
+    .duo {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+      padding: 0 12px; margin-bottom: 12px;
+    }
+    .duo .tile { margin-bottom: 0; }
+    .tile--half { min-height: 580px; padding-top: 52px; }
+    .tile--half .t-title { font-size: 40px; line-height: 1.1; letter-spacing: 0; }
+    .tile--half .t-sub { font-size: 21px; line-height: 1.19; letter-spacing: 0.011em; }
+    .tile--half .t-art { width: min(560px, 88%); padding-top: 36px; }
+
+    /* ---------------------------------------------------------- grid */
+    .bento { padding: 92px 0 112px; }
+    .bento-in { max-width: 1024px; margin: 0 auto; padding: 0 22px; }
     .bento-head {
-      font-size: clamp(30px, 3.8vw, 46px); font-weight: 700;
-      letter-spacing: -0.015em; text-align: center; margin-bottom: 10px;
+      font-size: 48px; font-weight: 600; line-height: 1.08;
+      letter-spacing: -0.003em; margin-bottom: 36px;
     }
-    .bento .sub { text-align: center; color: var(--ink-2); font-size: 19px; margin-bottom: 46px; }
-    /* A bento of tiles, not a stack of article cards. Each tile is art +
-       a name + one clamped line, so the eye scans the grid instead of
-       reading 17 paragraphs. Deliberately NOT the old card shape. */
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(224px, 1fr)); gap: 16px; }
+    .bento-head span { color: var(--ink-2); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(224px, 1fr)); gap: 12px; }
     .card {
-      background: var(--white); border-radius: 18px; overflow: hidden;
-      display: flex; flex-direction: column; box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-      transition: transform .3s cubic-bezier(.25,.1,.25,1), box-shadow .3s;
+      background: var(--gray); border-radius: 18px; overflow: hidden;
+      display: flex; flex-direction: column;
     }
-    .card:hover { transform: translateY(-4px); box-shadow: 0 16px 34px -14px rgba(0,0,0,0.20); }
     .card--wide { grid-column: span 2; }
-    .card-banner { line-height: 0; }
-    .card-banner svg { width: 100%; height: auto; display: block; }
-    .card-body { padding: 14px 16px 17px; display: flex; flex-direction: column; flex: 1; }
-    .card-tag {
-      font-size: 11px; font-weight: 600; color: var(--ink-2);
-      margin-bottom: 4px; text-transform: uppercase; letter-spacing: .03em;
+    .card-banner { line-height: 0; overflow: hidden; }
+    .card-banner svg {
+      display: block; width: 100%; height: auto;
+      transition: transform .6s cubic-bezier(.25,.1,.25,1);
     }
-    .card-title { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; line-height: 1.25; }
+    /* The only hover: art settles slightly closer. No lift, no shadow, no tilt. */
+    .card:hover .card-banner svg { transform: scale(1.035); }
+    .card-body { padding: 15px 18px 20px; }
+    .card-tag { font-size: 12px; color: var(--ink-2); margin-bottom: 3px; }
+    .card-title { font-size: 17px; font-weight: 600; line-height: 1.24; letter-spacing: -0.022em; }
     .card-desc {
-      margin-top: 5px; font-size: 13px; line-height: 1.45; color: var(--ink-2);
-      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
-      overflow: hidden;
+      margin-top: 4px; font-size: 14px; line-height: 1.43; color: var(--ink-2);
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
     }
 
-    /* --------------------------------------------------------- footer */
-    .foot { background: var(--gray); border-top: 1px solid var(--hair); padding: 44px 0 56px; }
+    /* -------------------------------------------------------- footer */
+    .foot { background: var(--gray); padding: 40px 0 52px; font-size: 12px; color: var(--ink-2); }
+    .foot-in { max-width: 1024px; margin: 0 auto; padding: 0 22px; }
     .foot-cols {
       display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 28px; padding-bottom: 30px; border-bottom: 1px solid var(--hair);
+      gap: 24px; padding-bottom: 26px; border-bottom: 1px solid rgba(0,0,0,0.12);
     }
-    .foot h3 { font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 11px; }
+    .foot-h { font-size: 12px; font-weight: 600; color: var(--ink); margin-bottom: 10px; }
     .foot ul { list-style: none; display: flex; flex-direction: column; gap: 8px; }
-    .foot a { font-size: 12px; color: var(--ink-2); }
+    .foot a { color: var(--ink-2); }
     .foot a:hover { color: var(--ink); text-decoration: underline; }
-    .foot-legal { padding-top: 20px; font-size: 12px; color: var(--ink-2); }
+    .foot-legal { padding-top: 18px; }
 
-    /* --------------------------------------------------------- reveal
-       Scroll-driven CSS, not JS. The resting state is VISIBLE: a browser
-       without `animation-timeline` simply shows the content, and no script
-       failure, blocked observer or throttled timer can ever leave the page
-       blank. The animation only ever adds. */
+    /* -------------------------------------------------------- reveal
+       Scroll-driven CSS with a VISIBLE resting state: no script, observer or
+       timer can ever leave content hidden. */
     @media (prefers-reduced-motion: no-preference) {
       @supports (animation-timeline: view()) {
-        @keyframes reveal-in {
-          from { opacity: 0; transform: translateY(26px); }
+        @keyframes rise {
+          from { opacity: 0; transform: translateY(30px); }
           to   { opacity: 1; transform: none; }
         }
-        @keyframes wipe-in {
-          from { clip-path: inset(0 0 100% 0); }
-          to   { clip-path: inset(0 0 0 0); }
-        }
         .reveal {
-          animation: reveal-in linear both;
+          animation: rise linear both;
           animation-timeline: view();
-          animation-range: entry 0% entry 55%;
-        }
-        .wipe {
-          animation: wipe-in linear both;
-          animation-timeline: view();
-          animation-range: entry 5% entry 60%;
+          animation-range: entry 0% entry 45%;
         }
       }
     }
 
-    /* ----------------------------------------------- scroll-linked scene
-       The NYC Walk chapter scrolls at normal speed: no sticky stage, no held
-       scroll. It was pinned (260vh, then 150vh) and both read as the page
-       being stuck. The damped engine still maps the section's pass through
-       the viewport onto its art, so it moves with you without stopping you. */
-
-    /* ---------------------------------------------- clip-path wipe
-       Reads as purposeful revelation rather than a generic fade. */
-    .js-motion .wipe { clip-path: inset(0 0 100% 0); }
-    .js-motion .wipe.in {
-      clip-path: inset(0 0 0 0);
-      transition: clip-path 1s cubic-bezier(.22,.61,.36,1);
+    @media (max-width: 1068px) {
+      .tile { min-height: 620px; }
+      .t-title { font-size: 48px; }
+      .t-sub { font-size: 24px; }
+      .tile--half { min-height: 520px; }
+      .tile--half .t-title { font-size: 34px; }
+      .tile--half .t-sub { font-size: 19px; }
     }
-
-    /* ------------------------------------------------ ambient float
-       6-12px over 4-7s so the page breathes when scrolling stops. */
-    @keyframes float-y {
-      from { transform: translateY(-7px); }
-      to   { transform: translateY(7px); }
-    }
-    .js-motion .float { animation: float-y 6.5s ease-in-out infinite alternate; }
-
-    /* --------------------------------------------- pointer-reactive
-       Desktop polish only: a real pointer, and hover actually works. */
-    @media (hover: hover) and (pointer: fine) {
-      .js-motion .card { transform-style: preserve-3d; }
-      .js-motion .card.tilt { transition: transform .1s linear, box-shadow .3s; }
-    }
-
-    @media (max-width: 820px) {
-      .chapter { padding: 84px 0; }
-      .chapter-in { grid-template-columns: 1fr; gap: 34px; }
-      .chapter--flip .ch-text { order: 0; }
+    @media (max-width: 734px) {
+      .tile { min-height: 520px; padding-top: 46px; }
+      .t-title { font-size: 40px; }
+      .t-sub { font-size: 21px; }
+      .duo { grid-template-columns: 1fr; }
+      .tile--half { min-height: 480px; }
+      .tile--half .t-title { font-size: 32px; }
+      .bento { padding: 64px 0 80px; }
+      .bento-head { font-size: 32px; }
       .card--wide { grid-column: span 1; }
-      .nav-links { gap: 16px; }
-      .hero { padding-top: 56px; }
+      .nav-links { gap: 20px; }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after {
-        transition-duration: 0.01ms !important;
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-      }
-      .reveal { opacity: 1; transform: none; animation: none; }
-      .wipe { clip-path: none; animation: none; }
-      .float, .js-motion .float { animation: none; }
-      .card:hover { transform: none; }
+      *, *::before, *::after { transition-duration: 0.01ms !important; animation: none !important; }
+      .reveal { opacity: 1; transform: none; }
+      .card:hover .card-banner svg { transform: none; }
     }
   </style>
 </head>
@@ -269,7 +224,7 @@
   <header class="nav" id="nav">
     <div class="nav-in">
       <a class="nav-mark" href="/">ARTGEOrge</a>
-      <nav class="nav-links">
+      <nav class="nav-links" aria-label="Site">
         <a href="#games">Games</a>
         <a href="https://github.com/ARTGEOrge">GitHub</a>
       </nav>
@@ -281,29 +236,22 @@
             <circle cx="5" cy="19" r="2"/><circle cx="12" cy="19" r="2"/><circle cx="19" cy="19" r="2"/>
           </svg>
         </button>
-  <div class="apps-menu" id="appsMenu">
-    <a class="apps-app" href="/math-solver/"><span class="ai">🧮</span><span>Math Solver</span></a>
-    <a class="apps-app" href="/cipher/"><span class="ai">🔐</span><span>Cipher</span></a>
-  </div>
+        <div class="apps-menu" id="appsMenu">
+        <a class="apps-app" href="/math-solver/"><span class="ai">🧮</span><span>Math Solver</span></a>
+        <a class="apps-app" href="/cipher/"><span class="ai">🔐</span><span>Cipher</span></a>
+        </div>
       </div>
     </div>
   </header>
 
   <main>
-    <section class="hero">
-      <div class="wrap">
-        <!-- Deliberately NOT a .wipe: the hero headline is the page's most
-             important element and must never be gated behind a script or an
-             observer callback. Wipes are for the below-fold chapter heads. -->
-        <h1>Game Arcade</h1>
-        <p class="tagline">Twenty-one games. No downloads. Just press play.</p>
-        <div class="ctas">
-          <a class="cta" href="/mario-kart/">Play Kart Games &rsaquo;</a>
-          <a class="cta" href="#games">Browse all games &rsaquo;</a>
-        </div>
-        <!-- parallax on the frame, ambient float on the inner layer, so the
-             two transforms never fight over the same element -->
-        <div class="hero-art" data-parallax><div class="float"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+    <section class="tile tile--gray">
+      <div class="reveal">
+        <h1 class="t-title">Game Arcade</h1>
+        <p class="t-sub">Twenty-one games. No downloads. Just press play.</p>
+        <div class="pills"><a class="pill pill--fill" href="/mario-kart/">Play Kart Games</a><a class="pill pill--line" href="#games">Browse all games</a></div>
+      </div>
+      <div class="t-art" data-parallax><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="kartSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#123a86"/>
@@ -383,64 +331,15 @@
             <line x1="60" y1="112" x2="42" y2="117"/>
             <line x1="340" y1="112" x2="358" y2="117"/>
           </g>
-        </svg></div></div>
-      </div>
-    </section>
-
-  <section class="chapter reveal">
-    <div class="chapter-in">
-      <div class="ch-text">
-        <p class="ch-eyebrow">New</p>
-        <h2 class="ch-title wipe">Zombie Apocalypse</h2>
-        <p class="ch-desc">Survive endless zombie hordes in GOD MODE. Auto-fire your growing arsenal, pick a weapon each level from 25 rarities up to Godly &amp; Universal, and crush bosses every 5 levels.</p>
-        <a class="ch-cta" href="/zombie-survivors/">Play Zombie Apocalypse &rsaquo;</a>
-      </div>
-      <div class="ch-art float"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <radialGradient id="zombGrad" cx="50%" cy="55%" r="70%">
-              <stop offset="0%" stop-color="#1a0a2e"/>
-              <stop offset="100%" stop-color="#050510"/>
-            </radialGradient>
-          </defs>
-          <rect width="400" height="180" fill="url(#zombGrad)"/>
-          <!-- grid floor -->
-          <g stroke="rgba(109,74,255,0.14)" stroke-width="1">
-            <path d="M0,120 H400 M0,145 H400 M0,175 H400"/>
-            <path d="M60,120 L20,180 M140,120 L120,180 M220,120 L230,180 M300,120 L340,180"/>
-          </g>
-          <!-- muzzle flash -->
-          <circle cx="200" cy="92" r="70" fill="none" stroke="rgba(109,74,255,0.18)" stroke-width="16"/>
-          <circle cx="200" cy="92" r="42" fill="none" stroke="rgba(109,74,255,0.3)" stroke-width="10"/>
-          <!-- player -->
-          <rect x="186" y="78" width="28" height="28" rx="4" fill="#6d4aff"/>
-          <circle cx="194" cy="88" r="3" fill="#fff"/><circle cx="206" cy="88" r="3" fill="#fff"/>
-          <!-- tracer -->
-          <line x1="214" y1="92" x2="330" y2="60" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
-          <circle cx="330" cy="60" r="6" fill="#ffcc33"/>
-          <!-- zombies -->
-          <g fill="#3f8f3f">
-            <rect x="46" y="66" width="24" height="24" rx="3"/>
-            <rect x="92" y="104" width="24" height="24" rx="3"/>
-            <rect x="316" y="106" width="24" height="24" rx="3"/>
-          </g>
-          <g fill="#f33"><circle cx="52" cy="74" r="2.5"/><circle cx="64" cy="74" r="2.5"/><circle cx="98" cy="112" r="2.5"/><circle cx="110" cy="112" r="2.5"/></g>
-          <!-- boss zombie -->
-          <rect x="344" y="60" width="40" height="40" rx="4" fill="#6a0dad"/>
-          <circle cx="354" cy="74" r="3.5" fill="#f33"/><circle cx="374" cy="74" r="3.5" fill="#f33"/>
         </svg></div>
-    </div>
-  </section>
-
-  <section class="chapter chapter--dark chapter--pin chapter--flip" data-scene>
-    <div class="pin">
-      <div class="chapter-in">
-      <div class="ch-text">
-        <p class="ch-eyebrow">Open World</p>
-        <h2 class="ch-title wipe">NYC Walk</h2>
-        <p class="ch-desc">Walk a procedural New York &mdash; Manhattan, Brooklyn, Queens, the Bronx and Staten Island, two rivers and six bridges. Right-click any moving cab to take the wheel and drive across town, day or night.</p>
-        <a class="ch-cta" href="/nyc-walk/">Play NYC Walk &rsaquo;</a>
+    </section>
+    <section class="tile tile--dark" data-scene>
+      <div class="reveal">
+        <h2 class="t-title">NYC Walk</h2>
+        <p class="t-sub">All five boroughs. Walk it, or take the wheel.</p>
+        <div class="pills"><a class="pill pill--fill" href="/nyc-walk/" aria-label="Play NYC Walk">Play</a></div>
       </div>
-      <div class="ch-art" data-scene-art><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+      <div class="t-art" data-scene-art><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="nycSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#0b1430"/>
@@ -501,19 +400,55 @@
           <rect x="128" y="86" width="22" height="4" fill="#161a20"/>
           <circle cx="150" cy="92" r="6" fill="#ffd27a" opacity=".9"/>
         </svg></div>
+    </section>
+    <div class="duo">
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Zombie Apocalypse</h2>
+        <p class="t-sub">Endless hordes. A boss every five levels.</p>
+        <div class="pills"><a class="pill pill--fill" href="/zombie-survivors/" aria-label="Play Zombie Apocalypse">Play</a></div>
       </div>
-    </div>
-  </section>
-
-  <section class="chapter reveal">
-    <div class="chapter-in">
-      <div class="ch-text">
-        <p class="ch-eyebrow">Minecraft</p>
-        <h2 class="ch-title wipe">Eaglercraft 1.12</h2>
-        <p class="ch-desc">Minecraft 1.12.2 running entirely in your browser. Build, explore, and survive — no download needed.</p>
-        <a class="ch-cta" href="/eaglercraft/">Play Eaglercraft 1.12 &rsaquo;</a>
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="zombGrad" cx="50%" cy="55%" r="70%">
+              <stop offset="0%" stop-color="#1a0a2e"/>
+              <stop offset="100%" stop-color="#050510"/>
+            </radialGradient>
+          </defs>
+          <rect width="400" height="180" fill="url(#zombGrad)"/>
+          <!-- grid floor -->
+          <g stroke="rgba(109,74,255,0.14)" stroke-width="1">
+            <path d="M0,120 H400 M0,145 H400 M0,175 H400"/>
+            <path d="M60,120 L20,180 M140,120 L120,180 M220,120 L230,180 M300,120 L340,180"/>
+          </g>
+          <!-- muzzle flash -->
+          <circle cx="200" cy="92" r="70" fill="none" stroke="rgba(109,74,255,0.18)" stroke-width="16"/>
+          <circle cx="200" cy="92" r="42" fill="none" stroke="rgba(109,74,255,0.3)" stroke-width="10"/>
+          <!-- player -->
+          <rect x="186" y="78" width="28" height="28" rx="4" fill="#6d4aff"/>
+          <circle cx="194" cy="88" r="3" fill="#fff"/><circle cx="206" cy="88" r="3" fill="#fff"/>
+          <!-- tracer -->
+          <line x1="214" y1="92" x2="330" y2="60" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="330" cy="60" r="6" fill="#ffcc33"/>
+          <!-- zombies -->
+          <g fill="#3f8f3f">
+            <rect x="46" y="66" width="24" height="24" rx="3"/>
+            <rect x="92" y="104" width="24" height="24" rx="3"/>
+            <rect x="316" y="106" width="24" height="24" rx="3"/>
+          </g>
+          <g fill="#f33"><circle cx="52" cy="74" r="2.5"/><circle cx="64" cy="74" r="2.5"/><circle cx="98" cy="112" r="2.5"/><circle cx="110" cy="112" r="2.5"/></g>
+          <!-- boss zombie -->
+          <rect x="344" y="60" width="40" height="40" rx="4" fill="#6a0dad"/>
+          <circle cx="354" cy="74" r="3.5" fill="#f33"/><circle cx="374" cy="74" r="3.5" fill="#f33"/>
+        </svg></div>
+    </section>
+    <section class="tile tile--gray tile--half">
+      <div class="reveal">
+        <h2 class="t-title">Eaglercraft 1.12</h2>
+        <p class="t-sub">Minecraft 1.12, right in your browser.</p>
+        <div class="pills"><a class="pill pill--fill" href="/eaglercraft/" aria-label="Play Eaglercraft 1.12">Play</a></div>
       </div>
-      <div class="ch-art float"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
+      <div class="t-art"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="mcSky" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stop-color="#5588cc"/>
@@ -566,13 +501,12 @@
           <rect x="200" y="18"  width="60" height="14" fill="rgba(255,255,255,0.85)"/>
           <rect x="208" y="10"  width="44" height="12" fill="rgba(255,255,255,0.85)"/>
         </svg></div>
+    </section>
     </div>
-  </section>
 
     <section class="bento" id="games">
-      <div class="wrap">
-        <h2 class="bento-head wipe">All games</h2>
-        <p class="sub">Every one runs in the browser.</p>
+      <div class="bento-in">
+        <h2 class="bento-head reveal">All games. <span>Every one runs in the browser.</span></h2>
         <div class="grid">
           <a class="card card--wide reveal" href="/encyclopedia/">
             <div class="card-banner"><svg aria-hidden="true" viewBox="0 0 400 180" xmlns="http://www.w3.org/2000/svg">
@@ -636,7 +570,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">Reference</p>
-              <h2 class="card-title">Encyclopædia</h2>
+              <h3 class="card-title">Encyclopædia</h3>
               <p class="card-desc">A free online encyclopedia in the classic Britannica style.</p>
             </div>
           </a>
@@ -719,7 +653,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">3D · CAD</p>
-              <h2 class="card-title">3D Shapes Studio</h2>
+              <h3 class="card-title">3D Shapes Studio</h3>
               <p class="card-desc">An Onshape-style Part Studio in your browser — Features tree, view cube, multi-project workspaces, primitives with Solid/Hole modes, STL export.</p>
             </div>
           </a>
@@ -766,7 +700,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">City Chase</p>
-              <h2 class="card-title">Escape Road City 2</h2>
+              <h3 class="card-title">Escape Road City 2</h3>
               <p class="card-desc">Hit the streets and outrun the cops through a sprawling city.</p>
             </div>
           </a>
@@ -815,7 +749,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">3D</p>
-              <h2 class="card-title">Snow Rider 3D</h2>
+              <h3 class="card-title">Snow Rider 3D</h3>
               <p class="card-desc">Strap in and race down snowy mountain slopes on a sled.</p>
             </div>
           </a>
@@ -864,7 +798,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">Action</p>
-              <h2 class="card-title">Evolving Bombs 3D</h2>
+              <h3 class="card-title">Evolving Bombs 3D</h3>
               <p class="card-desc">Toss bombs that grow with every kill.</p>
             </div>
           </a>
@@ -921,7 +855,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">Hopper</p>
-              <h2 class="card-title">Crossy Road</h2>
+              <h3 class="card-title">Crossy Road</h3>
               <p class="card-desc">Hop across endless lanes of traffic, rivers, and railways.</p>
             </div>
           </a>
@@ -996,7 +930,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">Puzzle</p>
-              <h2 class="card-title">Block Blast</h2>
+              <h3 class="card-title">Block Blast</h3>
               <p class="card-desc">Drag and drop colorful blocks onto the grid.</p>
             </div>
           </a>
@@ -1064,7 +998,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">Crowd</p>
-              <h2 class="card-title">Mob Control</h2>
+              <h3 class="card-title">Mob Control</h3>
               <p class="card-desc">Aim your gate, multiply your crowd, and overwhelm the enemy stickmen.</p>
             </div>
           </a>
@@ -1138,7 +1072,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">Runner</p>
-              <h2 class="card-title">Death Run 3D</h2>
+              <h3 class="card-title">Death Run 3D</h3>
               <p class="card-desc">Sprint down a deadly 3D corridor full of spikes, blades, and gaps.</p>
             </div>
           </a>
@@ -1216,7 +1150,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">Race</p>
-              <h2 class="card-title">Bridge Race</h2>
+              <h3 class="card-title">Bridge Race</h3>
               <p class="card-desc">Collect blocks of your color and build a bridge to the next platform.</p>
             </div>
           </a>
@@ -1292,7 +1226,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">Puzzle</p>
-              <h2 class="card-title">Color Water Sort 3D</h2>
+              <h3 class="card-title">Color Water Sort 3D</h3>
               <p class="card-desc">Pour colored liquids between tubes until each one holds a single color.</p>
             </div>
           </a>
@@ -1376,7 +1310,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">Action</p>
-              <h2 class="card-title">Bazooka Boy</h2>
+              <h3 class="card-title">Bazooka Boy</h3>
               <p class="card-desc">Aim, fire, and blow stuff up.</p>
             </div>
           </a>
@@ -1465,7 +1399,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">Sports</p>
-              <h2 class="card-title">Basket Random</h2>
+              <h3 class="card-title">Basket Random</h3>
               <p class="card-desc">Wobbly ragdoll basketball where every shot is chaos.</p>
             </div>
           </a>
@@ -1544,7 +1478,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">Rhythm</p>
-              <h2 class="card-title">Geometry Dash Lite</h2>
+              <h3 class="card-title">Geometry Dash Lite</h3>
               <p class="card-desc">Tap to jump your cube through spikes, blocks, and gravity flips.</p>
             </div>
           </a>
@@ -1645,7 +1579,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">Endless Runner · 3D</p>
-              <h2 class="card-title">Subway Surfers Remake</h2>
+              <h3 class="card-title">Subway Surfers Remake</h3>
               <p class="card-desc">A real 3D WebGL endless runner.</p>
             </div>
           </a>
@@ -1712,7 +1646,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">Sports</p>
-              <h2 class="card-title">Tennis 3D</h2>
+              <h3 class="card-title">Tennis 3D</h3>
               <p class="card-desc">3D arcade tennis with a real court, net and ball physics.</p>
             </div>
           </a>
@@ -1772,7 +1706,7 @@
         </svg></div>
             <div class="card-body">
               <p class="card-tag">Sports</p>
-              <h2 class="card-title">Ping Pong</h2>
+              <h3 class="card-title">Ping Pong</h3>
               <p class="card-desc">Classic table tennis in your browser.</p>
             </div>
           </a>
@@ -1782,10 +1716,10 @@
   </main>
 
   <footer class="foot">
-    <div class="wrap">
+    <div class="foot-in">
       <div class="foot-cols">
         <div>
-          <h3>Arcade</h3>
+          <h2 class="foot-h">Arcade</h2>
           <ul>
             <li><a href="#games">All games</a></li>
             <li><a href="/zombie-survivors/">Zombie Apocalypse</a></li>
@@ -1793,7 +1727,7 @@
           </ul>
         </div>
         <div>
-          <h3>Apps</h3>
+          <h2 class="foot-h">Apps</h2>
           <ul>
             <li><a href="/search/">Search</a></li>
             <li><a href="/docs/">Docs</a></li>
@@ -1801,7 +1735,7 @@
           </ul>
         </div>
         <div>
-          <h3>Tools</h3>
+          <h2 class="foot-h">Tools</h2>
           <ul>
             <li><a href="/playground/">Playground</a></li>
             <li><a href="/cipher/">Cipher</a></li>
@@ -1809,7 +1743,7 @@
           </ul>
         </div>
         <div>
-          <h3>More</h3>
+          <h2 class="foot-h">More</h2>
           <ul>
             <li><a href="https://github.com/ARTGEOrge">GitHub</a></li>
             <li><a href="/news/">News</a></li>
@@ -1822,46 +1756,21 @@
 
 <script>
   var btn = document.getElementById('appsBtn'), menu = document.getElementById('appsMenu');
-  btn.addEventListener('click', function (e) {
-    e.stopPropagation();
-    var open = menu.classList.toggle('open');
+  function setMenu(open) {
+    menu.classList.toggle('open', open);
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-  });
-  document.addEventListener('click', function () {
-    menu.classList.remove('open');
-    btn.setAttribute('aria-expanded', 'false');
-  });
-  document.addEventListener('keydown', function (e) {
-    if (e.key === 'Escape') {
-      menu.classList.remove('open');
-      btn.setAttribute('aria-expanded', 'false');
-    }
-  });
+  }
+  btn.addEventListener('click', function (e) { e.stopPropagation(); setMenu(!menu.classList.contains('open')); });
+  document.addEventListener('click', function () { setMenu(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { setMenu(false); } });
 
-  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
-  var motionOK = !reduce.matches;
-  if (motionOK) { document.documentElement.className += ' js-motion'; }
-
-  // Reveals and wipes are pure CSS (animation-timeline: view()). No observer,
-  // no timer, no class toggling -- nothing here can hide content.
-
-  /* ----------------------------------------------------------------------
-     Damped scroll-progress engine.
-
-     NOT scroll-jacking: this smooths the READ scroll value only. Nothing
-     calls preventDefault, nothing sets overflow:hidden, nothing moves
-     content manually. Native scrollbar, trackpad momentum, iOS rubber-band,
-     keyboard scroll and assistive tech all stay intact -- only the animated
-     transforms lag behind via the lerp.
-     -------------------------------------------------------------------- */
-  if (motionOK) {
-    var DAMPING = 0.1;                 // Lenis-default feel; 0.08-0.12 typical
-    var target = window.pageYOffset;
-    var smoothed = target;
-
-    window.addEventListener('scroll', function () {
-      target = window.pageYOffset;
-    }, { passive: true });
+  /* Damped scroll engine. Smooths only the value it READS -- never calls
+     preventDefault or moves content, so native scroll, momentum, keyboard and
+     assistive tech are untouched. Nothing here holds or pins the page. */
+  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    var DAMPING = 0.1;
+    var target = window.pageYOffset, smoothed = target;
+    window.addEventListener('scroll', function () { target = window.pageYOffset; }, { passive: true });
 
     function mapRange(v, inA, inB, outA, outB) {
       var t = Math.max(0, Math.min(1, (v - inA) / (inB - inA)));
@@ -1871,83 +1780,47 @@
     var nav = document.getElementById('nav');
     var scene = document.querySelector('[data-scene]');
     var sceneArt = document.querySelector('[data-scene-art]');
-    var parallax = document.querySelector('[data-parallax]');
+    var heroArt = document.querySelector('[data-parallax]');
 
-    // Cached geometry: offsetTop/offsetHeight would otherwise reflow per frame.
     var geo = { top: 0, height: 0, vh: 0, navH: 0 };
     function measure() {
       geo.vh = window.innerHeight;
-      if (nav) { geo.navH = nav.offsetHeight; }
-      if (scene) {
-        geo.top = scene.offsetTop;
-        geo.height = scene.offsetHeight;
-      }
+      geo.navH = nav ? nav.offsetHeight : 0;
+      if (scene) { geo.top = scene.offsetTop; geo.height = scene.offsetHeight; }
     }
     measure();
     window.addEventListener('resize', measure, { passive: true });
-    // Fonts and images can still move the scene after this script runs.
     window.addEventListener('load', measure);
 
-    var lastStuck = null, lastDark = null;
-
+    var lastDark = null;
     function tick() {
       smoothed += (target - smoothed) * DAMPING;
 
-      if (nav) {
-        var stuck = smoothed > 12;
-        if (stuck !== lastStuck) { nav.classList.toggle('is-stuck', stuck); lastStuck = stuck; }
+      // Hero art grows very slightly from its bottom edge as you leave.
+      if (heroArt) {
+        heroArt.style.transform = 'scale(' + mapRange(smoothed, 0, geo.vh, 1, 1.05).toFixed(4) + ')';
       }
 
-      // Hero art drifts up as you leave the hero.
-      if (parallax) {
-        parallax.style.transform =
-          'translateY(' + mapRange(smoothed, 0, geo.vh, 0, -70).toFixed(2) + 'px)';
-      }
-
-      // Scroll-linked scene, no pin: progress runs 0 -> 1 as the section
-      // travels from entering at the bottom of the screen to leaving at the top.
-      if (scene) {
+      // Dark tile: art rises into place as the tile enters. It settles at 0,
+      // so the rounded top never lifts off the tile's bottom edge.
+      if (scene && sceneArt) {
         var pr = mapRange(smoothed, geo.top - geo.vh, geo.top + geo.height, 0, 1);
+        sceneArt.style.transform =
+          'translateY(' + mapRange(pr, 0, 0.5, 60, 0).toFixed(2) + 'px)' +
+          ' scale(' + mapRange(pr, 0, 0.5, 0.94, 1).toFixed(4) + ')';
+      }
 
-        if (sceneArt) {
-          sceneArt.style.transform =
-            'translateY(' + mapRange(pr, 0, 1, 40, -40).toFixed(2) + 'px)' +
-            ' scale(' + mapRange(pr, 0, 1, 0.92, 1.04).toFixed(3) + ')';
-        }
-
-        // Invert the nav while the dark section sits under it. Uses the real
-        // scroll position, not the smoothed one, because the nav itself never lags.
-        if (nav) {
-          var under = target + geo.navH / 2;
-          var dark = under >= geo.top && under <= geo.top + geo.height;
-          if (dark !== lastDark) { nav.classList.toggle('is-dark', dark); lastDark = dark; }
-        }
+      // Nav turns dark over the black tile. Real scroll, not smoothed: the nav
+      // itself never lags.
+      if (nav && scene) {
+        var under = target + geo.navH / 2;
+        var dark = under >= geo.top && under <= geo.top + geo.height;
+        if (dark !== lastDark) { nav.classList.toggle('is-dark', dark); lastDark = dark; }
       }
 
       requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
-
-    /* Pointer-reactive card tilt -- desktop polish, done last and gated on a
-       real pointer so touch devices never get it. */
-    if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-      var MAX_TILT = 6;
-      Array.prototype.forEach.call(document.querySelectorAll('.card'), function (card) {
-        card.addEventListener('pointermove', function (e) {
-          var r = card.getBoundingClientRect();
-          var rx = mapRange((e.clientY - r.top) / r.height, 0, 1, MAX_TILT, -MAX_TILT);
-          var ry = mapRange((e.clientX - r.left) / r.width, 0, 1, -MAX_TILT, MAX_TILT);
-          card.classList.add('tilt');
-          card.style.transform =
-            'perspective(900px) rotateX(' + rx.toFixed(2) + 'deg) rotateY(' +
-            ry.toFixed(2) + 'deg) translateY(-5px)';
-        });
-        card.addEventListener('pointerleave', function () {
-          card.classList.remove('tilt');
-          card.style.transform = '';
-        });
-      });
-    }
   }
 </script>
 </body>
