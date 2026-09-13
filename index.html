@@ -213,22 +213,11 @@
       }
     }
 
-    /* ------------------------------------------------- pinned scene
-       A tall sentinel holds a sticky full-viewport stage; the damped
-       scroll engine maps 0->1 progress onto the children. Only applied
-       once JS confirms motion is wanted -- otherwise the chapter stays
-       an ordinary section and the page reads normally. */
-    /* The scene keeps its own dark background: text is never left sitting on a
-       half-morphed body colour. The register change comes from the pin itself. */
-    /* 150vh = 50vh of held scroll. It was 260vh (160vh held), which in
-       practice meant ~6s of scrolling with the page apparently stuck. */
-    .js-motion .chapter--pin { height: 150vh; padding: 0; }
-    .js-motion .chapter--pin .pin { background: var(--ink); }
-    .js-motion .chapter--pin .pin {
-      position: sticky; top: 0; height: 100vh;
-      display: flex; align-items: center; overflow: hidden;
-    }
-    .js-motion .chapter--pin .chapter-in { width: 100%; }
+    /* ----------------------------------------------- scroll-linked scene
+       The NYC Walk chapter scrolls at normal speed: no sticky stage, no held
+       scroll. It was pinned (260vh, then 150vh) and both read as the page
+       being stuck. The damped engine still maps the section's pass through
+       the viewport onto its art, so it moves with you without stopping you. */
 
     /* ---------------------------------------------- clip-path wipe
        Reads as purposeful revelation rather than a generic fade. */
@@ -260,10 +249,6 @@
       .card--wide { grid-column: span 1; }
       .nav-links { gap: 16px; }
       .hero { padding-top: 56px; }
-      /* Narrow viewports stack the chapter, which can exceed the 100vh stage
-         and get clipped by its overflow. Drop the pin and read normally. */
-      .js-motion .chapter--pin { height: auto; padding: 84px 0; }
-      .js-motion .chapter--pin .pin { position: static; height: auto; overflow: visible; }
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -276,9 +261,6 @@
       .wipe { clip-path: none; animation: none; }
       .float, .js-motion .float { animation: none; }
       .card:hover { transform: none; }
-      /* The pinned scene collapses back to an ordinary section. */
-      .chapter--pin, .js-motion .chapter--pin { height: auto; padding: 84px 0; }
-      .chapter--pin .pin, .js-motion .chapter--pin .pin { position: static; height: auto; }
     }
   </style>
 </head>
@@ -1892,16 +1874,13 @@
     var parallax = document.querySelector('[data-parallax]');
 
     // Cached geometry: offsetTop/offsetHeight would otherwise reflow per frame.
-    var geo = { top: 0, height: 0, vh: 0, pinned: false };
+    var geo = { top: 0, height: 0, vh: 0, navH: 0 };
     function measure() {
       geo.vh = window.innerHeight;
+      if (nav) { geo.navH = nav.offsetHeight; }
       if (scene) {
         geo.top = scene.offsetTop;
         geo.height = scene.offsetHeight;
-        // Matches the <=820px rule that un-pins the scene; without this the
-        // progress transforms would keep firing on a section that no longer pins.
-        var pin = scene.querySelector('.pin');
-        geo.pinned = !!pin && getComputedStyle(pin).position === 'sticky';
       }
     }
     measure();
@@ -1925,26 +1904,22 @@
           'translateY(' + mapRange(smoothed, 0, geo.vh, 0, -70).toFixed(2) + 'px)';
       }
 
-      // Pinned scene: one stage, children mapped onto 0->1 progress.
-      if (scene && !geo.pinned && sceneArt && sceneArt.style.transform) {
-        sceneArt.style.transform = '';
-        sceneArt.style.opacity = '';
-        if (nav && lastDark) { nav.classList.remove('is-dark'); lastDark = false; }
-      }
-      if (scene && geo.pinned) {
-        var end = geo.top + geo.height - geo.vh;
-        var pr = mapRange(smoothed, geo.top, end, 0, 1);
+      // Scroll-linked scene, no pin: progress runs 0 -> 1 as the section
+      // travels from entering at the bottom of the screen to leaving at the top.
+      if (scene) {
+        var pr = mapRange(smoothed, geo.top - geo.vh, geo.top + geo.height, 0, 1);
 
         if (sceneArt) {
           sceneArt.style.transform =
-            'translateY(' + mapRange(pr, 0, 1, 54, -54).toFixed(2) + 'px)' +
-            ' scale(' + mapRange(pr, 0, 1, 0.88, 1.06).toFixed(3) + ')';
-          sceneArt.style.opacity = mapRange(pr, 0, 0.14, 0.15, 1).toFixed(3);
+            'translateY(' + mapRange(pr, 0, 1, 40, -40).toFixed(2) + 'px)' +
+            ' scale(' + mapRange(pr, 0, 1, 0.92, 1.04).toFixed(3) + ')';
         }
 
-        // Invert the nav only while the dark stage actually owns the viewport.
+        // Invert the nav while the dark section sits under it. Uses the real
+        // scroll position, not the smoothed one, because the nav itself never lags.
         if (nav) {
-          var dark = smoothed >= geo.top - 8 && smoothed <= end + 8;
+          var under = target + geo.navH / 2;
+          var dark = under >= geo.top && under <= geo.top + geo.height;
           if (dark !== lastDark) { nav.classList.toggle('is-dark', dark); lastDark = dark; }
         }
       }
