@@ -17,7 +17,7 @@
     ctx.strokeStyle = 'rgba(40,20,20,0.55)'; ctx.lineWidth = r * 0.07;
     ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
   }
-  function eye(ctx, x, y, s, blink, look) {
+  function eye(ctx, x, y, s, blink, look, scared) {
     if (blink) {
       ctx.strokeStyle = '#2a1a14'; ctx.lineWidth = s * 0.28; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.arc(x, y - s * 0.1, s * 0.75, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
@@ -26,8 +26,14 @@
     circle(ctx, x, y, s, '#ffffff');
     ctx.strokeStyle = 'rgba(40,20,20,0.35)'; ctx.lineWidth = s * 0.12;
     ctx.beginPath(); ctx.arc(x, y, s, 0, TAU); ctx.stroke();
+    if (scared) {
+      circle(ctx, x + s * 0.1 * (look || 1), y, s * 0.24, '#1d1410');
+      circle(ctx, x, y - s * 0.08, s * 0.08, '#ffffff');
+      return;
+    }
     circle(ctx, x + s * 0.32 * (look || 1), y + s * 0.05, s * 0.52, '#1d1410');
     circle(ctx, x + s * 0.12 * (look || 1), y - s * 0.2, s * 0.18, '#ffffff');
+    circle(ctx, x + s * 0.5 * (look || 1), y + s * 0.28, s * 0.08, 'rgba(255,255,255,0.8)');
   }
 
   /* ------------------------------------------------------------------ birds */
@@ -45,12 +51,16 @@
     var t = st.t || 0;
     ctx.save();
     if (st.squash) ctx.scale(1 + st.squash, 1 - st.squash);
+    if (st.stretch) ctx.scale(1 + st.stretch, 1 - st.stretch * 0.6);
+    if (!st.flap && !st.stretch) { var br = Math.sin(t * 3.2 + r * 10) * 0.025; ctx.scale(1 - br * 0.5, 1 + br); }
 
-    // tail feathers
-    ctx.fillStyle = b.dark;
+    // tail: three layered feathers with light tips
     for (var i = -1; i <= 1; i++) {
-      ctx.save(); ctx.translate(-r * 0.9, r * 0.05); ctx.rotate(Math.PI + i * 0.35);
-      ctx.beginPath(); ctx.ellipse(r * 0.28, 0, r * 0.32, r * 0.1, 0, 0, TAU); ctx.fill();
+      ctx.save(); ctx.translate(-r * 0.9, r * 0.05); ctx.rotate(Math.PI + i * 0.38);
+      ctx.fillStyle = b.dark;
+      ctx.beginPath(); ctx.ellipse(r * 0.3, 0, r * 0.36, r * 0.11, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = b.light;
+      ctx.beginPath(); ctx.ellipse(r * 0.52, 0, r * 0.12, r * 0.06, 0, 0, TAU); ctx.fill();
       ctx.restore();
     }
 
@@ -76,6 +86,13 @@
     ctx.beginPath(); ctx.ellipse(r * 0.12, r * 0.42, r * 0.62, r * 0.42, 0, 0, TAU); ctx.fill();
     ctx.fillStyle = bg;
     ctx.beginPath(); ctx.ellipse(r * 0.12, r * 0.42, r * 0.62, r * 0.42, 0, 0, TAU); ctx.fill();
+    // feather texture: small chevrons over the back
+    ctx.strokeStyle = 'rgba(0,0,0,0.14)'; ctx.lineWidth = r * 0.035; ctx.lineCap = 'round';
+    [[-0.55, -0.1], [-0.35, -0.35], [-0.6, 0.25], [-0.15, -0.62], [0.1, -0.5]].forEach(function (f) {
+      ctx.beginPath();
+      ctx.moveTo((f[0] - 0.07) * r, (f[1] - 0.05) * r); ctx.lineTo(f[0] * r, (f[1] + 0.04) * r); ctx.lineTo((f[0] + 0.07) * r, (f[1] - 0.05) * r);
+      ctx.stroke();
+    });
     // glossy shine on the crown
     ctx.fillStyle = 'rgba(255,255,255,0.38)';
     ctx.beginPath(); ctx.ellipse(-r * 0.34, -r * 0.52, r * 0.3, r * 0.14, -0.55, 0, TAU); ctx.fill();
@@ -104,9 +121,16 @@
       }
     }
 
-    // wing
-    ctx.fillStyle = b.dark;
-    ctx.beginPath(); ctx.ellipse(-r * 0.32, r * 0.15, r * 0.34, r * 0.2, -0.5 + Math.sin(t * 14) * (st.flap ? 0.5 : 0), 0, TAU); ctx.fill();
+    // wing: three overlapping feathers that fan out when flapping
+    var wa = -0.5 + Math.sin(t * 14) * (st.flap ? 0.5 : 0);
+    ctx.save(); ctx.translate(-r * 0.18, r * 0.12); ctx.rotate(wa);
+    for (var wf = 2; wf >= 0; wf--) {
+      ctx.fillStyle = wf === 0 ? b.base : b.dark;
+      ctx.beginPath(); ctx.ellipse(-r * (0.14 + wf * 0.06), r * wf * 0.07, r * (0.34 - wf * 0.03), r * 0.13, wf * 0.22, 0, TAU); ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = r * 0.03;
+    ctx.beginPath(); ctx.ellipse(-r * 0.14, 0, r * 0.34, r * 0.13, 0, 0.2, Math.PI - 0.2); ctx.stroke();
+    ctx.restore();
 
     // eyes
     var es = type === 'tank' ? r * 0.26 : r * 0.3;
@@ -137,12 +161,17 @@
     mid:    { r: 0.62, hp: 2 },
     helmet: { r: 0.62, hp: 3.5 },
     big:    { r: 0.85, hp: 4 },
-    boss:   { r: 1.1,  hp: 8 }
+    boss:   { r: 1.1,  hp: 8 },
+    explorer: { r: 0.62, hp: 3.5 },
+    miner:  { r: 0.62, hp: 4 },
+    chief:  { r: 0.95, hp: 6 }
   };
 
   ART.drawBandit = function (ctx, kind, r, st) {
     st = st || {};
-    var hurt = st.dmg > 0.45;
+    var hurt = st.dmg > 0.45, scared = !!st.scared && !hurt;
+    var breathe = Math.sin((st.t || 0) * 2.6) * 0.025;
+    ctx.scale(1 - breathe * 0.5, 1 + breathe);
     // bushy striped tail curling up behind
     ctx.save();
     ctx.translate(-r * 0.7, r * 0.55);
@@ -163,6 +192,11 @@
     ctx.fillStyle = shaded(ctx, r, '#d4dbe3', '#9aa4b0', '#626b77');
     ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
     outline(ctx, r);
+    // fur tuft on top of the head
+    ctx.fillStyle = '#9aa4b0';
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.2, -r * 0.92); ctx.lineTo(-r * 0.1, -r * 1.14); ctx.lineTo(0, -r * 0.94);
+    ctx.lineTo(r * 0.12, -r * 1.18); ctx.lineTo(r * 0.2, -r * 0.92); ctx.closePath(); ctx.fill();
     // pale muzzle
     ctx.fillStyle = '#f2f4f7';
     ctx.beginPath(); ctx.ellipse(0, r * 0.38, r * 0.58, r * 0.42, 0, 0, TAU); ctx.fill();
@@ -178,12 +212,20 @@
     ctx.fill();
     // eyes (one squeezed shut when hurt)
     var es = r * 0.17;
-    eye(ctx, -r * 0.36, -r * 0.14, es, st.blink, 0.4);
+    // eyebrows: raised when scared, low and sly otherwise
+    ctx.strokeStyle = '#1a1c20'; ctx.lineWidth = r * 0.07; ctx.lineCap = 'round';
+    [-1, 1].forEach(function (sd) {
+      ctx.beginPath();
+      if (scared) { ctx.moveTo(sd * r * 0.2, -r * 0.5); ctx.lineTo(sd * r * 0.52, -r * 0.56); }
+      else { ctx.moveTo(sd * r * 0.2, -r * 0.4); ctx.lineTo(sd * r * 0.54, -r * 0.46); }
+      ctx.stroke();
+    });
+    eye(ctx, -r * 0.36, -r * 0.14, es * (scared ? 1.2 : 1), st.blink, 0.4, scared);
     if (hurt) {
       ctx.strokeStyle = '#fff'; ctx.lineWidth = r * 0.06; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(r * 0.24, -r * 0.2); ctx.lineTo(r * 0.48, -r * 0.08); ctx.moveTo(r * 0.24, -r * 0.06); ctx.lineTo(r * 0.48, -r * 0.18); ctx.stroke();
     } else {
-      eye(ctx, r * 0.36, -r * 0.14, es, st.blink, 0.4);
+      eye(ctx, r * 0.36, -r * 0.14, es * (scared ? 1.2 : 1), st.blink, 0.4, scared);
     }
     // whiskers and blush
     ctx.strokeStyle = 'rgba(40,44,52,0.55)'; ctx.lineWidth = r * 0.025; ctx.lineCap = 'round';
@@ -201,9 +243,13 @@
     ctx.strokeStyle = '#2a2d33'; ctx.lineWidth = r * 0.06; ctx.lineCap = 'round';
     ctx.beginPath();
     if (hurt) ctx.arc(0, r * 0.52, r * 0.16, 1.15 * Math.PI, 1.85 * Math.PI);
-    else ctx.arc(0, r * 0.3, r * 0.22, 0.2 * Math.PI, 0.8 * Math.PI);
+    else if (!scared) ctx.arc(0, r * 0.3, r * 0.22, 0.2 * Math.PI, 0.8 * Math.PI);
     ctx.stroke();
-    if (!hurt) {
+    if (scared) {
+      ctx.fillStyle = '#5a1f2a';
+      ctx.beginPath(); ctx.ellipse(0, r * 0.47, r * 0.1, r * 0.13, 0, 0, TAU); ctx.fill();
+    }
+    if (!hurt && !scared) {
       ctx.fillStyle = '#fff';
       ctx.fillRect(-r * 0.08, r * 0.49, r * 0.07, r * 0.07);
       ctx.fillRect(r * 0.01, r * 0.49, r * 0.07, r * 0.07);
@@ -213,7 +259,42 @@
       ctx.beginPath(); ctx.ellipse(-r * 0.55, r * 0.22, r * 0.14, r * 0.1, 0, 0, TAU); ctx.fill();
     }
 
-    if (kind === 'helmet') {
+    if (hurt && kind !== 'helmet' && kind !== 'miner') {
+      // sticking plaster across the forehead
+      ctx.save(); ctx.translate(r * 0.3, -r * 0.62); ctx.rotate(0.5);
+      ctx.fillStyle = '#f5deb8'; ctx.fillRect(-r * 0.3, -r * 0.08, r * 0.6, r * 0.16);
+      ctx.fillStyle = '#e8c79a'; ctx.fillRect(-r * 0.08, -r * 0.08, r * 0.16, r * 0.16);
+      ctx.restore();
+    }
+
+    if (kind === 'explorer') {
+      ctx.fillStyle = shaded(ctx, r, '#f3e2b0', '#d8bb78', '#a88a4a');
+      ctx.beginPath(); ctx.ellipse(0, -r * 0.62, r * 1.05, r * 0.2, 0, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, -r * 0.66, r * 0.62, Math.PI, TAU); ctx.fill();
+      ctx.fillStyle = '#6a4a24'; ctx.fillRect(-r * 0.62, -r * 0.8, r * 1.24, r * 0.12);
+    } else if (kind === 'miner') {
+      ctx.fillStyle = shaded(ctx, r, '#ffb07a', '#e8702a', '#a8401a');
+      ctx.beginPath(); ctx.arc(0, -r * 0.42, r * 0.82, Math.PI, TAU); ctx.fill();
+      ctx.fillStyle = '#b8501a'; ctx.fillRect(-r * 1.0, -r * 0.46, r * 2.0, r * 0.14);
+      var lamp = 0.7 + 0.3 * Math.sin((st.t || 0) * 5);
+      var lg = ctx.createRadialGradient(0, -r * 0.95, 0, 0, -r * 0.95, r * 0.7);
+      lg.addColorStop(0, 'rgba(255,250,200,' + lamp + ')'); lg.addColorStop(1, 'rgba(255,250,200,0)');
+      ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(0, -r * 0.95, r * 0.7, 0, TAU); ctx.fill();
+      circle(ctx, 0, -r * 0.95, r * 0.16, '#fff6c0');
+      ctx.strokeStyle = '#6a3a1a'; ctx.lineWidth = r * 0.05; ctx.beginPath(); ctx.arc(0, -r * 0.95, r * 0.16, 0, TAU); ctx.stroke();
+    } else if (kind === 'chief') {
+      var cols = ['#e5484d', '#ffd23f', '#3ec1ff', '#5fdc7a', '#ff8a1f', '#c06bff', '#e5484d'];
+      for (var fe = 0; fe < 7; fe++) {
+        ctx.save(); ctx.translate(0, -r * 0.7); ctx.rotate((fe - 3) * 0.28);
+        ctx.fillStyle = cols[fe];
+        ctx.beginPath(); ctx.ellipse(0, -r * 0.5, r * 0.12, r * 0.42, 0, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.beginPath(); ctx.ellipse(0, -r * 0.72, r * 0.05, r * 0.14, 0, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
+      ctx.fillStyle = '#8a4a1a'; ctx.fillRect(-r * 0.78, -r * 0.8, r * 1.56, r * 0.16);
+      [-0.5, 0, 0.5].forEach(function (bx2) { circle(ctx, bx2 * r, -r * 0.72, r * 0.06, '#ffd23f'); });
+    } else if (kind === 'helmet') {
       ctx.fillStyle = shaded(ctx, r, '#ffe27a', '#f5b81c', '#b97d00');
       ctx.beginPath(); ctx.arc(0, -r * 0.42, r * 0.82, Math.PI, TAU); ctx.fill();
       ctx.fillStyle = '#d99a10';

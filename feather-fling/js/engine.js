@@ -9,7 +9,7 @@
     stone: { density: 2.4, friction: 0.8, restitution: 0.02, hp: 24, score: 800, chips: ['#a3adb8', '#6f7a86', '#cdd4dc'], kind: 'chip' },
     ice:   { density: 0.9, friction: 0.25, restitution: 0.05, hp: 4, score: 300, chips: ['#bfe9ff', '#7cc6f0', '#ffffff'], kind: 'shard' }
   };
-  var BANDIT_HP = { small: 3, mid: 5.5, helmet: 7, big: 10, boss: 45 };
+  var BANDIT_HP = { small: 3, mid: 5.5, helmet: 7, big: 10, boss: 45, explorer: 6, miner: 8, chief: 22 };
   var BIRD_DENSITY = { rusty: 4, zip: 3.2, trio: 3.5, boomer: 4.5, tank: 5 };
   var GRACE = 1.2;          // seconds after load before impacts do damage
   var MIN_IMPULSE = 1.2;    // ignore resting contacts
@@ -353,17 +353,20 @@
         if (ud.kind === 'tnt') ART.drawTNT(ctx, ud.w, ud.h, E.t);
         else if (ud.shape === 'round') ART.drawRound(ctx, ud.m, ud.r, dmg, ud.seed);
         else if (ud.shape === 'tri') ART.drawTri(ctx, ud.m, ud.pts.map(function (v) { return [v[0], -v[1]]; }), dmg, ud.seed);
-        else ART.drawBlock(ctx, ud.m, ud.w, ud.h, dmg, ud.seed);
+        else ART.drawBlock(ctx, ud.m, ud.w, ud.h, dmg, ud.seed, { moss: E.pal.moss });
       });
     });
 
+    // bandits flinch when an airborne bird is close
+    var threats = E.birds.filter(function (b) { var u = b.getUserData(); return u.launched && !u.hit; }).map(function (b) { return b.getPosition(); });
     E.bandits.forEach(function (b) {
       var p = b.getPosition(), ud = b.getUserData();
       var blink = ((E.t + ud.blinkAt) % 3.2) < 0.12;
+      var scared = threats.some(function (q) { return Math.abs(q.x - p.x) < 6 && Math.abs(q.y - p.y) < 5; });
       at(p.x, p.y, b.getAngle() * 0.35, function () {
         var bob = ud.ouch > 0 ? Math.sin(E.t * 50) * 0.05 : 0;
         ctx.translate(bob, 0);
-        ART.drawBandit(ctx, ud.k, ud.r, { blink: blink, dmg: 1 - ud.hp / ud.maxHp, t: E.t + ud.blinkAt });
+        ART.drawBandit(ctx, ud.k, ud.r, { blink: blink && !scared, dmg: 1 - ud.hp / ud.maxHp, t: E.t + ud.blinkAt, scared: scared });
       });
     });
 
@@ -378,7 +381,8 @@
           ctx.globalAlpha = 1;
         });
       });
-      at(p.x, p.y, ang, function () { ART.drawBird(ctx, ud.type, ud.r, { t: E.t, flap: ud.launched, blink: false }); });
+      var stretch = ud.launched && !ud.hit ? Math.min(0.16, Math.hypot(v.x, v.y) * 0.007) : 0;
+      at(p.x, p.y, ang, function () { ART.drawBird(ctx, ud.type, ud.r, { t: E.t, flap: ud.launched, blink: false, stretch: stretch }); });
     });
 
     if (hooks.loaded) hooks.loaded(at);

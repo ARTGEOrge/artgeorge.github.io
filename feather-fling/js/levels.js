@@ -338,6 +338,152 @@
       var b1 = b.frame('stone', 31, 0, 2.2, 2.2);
       b.bandit('small', 31, 0);
       b.bandit('mid', 31, b1);
+    }),
+
+    /* ------------------------------------------------- World 6: Jungle Ruins */
+    level('Temple Steps', 5, ['rusty', 'zip', 'rusty'], function (b) {
+      b.frame('stone', 21, 0, 2.4, 1.4);
+      b.bandit('small', 21, 0);
+      var t2 = b.frame('stone', 24.5, 0, 3, 2.4);
+      var t3 = b.frame('stone', 24.5, t2, 3, 1.6);
+      b.bandit('explorer', 24.5, 0);
+      b.bandit('small', 24.5, t2);
+      b.tri('stone', 24.5, t3, 3, 1, 'peak');
+    }),
+
+    level('Rope Bridge', 5, ['trio', 'rusty', 'zip'], function (b) {
+      var ta = b.frame('stone', 20.5, 0, 2.2, 3);
+      b.frame('stone', 28.5, 0, 2.2, 3);
+      b.bandit('small', 20.5, 0);
+      b.bandit('small', 28.5, 0);
+      var bridge = b.plank('wood', 24.5, ta, 9);
+      b.bandit('explorer', 23.5, bridge);
+      b.bandit('small', 25.8, bridge);
+    }),
+
+    level('Idol Room', 5, ['boomer', 'zip', 'rusty', 'trio'], function (b) {
+      var t = b.frame('stone', 24, 0, 4, 2.2);
+      b.bandit('explorer', 23.2, 0);
+      b.tnt(25, 0);
+      b.tri('stone', 22.95, t, 2, 1.2, 'up');
+      b.tri('stone', 25.05, t, 2, 1.2, 'down');
+      b.frame('wood', 29, 0, 2.4, 1.6);
+      b.bandit('small', 29, 0);
+    }),
+
+    level('Vine Swing', 5, ['zip', 'tank', 'trio', 'rusty'], function (b) {
+      var t1 = b.frame('wood', 23, 0, 2.2, 2.4);
+      var t2 = b.frame('wood', 23, t1, 2.2, 2.4);
+      var t3 = b.frame('ice', 23, t2, 2.2, 2);
+      b.bandit('explorer', 23, 0);
+      b.bandit('small', 23, t1);
+      b.bandit('small', 23, t2);
+      b.bandit('mid', 23, t3);
+      b.round('stone', 27, 0, 0.7);
+      b.bandit('small', 28.4, 0);
+    }),
+
+    level('Sunken Temple', 5, ['tank', 'boomer', 'zip', 'rusty'], function (b) {
+      b.tri('stone', 19.5, 0, 2.4, 1.4, 'up');
+      var a = b.frame('stone', 23, 0, 3, 2);
+      b.frame('stone', 26.4, 0, 3, 2);
+      b.bandit('explorer', 23, 0);
+      b.bandit('explorer', 26.4, 0);
+      var top = b.plank('stone', 24.7, a, 6.8);
+      b.bandit('mid', 24.7, top);
+      b.box('wood', 22.2, top, 0.8);
+      b.box('wood', 27.2, top, 0.8);
+    }),
+
+    level('Jungle Chief', 5, ['tank', 'boomer', 'trio', 'zip', 'rusty'], function (b) {
+      b.frame('wood', 20, 0, 2.4, 1.8);
+      b.bandit('small', 20, 0);
+      var k1 = b.frame('stone', 25, 0, 4.4, 3);
+      b.bandit('chief', 25, 0);
+      var k2 = b.frame('wood', 25, k1, 3.4, 2.2);
+      b.bandit('explorer', 24.35, k1);
+      b.bandit('explorer', 25.65, k1);
+      b.tri('stone', 25, k2, 3.4, 1.4, 'peak');
+      b.frame('ice', 30, 0, 2.4, 1.8);
+      b.bandit('mid', 30, 0);
+    }),
+
+    /* ------------------------------------------------- World 7: Volcano Isle */
+    level('Ash Fields', 6, ['rusty', 'boomer', 'zip'], function (b) {
+      b.frame('stone', 21, 0, 2.6, 1.8);
+      b.bandit('miner', 21, 0);
+      var bt = b.frame('wood', 26, 0, 3, 2);
+      b.bandit('small', 26, 0);
+      b.tnt(26, bt);
+      b.bandit('mid', 29.6, 0);
+    }),
+
+    level('Magma Chamber', 6, ['boomer', 'tank', 'zip', 'trio'], function (b) {
+      var t = b.frame('stone', 24, 0, 5, 2);
+      b.tnt(22.35, 0);
+      b.bandit('miner', 23.7, 0);
+      b.tnt(25.65, 0);
+      var t2 = b.frame('stone', 24, t, 3, 1.8);
+      b.bandit('miner', 24, t);
+      b.round('stone', 23.6, t2, 0.5);
+      b.bandit('small', 24.6, t2);
+    }),
+
+    level('Obsidian Spire', 6, ['tank', 'zip', 'boomer', 'rusty'], function (b) {
+      b.round('stone', 20.5, 0, 0.6);
+      var t1 = b.frame('stone', 24, 0, 2.2, 2.2);
+      var t2 = b.frame('stone', 24, t1, 2.2, 2.2);
+      var t3 = b.frame('wood', 24, t2, 2.2, 2.2);
+      var t4 = b.frame('ice', 24, t3, 2.2, 1.6);
+      b.bandit('miner', 24, 0);
+      b.bandit('small', 24, t1);
+      b.bandit('small', 24, t2);
+      b.bandit('small', 24, t3);
+      b.tri('stone', 24, t4, 2.2, 1.2, 'peak');
+    }),
+
+    level('Lava Flow', 6, ['trio', 'boomer', 'zip', 'tank'], function (b) {
+      b.tri('stone', 21, 0, 3, 1.5, 'up');
+      var t = b.frame('wood', 25, 0, 3, 2.2);
+      b.bandit('big', 25, 0);
+      b.col('wood', 23.65, t, 0.7, 0.3);
+      b.col('wood', 26.35, t, 0.7, 0.3);
+      b.round('stone', 24.4, t, 0.5);
+      b.round('stone', 25.6, t, 0.5);
+      b.frame('ice', 29.5, 0, 2.4, 1.6);
+      b.bandit('miner', 29.5, 0);
+    }),
+
+    level('Forge', 6, ['tank', 'boomer', 'trio', 'zip', 'rusty'], function (b) {
+      var a = b.frame('stone', 22, 0, 3, 2);
+      b.tnt(21.4, 0);
+      b.bandit('small', 22.55, 0);
+      b.frame('stone', 26, 0, 3, 2);
+      b.bandit('miner', 26, 0);
+      var top = b.plank('stone', 24, a, 6.4);
+      b.bandit('miner', 23, top);
+      b.bandit('miner', 25, top);
+      b.box('stone', 21.2, top, 0.6);
+      b.box('stone', 26.8, top, 0.6);
+    }),
+
+    level('Volcano King', 6, ['tank', 'boomer', 'zip', 'trio', 'boomer', 'tank'], function (b) {
+      var l1 = b.frame('stone', 19.5, 0, 2.2, 2);
+      b.bandit('small', 19.5, 0);
+      b.tri('stone', 19.5, l1, 2.2, 1, 'peak');
+      var k1 = b.frame('stone', 25, 0, 5.2, 3);
+      b.tnt(23.25, 0);
+      b.tnt(26.75, 0);
+      b.bandit('boss', 25, 0);
+      var k2 = b.frame('stone', 25, k1, 4, 2.2);
+      b.bandit('miner', 24.2, k1);
+      b.bandit('miner', 25.8, k1);
+      var k3 = b.frame('wood', 25, k2, 2.6, 1.8);
+      b.bandit('mid', 25, k2);
+      b.tri('wood', 25, k3, 2.6, 1.2, 'peak');
+      var r1 = b.frame('stone', 31, 0, 2.2, 2.4);
+      b.bandit('miner', 31, 0);
+      b.bandit('small', 31, r1);
     })
   ];
 
@@ -346,6 +492,8 @@
     { name: 'Sunset Canyon', theme: 1, from: 4, to: 8 },
     { name: 'Snowy Peaks', theme: 2, from: 8, to: 12 },
     { name: 'Tropical Beach', theme: 3, from: 12, to: 18 },
-    { name: 'Moonlit Castle', theme: 4, from: 18, to: 24 }
+    { name: 'Moonlit Castle', theme: 4, from: 18, to: 24 },
+    { name: 'Jungle Ruins', theme: 5, from: 24, to: 30 },
+    { name: 'Volcano Isle', theme: 6, from: 30, to: 36 }
   ];
 })();

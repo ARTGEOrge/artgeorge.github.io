@@ -52,7 +52,17 @@
       sky: ['#0d1440', '#2a2a6a', '#5a4a8a'], sun: '#fff8d8', night: true, rays: false,
       farCol: '#232653', farCap: '#3a3f7a', mid: '#2b3a5a', midDark: '#1f2a45', near: '#2e4a3a',
       tree: '#1d3a2e', treeLight: '#2c5242', trunk: '#2a1c14', haze: 'rgba(120,110,190,0.35)',
-      grass: '#3f7a4a', grassLight: '#5fa066', grassDark: '#2a5234', dirt: '#4a3a30', dirtDark: '#2a2018', cloud: '#6a6aa0' }
+      grass: '#3f7a4a', grassLight: '#5fa066', grassDark: '#2a5234', dirt: '#4a3a30', dirtDark: '#2a2018', cloud: '#6a6aa0' },
+    { name: 'Jungle Ruins', far: 'temple', props: 'jungle', deco: 'ferns', ambient: 'leaves', moss: true,
+      sky: ['#2f9e8f', '#9fe0c0', '#f2ffe6'], sun: '#fffbd0', night: false, rays: true,
+      farCol: '#5f9f86', farCap: '#7fbf9f', mid: '#3f9a5a', midDark: '#2c7a48', near: '#2f8a44',
+      tree: '#236e3a', treeLight: '#3fa052', trunk: '#5a3a1e', haze: 'rgba(220,255,230,0.5)',
+      grass: '#4fc04a', grassLight: '#8fe06a', grassDark: '#2f8a34', dirt: '#8a5a32', dirtDark: '#5a3418', cloud: '#ffffff' },
+    { name: 'Volcano Isle', far: 'volcano', props: 'lavarocks', deco: 'embers', ambient: 'embers',
+      sky: ['#2a0f1f', '#a8382a', '#ffb064'], sun: '#ffd9a0', night: false, rays: false,
+      farCol: '#3a2226', farCap: '#ff7a2a', mid: '#4a2a2a', midDark: '#33191c', near: '#3a2424',
+      tree: '#241516', treeLight: '#ff7a2a', trunk: '#241516', haze: 'rgba(255,140,80,0.35)',
+      grass: '#5a4a44', grassLight: '#7a6660', grassDark: '#3a2c28', dirt: '#3a2622', dirtDark: '#1f1210', cloud: '#8a6a6a' }
   ];
   ART.THEMES = THEMES;
   ART.theme = function (i) { return THEMES[(i || 0) % THEMES.length]; };
@@ -183,6 +193,51 @@
         }
       }
     }
+    if (pal.far === 'temple') {
+      var tpd = 760 * u, toff2 = -((camPx * 0.12) % tpd + tpd) % tpd;
+      for (var tq = -1; tq < Math.ceil(W / tpd) + 2; tq++) {
+        var tbx = toff2 + tq * tpd + 200 * u, tby = groundY - 36 * u;
+        for (var st = 0; st < 5; st++) {
+          var sw = (150 - st * 26) * u, sh2 = 26 * u;
+          ctx.fillStyle = st % 2 ? pal.farCol : pal.farCap;
+          ctx.fillRect(tbx - sw, tby - (st + 1) * sh2, sw * 2, sh2 + 1);
+        }
+        ctx.fillStyle = pal.farCol;
+        ctx.fillRect(tbx - 22 * u, tby - 150 * u, 44 * u, 22 * u);
+        ctx.fillStyle = 'rgba(20,50,40,0.55)';
+        ctx.fillRect(tbx - 12 * u, tby - 44 * u, 24 * u, 44 * u);
+        ctx.strokeStyle = 'rgba(40,110,60,0.8)'; ctx.lineWidth = 3 * u;
+        for (var vn = 0; vn < 5; vn++) {
+          var vx = tbx - 120 * u + vn * 60 * u;
+          ctx.beginPath(); ctx.moveTo(vx, tby - 110 * u + Math.abs(vn - 2) * 26 * u);
+          ctx.quadraticCurveTo(vx + 10 * u, tby - 60 * u, vx - 4 * u, tby - 20 * u); ctx.stroke();
+        }
+      }
+    }
+    if (pal.far === 'volcano') {
+      var vxc = ((W * 0.62 - camPx * 0.1) % (W + 900) + W + 900) % (W + 900) - 300, vb = groundY - 30 * u;
+      var vw = 360 * u, vh = 240 * u;
+      ctx.fillStyle = pal.farCol;
+      ctx.beginPath(); ctx.moveTo(vxc - vw, vb); ctx.lineTo(vxc - 46 * u, vb - vh); ctx.lineTo(vxc + 46 * u, vb - vh); ctx.lineTo(vxc + vw, vb); ctx.fill();
+      // lava rivers down the flanks
+      ctx.strokeStyle = 'rgba(255,120,40,0.85)'; ctx.lineWidth = 5 * u; ctx.lineCap = 'round';
+      [[-30, -1], [18, 1], [-6, 0.3]].forEach(function (lr) {
+        ctx.beginPath(); ctx.moveTo(vxc + lr[0] * u, vb - vh + 6 * u);
+        ctx.quadraticCurveTo(vxc + (lr[0] + lr[1] * 90) * u, vb - vh * 0.5, vxc + (lr[0] + lr[1] * 170) * u, vb);
+        ctx.stroke();
+      });
+      var crater = ctx.createRadialGradient(vxc, vb - vh, 0, vxc, vb - vh, 90 * u);
+      crater.addColorStop(0, 'rgba(255,220,120,0.95)'); crater.addColorStop(0.35, 'rgba(255,120,40,0.6)'); crater.addColorStop(1, 'rgba(255,80,20,0)');
+      ctx.fillStyle = crater;
+      ctx.beginPath(); ctx.arc(vxc, vb - vh, 90 * u, 0, TAU); ctx.fill();
+      // smoke plume rising and drifting
+      for (var sm = 0; sm < 9; sm++) {
+        var ph2 = ((t * 0.12 + sm / 9) % 1);
+        var smx = vxc + Math.sin(ph2 * 3 + sm) * 30 * u + ph2 * 120 * u, smy = vb - vh - ph2 * 260 * u;
+        ctx.fillStyle = 'rgba(70,50,55,' + (0.55 * (1 - ph2)) + ')';
+        ctx.beginPath(); ctx.arc(smx, smy, (30 + ph2 * 70) * u, 0, TAU); ctx.fill();
+      }
+    }
     if (pal.far === 'sea') {
       var seaY = groundY - 70 * u;
       var sg = ctx.createLinearGradient(0, seaY, 0, groundY);
@@ -245,6 +300,38 @@
       }
       ctx.fillStyle = '#6a4a24';
       ctx.beginPath(); ctx.arc(tx + 1 * ts + sway, ty - 86 * ts, 4 * ts, 0, TAU); ctx.arc(tx + 9 * ts + sway, ty - 87 * ts, 4 * ts, 0, TAU); ctx.fill();
+    } else if (kind === 'jungle') {
+      ctx.fillStyle = pal.trunk;
+      ctx.beginPath(); ctx.moveTo(tx - 7 * ts, ty); ctx.quadraticCurveTo(tx - 2 * ts, ty - 60 * ts, tx - 4 * ts, ty - 104 * ts);
+      ctx.lineTo(tx + 5 * ts, ty - 104 * ts); ctx.quadraticCurveTo(tx + 6 * ts, ty - 60 * ts, tx + 9 * ts, ty); ctx.fill();
+      for (var lf = 0; lf < 7; lf++) {
+        var la = -Math.PI / 2 + (lf - 3) * 0.5;
+        ctx.save(); ctx.translate(tx, ty - 104 * ts); ctx.rotate(la);
+        ctx.fillStyle = lf % 2 ? pal.tree : pal.treeLight;
+        ctx.beginPath(); ctx.ellipse(32 * ts, 0, 36 * ts, 12 * ts, 0.25, 0, TAU); ctx.fill();
+        ctx.strokeStyle = 'rgba(0,40,10,0.35)'; ctx.lineWidth = 1.5 * ts;
+        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(64 * ts, 8 * ts); ctx.stroke();
+        ctx.restore();
+      }
+      ctx.strokeStyle = '#2f7a34'; ctx.lineWidth = 2.5 * ts; ctx.lineCap = 'round';
+      [[-30, 60], [22, 46], [40, 70]].forEach(function (v2) {
+        var sw2 = Math.sin(t * 1.3 + n + v2[0]) * 5 * ts;
+        ctx.beginPath(); ctx.moveTo(tx + v2[0] * ts, ty - 100 * ts);
+        ctx.quadraticCurveTo(tx + v2[0] * ts + sw2, ty - (100 - v2[1] / 2) * ts, tx + v2[0] * ts + sw2 * 1.6, ty - (100 - v2[1]) * ts); ctx.stroke();
+      });
+      ctx.fillStyle = pal.treeLight;
+      for (var fn = -2; fn <= 2; fn++) {
+        ctx.save(); ctx.translate(tx, ty); ctx.rotate(-Math.PI / 2 + fn * 0.45);
+        ctx.beginPath(); ctx.ellipse(18 * ts, 0, 20 * ts, 5 * ts, 0, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
+    } else if (kind === 'lavarocks') {
+      ctx.fillStyle = pal.tree;
+      ctx.beginPath(); ctx.moveTo(tx - 22 * ts, ty); ctx.lineTo(tx - 10 * ts, ty - 70 * ts); ctx.lineTo(tx - 2 * ts, ty - 86 * ts);
+      ctx.lineTo(tx + 8 * ts, ty - 58 * ts); ctx.lineTo(tx + 24 * ts, ty); ctx.fill();
+      var gl = 0.6 + 0.4 * Math.sin(t * 2 + n);
+      ctx.strokeStyle = 'rgba(255,' + Math.round(110 + gl * 60) + ',40,' + (0.55 + gl * 0.4) + ')'; ctx.lineWidth = 2.5 * ts; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.moveTo(tx - 4 * ts, ty - 74 * ts); ctx.lineTo(tx - 8 * ts, ty - 44 * ts); ctx.lineTo(tx + 2 * ts, ty - 30 * ts); ctx.lineTo(tx - 3 * ts, ty); ctx.stroke();
     } else if (kind === 'spooky') {
       ctx.strokeStyle = pal.trunk; ctx.lineCap = 'round';
       ctx.lineWidth = 7 * ts;
@@ -290,6 +377,24 @@
       prop(ctx, pal.props, pal, tx, groundY - 4 * u, ts, n, t);
     }
     ridge(ctx, W, groundY + 2 * u, camPx, 0.75, 360 * u, 26 * u, 41, pal.near, true);
+
+    if (pal.ambient === 'leaves' || pal.ambient === 'embers') {
+      for (var am = 0; am < 26; am++) {
+        var life = ((t * (0.05 + hash(am) * 0.05)) + hash(am * 7.1)) % 1;
+        var ax = ((hash(am * 3.7) * W - camPx * 0.3 + Math.sin(t + am) * 30) % W + W) % W;
+        if (pal.ambient === 'leaves') {
+          var ay = life * groundY;
+          ctx.save(); ctx.translate(ax + Math.sin(life * 12 + am) * 40 * u, ay); ctx.rotate(life * 10 + am);
+          ctx.fillStyle = am % 3 ? 'rgba(90,170,70,0.85)' : 'rgba(200,170,60,0.85)';
+          ctx.beginPath(); ctx.ellipse(0, 0, 7 * u, 3 * u, 0, 0, TAU); ctx.fill();
+          ctx.restore();
+        } else {
+          var ey = groundY - life * groundY * 0.9;
+          ctx.fillStyle = 'rgba(255,' + Math.round(140 + hash(am) * 90) + ',60,' + (1 - life) + ')';
+          ctx.beginPath(); ctx.arc(ax + Math.sin(life * 9 + am) * 20 * u, ey, (1.5 + hash(am * 2) * 2.5) * u, 0, TAU); ctx.fill();
+        }
+      }
+    }
   };
 
   /* ---------------------------------------------------------------- ground */
@@ -354,6 +459,18 @@
         ctx.fillStyle = '#ffb3a0'; ctx.beginPath(); ctx.arc(dx, -0.05, 0.1, Math.PI, TAU); ctx.fill();
         ctx.strokeStyle = '#e07a66'; ctx.lineWidth = 0.02;
         for (var r2 = -1; r2 <= 1; r2++) { ctx.beginPath(); ctx.moveTo(dx, -0.05); ctx.lineTo(dx + r2 * 0.07, -0.13); ctx.stroke(); }
+      } else if (pal.deco === 'ferns' && h > 0.55) {
+        ctx.fillStyle = h > 0.8 ? pal.grassLight : pal.grassDark;
+        for (var fr = -2; fr <= 2; fr++) {
+          ctx.save(); ctx.translate(dx, 0.04); ctx.rotate(-Math.PI / 2 + fr * 0.4 + sway);
+          ctx.beginPath(); ctx.ellipse(0.2, 0, 0.22, 0.05, 0, 0, TAU); ctx.fill();
+          ctx.restore();
+        }
+      } else if (pal.deco === 'embers' && h > 0.6) {
+        var eg = 0.5 + 0.5 * Math.sin(t * 4 + x * 3);
+        ctx.fillStyle = '#2a1a18'; ctx.beginPath(); ctx.ellipse(dx, 0.02, 0.2, 0.12, 0, Math.PI, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(255,' + Math.round(100 + eg * 80) + ',30,' + (0.5 + eg * 0.5) + ')';
+        ctx.beginPath(); ctx.ellipse(dx + 0.03, -0.04, 0.07, 0.03, 0, 0, TAU); ctx.fill();
       } else if (pal.deco === 'mushrooms' && h > 0.72) {
         var glow = 0.6 + 0.4 * Math.sin(t * 3 + x);
         ctx.fillStyle = '#e8e0d0'; ctx.fillRect(dx - 0.03, -0.18, 0.06, 0.2);
@@ -361,7 +478,7 @@
         ctx.beginPath(); ctx.arc(dx, -0.18, 0.12, Math.PI, TAU); ctx.fill();
       }
       // grass tufts everywhere except snow and sand
-      if (pal.deco !== 'snow' && pal.deco !== 'shells') {
+      if (pal.deco !== 'snow' && pal.deco !== 'shells' && pal.deco !== 'embers') {
         ctx.fillStyle = pal.grassDark;
         ctx.beginPath();
         ctx.moveTo(dx - 0.14, 0.06); ctx.lineTo(dx - 0.08 + sway, -0.2); ctx.lineTo(dx - 0.03, 0.04);

@@ -92,7 +92,8 @@
   }
 
   // Rectangle block centred at the origin.
-  ART.drawBlock = function (ctx, mat, w, h, dmg, seed) {
+  ART.drawBlock = function (ctx, mat, w, h, dmg, seed, opts) {
+    opts = opts || {};
     var m = MAT[mat], r = Math.min(w, h) * 0.16, x = -w / 2, y = -h / 2;
     var bev = Math.min(0.09, Math.min(w, h) * 0.18);
     ctx.fillStyle = m.edge;
@@ -116,6 +117,15 @@
         }
         ctx.stroke();
       }
+      // end grain: growth rings on the short ends of long pieces
+      if (Math.max(w, h) / Math.min(w, h) > 2.5) {
+        ctx.strokeStyle = 'rgba(110,55,15,0.4)'; ctx.lineWidth = 0.022;
+        var er = Math.min(w, h) * 0.32;
+        [-1, 1].forEach(function (sd) {
+          var ex = long ? sd * (w / 2 - er - 0.06) : 0, ey = long ? 0 : sd * (h / 2 - er - 0.06);
+          for (var ring = 1; ring <= 3; ring++) { ctx.beginPath(); ctx.arc(ex, ey, er * ring / 3, 0, TAU); ctx.stroke(); }
+        });
+      }
       if (w * h > 0.3) {   // a knot
         var kx = x + w * (0.25 + hash(seed) * 0.5), ky = y + h * (0.3 + hash(seed * 2) * 0.4);
         ctx.strokeStyle = 'rgba(110,55,15,0.45)'; ctx.lineWidth = 0.03;
@@ -138,12 +148,36 @@
       for (var sp = 0; sp < w * h * 14; sp++) {
         ctx.beginPath(); ctx.arc(x + hash(seed + sp) * w, y + hash(seed + sp * 1.9) * h, 0.02 + hash(sp) * 0.035, 0, TAU); ctx.fill();
       }
+      if (opts.moss) {
+        for (var ms = 0; ms < 3 + w * 2; ms++) {
+          var mx = x + hash(seed + ms * 9.1) * w, my = y + hash(seed + ms * 4.7) * h * 0.5;
+          ctx.fillStyle = ms % 2 ? 'rgba(80,160,60,0.75)' : 'rgba(60,130,50,0.7)';
+          ctx.beginPath(); ctx.ellipse(mx, my, 0.12 + hash(ms) * 0.1, 0.06 + hash(ms * 2) * 0.05, 0, 0, TAU); ctx.fill();
+        }
+        ctx.fillStyle = 'rgba(90,170,60,0.8)';
+        for (var dr = 0; dr < w * 3; dr++) {
+          var dx2 = x + hash(seed + dr * 2.3) * w;
+          ctx.beginPath(); ctx.ellipse(dx2, y + 0.06, 0.08, 0.05 + hash(dr) * 0.06, 0, 0, TAU); ctx.fill();
+        }
+      }
     } else {
       // glossy diagonal reflections
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
       ctx.beginPath();
       ctx.moveTo(x + w * 0.1, y + h); ctx.lineTo(x + w * 0.1 + h * 0.5, y); ctx.lineTo(x + w * 0.1 + h * 0.5 + 0.18, y); ctx.lineTo(x + w * 0.1 + 0.18, y + h);
       ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.75)';
+      for (var fb = 0; fb < Math.max(3, w * h * 10); fb++) {
+        var fx = x + hash(seed + fb * 3.1) * w, fy = y + hash(seed + fb * 5.3) * h;
+        if (fb % 3 === 0) {
+          ctx.save(); ctx.translate(fx, fy);
+          ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 0.015;
+          for (var sp2 = 0; sp2 < 3; sp2++) { ctx.rotate(Math.PI / 3); ctx.beginPath(); ctx.moveTo(-0.05, 0); ctx.lineTo(0.05, 0); ctx.stroke(); }
+          ctx.restore();
+        } else {
+          ctx.beginPath(); ctx.arc(fx, fy, 0.015 + hash(fb) * 0.02, 0, TAU); ctx.fill();
+        }
+      }
       ctx.fillStyle = 'rgba(255,255,255,0.25)';
       ctx.beginPath();
       ctx.moveTo(x + w * 0.1 + 0.3, y + h); ctx.lineTo(x + w * 0.1 + h * 0.5 + 0.3, y); ctx.lineTo(x + w * 0.1 + h * 0.5 + 0.38, y); ctx.lineTo(x + w * 0.1 + 0.38, y + h);
@@ -159,10 +193,23 @@
     ctx.beginPath(); ctx.moveTo(x + r, y + h - bev * 0.6); ctx.lineTo(x + w - r, y + h - bev * 0.6); ctx.moveTo(x + w - bev * 0.6, y + r); ctx.lineTo(x + w - bev * 0.6, y + h - r); ctx.stroke();
 
     if (mat === 'wood' && w > 0.5 && h > 0.5) {
-      ctx.fillStyle = '#5a3a1e';
       [[x + 0.15, y + 0.15], [x + w - 0.15, y + 0.15], [x + 0.15, y + h - 0.15], [x + w - 0.15, y + h - 0.15]].forEach(function (p) {
-        ctx.beginPath(); ctx.arc(p[0], p[1], 0.045, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#5a3a1e'; ctx.beginPath(); ctx.arc(p[0], p[1], 0.05, 0, TAU); ctx.fill();
+        ctx.fillStyle = '#b9b0a4'; ctx.beginPath(); ctx.arc(p[0], p[1], 0.035, 0, TAU); ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.beginPath(); ctx.arc(p[0] - 0.012, p[1] - 0.012, 0.012, 0, TAU); ctx.fill();
       });
+    }
+    if (dmg > 0.5) {
+      // a chunk knocked out of one or two corners
+      var chips = dmg > 0.75 ? 2 : 1, cs = Math.min(w, h) * 0.3;
+      for (var ci = 0; ci < chips; ci++) {
+        var cx2 = hash(seed + ci) < 0.5 ? -1 : 1, cy2 = hash(seed + ci * 3) < 0.5 ? -1 : 1;
+        var px2 = cx2 * w / 2, py2 = cy2 * h / 2;
+        ctx.fillStyle = m.edge;
+        ctx.beginPath(); ctx.moveTo(px2, py2); ctx.lineTo(px2 - cx2 * cs, py2); ctx.lineTo(px2 - cx2 * cs * 0.4, py2 - cy2 * cs * 0.5); ctx.lineTo(px2, py2 - cy2 * cs); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = m.low;
+        ctx.beginPath(); ctx.moveTo(px2 - cx2 * cs * 0.85, py2 - cy2 * 0.02); ctx.lineTo(px2 - cx2 * cs * 0.4, py2 - cy2 * cs * 0.45); ctx.lineTo(px2 - cx2 * 0.02, py2 - cy2 * cs * 0.85); ctx.closePath(); ctx.fill();
+      }
     }
     cracks(ctx, w, h, dmg, seed, mat === 'ice' ? 'rgba(30,90,150,0.85)' : 'rgba(40,20,5,0.6)');
   };
