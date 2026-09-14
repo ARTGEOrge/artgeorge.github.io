@@ -1,3 +1,26 @@
 {
- "photos": []
+ "photos": [
+  {
+   "id": "pmu0q1u75-bk41z",
+   "src": "img/pmu0q1u75-bk41z.jpg",
+   "thumb": "img/pmu0q1u75-bk41z-t.jpg",
+   "w": 2200,
+   "h": 1467,
+   "caption": "",
+   "date": "2026-09-13",
+   "texts": [
+    {
+     "t": "©Arthur George",
+     "x": 87.65,
+     "y": 6.19,
+     "size": 1.19,
+     "font": "sans",
+     "color": "#ffffff",
+     "style": "shadow",
+     "align": "center",
+     "rot": 0.0
+    }
+   ]
+  }
+ ]
 }
