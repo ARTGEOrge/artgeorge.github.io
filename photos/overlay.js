@@ -32,7 +32,7 @@
       t: String(layer.t == null ? '' : layer.t).slice(0, 400),
       x: clamp(layer.x, 0, 100, 50),
       y: clamp(layer.y, 0, 100, 50),
-      size: clamp(layer.size, 2, 30, 8),
+      size: clamp(layer.size, 1, 30, 8),
       font: FONTS[layer.font] ? layer.font : 'sans',
       color: safeColor(layer.color),
       style: STYLES.indexOf(layer.style) >= 0 ? layer.style : 'shadow',
