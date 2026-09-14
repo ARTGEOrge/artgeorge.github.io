@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Photos by ARTGEOrge." />
+  <title>Photos — ARTGEOrge</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --white: #ffffff; --gray: #f5f5f7; --ink: #1d1d1f; --ink-2: #6e6e73;
+      --blue: #0071e3; --link: #0066cc; --hair: rgba(0,0,0,0.08);
+    }
+    body {
+      background: var(--white); color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif;
+      font-size: 17px; line-height: 1.47; letter-spacing: -0.022em; -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    button { font: inherit; }
+    :focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; border-radius: 8px; }
+
+    .nav {
+      position: sticky; top: 0; z-index: 50; height: 44px;
+      background: rgba(245,245,247,0.8);
+      -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+    }
+    .nav-in { max-width: 1024px; height: 100%; margin: 0 auto; padding: 0 22px; display: flex; align-items: center; gap: 30px; }
+    .nav-mark { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+    .nav-links { display: flex; gap: 30px; margin-left: auto; }
+    .nav-links a { font-size: 12px; color: rgba(0,0,0,0.8); }
+    .nav-links a:hover { color: #000; }
+    .nav-links a[aria-current] { color: #000; font-weight: 600; }
+
+    .intro { text-align: center; padding: 72px 22px 48px; }
+    .intro h1 { font-size: clamp(48px, 8vw, 80px); line-height: 1.05; font-weight: 700; letter-spacing: -0.015em; }
+    .intro p { margin-top: 12px; font-size: clamp(19px, 2.4vw, 24px); color: var(--ink-2); letter-spacing: 0.004em; }
+
+    .wall { max-width: 1180px; margin: 0 auto; padding: 0 22px 96px; columns: 3 320px; column-gap: 22px; }
+    .card { break-inside: avoid; margin-bottom: 30px; }
+    .card button {
+      display: block; width: 100%; border: 0; padding: 0; background: var(--gray); cursor: zoom-in;
+      border-radius: 18px; overflow: hidden; text-align: left;
+      transition: transform .5s cubic-bezier(.2,.8,.2,1), box-shadow .5s;
+    }
+    .card button:hover { transform: scale(1.012); box-shadow: 0 18px 50px rgba(0,0,0,0.14); }
+    .card img { opacity: 0; transition: opacity .6s ease; }
+    .card img.ready { opacity: 1; }
+    .cap { padding: 12px 4px 0; }
+    .cap h2 { font-size: 17px; font-weight: 600; line-height: 1.3; letter-spacing: -0.02em; }
+    .cap time { display: block; margin-top: 2px; font-size: 12px; color: var(--ink-2); letter-spacing: 0; }
+
+    .empty { text-align: center; color: var(--ink-2); padding: 40px 22px 120px; font-size: 19px; }
+    .empty[hidden] { display: none; }
+
+    /* lightbox */
+    .lb {
+      position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.94);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 56px 16px 24px; opacity: 0; pointer-events: none; transition: opacity .3s ease;
+    }
+    .lb.open { opacity: 1; pointer-events: auto; }
+    .lb-stage { position: relative; display: flex; align-items: center; justify-content: center; }
+    .lb .po-host { width: min(92vw, calc((100vh - 190px) * var(--ar, 1.5))); border-radius: 12px; background: #111;
+      transform: scale(.97); transition: transform .35s cubic-bezier(.2,.8,.2,1); }
+    .lb.open .po-host { transform: none; }
+    .lb-cap { color: #f5f5f7; text-align: center; margin-top: 18px; max-width: 720px; min-height: 48px; }
+    .lb-cap h2 { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; }
+    .lb-cap time { font-size: 13px; color: #a1a1a6; letter-spacing: 0; }
+    .lb-btn {
+      position: fixed; width: 44px; height: 44px; border-radius: 50%; border: 0; cursor: pointer;
+      background: rgba(255,255,255,0.12); color: #fff; display: flex; align-items: center; justify-content: center;
+      transition: background .2s;
+    }
+    .lb-btn:hover { background: rgba(255,255,255,0.24); }
+    .lb-btn svg { width: 18px; height: 18px; }
+    .lb-close { top: 12px; right: 16px; }
+    .lb-prev { left: 16px; top: 50%; transform: translateY(-50%); }
+    .lb-next { right: 16px; top: 50%; transform: translateY(-50%); }
+    .lb-count { position: fixed; top: 22px; left: 50%; transform: translateX(-50%); color: #a1a1a6; font-size: 13px; letter-spacing: 0; }
+    @media (max-width: 640px) {
+      .lb-prev, .lb-next { top: auto; bottom: 18px; transform: none; }
+      .lb { padding-bottom: 80px; }
+      .lb .po-host { width: min(94vw, calc((100vh - 240px) * var(--ar, 1.5))); }
+      .nav-links { gap: 18px; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+  </style>
+  <script src="overlay.js"></script>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-in">
+      <a class="nav-mark" href="/">ARTGEOrge</a>
+      <nav class="nav-links" aria-label="Site">
+        <a href="/#games">Games</a>
+        <a href="/photos/" aria-current="page">Photos</a>
+        <a href="https://github.com/ARTGEOrge">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="intro">
+      <h1>Photos.</h1>
+      <p id="sub">Moments, captured.</p>
+    </section>
+    <section class="wall" id="wall" aria-label="Photos"></section>
+    <p class="empty" id="empty" hidden>No photos yet. Check back soon.</p>
+  </main>
+
+  <div class="lb" id="lb" role="dialog" aria-modal="true" aria-label="Photo viewer" aria-hidden="true">
+    <span class="lb-count" id="lbCount"></span>
+    <button class="lb-btn lb-close" id="lbClose" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <button class="lb-btn lb-prev" id="lbPrev" aria-label="Previous photo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+    </button>
+    <button class="lb-btn lb-next" id="lbNext" aria-label="Next photo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+    </button>
+    <div class="lb-stage"><div class="po-host" id="lbHost"><img id="lbImg" alt="" /></div></div>
+    <div class="lb-cap"><h2 id="lbTitle"></h2><time id="lbDate"></time></div>
+  </div>
+
+  <script>
+  (function () {
+    'use strict';
+    var $ = function (id) { return document.getElementById(id); };
+    var photos = [], cur = -1, lastFocus = null;
+
+    function fmtDate(d) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d || '')) return '';
+      var p = d.split('-');
+      return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    }
+    // Only files inside img/ are ever loaded.
+    function safeSrc(s) { return /^img\/[a-z0-9-]+\.jpg$/.test(s || '') ? s : ''; }
+
+    function card(ph, i) {
+      var fig = document.createElement('figure');
+      fig.className = 'card';
+      var btn = document.createElement('button');
+      btn.setAttribute('aria-label', 'Open photo' + (ph.caption ? ': ' + ph.caption : ''));
+      var host = document.createElement('div');
+      host.className = 'po-host';
+      host.style.aspectRatio = ph.w + ' / ' + ph.h;
+      var img = document.createElement('img');
+      img.loading = 'lazy'; img.decoding = 'async'; img.alt = ph.caption || '';
+      img.width = ph.w; img.height = ph.h;
+      img.onload = function () { img.classList.add('ready'); };
+      img.src = safeSrc(ph.thumb) || safeSrc(ph.src);
+      host.appendChild(img);
+      PhotoOverlay.render(host, ph.texts);
+      btn.appendChild(host);
+      btn.onclick = function () { open(i); };
+      fig.appendChild(btn);
+      if (ph.caption || ph.date) {
+        var cap = document.createElement('figcaption');
+        cap.className = 'cap';
+        if (ph.caption) { var h = document.createElement('h2'); h.textContent = ph.caption; cap.appendChild(h); }
+        if (ph.date) { var t = document.createElement('time'); t.dateTime = ph.date; t.textContent = fmtDate(ph.date); cap.appendChild(t); }
+        fig.appendChild(cap);
+      }
+      return fig;
+    }
+
+    function show(i) {
+      cur = (i + photos.length) % photos.length;
+      var ph = photos[cur], host = $('lbHost');
+      host.style.setProperty('--ar', ph.w / ph.h);
+      host.style.aspectRatio = ph.w + ' / ' + ph.h;
+      $('lbImg').src = safeSrc(ph.src);
+      $('lbImg').alt = ph.caption || '';
+      PhotoOverlay.render(host, ph.texts);
+      $('lbTitle').textContent = ph.caption || '';
+      $('lbDate').textContent = fmtDate(ph.date);
+      $('lbCount').textContent = photos.length > 1 ? (cur + 1) + ' of ' + photos.length : '';
+      $('lbPrev').hidden = $('lbNext').hidden = photos.length < 2;
+      history.replaceState(null, '', '#' + ph.id);
+      // warm the neighbours so arrowing through feels instant
+      [cur + 1, cur - 1].forEach(function (k) { var n = photos[(k + photos.length) % photos.length]; if (n) new Image().src = safeSrc(n.src); });
+    }
+    function open(i) {
+      lastFocus = document.activeElement;
+      show(i);
+      $('lb').classList.add('open');
+      $('lb').setAttribute('aria-hidden', 'false');
+      document.body.style.overflow = 'hidden';
+      $('lbClose').focus();
+    }
+    function close() {
+      $('lb').classList.remove('open');
+      $('lb').setAttribute('aria-hidden', 'true');
+      document.body.style.overflow = '';
+      history.replaceState(null, '', location.pathname);
+      if (lastFocus) lastFocus.focus();
+      cur = -1;
+    }
+    $('lbClose').onclick = close;
+    $('lbPrev').onclick = function () { show(cur - 1); };
+    $('lbNext').onclick = function () { show(cur + 1); };
+    $('lb').addEventListener('click', function (e) { if (e.target === $('lb') || e.target.className === 'lb-stage') close(); });
+    document.addEventListener('keydown', function (e) {
+      if (cur < 0) return;
+      if (e.key === 'Escape') close();
+      else if (e.key === 'ArrowRight') show(cur + 1);
+      else if (e.key === 'ArrowLeft') show(cur - 1);
+    });
+    var sx = null;
+    $('lb').addEventListener('touchstart', function (e) { sx = e.touches[0].clientX; }, { passive: true });
+    $('lb').addEventListener('touchend', function (e) {
+      if (sx == null) return;
+      var dx = e.changedTouches[0].clientX - sx; sx = null;
+      if (Math.abs(dx) > 50) show(cur + (dx < 0 ? 1 : -1));
+    });
+
+    fetch('photos.json', { cache: 'no-cache' })
+      .then(function (r) { return r.ok ? r.json() : { photos: [] }; })
+      .catch(function () { return { photos: [] }; })
+      .then(function (data) {
+        photos = (data.photos || []).filter(function (p) { return p && safeSrc(p.src) && p.w > 0 && p.h > 0; });
+        var wall = $('wall');
+        photos.forEach(function (ph, i) { wall.appendChild(card(ph, i)); });
+        $('empty').hidden = photos.length > 0;
+        $('sub').textContent = photos.length ? photos.length + (photos.length === 1 ? ' photo.' : ' photos.') + ' Moments, captured.' : 'Moments, captured.';
+        var want = location.hash.slice(1);
+        if (want) photos.forEach(function (p, i) { if (p.id === want) open(i); });
+      });
+  })();
+  </script>
+</body>
+</html>
