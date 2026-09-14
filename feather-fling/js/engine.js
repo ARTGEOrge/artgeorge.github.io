@@ -22,6 +22,7 @@
   };
 
   function emit(type, data) { if (E.onEvent) E.onEvent(type, data || {}); }
+  function triArea(v) { return Math.abs((v[1][0] - v[0][0]) * (v[2][1] - v[0][1]) - (v[2][0] - v[0][0]) * (v[1][1] - v[0][1])) / 2; }
 
   /* ------------------------------------------------------------------ load */
   E.load = function (level) {
@@ -49,13 +50,16 @@
       } else {
         var m = MATERIAL[p.t === 'tnt' ? 'wood' : p.m];
         body = world.createBody({ type: 'dynamic', position: pl.Vec2(p.x, p.y), angle: p.a || 0 });
-        if (p.t === 'round') body.createFixture(pl.Circle(p.r), { density: m.density, friction: m.friction, restitution: m.restitution });
-        else body.createFixture(pl.Box(p.w / 2, p.h / 2), { density: m.density, friction: m.friction, restitution: m.restitution });
-        var area = p.t === 'round' ? Math.PI * p.r * p.r : p.w * p.h;
+        var fd = { density: m.density, friction: m.friction, restitution: m.restitution };
+        if (p.t === 'round') body.createFixture(pl.Circle(p.r), fd);
+        else if (p.t === 'tri') body.createFixture(pl.Polygon(p.pts.map(function (v) { return pl.Vec2(v[0], v[1]); })), fd);
+        else body.createFixture(pl.Box(p.w / 2, p.h / 2), fd);
+        var area = p.t === 'round' ? Math.PI * p.r * p.r : p.t === 'tri' ? triArea(p.pts) : p.w * p.h;
         var hp = p.t === 'tnt' ? 2.5 : m.hp * Math.max(0.6, Math.min(2.2, area));
-        ud = { kind: p.t === 'tnt' ? 'tnt' : 'block', shape: p.t, m: p.m || 'wood', w: p.w, h: p.h, r: p.r, hp: hp, maxHp: hp, seed: i * 7.3 };
+        ud = { kind: p.t === 'tnt' ? 'tnt' : 'block', shape: p.t, m: p.m || 'wood', w: p.w, h: p.h, r: p.r, pts: p.pts, hp: hp, maxHp: hp, seed: i * 7.3 };
+        if (p.t === 'tri') { ud.w = 1; ud.h = 1; }
         E.blocks.push(body);
-        maxY = Math.max(maxY, p.y + (p.h || p.r * 2) / 2);
+        maxY = Math.max(maxY, p.t === 'tri' ? p.y + 1 : p.y + (p.h || p.r * 2) / 2);
       }
       maxX = Math.max(maxX, p.x);
       body.setUserData(ud);
@@ -64,6 +68,7 @@
     E.extentY = Math.max(7, maxY + 2);
 
     world.on('post-solve', onPostSolve);
+    E.flash = 0; E.dustBudget = 0;
     E.frameCam(true);
   };
 
@@ -74,6 +79,14 @@
     for (var i = 0; i < n; i++) imp = Math.max(imp, impulse.normalImpulses[i]);
     if (imp < MIN_IMPULSE) return;
     var a = contact.getFixtureA().getBody(), b = contact.getFixtureB().getBody();
+    if (imp > 5 && E.dustBudget > 0) {
+      var wm = contact.getWorldManifold(null);
+      if (wm && wm.points && wm.points[0]) {
+        E.dustBudget--;
+        var cp = wm.points[0];
+        burst(cp.x, cp.y, 'dust', ['rgba(255,250,240,0.9)', 'rgba(220,205,180,0.9)'], 4, 0.18 + Math.min(0.3, imp * 0.01), 1.6);
+      }
+    }
     hurt(a, imp, b);
     hurt(b, imp, a);
   }
@@ -128,9 +141,13 @@
 
   /* ------------------------------------------------------------- explosion */
   E.explode = function (x, y, radius, power) {
-    burst(x, y, 'puff', ['#ffb13b', '#ff6a1f', '#6f5f60'], 22, 0.6, 7);
-    burst(x, y, 'spark', ['#fff3a0', '#ffd23f'], 14, 0.22, 10);
-    E.shake = Math.max(E.shake || 0, 0.5);
+    burst(x, y, 'fire', ['#ffb13b'], 7, 1.1, 2.5);
+    burst(x, y, 'puff', ['#ffb13b', '#ff6a1f', '#6f5f60', '#4a4040'], 20, 0.6, 6);
+    burst(x, y, 'spark', ['#fff3a0', '#ffd23f'], 16, 0.22, 11);
+    ring(x, y, radius, '#fff6d0', 0.55);
+    ring(x, y, radius * 0.6, '#ffb13b', 0.4);
+    E.shake = Math.max(E.shake || 0, 0.6);
+    E.flash = Math.max(E.flash || 0, 0.35);
     emit('boom', { x: x, y: y });
     var all = E.blocks.concat(E.bandits);
     all.forEach(function (body) {
@@ -177,6 +194,20 @@
       });
     }
   }
+  function ring(x, y, r, col, life) {
+    E.particles.push({ kind: 'ring', x: x, y: y, vx: 0, vy: 0, a: 0, va: 0, s: r, col: col, life: life, max: life, grav: 0 });
+  }
+  E.ring = ring;
+  // Celebration confetti falling across the current view.
+  E.confetti = function (n) {
+    var tl = E.toWorld(0, 0), br = E.toWorld(W, H);
+    var cols = ['#ff5a6e', '#ffd23f', '#3ec1ff', '#5fdc7a', '#c06bff', '#ffffff'];
+    for (var i = 0; i < (n || 90); i++) {
+      E.particles.push({ kind: 'confetti', x: tl.x + Math.random() * (br.x - tl.x), y: tl.y + Math.random() * 3,
+        vx: (Math.random() - 0.5) * 2, vy: -1 - Math.random() * 2, a: Math.random() * 6, va: (Math.random() - 0.5) * 12,
+        s: 0.08 + Math.random() * 0.08, col: cols[i % cols.length], life: 3 + Math.random() * 2, max: 5, grav: 1.2 });
+    }
+  };
   function popup(x, y, text, col, size) {
     E.particles.push({ kind: 'text', text: text, x: x, y: y + 0.4, vx: 0, vy: 1.4, a: 0, va: 0, s: size, col: col, life: 1.2, max: 1.2, grav: 0 });
   }
@@ -186,6 +217,7 @@
   /* ------------------------------------------------------------------ step */
   E.step = function (dt) {
     E.t += dt;
+    E.dustBudget = Math.min(6, E.dustBudget + 0.5);
     E.world.step(1 / 60, 10, 6);
     destroyPending();
 
@@ -203,11 +235,13 @@
       p.life -= dt;
       if (p.life <= 0) { E.particles.splice(i, 1); continue; }
       p.vy -= p.grav * dt;
-      if (p.kind === 'feather') { p.vx *= 0.96; p.vy = Math.max(p.vy, -1.2); }
+      if (p.kind === 'feather' || p.kind === 'confetti') { p.vx *= 0.96; p.vy = Math.max(p.vy, p.kind === 'confetti' ? -2.2 : -1.2); p.vx += Math.sin(E.t * 3 + p.a) * 0.02; }
       p.x += p.vx * dt; p.y += p.vy * dt; p.a += p.va * dt;
       if (p.y < 0.05 && p.grav > 0) { p.y = 0.05; p.vy *= -0.3; p.vx *= 0.7; }
     }
     if (E.shake) E.shake = Math.max(0, E.shake - dt);
+    if (E.flash) E.flash = Math.max(0, E.flash - dt);
+    if (E.introT > 0) E.introT = Math.max(0, E.introT - dt);
   };
 
   // Everything has come to rest (used to decide when a shot is over).
@@ -244,8 +278,21 @@
     E.cam.ty = Math.max((H / 2 - groundMargin(z)) / z, y - 1);
   };
 
+  // Opening shot of a level: show the bandits' structure, then pan to the slingshot.
+  E.startIntro = function () {
+    E.frameCam(true);
+    var z = Math.min(60, E.cam.tz * 1.35);
+    E.cam.zoom = E.cam.tz = z;
+    E.cam.x = E.cam.tx = E.extentX - 4 - (W / 2) / z * 0.35;
+    E.cam.y = E.cam.ty = (H / 2 - groundMargin(z)) / z;
+    E.introT = 2.2;
+  };
+  E.skipIntro = function () { if (E.introT > 0) { E.introT = 0; E.frameCam(false); } };
+
   E.updateCam = function (dt) {
-    var k = 1 - Math.pow(0.02, dt);
+    if (E.introT > 0 && E.introT < 1.3 && !E.introPanned) { E.introPanned = true; E.frameCam(false); }
+    if (E.introT > 1.3) E.introPanned = false;
+    var k = 1 - Math.pow(E.introT > 0 ? 0.12 : 0.02, dt);
     E.cam.x += (E.cam.tx - E.cam.x) * k;
     E.cam.y += (E.cam.ty - E.cam.y) * k;
     E.cam.zoom += (E.cam.tz - E.cam.zoom) * k;
@@ -275,7 +322,7 @@
     shakeX = E.shake ? (Math.random() - 0.5) * E.shake * 16 : 0;
     shakeY = E.shake ? (Math.random() - 0.5) * E.shake * 16 : 0;
     var g0 = E.toScreen(0, 0);
-    ART.drawSky(ctx, W, H, E.pal, g0.y);
+    ART.drawSky(ctx, W, H, E.pal, g0.y, E.t);
     ART.drawParallax(ctx, W, H, E.pal, E.cam, g0.y, E.t);
 
     function at(x, y, a, fn) {
@@ -287,15 +334,25 @@
     E.at = at;
 
     var left = E.toWorld(0, 0).x - 2, right = E.toWorld(W, 0).x + 2;
-    at(0, 0, 0, function () { ART.drawGround(ctx, E.pal, left, right); });
+    at(0, 0, 0, function () {
+      ART.drawGround(ctx, E.pal, left, right);
+      // soft contact shadows for anything near the ground
+      E.blocks.concat(E.bandits, E.birds).forEach(function (b) {
+        var bp = b.getPosition(), u = b.getUserData();
+        var half = u.kind === 'bandit' || u.kind === 'bird' ? u.r : u.shape === 'round' ? u.r : Math.max(u.w || 1, u.h || 1) / 2;
+        var bottom = bp.y - (u.kind === 'bandit' || u.kind === 'bird' || u.shape === 'round' ? u.r : Math.min(u.w || 1, u.h || 1) / 2);
+        if (bottom < 4) ART.drawShadow(ctx, bp.x, half, Math.max(0, bottom), E.pal.night);
+      });
+    });
     at(0, 0, 0, function () { ART.drawSlingBack(ctx); });
     if (hooks.behindSling) hooks.behindSling(at);
 
     E.blocks.forEach(function (b) {
       var p = b.getPosition(), ud = b.getUserData(), dmg = 1 - ud.hp / ud.maxHp;
       at(p.x, p.y, b.getAngle(), function () {
-        if (ud.kind === 'tnt') ART.drawTNT(ctx, ud.w, ud.h);
+        if (ud.kind === 'tnt') ART.drawTNT(ctx, ud.w, ud.h, E.t);
         else if (ud.shape === 'round') ART.drawRound(ctx, ud.m, ud.r, dmg, ud.seed);
+        else if (ud.shape === 'tri') ART.drawTri(ctx, ud.m, ud.pts.map(function (v) { return [v[0], -v[1]]; }), dmg, ud.seed);
         else ART.drawBlock(ctx, ud.m, ud.w, ud.h, dmg, ud.seed);
       });
     });
@@ -306,7 +363,7 @@
       at(p.x, p.y, b.getAngle() * 0.35, function () {
         var bob = ud.ouch > 0 ? Math.sin(E.t * 50) * 0.05 : 0;
         ctx.translate(bob, 0);
-        ART.drawBandit(ctx, ud.k, ud.r, { blink: blink, dmg: 1 - ud.hp / ud.maxHp });
+        ART.drawBandit(ctx, ud.k, ud.r, { blink: blink, dmg: 1 - ud.hp / ud.maxHp, t: E.t + ud.blinkAt });
       });
     });
 
@@ -328,9 +385,18 @@
     at(0, 0, 0, function () { ART.drawSlingFront(ctx); });
     if (hooks.frontBand) hooks.frontBand(at);
 
+    at(0, 0, 0, function () { ART.drawForeground(ctx, E.pal, left, right, E.t); });
+
     E.particles.forEach(function (p) {
-      at(p.x, p.y, p.kind === 'text' ? 0 : p.a, function () { ART.drawParticle(ctx, p); });
+      at(p.x, p.y, p.kind === 'text' || p.kind === 'ring' ? 0 : p.a, function () { ART.drawParticle(ctx, p); });
     });
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ART.drawVignette(ctx, W, H, E.pal.night);
+    if (E.flash > 0) {
+      ctx.fillStyle = 'rgba(255,248,225,' + Math.min(0.28, E.flash * 0.8) + ')';
+      ctx.fillRect(0, 0, W, H);
+    }
 
     if (hooks.overlay) { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); hooks.overlay(ctx); }
   };

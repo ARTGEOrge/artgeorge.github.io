@@ -69,9 +69,18 @@
       outline(ctx, r);
     }
 
-    // belly
+    // belly, softly shaded
+    var bg = ctx.createLinearGradient(0, r * 0.05, 0, r * 0.85);
+    bg.addColorStop(0, b.belly); bg.addColorStop(1, 'rgba(0,0,0,0.08)');
     ctx.fillStyle = b.belly;
     ctx.beginPath(); ctx.ellipse(r * 0.12, r * 0.42, r * 0.62, r * 0.42, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = bg;
+    ctx.beginPath(); ctx.ellipse(r * 0.12, r * 0.42, r * 0.62, r * 0.42, 0, 0, TAU); ctx.fill();
+    // glossy shine on the crown
+    ctx.fillStyle = 'rgba(255,255,255,0.38)';
+    ctx.beginPath(); ctx.ellipse(-r * 0.34, -r * 0.52, r * 0.3, r * 0.14, -0.55, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.beginPath(); ctx.ellipse(-r * 0.5, -r * 0.44, r * 0.07, r * 0.04, -0.55, 0, TAU); ctx.fill();
 
     // crest
     if (type === 'boomer') {
@@ -110,6 +119,9 @@
     ctx.beginPath(); ctx.moveTo(-r * 0.2, ey - es * 1.35); ctx.lineTo(r * 0.16, ey - es * 1.05); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(r * 0.72, ey - es * 1.35); ctx.lineTo(r * 0.38, ey - es * 1.05); ctx.stroke();
 
+    // cheek blush
+    ctx.fillStyle = 'rgba(255,110,120,0.32)';
+    ctx.beginPath(); ctx.ellipse(-r * 0.12, r * 0.14, r * 0.14, r * 0.08, 0, 0, TAU); ctx.fill();
     // beak
     var bx = r * 0.62, by = r * 0.12;
     ctx.fillStyle = '#ffb21e';
@@ -131,6 +143,15 @@
   ART.drawBandit = function (ctx, kind, r, st) {
     st = st || {};
     var hurt = st.dmg > 0.45;
+    // bushy striped tail curling up behind
+    ctx.save();
+    ctx.translate(-r * 0.7, r * 0.55);
+    ctx.rotate(-0.9 + Math.sin((st.t || 0) * 2.2) * 0.12);
+    for (var seg = 0; seg < 5; seg++) {
+      ctx.fillStyle = seg % 2 ? '#2a2d33' : '#8a939e';
+      ctx.beginPath(); ctx.ellipse(-seg * r * 0.2, -seg * r * 0.05, r * (0.24 - seg * 0.02), r * 0.18, 0, 0, TAU); ctx.fill();
+    }
+    ctx.restore();
     // ears
     [-1, 1].forEach(function (s) {
       ctx.save(); ctx.translate(s * r * 0.62, -r * 0.72); ctx.rotate(s * 0.35);
@@ -164,6 +185,15 @@
     } else {
       eye(ctx, r * 0.36, -r * 0.14, es, st.blink, 0.4);
     }
+    // whiskers and blush
+    ctx.strokeStyle = 'rgba(40,44,52,0.55)'; ctx.lineWidth = r * 0.025; ctx.lineCap = 'round';
+    [-1, 1].forEach(function (sd) {
+      for (var wk = 0; wk < 2; wk++) {
+        ctx.beginPath(); ctx.moveTo(sd * r * 0.3, r * 0.26 + wk * r * 0.08); ctx.lineTo(sd * r * 0.72, r * 0.18 + wk * r * 0.16); ctx.stroke();
+      }
+    });
+    ctx.fillStyle = 'rgba(255,140,160,0.35)';
+    ctx.beginPath(); ctx.ellipse(-r * 0.5, r * 0.34, r * 0.12, r * 0.07, 0, 0, TAU); ctx.ellipse(r * 0.5, r * 0.34, r * 0.12, r * 0.07, 0, 0, TAU); ctx.fill();
     // nose + grin
     ctx.fillStyle = '#2a2d33';
     ctx.beginPath(); ctx.ellipse(0, r * 0.2, r * 0.12, r * 0.085, 0, 0, TAU); ctx.fill();
@@ -226,6 +256,26 @@
       circle(ctx, 0, 0, rad, p.col);
     } else if (p.kind === 'spark') {
       ctx.fillStyle = p.col; ART.starPath(ctx, 0, 0, p.s, 5); ctx.fill();
+    } else if (p.kind === 'ring') {
+      var rr2 = p.s * (1 - k) + p.s * 0.1;
+      ctx.globalAlpha = k * 0.85;
+      ctx.strokeStyle = p.col; ctx.lineWidth = p.s * 0.12 * k + 0.02;
+      ctx.beginPath(); ctx.arc(0, 0, rr2, 0, TAU); ctx.stroke();
+    } else if (p.kind === 'fire') {
+      var fr = p.s * (1.3 - k * 0.5);
+      var fg = ctx.createRadialGradient(0, 0, 0, 0, 0, fr);
+      fg.addColorStop(0, 'rgba(255,255,220,' + k + ')');
+      fg.addColorStop(0.35, 'rgba(255,190,60,' + k * 0.9 + ')');
+      fg.addColorStop(0.7, 'rgba(255,90,30,' + k * 0.6 + ')');
+      fg.addColorStop(1, 'rgba(120,40,20,0)');
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(0, 0, fr, 0, TAU); ctx.fill();
+    } else if (p.kind === 'confetti') {
+      ctx.fillStyle = p.col;
+      ctx.fillRect(-p.s, -p.s * 0.45, p.s * 2, p.s * 0.9 * Math.abs(Math.cos(p.a * 2)) + 0.01);
+    } else if (p.kind === 'dust') {
+      ctx.globalAlpha = k * 0.55;
+      circle(ctx, 0, 0, p.s * (1.8 - k), p.col);
     } else if (p.kind === 'text') {
       ctx.globalAlpha = Math.min(1, k * 2);
       ctx.font = (p.s) + 'px "Lilita One", Arial, sans-serif';

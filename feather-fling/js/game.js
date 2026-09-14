@@ -17,6 +17,7 @@
 
   var canvas = $('stage'), ctx = canvas.getContext('2d');
   var S = null;                         // current play state
+  var WORLDS = window.WORLDS, page = 0, attractTheme = 0;
   var progress = loadProgress();
   var paused = false;
 
@@ -60,10 +61,31 @@
     $('hud').classList.toggle('hidden', !S || id === 'title' || id === 'levels');
   }
 
+  function worldOf(i) {
+    for (var w = 0; w < WORLDS.length; w++) if (i >= WORLDS[w].from && i < WORLDS[w].to) return w;
+    return 0;
+  }
+  function furthestWorld() {
+    var best = 0;
+    LEVELS.forEach(function (lv, i) { if (unlocked(i)) best = worldOf(i); });
+    return best;
+  }
+
   function buildLevelGrid() {
-    var grid = $('levelGrid');
+    var grid = $('levelGrid'), W0 = WORLDS[page];
     grid.innerHTML = '';
-    LEVELS.forEach(function (lv, i) {
+    var count = W0.to - W0.from;
+    grid.style.gridTemplateColumns = 'repeat(' + (count > 4 ? 3 : count) + ', 1fr)';
+    $('worldName').textContent = W0.name;
+    $('worldSub').textContent = 'World ' + (page + 1) + '  \u00b7  Levels ' + (W0.from + 1) + '-' + W0.to;
+    $('worldPrev').disabled = page === 0;
+    $('worldNext').disabled = page === WORLDS.length - 1;
+    attractTheme = W0.theme;
+    $('worldDots').innerHTML = WORLDS.map(function (w, k) {
+      return '<i class="' + (k === page ? 'on' : unlocked(w.from) ? '' : 'locked') + '"></i>';
+    }).join('');
+    LEVELS.slice(W0.from, W0.to).forEach(function (lv, j) {
+      var i = W0.from + j;
       var b = document.createElement('button');
       var open = unlocked(i), st = progress.stars[i] || 0;
       b.className = 'lvl' + (open ? '' : ' locked');
@@ -79,6 +101,14 @@
       grid.appendChild(b);
     });
   }
+
+  function openLevels(atPage) {
+    page = atPage === undefined ? furthestWorld() : atPage;
+    buildLevelGrid();
+    show('levels');
+  }
+  $('worldPrev').onclick = function () { if (page > 0) { page--; buildLevelGrid(); } };
+  $('worldNext').onclick = function () { if (page < WORLDS.length - 1) { page++; buildLevelGrid(); } };
 
   /* ----------------------------------------------------------------- level */
   function startLevel(i) {
@@ -96,6 +126,7 @@
     $('pauseSub').textContent = 'Level ' + (i + 1) + ': ' + lv.name;
     buildStarMarkers();
     loadNextBird();
+    E.startIntro();
     paused = false;
     show(null);
   }
@@ -147,6 +178,7 @@
 
   canvas.addEventListener('pointerdown', function (e) {
     if (!S || paused || S.ended) return;
+    if (E.introT > 0) { E.skipIntro(); return; }
     var w = worldFromEvent(e);
     if (S.phase === 'aim' && S.loaded) {
       var dx = w.x - REST.x, dy = w.y - REST.y;
@@ -276,6 +308,7 @@
   /* ---------------------------------------------------------------- endings */
   function win() {
     S.ended = true; S.phase = 'done';
+    E.confetti(130);
     var remaining = (S.loaded ? 1 : 0) + S.queue.length;
     var delay = 0;
     for (var k = 0; k < remaining; k++) {
@@ -337,7 +370,7 @@
       // waiting birds hop in line behind the slingshot
       // spaced by size so a long queue stays on screen
       var qx = -0.9;
-      S.queue.forEach(function (type, k) {
+      S.queue.slice(0, 4).forEach(function (type, k) {
         var r = ART.BIRDS[type].r, hop = Math.max(0, Math.sin(E.t * 3 + k * 1.3)) * 0.25;
         qx -= r + 0.18;
         var x = qx;
@@ -412,30 +445,35 @@
 
   // Title backdrop: the scenery with a few birds, no physics.
   function drawAttract(t) {
-    var dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight, pal = ART.theme(0);
+    var dpr = window.devicePixelRatio || 1, W = innerWidth, H = innerHeight, pal = ART.theme(attractTheme);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     var gy = H * 0.78;
-    ART.drawSky(ctx, W, H, pal, gy);
+    ART.drawSky(ctx, W, H, pal, gy, t);
     ART.drawParallax(ctx, W, H, pal, { x: t * 1.5, zoom: 40 }, gy, t);
-    ctx.fillStyle = pal.grass; ctx.fillRect(0, gy, W, 14);
-    ctx.fillStyle = pal.dirt; ctx.fillRect(0, gy + 14, W, H - gy);
+    var s0 = Math.max(40, H / 14);
+    ctx.setTransform(s0 * dpr, 0, 0, s0 * dpr, 0, gy * dpr);
+    ART.drawGround(ctx, pal, -1, W / s0 + 1);
+    ART.drawForeground(ctx, pal, -1, W / s0 + 1, t);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     var s = Math.max(40, H / 14);
     [['rusty', 0.22], ['zip', 0.36], ['boomer', 0.64], ['tank', 0.8]].forEach(function (b, k) {
       var r = ART.BIRDS[b[0]].r, hop = Math.max(0, Math.sin(t * 3 + k)) * 0.35;
       ctx.setTransform(s * dpr, 0, 0, s * dpr, W * b[1] * dpr, (gy - (r + hop) * s) * dpr);
       ART.drawBird(ctx, b[0], r, { t: t, blink: ((t + k) % 4) < 0.1 });
     });
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ART.drawVignette(ctx, W, H, pal.night);
   }
 
   /* -------------------------------------------------------------- wiring */
-  $('playBtn').onclick = function () { buildLevelGrid(); show('levels'); };
-  $('levelsBack').onclick = function () { S = null; show('title'); };
+  $('playBtn').onclick = function () { openLevels(); };
+  $('levelsBack').onclick = function () { S = null; attractTheme = 0; show('title'); };
   $('pauseBtn').onclick = togglePause;
   $('restartBtn').onclick = function () { if (S) startLevel(S.index); };
   $('pauseResume').onclick = togglePause;
   $('pauseRestart').onclick = function () { startLevel(S.index); };
-  $('pauseMenu').onclick = function () { S = null; paused = false; buildLevelGrid(); show('levels'); };
-  $('winMenu').onclick = $('loseMenu').onclick = function () { S = null; buildLevelGrid(); show('levels'); };
+  $('pauseMenu').onclick = function () { var at = worldOf(S.index); S = null; paused = false; openLevels(at); };
+  $('winMenu').onclick = $('loseMenu').onclick = function () { var at = worldOf(S.index); S = null; openLevels(at); };
   $('winRetry').onclick = $('loseRetry').onclick = function () { startLevel(S.index); };
   $('winNext').onclick = function () { startLevel(Math.min(LEVELS.length - 1, S.index + 1)); };
 

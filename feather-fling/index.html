@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <title>Feather Fling</title>
-  <meta name="description" content="Pull back the slingshot and topple the raccoon bandits' towers. Physics puzzles across 12 levels." />
+  <meta name="description" content="Pull back the slingshot and topple the raccoon bandits' towers. Physics puzzles across 24 levels in five worlds." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Lilita+One&display=swap" rel="stylesheet" />
@@ -56,7 +56,7 @@
     #title .logo .l1 { color: #ffd23f; }
     #title .logo .l2 { color: #ff5a3c; }
     #title .tag { font-size: clamp(18px, 2.6vw, 26px); opacity: .95; }
-    #title .btn { height: 84px; min-width: 220px; font-size: 38px; border-radius: 26px; }
+    #title #playBtn { height: 84px; min-width: 220px; font-size: 38px; border-radius: 26px; }
     .back-home { position: fixed; top: 16px; left: 16px; z-index: 30; }
 
     /* level select */
@@ -75,6 +75,14 @@
     .lvl.locked { background: linear-gradient(#b9c3d1, #8793a6); box-shadow: 0 7px 0 #5a6577, 0 12px 20px rgba(0,0,0,.2); color: #eef2f7; cursor: default; }
     .lvl.locked svg { width: 34%; fill: #eef2f7; }
     .levels-foot { display: flex; gap: 16px; }
+    .world-nav { display: flex; align-items: center; gap: 22px; }
+    .world-head { text-align: center; min-width: min(420px, 60vw); }
+    .world-sub { font-size: clamp(16px, 2.2vw, 22px); opacity: .9; margin-top: 2px; }
+    .world-nav .btn:disabled { opacity: .35; cursor: default; }
+    .world-dots { display: flex; gap: 10px; }
+    .world-dots i { width: 12px; height: 12px; border-radius: 50%; background: rgba(255,255,255,.4); box-shadow: 0 2px 0 rgba(0,0,0,.2); }
+    .world-dots i.on { background: #ffd23f; }
+    .world-dots i.locked { background: rgba(20,30,60,.45); }
 
     /* result card */
     .card {
@@ -109,7 +117,7 @@
     #hud .bcard { width: 62px; height: 74px; border-radius: 14px; background: linear-gradient(#ffffff, #dfe9f7); box-shadow: 0 4px 0 #8aa0c2, 0 8px 14px rgba(0,0,0,.25); display: flex; align-items: center; justify-content: center; }
     #hud .bcard.next { width: 78px; height: 92px; background: linear-gradient(#fff6c8, #ffd66b); box-shadow: 0 5px 0 #c9901b, 0 10px 16px rgba(0,0,0,.25); }
     #hud .bcard canvas { position: static; width: 80%; height: auto; }
-    #hud .hint { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); font-size: 22px; opacity: .95; white-space: nowrap; transition: opacity .4s; }
+    #hud .hint { position: absolute; left: 50%; top: 84px; transform: translateX(-50%); font-size: 22px; opacity: .95; white-space: nowrap; transition: opacity .4s; }
     #hud .popup { position: absolute; left: 50%; top: 28%; transform: translate(-50%, -50%); font-size: clamp(40px, 7vw, 76px); animation: pop .5s cubic-bezier(.2,1.6,.4,1) both; }
 
     @media (max-width: 640px) {
@@ -155,8 +163,16 @@
 
   <!-- level select -->
   <div class="screen dim hidden" id="levels">
-    <div class="panel-title toon">Choose a level</div>
+    <div class="world-nav">
+      <button class="btn small round blue" id="worldPrev" aria-label="Previous world"><svg viewBox="0 0 24 24"><path d="M15.5 4.5 8 12l7.5 7.5 1.9-1.9L11.8 12l5.6-5.6z"/></svg></button>
+      <div class="world-head">
+        <div class="panel-title toon" id="worldName">Meadow</div>
+        <div class="world-sub toon" id="worldSub">Levels 1-4</div>
+      </div>
+      <button class="btn small round blue" id="worldNext" aria-label="Next world"><svg viewBox="0 0 24 24"><path d="M8.5 4.5 16 12l-7.5 7.5-1.9-1.9L12.2 12 6.6 6.4z"/></svg></button>
+    </div>
     <div class="level-grid" id="levelGrid"></div>
+    <div class="world-dots" id="worldDots"></div>
     <div class="levels-foot">
       <button class="btn small blue" id="levelsBack">Back</button>
     </div>
@@ -209,6 +225,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/planck@1.0.6/dist/planck.min.js"></script>
   <script src="js/art-world.js"></script>
+  <script src="js/art-blocks.js"></script>
   <script src="js/art-chars.js"></script>
   <script src="js/levels.js"></script>
   <script src="js/engine.js"></script>
