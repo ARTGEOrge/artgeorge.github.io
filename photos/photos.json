@@ -1,6 +1,28 @@
 {
  "photos": [
   {
+   "id": "pmu0qr0e6-eubhh",
+   "src": "img/pmu0qr0e6-eubhh.jpg",
+   "thumb": "img/pmu0qr0e6-eubhh-t.jpg",
+   "w": 2048,
+   "h": 1536,
+   "caption": "At sazallo library ",
+   "date": "2026-09-13",
+   "texts": [
+    {
+     "t": "©Arthur George",
+     "x": 91.67,
+     "y": 5.0,
+     "size": 1.39,
+     "font": "sans",
+     "color": "#ffffff",
+     "style": "shadow",
+     "align": "center",
+     "rot": 0.0
+    }
+   ]
+  },
+  {
    "id": "pmu0q1u75-bk41z",
    "src": "img/pmu0q1u75-bk41z.jpg",
    "thumb": "img/pmu0q1u75-bk41z-t.jpg",
