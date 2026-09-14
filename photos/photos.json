@@ -1,6 +1,28 @@
 {
  "photos": [
   {
+   "id": "pmu1ve5c3-8oo0n",
+   "src": "img/pmu1ve5c3-8oo0n.jpg",
+   "thumb": "img/pmu1ve5c3-8oo0n-t.jpg",
+   "w": 1086,
+   "h": 724,
+   "caption": "",
+   "date": "2026-08-20",
+   "texts": [
+    {
+     "t": "©Arthur George",
+     "x": 93.47,
+     "y": 2.12,
+     "size": 1.16,
+     "font": "sans",
+     "color": "#ffffff",
+     "style": "shadow",
+     "align": "center",
+     "rot": 0.0
+    }
+   ]
+  },
+  {
    "id": "pmu0qr0e6-eubhh",
    "src": "img/pmu0qr0e6-eubhh.jpg",
    "thumb": "img/pmu0qr0e6-eubhh-t.jpg",
