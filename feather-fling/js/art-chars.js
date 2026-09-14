@@ -17,7 +17,8 @@
     ctx.strokeStyle = 'rgba(40,20,20,0.55)'; ctx.lineWidth = r * 0.07;
     ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.stroke();
   }
-  function eye(ctx, x, y, s, blink, look, scared) {
+  function eye(ctx, x, y, s, blink, look, scared, lookY) {
+    lookY = lookY || 0;
     if (blink) {
       ctx.strokeStyle = '#2a1a14'; ctx.lineWidth = s * 0.28; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.arc(x, y - s * 0.1, s * 0.75, 0.2 * Math.PI, 0.8 * Math.PI); ctx.stroke();
@@ -31,8 +32,8 @@
       circle(ctx, x, y - s * 0.08, s * 0.08, '#ffffff');
       return;
     }
-    circle(ctx, x + s * 0.32 * (look || 1), y + s * 0.05, s * 0.52, '#1d1410');
-    circle(ctx, x + s * 0.12 * (look || 1), y - s * 0.2, s * 0.18, '#ffffff');
+    circle(ctx, x + s * 0.32 * (look || 1), y + s * 0.05 + s * 0.3 * lookY, s * 0.52, '#1d1410');
+    circle(ctx, x + s * 0.12 * (look || 1), y - s * 0.2 + s * 0.3 * lookY, s * 0.18, '#ffffff');
     circle(ctx, x + s * 0.5 * (look || 1), y + s * 0.28, s * 0.08, 'rgba(255,255,255,0.8)');
   }
 
@@ -136,8 +137,9 @@
     var es = type === 'tank' ? r * 0.26 : r * 0.3;
     var ey = type === 'tank' ? -r * 0.25 : -r * 0.2;
     if (type === 'tank') { circle(ctx, r * 0.02, ey, es * 1.5, b.belly); circle(ctx, r * 0.5, ey, es * 1.5, b.belly); }
-    eye(ctx, r * 0.02, ey, es, st.blink, 1);
-    eye(ctx, r * 0.5, ey, es, st.blink, 1);
+    var lx = st.lookX === undefined ? 1 : st.lookX, ly = st.lookY || 0;
+    eye(ctx, r * 0.02, ey, es, st.blink, lx, false, ly);
+    eye(ctx, r * 0.5, ey, es, st.blink, lx, false, ly);
     // determined brow (a small tilt, not a unibrow)
     ctx.strokeStyle = b.dark; ctx.lineWidth = r * 0.09; ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(-r * 0.2, ey - es * 1.35); ctx.lineTo(r * 0.16, ey - es * 1.05); ctx.stroke();
@@ -220,12 +222,17 @@
       else { ctx.moveTo(sd * r * 0.2, -r * 0.4); ctx.lineTo(sd * r * 0.54, -r * 0.46); }
       ctx.stroke();
     });
-    eye(ctx, -r * 0.36, -r * 0.14, es * (scared ? 1.2 : 1), st.blink, 0.4, scared);
+    var blx = st.lookX === undefined ? 0.4 : st.lookX, bly = st.lookY || 0;
+    if (st.laugh) {
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = r * 0.06; ctx.lineCap = 'round';
+      [-1, 1].forEach(function (sd) { ctx.beginPath(); ctx.arc(sd * r * 0.36, -r * 0.1, es * 0.8, 1.15 * Math.PI, 1.85 * Math.PI); ctx.stroke(); });
+    } else
+    eye(ctx, -r * 0.36, -r * 0.14, es * (scared ? 1.2 : 1), st.blink, blx, scared, bly);
     if (hurt) {
       ctx.strokeStyle = '#fff'; ctx.lineWidth = r * 0.06; ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(r * 0.24, -r * 0.2); ctx.lineTo(r * 0.48, -r * 0.08); ctx.moveTo(r * 0.24, -r * 0.06); ctx.lineTo(r * 0.48, -r * 0.18); ctx.stroke();
     } else {
-      eye(ctx, r * 0.36, -r * 0.14, es * (scared ? 1.2 : 1), st.blink, 0.4, scared);
+      if (!st.laugh) eye(ctx, r * 0.36, -r * 0.14, es * (scared ? 1.2 : 1), st.blink, blx, scared, bly);
     }
     // whiskers and blush
     ctx.strokeStyle = 'rgba(40,44,52,0.55)'; ctx.lineWidth = r * 0.025; ctx.lineCap = 'round';
@@ -243,6 +250,7 @@
     ctx.strokeStyle = '#2a2d33'; ctx.lineWidth = r * 0.06; ctx.lineCap = 'round';
     ctx.beginPath();
     if (hurt) ctx.arc(0, r * 0.52, r * 0.16, 1.15 * Math.PI, 1.85 * Math.PI);
+    else if (st.laugh) { ctx.fillStyle = '#5a1f2a'; ctx.beginPath(); ctx.arc(0, r * 0.4, r * 0.2, 0, Math.PI); ctx.fill(); }
     else if (!scared) ctx.arc(0, r * 0.3, r * 0.22, 0.2 * Math.PI, 0.8 * Math.PI);
     ctx.stroke();
     if (scared) {
@@ -267,6 +275,11 @@
       ctx.restore();
     }
 
+    hatFor(ctx, kind, r, st);
+  };
+
+  // Headgear, drawn in the bandit's frame. Also used on its own when it flies off.
+  function hatFor(ctx, kind, r, st) {
     if (kind === 'explorer') {
       ctx.fillStyle = shaded(ctx, r, '#f3e2b0', '#d8bb78', '#a88a4a');
       ctx.beginPath(); ctx.ellipse(0, -r * 0.62, r * 1.05, r * 0.2, 0, 0, TAU); ctx.fill();
@@ -316,6 +329,11 @@
       circle(ctx, -r * 0.34, -r * 0.92, r * 0.06, '#3ec1ff');
       circle(ctx, r * 0.34, -r * 0.92, r * 0.06, '#5fdc7a');
     }
+  }
+  ART.HATS = { helmet: 1, explorer: 1, miner: 1, chief: 1, boss: 1 };
+  ART.drawHat = function (ctx, kind, r, st) {
+    ctx.translate(0, r * 0.8);
+    hatFor(ctx, kind, r, st || {});
   };
 
   /* -------------------------------------------------------------- particles */

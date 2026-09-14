@@ -12,6 +12,11 @@
   var BANDIT_HP = { small: 3, mid: 5.5, helmet: 7, big: 10, boss: 45, explorer: 6, miner: 8, chief: 22 };
   var BIRD_DENSITY = { rusty: 4, zip: 3.2, trio: 3.5, boomer: 4.5, tank: 5 };
   var GRACE = 1.2;          // seconds after load before impacts do damage
+  // Collision categories: ground 1, game pieces 2, debris 4 (debris only hits the ground).
+  var PIECE = { filterCategoryBits: 2, filterMaskBits: 3 };
+  var DEBRIS = { filterCategoryBits: 4, filterMaskBits: 1 };
+  var MAX_DEBRIS = 70;
+  function withFilter(def, f) { def.filterCategoryBits = f.filterCategoryBits; def.filterMaskBits = f.filterMaskBits; return def; }
   var MIN_IMPULSE = 1.2;    // ignore resting contacts
 
   var E = window.FFEngine = {
@@ -29,7 +34,7 @@
     E.level = level;
     E.pal = ART.theme(level.theme);
     E.t = 0; E.score = 0;
-    E.blocks = []; E.bandits = []; E.birds = []; E.particles = [];
+    E.blocks = []; E.bandits = []; E.birds = []; E.particles = []; E.debris = [];
     E.pendingDestroy = [];
     var world = E.world = new pl.World({ gravity: pl.Vec2(0, -10) });
 
@@ -43,14 +48,14 @@
       if (p.t === 'bandit') {
         var r = ART.BANDITS[p.k].r;
         body = world.createBody({ type: 'dynamic', position: pl.Vec2(p.x, p.y), angularDamping: 0.8 });
-        body.createFixture(pl.Circle(r), { density: 0.8, friction: 0.6, restitution: 0.2 });
+        body.createFixture(pl.Circle(r), withFilter({ density: 0.8, friction: 0.6, restitution: 0.2 }, PIECE));
         ud = { kind: 'bandit', k: p.k, r: r, hp: BANDIT_HP[p.k], maxHp: BANDIT_HP[p.k], blinkAt: Math.random() * 3 };
         E.bandits.push(body);
         maxY = Math.max(maxY, p.y + r);
       } else {
         var m = MATERIAL[p.t === 'tnt' ? 'wood' : p.m];
         body = world.createBody({ type: 'dynamic', position: pl.Vec2(p.x, p.y), angle: p.a || 0 });
-        var fd = { density: m.density, friction: m.friction, restitution: m.restitution };
+        var fd = withFilter({ density: m.density, friction: m.friction, restitution: m.restitution }, PIECE);
         if (p.t === 'round') body.createFixture(pl.Circle(p.r), fd);
         else if (p.t === 'tri') body.createFixture(pl.Polygon(p.pts.map(function (v) { return pl.Vec2(v[0], v[1]); })), fd);
         else body.createFixture(pl.Box(p.w / 2, p.h / 2), fd);
@@ -68,7 +73,7 @@
     E.extentY = Math.max(7, maxY + 2);
 
     world.on('post-solve', onPostSolve);
-    E.flash = 0; E.dustBudget = 0;
+    E.flash = 0; E.dustBudget = 0; E.tauntT = 0; E.timeScale = 1; E.slowT = 0;
     E.frameCam(true);
   };
 
@@ -121,7 +126,10 @@
         burst(x, y, 'puff', ['#ffffff', '#e6ecf2'], 9, ud.r * 0.9, 3);
         burst(x, y, 'spark', ['#ffd23f', '#ffffff'], 6, 0.18, 6);
         popup(x, y + ud.r, '5000', '#9dff7a', 0.9);
+        if (ART.HATS[ud.k]) addDebris({ kind: 'hat', k: ud.k, r: ud.r }, x, y + ud.r * 0.6, body.getAngle(),
+          body.getLinearVelocity(), pl.Box(ud.r * 0.7, ud.r * 0.3), 5);
         E.bandits.splice(E.bandits.indexOf(body), 1);
+        if (ud.k === 'boss' || ud.k === 'chief' || E.bandits.length === 0) E.slowmo(0.8, 1.1);
         emit('bandit', { x: x, y: y });
       } else {
         var m = MATERIAL[ud.m] || MATERIAL.wood;
@@ -131,12 +139,50 @@
         burst(x, y, m.kind, m.chips, Math.round(6 + size * 4), 0.12, 5);
         burst(x, y, 'puff', ['rgba(255,255,255,0.9)'], 3, 0.35, 1.5);
         popup(x, y, String(val), '#ffffff', 0.55);
+        shatter(body, ud);
         E.blocks.splice(E.blocks.indexOf(body), 1);
         emit('break', { m: ud.m });
         if (ud.kind === 'tnt') E.explode(x, y, 4.2, 55);
       }
       E.world.destroyBody(body);
     });
+  }
+
+  /* ---------------------------------------------------------------- debris */
+  function addDebris(info, x, y, angle, vel, shape, up) {
+    if (E.debris.length >= MAX_DEBRIS) {
+      var old = E.debris.shift();
+      E.world.destroyBody(old.body);
+    }
+    var b = E.world.createBody({ type: 'dynamic', position: pl.Vec2(x, y), angle: angle, angularDamping: 0.3 });
+    b.createFixture(shape, withFilter({ density: 1, friction: 0.7, restitution: 0.25 }, DEBRIS));
+    b.setLinearVelocity(pl.Vec2(vel.x * 0.5 + (Math.random() - 0.5) * 5, vel.y * 0.5 + (up || 2) + Math.random() * 3));
+    b.setAngularVelocity((Math.random() - 0.5) * 12);
+    info.body = b;
+    info.life = info.max = 2.6 + Math.random() * 1.2;
+    E.debris.push(info);
+  }
+
+  // Break a block into tumbling chunks along its long axis.
+  function shatter(body, ud) {
+    var p = body.getPosition(), a = body.getAngle(), v = body.getLinearVelocity();
+    var ca = Math.cos(a), sa = Math.sin(a);
+    if (ud.shape === 'round') {
+      for (var k = 0; k < 3; k++) {
+        var ang = k * 2.1;
+        addDebris({ kind: 'round', m: ud.m, r: ud.r * 0.45, seed: ud.seed + k }, p.x + Math.cos(ang) * ud.r * 0.4, p.y + Math.sin(ang) * ud.r * 0.4, 0, v, pl.Circle(ud.r * 0.45));
+      }
+      return;
+    }
+    var w = ud.w || 1, h = ud.h || 1, long = w >= h, len = long ? w : h, thick = long ? h : w;
+    var n = Math.max(2, Math.min(4, Math.round(len / 0.75)));
+    for (var i = 0; i < n; i++) {
+      var off = (i + 0.5) / n * len - len / 2;
+      var cw = long ? len / n * 0.88 : thick * 0.85, ch = long ? thick * 0.85 : len / n * 0.88;
+      var lx = long ? off : 0, ly = long ? 0 : off;
+      addDebris({ kind: 'block', m: ud.kind === 'tnt' ? 'wood' : ud.m, w: cw, h: ch, seed: ud.seed + i },
+        p.x + lx * ca - ly * sa, p.y + lx * sa + ly * ca, a + (Math.random() - 0.5) * 0.4, v, pl.Box(cw / 2, ch / 2));
+    }
   }
 
   /* ------------------------------------------------------------- explosion */
@@ -147,6 +193,7 @@
     ring(x, y, radius, '#fff6d0', 0.55);
     ring(x, y, radius * 0.6, '#ffb13b', 0.4);
     E.shake = Math.max(E.shake || 0, 0.6);
+    E.slowmo(0.55, 1.07);
     E.flash = Math.max(E.flash || 0, 0.35);
     emit('boom', { x: x, y: y });
     var all = E.blocks.concat(E.bandits);
@@ -166,7 +213,7 @@
   E.addBird = function (type, x, y, r) {
     r = r || ART.BIRDS[type].r;
     var body = E.world.createBody({ type: 'dynamic', position: pl.Vec2(x, y), bullet: true, angularDamping: 1.2 });
-    body.createFixture(pl.Circle(r), { density: BIRD_DENSITY[type], friction: 0.6, restitution: 0.3 });
+    body.createFixture(pl.Circle(r), withFilter({ density: BIRD_DENSITY[type], friction: 0.6, restitution: 0.3 }, PIECE));
     body.setUserData({ kind: 'bird', type: type, r: r, age: 0, still: 0, trail: [] });
     E.birds.push(body);
     return body;
@@ -198,6 +245,22 @@
     E.particles.push({ kind: 'ring', x: x, y: y, vx: 0, vy: 0, a: 0, va: 0, s: r, col: col, life: life, max: life, grav: 0 });
   }
   E.ring = ring;
+  E.slowmo = function (seconds, punch) {
+    E.slowT = Math.max(E.slowT || 0, seconds);
+    E.cam.zoom *= punch || 1.08;
+  };
+  // real-time countdown; the game multiplies its physics clock by timeScale
+  E.updateTimeScale = function (dt) {
+    if (E.slowT > 0) { E.slowT = Math.max(0, E.slowT - dt); E.timeScale = E.slowT > 0.15 ? 0.3 : 0.3 + (0.15 - E.slowT) / 0.15 * 0.7; }
+    else E.timeScale = 1;
+  };
+  E.taunt = function () {
+    E.tauntT = 1.8;
+    E.bandits.slice(0, 3).forEach(function (b, i) {
+      var p = b.getPosition(), u = b.getUserData();
+      setTimeout(function () { popup(p.x, p.y + u.r + 0.3, i % 2 ? 'HEH!' : 'HA HA!', '#ffffff', 0.55); }, i * 220);
+    });
+  };
   // Celebration confetti falling across the current view.
   E.confetti = function (n) {
     var tl = E.toWorld(0, 0), br = E.toWorld(W, H);
@@ -229,6 +292,11 @@
     destroyPending();
 
     E.bandits.forEach(function (b) { var ud = b.getUserData(); if (ud.ouch > 0) ud.ouch -= dt; });
+    for (var di = E.debris.length - 1; di >= 0; di--) {
+      var dbr = E.debris[di];
+      dbr.life -= dt;
+      if (dbr.life <= 0 || dbr.body.getPosition().y < -5) { E.world.destroyBody(dbr.body); E.debris.splice(di, 1); }
+    }
 
     for (var i = E.particles.length - 1; i >= 0; i--) {
       var p = E.particles[i];
@@ -242,6 +310,8 @@
     if (E.shake) E.shake = Math.max(0, E.shake - dt);
     if (E.flash) E.flash = Math.max(0, E.flash - dt);
     if (E.introT > 0) E.introT = Math.max(0, E.introT - dt);
+    if (E.tauntT > 0) E.tauntT = Math.max(0, E.tauntT - dt);
+    E.birds.forEach(function (b) { var u = b.getUserData(); if (u.squash) u.squash *= 0.86; });
   };
 
   // Everything has come to rest (used to decide when a shot is over).
@@ -322,8 +392,17 @@
     shakeX = E.shake ? (Math.random() - 0.5) * E.shake * 16 : 0;
     shakeY = E.shake ? (Math.random() - 0.5) * E.shake * 16 : 0;
     var g0 = E.toScreen(0, 0);
-    ART.drawSky(ctx, W, H, E.pal, g0.y, E.t);
-    ART.drawParallax(ctx, W, H, E.pal, E.cam, g0.y, E.t);
+    // Depth of field: sky and distant scenery render at half resolution and are
+    // softened on the way up; nearer layers stay sharp.
+    var half = E._half || (E._half = document.createElement('canvas'));
+    var hw = Math.ceil(W / 2), hh = Math.ceil(H / 2);
+    if (half.width !== hw || half.height !== hh) { half.width = hw; half.height = hh; }
+    var hc = half.getContext('2d');
+    hc.setTransform(0.5, 0, 0, 0.5, 0, 0);
+    ART.drawSky(hc, W, H, E.pal, g0.y, E.t);
+    ART.drawParallax(hc, W, H, E.pal, E.cam, g0.y, E.t, 'far');
+    ctx.drawImage(half, 0, 0, hw, hh, 0, 0, W, H);
+    ART.drawParallax(ctx, W, H, E.pal, E.cam, g0.y, E.t, 'near');
 
     function at(x, y, a, fn) {
       frameAt(ctx, x, y, a);
@@ -347,6 +426,17 @@
     at(0, 0, 0, function () { ART.drawSlingBack(ctx); });
     if (hooks.behindSling) hooks.behindSling(at);
 
+    // depth: a soft offset silhouette behind every block
+    if (!E.lowFx) E.blocks.forEach(function (b) {
+      var p = b.getPosition(), ud = b.getUserData();
+      at(p.x + 0.09, p.y - 0.11, b.getAngle(), function () {
+        ctx.fillStyle = 'rgba(0,0,0,0.2)';
+        if (ud.shape === 'round') { ctx.beginPath(); ctx.arc(0, 0, ud.r, 0, Math.PI * 2); ctx.fill(); }
+        else if (ud.shape === 'tri') { ctx.beginPath(); ud.pts.forEach(function (v, i) { if (i) ctx.lineTo(v[0], -v[1]); else ctx.moveTo(v[0], -v[1]); }); ctx.closePath(); ctx.fill(); }
+        else { ART.rr(ctx, -ud.w / 2, -ud.h / 2, ud.w, ud.h, Math.min(ud.w, ud.h) * 0.16); ctx.fill(); }
+      });
+    });
+
     E.blocks.forEach(function (b) {
       var p = b.getPosition(), ud = b.getUserData(), dmg = 1 - ud.hp / ud.maxHp;
       at(p.x, p.y, b.getAngle(), function () {
@@ -357,16 +447,40 @@
       });
     });
 
+    E.debris.forEach(function (d) {
+      var p = d.body.getPosition();
+      at(p.x, p.y, d.body.getAngle(), function () {
+        ctx.globalAlpha = Math.min(1, d.life / 0.6);
+        if (d.kind === 'hat') ART.drawHat(ctx, d.k, d.r, { t: E.t });
+        else if (d.kind === 'round') ART.drawRound(ctx, d.m, d.r, 0.4, d.seed);
+        else ART.drawBlock(ctx, d.m, d.w, d.h, 0.55, d.seed, { moss: E.pal.moss });
+        ctx.globalAlpha = 1;
+      });
+    });
+
     // bandits flinch when an airborne bird is close
     var threats = E.birds.filter(function (b) { var u = b.getUserData(); return u.launched && !u.hit; }).map(function (b) { return b.getPosition(); });
     E.bandits.forEach(function (b) {
       var p = b.getPosition(), ud = b.getUserData();
       var blink = ((E.t + ud.blinkAt) % 3.2) < 0.12;
       var scared = threats.some(function (q) { return Math.abs(q.x - p.x) < 6 && Math.abs(q.y - p.y) < 5; });
+      var look = threats[0] || (E.birds[0] && E.birds[0].getPosition());
+      var lookX = look ? Math.max(-1, Math.min(1, (look.x - p.x) / 4)) : -0.6, lookY = look ? Math.max(-1, Math.min(1, -(look.y - p.y) / 4)) : 0;
+      var laugh = E.tauntT > 0;
+      var hop = laugh ? Math.abs(Math.sin(E.t * 12 + ud.blinkAt * 3)) * 0.18 : 0;
       at(p.x, p.y, b.getAngle() * 0.35, function () {
         var bob = ud.ouch > 0 ? Math.sin(E.t * 50) * 0.05 : 0;
         ctx.translate(bob, 0);
-        ART.drawBandit(ctx, ud.k, ud.r, { blink: blink && !scared, dmg: 1 - ud.hp / ud.maxHp, t: E.t + ud.blinkAt, scared: scared });
+        ctx.translate(0, -hop);
+        ART.drawBandit(ctx, ud.k, ud.r, { blink: blink && !scared, dmg: 1 - ud.hp / ud.maxHp, t: E.t + ud.blinkAt, scared: scared, lookX: lookX, lookY: lookY, laugh: laugh });
+      });
+      if (1 - ud.hp / ud.maxHp > 0.45) at(p.x, p.y + ud.r * 1.25, 0, function () {
+        for (var ds = 0; ds < 3; ds++) {
+          var da = E.t * 4 + ds * 2.09;
+          ctx.fillStyle = ds % 2 ? '#ffd23f' : '#ffffff';
+          ART.starPath(ctx, Math.cos(da) * ud.r * 0.7, Math.sin(da) * ud.r * 0.18, ud.r * 0.16, 5);
+          ctx.fill();
+        }
       });
     });
 
@@ -382,7 +496,7 @@
         });
       });
       var stretch = ud.launched && !ud.hit ? Math.min(0.16, Math.hypot(v.x, v.y) * 0.007) : 0;
-      at(p.x, p.y, ang, function () { ART.drawBird(ctx, ud.type, ud.r, { t: E.t, flap: ud.launched, blink: false, stretch: stretch }); });
+      at(p.x, p.y, ang, function () { ART.drawBird(ctx, ud.type, ud.r, { t: E.t, flap: ud.launched && !ud.hit, blink: false, stretch: stretch, squash: ud.squash || 0 }); });
     });
 
     if (hooks.loaded) hooks.loaded(at);
@@ -396,6 +510,11 @@
     });
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (!E.lowFx) {
+      ART.drawShafts(ctx, W, H, E.pal, E.t);
+      ART.drawFrame(ctx, W, H, E.pal, E.cam);
+      ART.drawGrade(ctx, W, H, E.pal);
+    }
     ART.drawVignette(ctx, W, H, E.pal.night);
     if (E.flash > 0) {
       ctx.fillStyle = 'rgba(255,248,225,' + Math.min(0.28, E.flash * 0.8) + ')';

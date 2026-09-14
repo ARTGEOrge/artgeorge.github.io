@@ -75,7 +75,22 @@
     var grid = $('levelGrid'), W0 = WORLDS[page];
     grid.innerHTML = '';
     var count = W0.to - W0.from;
-    grid.style.gridTemplateColumns = 'repeat(' + (count > 4 ? 3 : count) + ', 1fr)';
+    grid.className = 'level-grid map';
+    // node positions along a winding trail, in % of the map box
+    var spots = [];
+    for (var q = 0; q < count; q++) {
+      var tt = count === 1 ? 0.5 : q / (count - 1);
+      spots.push({ x: 8 + tt * 84, y: 52 + Math.sin(tt * Math.PI * 1.6 + page * 1.3) * 26 });
+    }
+    var d = spots.map(function (sp, q) {
+      if (!q) return 'M' + sp.x + ' ' + sp.y;
+      var pr = spots[q - 1], mx = (pr.x + sp.x) / 2;
+      return 'C' + mx + ' ' + pr.y + ' ' + mx + ' ' + sp.y + ' ' + sp.x + ' ' + sp.y;
+    }).join(' ');
+    var furthest = -1;
+    for (var fi = W0.from; fi < W0.to; fi++) if (unlocked(fi)) furthest = fi;
+    grid.innerHTML = '<svg class="trail" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' +
+      '<path d="' + d + '" class="trail-shadow"/><path d="' + d + '" class="trail-line"/></svg>';
     $('worldName').textContent = W0.name;
     $('worldSub').textContent = 'World ' + (page + 1) + '  \u00b7  Levels ' + (W0.from + 1) + '-' + W0.to;
     $('worldPrev').disabled = page === 0;
@@ -88,12 +103,16 @@
       var i = W0.from + j;
       var b = document.createElement('button');
       var open = unlocked(i), st = progress.stars[i] || 0;
-      b.className = 'lvl' + (open ? '' : ' locked');
+      b.className = 'lvl' + (open ? '' : ' locked') + (i === furthest && !st ? ' next' : '') + (j === count - 1 ? ' boss' : '');
+      b.style.left = spots[j].x + '%';
+      b.style.top = spots[j].y + '%';
       b.setAttribute('aria-label', 'Level ' + (i + 1) + ': ' + lv.name + (open ? ', ' + st + ' stars' : ', locked'));
       if (open) {
         var stars = '';
         for (var k = 0; k < 3; k++) stars += '<span class="' + (k < st ? '' : 'off') + '">★</span>';
-        b.innerHTML = '<span>' + (i + 1) + '</span><span class="stars">' + stars + '</span>';
+        b.innerHTML = (j === count - 1 ? '<span class="crown">\ud83d\udc51</span>' : '') +
+          '<span>' + (i + 1) + '</span><span class="stars">' + stars + '</span>' +
+          '<span class="lvl-name">' + lv.name + '</span>';
         b.onclick = function () { startLevel(i); };
       } else {
         b.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 10V8a5 5 0 0 1 10 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1zm2 0h6V8a3 3 0 0 0-6 0z"/></svg>';
@@ -127,8 +146,31 @@
     buildStarMarkers();
     loadNextBird();
     E.startIntro();
+    showBanner(i, lv);
     paused = false;
     show(null);
+  }
+
+  function showBanner(i, lv) {
+    var w = WORLDS[worldOf(i)], el = $('banner');
+    $('bannerWorld').textContent = 'World ' + (worldOf(i) + 1) + '  \u00b7  ' + w.name;
+    $('bannerName').textContent = lv.name;
+    $('bannerNum').textContent = 'Level ' + (i + 1);
+    el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+    // the hint waits until the banner has gone
+    var hint = $('hint');
+    hint.style.visibility = 'hidden';
+    clearTimeout(showBanner.timer);
+    el.onanimationend = function () { clearTimeout(showBanner.timer); hint.style.visibility = ''; };
+    showBanner.timer = setTimeout(el.onanimationend, 3000);
+  }
+
+  function praise(text) {
+    var el = document.createElement('div');
+    el.className = 'popup toon praise';
+    el.textContent = text;
+    $('hud').appendChild(el);
+    setTimeout(function () { el.remove(); }, 1500);
   }
 
   function buildStarMarkers() {
@@ -227,7 +269,7 @@
     body.getUserData().launched = true;
     S.flying = [body];
     S.loaded = null; S.pull = null;
-    S.phase = 'flying'; S.abilityUsed = false; S.wait = 0;
+    S.phase = 'flying'; S.abilityUsed = false; S.wait = 0; S.shotStart = E.score; S.judged = false;
     $('hint').style.opacity = 0;
     renderCards();
     SFX.launch();
@@ -271,7 +313,7 @@
       var b = S.flying[i], ud = b.getUserData(), p = b.getPosition(), v = b.getLinearVelocity();
       ud.age += dt;
       if (!ud.hit && touching(b)) {
-        ud.hit = true; ud.hitAt = ud.age;
+        ud.hit = true; ud.hitAt = ud.age; ud.squash = 0.35;
         E.burst(p.x, p.y, 'feather', [ART.BIRDS[ud.type].base, ART.BIRDS[ud.type].belly], 4, 0.18, 2);
       }
       if (!ud.hit && (ud.trail.length === 0 || Math.hypot(p.x - ud.trail[ud.trail.length - 1].x, p.y - ud.trail[ud.trail.length - 1].y) > 0.55)) {
@@ -295,9 +337,20 @@
     }
   }
 
+  function judgeShot() {
+    if (S.judged || S.shotStart === undefined) return;
+    S.judged = true;
+    var gained = E.score - S.shotStart;
+    if (gained >= 25000) praise('INCREDIBLE!');
+    else if (gained >= 15000) praise('AWESOME!');
+    else if (gained >= 8000) praise('GREAT!');
+    else if (gained < 500 && E.bandits.length) E.taunt();
+  }
+
   function updateSettling(dt) {
     S.wait += dt;
     if (S.wait < 0.8) return;
+    if (E.settled() || S.wait > 2.5) judgeShot();
     if (E.bandits.length === 0 && (E.settled() || S.wait > 2.5)) return win();
     if (!E.settled() && S.wait < 4) return;
     if (E.bandits.length === 0) return win();
@@ -315,7 +368,7 @@
       (function (k) {
         setTimeout(function () {
           E.score += 10000;
-          E.popup(-1.2 - k * 1.1, 1.4, '10000', '#ffd23f', 0.75);
+          E.popup(-1.6, 2.2 + k * 1.0, '+10000', '#ffd23f', 0.75);   // stacked so they never overlap
           SFX.bandit();
         }, 500 + k * 450);
       })(k);
@@ -422,11 +475,20 @@
   window.addEventListener('resize', resize);
 
   var last = performance.now(), acc = 0;
+  // Adaptive quality: if frames stay slow while playing, drop the cosmetic
+  // screen passes. Long gaps (a hidden tab) are ignored. ?hq forces full quality.
+  var slowFrames = 0, forceHQ = /[?&]hq\b/.test(location.search);
   function frame(now) {
-    var dt = Math.min(0.05, (now - last) / 1000);
+    var rawDt = (now - last) / 1000;
+    var dt = Math.min(0.05, rawDt);
     last = now;
+    if (S && !paused && !E.lowFx && !forceHQ && rawDt < 0.25) {
+      slowFrames = rawDt > 0.034 ? slowFrames + 1 : Math.max(0, slowFrames - 2);
+      if (slowFrames > 120) E.lowFx = true;
+    }
     if (S && !paused) {
-      acc += dt;
+      E.updateTimeScale(dt);
+      acc += dt * E.timeScale;
       while (acc >= 1 / 60) {
         acc -= 1 / 60;
         E.step(1 / 60);

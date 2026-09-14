@@ -347,9 +347,12 @@
   }
 
   /* ------------------------------------------------------ parallax scenery */
-  ART.drawParallax = function (ctx, W, H, pal, cam, groundY, t) {
+  // pass: 'far' (clouds, distant scenery, haze, mid hills), 'near' (props, near
+  // hills, ambient particles) or undefined for both.
+  ART.drawParallax = function (ctx, W, H, pal, cam, groundY, t, pass) {
     var camPx = cam.x * cam.zoom;
     var u = Math.max(0.6, Math.min(1.6, H / 720));
+    if (pass !== 'near') {
 
     for (var i = 0; i < 6; i++) {
       var span = W + 600;
@@ -368,6 +371,8 @@
 
     if (pal.far !== 'sea') ridge(ctx, W, groundY - 18 * u, camPx, 0.35, 520 * u, 95 * u, 11, pal.midDark, true);
     ridge(ctx, W, groundY - 6 * u, camPx, 0.5, 430 * u, pal.far === 'sea' ? 26 * u : 70 * u, 23, pal.mid, true);
+    }
+    if (pass === 'far') return;
 
     var tp = 150 * u, factor = 0.6, toff = -((camPx * factor) % tp + tp) % tp;
     for (var j = -1; j < W / tp + 2; j++) {

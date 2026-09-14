@@ -85,6 +85,21 @@
     }
   }
 
+  // Textured face: the material pattern, then a light-from-above form shade on top.
+  function texturedFace(ctx, mat, m, pathFn, y, h, rotate) {
+    var pat = ART.texture ? ART.texture(ctx, mat, rotate) : null;
+    ctx.fillStyle = pat || faceGradient(ctx, m, y, h);
+    pathFn(); ctx.fill();
+    var shade = ctx.createLinearGradient(0, y, 0, y + h);
+    shade.addColorStop(0, 'rgba(255,255,255,0.32)');
+    shade.addColorStop(0.3, 'rgba(255,255,255,0.04)');
+    shade.addColorStop(0.75, 'rgba(0,0,0,0.06)');
+    shade.addColorStop(1, 'rgba(0,0,0,0.3)');
+    ctx.fillStyle = shade;
+    pathFn(); ctx.fill();
+  }
+  ART.texturedFace = texturedFace;
+
   function faceGradient(ctx, m, y, h) {
     var g = ctx.createLinearGradient(0, y, 0, y + h);
     g.addColorStop(0, m.top); g.addColorStop(0.35, m.base); g.addColorStop(1, m.low);
@@ -98,25 +113,12 @@
     var bev = Math.min(0.09, Math.min(w, h) * 0.18);
     ctx.fillStyle = m.edge;
     rr(ctx, x, y, w, h, r); ctx.fill();
-    ctx.fillStyle = faceGradient(ctx, m, y, h);
-    rr(ctx, x + 0.035, y + 0.035, w - 0.07, h - 0.07, r * 0.85); ctx.fill();
+    texturedFace(ctx, mat, m, function () { rr(ctx, x + 0.035, y + 0.035, w - 0.07, h - 0.07, r * 0.85); }, y, h, mat === 'wood' && h > w);
 
     ctx.save();
     rr(ctx, x + 0.035, y + 0.035, w - 0.07, h - 0.07, r * 0.85); ctx.clip();
     if (mat === 'wood') {
-      var long = w >= h, span = long ? h : w, lines = Math.max(2, Math.round(span / 0.13));
-      ctx.strokeStyle = 'rgba(120,62,20,0.35)'; ctx.lineWidth = 0.03;
-      for (var i = 1; i < lines; i++) {
-        ctx.beginPath();
-        if (long) {
-          var yy = y + (h * i) / lines, wob = (hash(seed + i) - 0.5) * 0.05;
-          ctx.moveTo(x, yy); ctx.bezierCurveTo(x + w * 0.33, yy + wob, x + w * 0.66, yy - wob, x + w, yy);
-        } else {
-          var xx = x + (w * i) / lines, wb = (hash(seed + i) - 0.5) * 0.05;
-          ctx.moveTo(xx, y); ctx.bezierCurveTo(xx + wb, y + h * 0.33, xx - wb, y + h * 0.66, xx, y + h);
-        }
-        ctx.stroke();
-      }
+      var long = w >= h;
       // end grain: growth rings on the short ends of long pieces
       if (Math.max(w, h) / Math.min(w, h) > 2.5) {
         ctx.strokeStyle = 'rgba(110,55,15,0.4)'; ctx.lineWidth = 0.022;
@@ -126,28 +128,7 @@
           for (var ring = 1; ring <= 3; ring++) { ctx.beginPath(); ctx.arc(ex, ey, er * ring / 3, 0, TAU); ctx.stroke(); }
         });
       }
-      if (w * h > 0.3) {   // a knot
-        var kx = x + w * (0.25 + hash(seed) * 0.5), ky = y + h * (0.3 + hash(seed * 2) * 0.4);
-        ctx.strokeStyle = 'rgba(110,55,15,0.45)'; ctx.lineWidth = 0.03;
-        ctx.beginPath(); ctx.ellipse(kx, ky, 0.08, 0.045, long ? 0 : Math.PI / 2, 0, TAU); ctx.stroke();
-        ctx.beginPath(); ctx.ellipse(kx, ky, 0.035, 0.02, long ? 0 : Math.PI / 2, 0, TAU); ctx.stroke();
-      }
     } else if (mat === 'stone') {
-      // brick courses
-      var course = 0.36, bw = 0.62;
-      ctx.strokeStyle = 'rgba(55,65,78,0.45)'; ctx.lineWidth = 0.035;
-      for (var row = 0; y + row * course < y + h; row++) {
-        var ry = y + row * course;
-        if (row) { ctx.beginPath(); ctx.moveTo(x, ry); ctx.lineTo(x + w, ry); ctx.stroke(); }
-        for (var c = (row % 2) * bw / 2; c < w; c += bw) {
-          if (c <= 0.05) continue;
-          ctx.beginPath(); ctx.moveTo(x + c, ry); ctx.lineTo(x + c, Math.min(y + h, ry + course)); ctx.stroke();
-        }
-      }
-      ctx.fillStyle = 'rgba(60,70,82,0.18)';
-      for (var sp = 0; sp < w * h * 14; sp++) {
-        ctx.beginPath(); ctx.arc(x + hash(seed + sp) * w, y + hash(seed + sp * 1.9) * h, 0.02 + hash(sp) * 0.035, 0, TAU); ctx.fill();
-      }
       if (opts.moss) {
         for (var ms = 0; ms < 3 + w * 2; ms++) {
           var mx = x + hash(seed + ms * 9.1) * w, my = y + hash(seed + ms * 4.7) * h * 0.5;
@@ -211,7 +192,10 @@
         ctx.beginPath(); ctx.moveTo(px2 - cx2 * cs * 0.85, py2 - cy2 * 0.02); ctx.lineTo(px2 - cx2 * cs * 0.4, py2 - cy2 * cs * 0.45); ctx.lineTo(px2 - cx2 * 0.02, py2 - cy2 * cs * 0.85); ctx.closePath(); ctx.fill();
       }
     }
+    ctx.save();
+    rr(ctx, x, y, w, h, r); ctx.clip();
     cracks(ctx, w, h, dmg, seed, mat === 'ice' ? 'rgba(30,90,150,0.85)' : 'rgba(40,20,5,0.6)');
+    ctx.restore();
   };
 
   // Right-angled or isosceles triangle; `pts` in local coordinates (y down).
@@ -228,7 +212,7 @@
     }
     ctx.lineJoin = 'round';
     ctx.fillStyle = m.edge; path(0); ctx.fill();
-    ctx.fillStyle = faceGradient(ctx, m, minY, maxY - minY); path(0.08); ctx.fill();
+    texturedFace(ctx, mat, m, function () { path(0.08); }, minY, maxY - minY, false);
     ctx.strokeStyle = m.bevelHi; ctx.lineWidth = 0.05; path(0.16); ctx.stroke();
     cracks(ctx, 0.8, 0.8, dmg, seed, mat === 'ice' ? 'rgba(30,90,150,0.85)' : 'rgba(40,20,5,0.6)');
   };
@@ -238,9 +222,10 @@
     var m = MAT[mat];
     ctx.fillStyle = m.edge;
     ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
-    var g = ctx.createRadialGradient(-r * 0.35, -r * 0.4, r * 0.08, 0, 0, r);
-    g.addColorStop(0, m.top); g.addColorStop(0.55, m.base); g.addColorStop(1, m.low);
-    ctx.fillStyle = g;
+    texturedFace(ctx, mat, m, function () { ctx.beginPath(); ctx.arc(0, 0, r * 0.92, 0, TAU); }, -r, r * 2, false);
+    var rg2 = ctx.createRadialGradient(-r * 0.35, -r * 0.4, r * 0.08, 0, 0, r);
+    rg2.addColorStop(0, 'rgba(255,255,255,0.25)'); rg2.addColorStop(0.6, 'rgba(255,255,255,0)'); rg2.addColorStop(1, 'rgba(0,0,0,0.3)');
+    ctx.fillStyle = rg2;
     ctx.beginPath(); ctx.arc(0, 0, r * 0.92, 0, TAU); ctx.fill();
     if (mat === 'wood') {
       ctx.strokeStyle = 'rgba(122,68,26,0.5)'; ctx.lineWidth = 0.03;
@@ -275,15 +260,20 @@
   };
 
   // Soft contact shadow on the ground under an object (world frame at ground level).
+  var shadowSprite = null;
   ART.drawShadow = function (ctx, x, halfW, height, night) {
     var a = Math.max(0, 0.32 - height * 0.05) * (night ? 0.7 : 1);
     if (a <= 0.01) return;
-    var g = ctx.createRadialGradient(x, 0, 0, x, 0, halfW * 1.3);
-    g.addColorStop(0, 'rgba(0,0,0,' + a + ')');
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.save(); ctx.translate(x, 0.02); ctx.scale(1, 0.22); ctx.translate(-x, 0);
-    ctx.beginPath(); ctx.arc(x, 0, halfW * 1.3, 0, TAU); ctx.fill();
-    ctx.restore();
+    if (!shadowSprite) {
+      shadowSprite = document.createElement('canvas');
+      shadowSprite.width = shadowSprite.height = 64;
+      var sc = shadowSprite.getContext('2d'), g = sc.createRadialGradient(32, 32, 0, 32, 32, 32);
+      g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      sc.fillStyle = g; sc.fillRect(0, 0, 64, 64);
+    }
+    var rw = halfW * 1.3;
+    ctx.globalAlpha = a;
+    ctx.drawImage(shadowSprite, x - rw, -rw * 0.22 + 0.02, rw * 2, rw * 0.44);
+    ctx.globalAlpha = 1;
   };
 })();
