@@ -1,6 +1,50 @@
 {
  "photos": [
   {
+   "id": "pmu1w4b0b-21p10",
+   "src": "img/pmu1w4b0b-21p10.jpg",
+   "thumb": "img/pmu1w4b0b-21p10-t.jpg",
+   "w": 2200,
+   "h": 1467,
+   "caption": "",
+   "date": "2026-09-07",
+   "texts": [
+    {
+     "t": "©Arthur George",
+     "x": 6.53,
+     "y": 5.74,
+     "size": 1,
+     "font": "sans",
+     "color": "#ffffff",
+     "style": "shadow",
+     "align": "center",
+     "rot": 0.0
+    }
+   ]
+  },
+  {
+   "id": "pmu1w4bto-0pu6d",
+   "src": "img/pmu1w4bto-0pu6d.jpg",
+   "thumb": "img/pmu1w4bto-0pu6d-t.jpg",
+   "w": 2200,
+   "h": 1467,
+   "caption": "",
+   "date": "2026-09-07",
+   "texts": [
+    {
+     "t": "©Arthur George",
+     "x": 93.17,
+     "y": 1.97,
+     "size": 1.2,
+     "font": "sans",
+     "color": "#ffffff",
+     "style": "shadow",
+     "align": "center",
+     "rot": 0.0
+    }
+   ]
+  },
+  {
    "id": "pmu1ve5c3-8oo0n",
    "src": "img/pmu1ve5c3-8oo0n.jpg",
    "thumb": "img/pmu1ve5c3-8oo0n-t.jpg",
