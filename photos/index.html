@@ -138,6 +138,28 @@
     // Only files inside img/ are ever loaded.
     function safeSrc(s) { return /^img\/[a-z0-9-]+\.jpg$/.test(s || '') ? s : ''; }
 
+    // A card fades in once its image arrives. If a load fails (a flaky
+    // connection, or a host still catching up right after publishing, whose
+    // "not found" answer the browser may have cached), try again past the
+    // cache, then fall back to the full-size photo. A card never stays blank.
+    function loadInto(img, src, fullSrc) {
+      var tries = [src, src + '?r=' + Date.now(), fullSrc + '?r=' + Date.now()], n = 0;
+      img.onload = function () { img.classList.add('ready'); };
+      img.onerror = function () {
+        if (++n >= tries.length) { img.classList.add('ready'); return; }
+        setTimeout(function () { img.src = tries[n]; }, n === 1 ? 800 : 2500);
+      };
+      img.src = tries[0];
+    }
+    // belt and braces: reveal any image that finished loading without telling us
+    function revealLoaded() {
+      Array.prototype.forEach.call(document.querySelectorAll('.card img:not(.ready)'), function (im) {
+        if (im.complete && im.naturalWidth) im.classList.add('ready');
+      });
+    }
+    window.addEventListener('load', function () { setTimeout(revealLoaded, 300); });
+    setInterval(revealLoaded, 2000);
+
     function card(ph, i) {
       var fig = document.createElement('figure');
       fig.className = 'card';
@@ -149,8 +171,7 @@
       var img = document.createElement('img');
       img.loading = 'lazy'; img.decoding = 'async'; img.alt = ph.caption || '';
       img.width = ph.w; img.height = ph.h;
-      img.onload = function () { img.classList.add('ready'); };
-      img.src = safeSrc(ph.thumb) || safeSrc(ph.src);
+      loadInto(img, safeSrc(ph.thumb) || safeSrc(ph.src), safeSrc(ph.src));
       host.appendChild(img);
       PhotoOverlay.render(host, ph.texts);
       btn.appendChild(host);
@@ -171,7 +192,9 @@
       var ph = photos[cur], host = $('lbHost');
       host.style.setProperty('--ar', ph.w / ph.h);
       host.style.aspectRatio = ph.w + ' / ' + ph.h;
-      $('lbImg').src = safeSrc(ph.src);
+      var big = $('lbImg'), retried = false;
+      big.onerror = function () { if (!retried) { retried = true; big.src = safeSrc(ph.src) + '?r=' + Date.now(); } };
+      big.src = safeSrc(ph.src);
       $('lbImg').alt = ph.caption || '';
       PhotoOverlay.render(host, ph.texts);
       $('lbTitle').textContent = ph.caption || '';
