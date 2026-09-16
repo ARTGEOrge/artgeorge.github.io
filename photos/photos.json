@@ -1,6 +1,28 @@
 {
  "photos": [
   {
+   "id": "pmu4qubz9-utera",
+   "src": "img/pmu4qubz9-utera.jpg",
+   "thumb": "img/pmu4qubz9-utera-t.jpg",
+   "w": 724,
+   "h": 1086,
+   "caption": "",
+   "date": "2026-08-19",
+   "texts": [
+    {
+     "t": "©Arthur George\n",
+     "x": 12.97,
+     "y": 2.2,
+     "size": 1.97,
+     "font": "sans",
+     "color": "#ffffff",
+     "style": "shadow",
+     "align": "center",
+     "rot": 0.0
+    }
+   ]
+  },
+  {
    "id": "pmu1x4v2m-qg075",
    "src": "img/pmu1x4v2m-qg075.jpg",
    "thumb": "img/pmu1x4v2m-qg075-t.jpg",
