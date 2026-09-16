@@ -173,7 +173,7 @@ const hud = {
 };
 
 /* --------------------------------------------------------------- screens */
-const SCREENS = ['menu', 'levelScreen', 'pause', 'dead', 'cleared'];
+const SCREENS = ['menu', 'levelScreen', 'pause', 'dead', 'cleared', 'ready'];
 function show(id) {
   for (const s of SCREENS) $(s).hidden = s !== id;
   $('hud').hidden = id !== null;
@@ -205,22 +205,34 @@ function buildLevelList() {
 }
 
 /**
- * Capture the mouse first, while the click still counts as a user gesture —
- * building a level can take long enough that the browser would refuse later.
- * Then show a loading screen and build on the next frame so it can paint.
+ * Build the level behind a loading screen, then wait on a "click to play"
+ * card. The mouse is captured by that click and nothing heavy runs after it —
+ * the same flow NYC Walk uses. (Asking for capture before a long build lets the
+ * browser refuse it or drop it a moment later.)
  */
 function runLevel(build) {
   audio.unlock();
-  game.lock();
   show(null);
+  $('hud').hidden = true;
   $('loadText').textContent = 'Loading…';
   $('loading').hidden = false;
   setTimeout(() => {
     build();
-    game.start();
     $('loading').hidden = true;
+    const lv = LEVELS[game.levelIndex];
+    $('readyNum').textContent = 'Stage ' + (game.levelIndex + 1);
+    $('readyName').textContent = lv.name;
+    $('readyObj').textContent = lv.brief;
+    game.ready();
+    show('ready');
   }, 30);
 }
+
+$('ready').addEventListener('click', () => {
+  game.lock();          // first, while this click is still fresh
+  show(null);
+  game.start();
+});
 
 function startLevel(i) {
   runLevel(() => game.loadLevel(i));
@@ -243,8 +255,8 @@ $('nextBtn').onclick = () => {
 
 addEventListener('keydown', e => {
   if (e.code === 'Escape') {
+    // Esc only pauses; resuming takes a click so the mouse can be captured
     if (game.state === 'playing' || game.state === 'mars') game.pause();
-    else if (game.state === 'paused') game.resume();
   }
   if (e.code === 'F3') { $('fps').hidden = !$('fps').hidden; }
 });

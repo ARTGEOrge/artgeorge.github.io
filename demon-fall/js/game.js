@@ -198,6 +198,9 @@ export class Game {
     addEventListener('contextmenu', e => e.preventDefault());
     addEventListener('mousemove', e => {
       if (!this.locked && !this.dragLook) return;
+      // browsers often report one huge jump right after capture; drop it
+      if (performance.now() - this.lockAt < 120) return;
+      if (Math.abs(e.movementX) > 250 || Math.abs(e.movementY) > 250) return;
       this.mouse.x += e.movementX;
       this.mouse.y += e.movementY;
     });
@@ -208,6 +211,8 @@ export class Game {
 
     document.addEventListener('pointerlockchange', () => {
       this.lockPending = false;
+      this.lockAt = performance.now();
+      this.mouse.x = this.mouse.y = 0;
       const locked = this.locked;
       this.hud.lockHint(false);
       if (!locked && this.state === 'playing') this.pause();
@@ -326,7 +331,7 @@ export class Game {
 
     audio.startMusic(theme.music || 45);
     this.nextStage();
-    this.hud.banner(index + 1, def.name, def.brief);
+    this.bannerPending = true;         // shown when play actually starts
   }
 
   nextStage() {
@@ -524,17 +529,32 @@ export class Game {
   }
 
   /* ---------------------------------------------------------------- loop */
+  /** Level built and waiting behind the "click to play" screen. */
+  ready() {
+    this.state = 'ready';
+    this.runLoop();
+  }
+
+  runLoop() {
+    if (this.running) return;
+    this.running = true;
+    this.lastFrame = performance.now();
+    requestAnimationFrame(t => this.frame(t));
+  }
+
+  /** Call from inside the click that should capture the mouse. */
   start() {
     this.state = 'playing';
+    if (this.bannerPending) {
+      this.bannerPending = false;
+      this.hud.banner(this.levelIndex + 1, this.levelDef.name, this.levelDef.brief);
+    }
     this.mouse.down = this.mouse.right = false;
     this.firedThisClick = true;        // needs a fresh click before firing
     this.lock();
     this.checkLock();
     this.lastFrame = performance.now();
-    if (!this.running) {
-      this.running = true;
-      requestAnimationFrame(t => this.frame(t));
-    }
+    this.runLoop();
   }
 
   pause() {
