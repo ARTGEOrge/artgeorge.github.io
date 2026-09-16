@@ -5,240 +5,397 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="description" content="Demon Fall — a 3D survival shooter. Fight through a demon-torn world, reach the Master Treasury, and escape to Mars." />
 <title>Demon Fall — Escape to Mars</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 <style>
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
   :root {
-    --blood: #c8102e; --ember: #ff7a2f; --bone: #e8e2d6; --ink: #07070b;
-    --ui: "Bahnschrift", "DIN Alternate", "Segoe UI Semibold", "Segoe UI", system-ui, sans-serif;
+    --accent: #ff6a2b; --accent-2: #ffb347; --blood: #e5173f; --blue: #5ec8ff; --green: #4ee08a;
+    --text: #f2eee6; --muted: #9d978c; --line: rgba(255,255,255,.12); --glass: rgba(12,11,16,.58);
+    --display: "Chakra Petch", "Bahnschrift", "Segoe UI Semibold", system-ui, sans-serif;
+    --body: "Inter", "Segoe UI", system-ui, sans-serif;
   }
   html, body { height: 100%; overflow: hidden; background: #000; }
-  body { font-family: var(--ui); color: var(--bone); user-select: none; -webkit-user-select: none; }
+  body { font-family: var(--body); color: var(--text); user-select: none; -webkit-user-select: none; -webkit-font-smoothing: antialiased; }
   canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
   [hidden] { display: none !important; }
+  button { font: inherit; color: inherit; }
 
-  /* ---------------------------------------------------------------- HUD */
-  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
-  .corner { position: absolute; padding: 16px 20px; }
-  .bl { left: 0; bottom: 0; } .br { right: 0; bottom: 0; } .tl { left: 0; top: 0; }
+  /* ================================================================== HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; font-family: var(--display); }
+  .vig { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,.6) 100%); }
+  .glass { background: var(--glass); border: 1px solid var(--line); border-radius: 10px;
+    -webkit-backdrop-filter: blur(10px) saturate(140%); backdrop-filter: blur(10px) saturate(140%); }
 
-  .meter { width: 250px; }
-  .meter + .meter { margin-top: 10px; }
-  .meter .lbl { font-size: 11px; letter-spacing: .28em; text-transform: uppercase; opacity: .75; margin-bottom: 4px; }
-  .bar { height: 12px; background: rgba(0,0,0,.55); border: 1px solid rgba(232,226,214,.28); position: relative; overflow: hidden; }
-  .bar i { position: absolute; inset: 0; transform-origin: left; transition: transform .18s ease-out; }
-  #hpFill { background: linear-gradient(90deg, #8d0d20, var(--blood) 60%, #ff4d63); }
-  #armFill { background: linear-gradient(90deg, #1d5d86, #48b5ff); }
-  #stamFill { background: linear-gradient(90deg, #6a5a1d, #e8c34a); }
-  .bar.low i { animation: pulse .6s ease-in-out infinite; }
+  /* top centre: compass strip + objective */
+  #topbar { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: min(560px, 70vw); text-align: center; }
+  #compassStrip { position: relative; height: 30px; overflow: hidden; border-radius: 8px; }
+  #compassTape { position: absolute; top: 0; left: 50%; height: 100%; white-space: nowrap; will-change: transform; }
+  #compassTape span { position: absolute; top: 7px; transform: translateX(-50%); font-size: 12px; font-weight: 600; letter-spacing: .1em; color: var(--muted); }
+  #compassTape span.card { color: var(--text); font-size: 13px; }
+  #compassTape i { position: absolute; top: 22px; width: 1px; height: 6px; background: rgba(255,255,255,.3); }
+  #compassNeedle { position: absolute; left: 50%; top: 0; width: 2px; height: 6px; margin-left: -1px; background: var(--accent); }
+  #compassMark { position: absolute; top: 6px; width: 12px; height: 12px; margin-left: -6px; transform: rotate(45deg);
+    background: var(--accent); box-shadow: 0 0 12px var(--accent); transition: opacity .2s; }
+  #compassMark.off { opacity: 0; }
+  #objWrap { margin-top: 8px; display: inline-flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 16px; }
+  #objective { font-size: 14px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 1px 8px #000; }
+  #objective b { color: var(--accent-2); font-weight: 700; }
+  #objMeta { display: flex; gap: 12px; align-items: center; font-size: 11px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
+  #objDist { color: var(--accent-2); }
+  #objProgress { width: 180px; height: 3px; background: rgba(255,255,255,.12); border-radius: 2px; overflow: hidden; }
+  #objProgress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .25s; }
+
+  /* boss bar */
+  #bossBar { position: absolute; top: 118px; left: 50%; transform: translateX(-50%); width: min(520px, 64vw); text-align: center; }
+  #bossName { font-size: 13px; font-weight: 700; letter-spacing: .3em; text-transform: uppercase; color: #ffd0c0; text-shadow: 0 0 12px rgba(229,23,63,.8); }
+  #bossTrack { margin-top: 6px; height: 8px; border-radius: 4px; background: rgba(0,0,0,.6); border: 1px solid rgba(229,23,63,.45); overflow: hidden; }
+  #bossFill { height: 100%; width: 100%; background: linear-gradient(90deg, #7a0a1e, var(--blood) 70%, #ff6a7a); transition: width .15s; }
+
+  /* top left: stage + hostiles */
+  #stageTag { position: absolute; top: 16px; left: 18px; display: flex; flex-direction: column; gap: 6px; }
+  #stageName { font-size: 12px; letter-spacing: .24em; text-transform: uppercase; color: var(--muted); }
+  #threat { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 600; letter-spacing: .14em; padding: 5px 10px; width: max-content; }
+  #threat::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--blood); box-shadow: 0 0 10px var(--blood); }
+  #threat.clear::before { background: var(--green); box-shadow: 0 0 10px var(--green); }
+
+  /* bottom left: vitals */
+  #vitals { position: absolute; left: 18px; bottom: 18px; padding: 14px 16px; width: 280px; }
+  .vrow { display: grid; grid-template-columns: 26px 1fr 44px; align-items: center; gap: 10px; }
+  .vrow + .vrow { margin-top: 9px; }
+  .vico { width: 22px; height: 22px; opacity: .9; }
+  .vnum { font-size: 22px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; line-height: 1; }
+  .vrow.small .vnum { font-size: 14px; color: var(--muted); }
+  .track { height: 8px; border-radius: 4px; background: rgba(255,255,255,.08); overflow: hidden; position: relative; }
+  .track i { position: absolute; inset: 0; transform-origin: left; transition: transform .18s ease-out; border-radius: 4px; }
+  .track.seg::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 2px), rgba(0,0,0,.55) calc(10% - 2px) 10%); }
+  .vrow.small .track { height: 4px; }
+  #hpFill { background: linear-gradient(90deg, #b3122f, var(--blood) 55%, #ff6a7a); }
+  #armFill { background: linear-gradient(90deg, #2a7fc0, var(--blue)); }
+  #stamFill { background: linear-gradient(90deg, #b88a1c, #f3cf52); }
+  #vitals.low #hpFill { animation: pulse .6s ease-in-out infinite; }
+  #vitals.low .vrow:first-child .vnum { color: var(--blood); }
   @keyframes pulse { 50% { opacity: .45; } }
 
-  #ammoBox { text-align: right; }
-  #ammoNum { font-size: 62px; line-height: .9; font-weight: 700; text-shadow: 0 3px 16px rgba(0,0,0,.9); font-variant-numeric: tabular-nums; }
-  #ammoNum small { font-size: 26px; opacity: .6; }
-  #wepName { font-size: 13px; letter-spacing: .3em; text-transform: uppercase; opacity: .8; margin-top: 4px; }
-  #reloadHint { font-size: 13px; letter-spacing: .2em; color: var(--ember); opacity: 0; transition: opacity .2s; }
+  /* bottom right: weapon */
+  #weapon { position: absolute; right: 18px; bottom: 18px; padding: 12px 18px 14px; min-width: 250px; text-align: right; }
+  #wepName { font-size: 12px; letter-spacing: .26em; text-transform: uppercase; color: var(--muted); }
+  #ammoRow { display: flex; justify-content: flex-end; align-items: baseline; gap: 8px; margin-top: 2px; }
+  #ammoNum { font-size: 52px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  #ammoRes { font-size: 18px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #ammoRow.empty #ammoNum { color: var(--blood); }
+  #magPips { display: flex; justify-content: flex-end; gap: 2px; margin-top: 6px; height: 6px; }
+  #magPips i { width: 5px; height: 6px; background: var(--accent-2); border-radius: 1px; }
+  #magPips i.spent { background: rgba(255,255,255,.14); }
+  #slots { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }
+  #slots span { font-size: 11px; font-weight: 600; letter-spacing: .1em; padding: 3px 8px; border-radius: 5px;
+    border: 1px solid var(--line); color: var(--muted); }
+  #slots span.on { color: #111; background: var(--accent-2); border-color: var(--accent-2); }
+  #slots span.locked { opacity: .3; }
+  #reloadHint { position: absolute; left: 50%; top: calc(50% + 46px); transform: translateX(-50%); font-size: 12px; font-weight: 600;
+    letter-spacing: .24em; color: var(--accent-2); opacity: 0; transition: opacity .2s; text-transform: uppercase; }
   #reloadHint.on { opacity: 1; animation: pulse .8s infinite; }
 
-  #objective { font-size: 15px; letter-spacing: .18em; text-transform: uppercase; text-shadow: 0 2px 10px #000; }
-  #objective b { color: var(--ember); }
-  #compass { margin-top: 6px; font-size: 12px; letter-spacing: .3em; opacity: .7; }
-  #threat { margin-top: 8px; font-size: 12px; letter-spacing: .25em; opacity: .85; color: var(--blood); }
-
-  #cross { position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; transform: translate(-50%, -50%); }
-  #cross i { position: absolute; background: rgba(232,226,214,.9); box-shadow: 0 0 4px #000; transition: transform .08s; }
-  #cross .h { width: 8px; height: 2px; top: 13px; } #cross .h.l { left: 0; } #cross .h.r { right: 0; }
-  #cross .v { width: 2px; height: 8px; left: 13px; } #cross .v.t { top: 0; } #cross .v.b { bottom: 0; }
-  #cross.hot i { background: var(--ember); }
-  #hitmark { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; transform: translate(-50%,-50%) rotate(45deg); opacity: 0; }
+  /* crosshair: four ticks that spread with movement and recoil */
+  #cross { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+  #cross i { position: absolute; background: rgba(255,255,255,.92); box-shadow: 0 0 3px rgba(0,0,0,.9); border-radius: 1px; }
+  #cross .h { width: 9px; height: 2px; top: -1px; }
+  #cross .v { width: 2px; height: 9px; left: -1px; }
+  #cross .dot { width: 2px; height: 2px; left: -1px; top: -1px; }
+  #cross.hot i { background: var(--blood); }
+  #hitmark { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; transform: translate(-50%,-50%) rotate(45deg); opacity: 0; }
   #hitmark i { position: absolute; background: #fff; }
-  #hitmark .a { width: 2px; height: 10px; left: 16px; top: 0; } #hitmark .b { width: 2px; height: 10px; left: 16px; bottom: 0; }
-  #hitmark .c { height: 2px; width: 10px; top: 16px; left: 0; } #hitmark .d { height: 2px; width: 10px; top: 16px; right: 0; }
+  #hitmark .a { width: 2px; height: 8px; left: 14px; top: 0; } #hitmark .b { width: 2px; height: 8px; left: 14px; bottom: 0; }
+  #hitmark .c { height: 2px; width: 8px; top: 14px; left: 0; } #hitmark .d { height: 2px; width: 8px; top: 14px; right: 0; }
   #hitmark.show { animation: hm .22s ease-out; }
   #hitmark.kill i { background: var(--blood); }
-  @keyframes hm { from { opacity: 1; transform: translate(-50%,-50%) rotate(45deg) scale(.7); } to { opacity: 0; transform: translate(-50%,-50%) rotate(45deg) scale(1.3); } }
+  @keyframes hm { from { opacity: 1; transform: translate(-50%,-50%) rotate(45deg) scale(.7); } to { opacity: 0; transform: translate(-50%,-50%) rotate(45deg) scale(1.35); } }
+
+  /* damage direction arcs */
+  #dmgDirs { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+  .dmgArc { position: absolute; left: -90px; top: -90px; width: 180px; height: 180px; border-radius: 50%;
+    border: 4px solid transparent; border-top-color: rgba(229,23,63,.9); filter: drop-shadow(0 0 6px rgba(229,23,63,.9));
+    animation: dfade 1s ease-out forwards; }
+  @keyframes dfade { from { opacity: 1; } to { opacity: 0; } }
+
+  /* kill feed */
+  #killfeed { position: absolute; right: 18px; top: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
+  #killfeed div { font-size: 12px; font-weight: 600; letter-spacing: .08em; padding: 5px 10px; border-radius: 6px;
+    background: rgba(12,11,16,.55); border: 1px solid var(--line); animation: kf 2.6s ease-out forwards; }
+  #killfeed div.pickup { color: var(--accent-2); }
+  #killfeed div.head { color: #ffd0c0; border-color: rgba(229,23,63,.5); }
+  @keyframes kf { 0% { opacity: 0; transform: translateX(12px); } 8% { opacity: 1; transform: none; } 78% { opacity: 1; } 100% { opacity: 0; } }
 
   #dmg { position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0;
-    background: radial-gradient(ellipse at center, rgba(180,0,20,0) 35%, rgba(150,0,16,.85) 100%); transition: opacity .35s ease-out; }
-  #flash { position: fixed; inset: 0; pointer-events: none; z-index: 6; background: #fff; opacity: 0; }
+    background: radial-gradient(ellipse at center, rgba(180,0,20,0) 40%, rgba(150,0,16,.8) 100%); transition: opacity .35s ease-out; }
 
-  #killfeed { position: absolute; right: 20px; top: 16px; text-align: right; font-size: 13px; letter-spacing: .12em; }
-  #killfeed div { opacity: 0; animation: kf 2.6s ease-out forwards; text-shadow: 0 2px 8px #000; }
-  @keyframes kf { 8% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
-  .pickup { color: var(--ember); }
+  #subtitle { position: fixed; left: 50%; bottom: 16%; transform: translate(-50%, 8px); z-index: 7; pointer-events: none;
+    font-family: var(--display); font-size: clamp(14px, 1.6vw, 18px); font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+    padding: 8px 18px; border-radius: 8px; background: rgba(12,11,16,.6); border: 1px solid var(--line);
+    opacity: 0; transition: opacity .35s, transform .35s; max-width: 80vw; text-align: center; }
+  #subtitle.on { opacity: 1; transform: translate(-50%, 0); }
 
-  /* ------------------------------------------------------------- screens */
-  .screen { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    text-align: center; padding: 24px; overflow-y: auto;
-    background: radial-gradient(ellipse at 50% 40%, rgba(40,6,10,.82), rgba(3,3,6,.97) 70%); }
-  .screen h1 { font-size: clamp(46px, 9vw, 120px); line-height: .92; letter-spacing: .04em; font-weight: 700;
-    background: linear-gradient(180deg, #fff 10%, var(--blood) 65%, #5c0713);
-    -webkit-background-clip: text; background-clip: text; color: transparent;
-    filter: drop-shadow(0 6px 30px rgba(200,16,46,.5)); text-transform: uppercase; }
-  .screen h2 { font-size: clamp(22px, 3.4vw, 40px); letter-spacing: .22em; text-transform: uppercase; }
-  .screen .sub { margin-top: 10px; font-size: clamp(13px, 1.8vw, 18px); letter-spacing: .3em; text-transform: uppercase; color: #b9b2a5; }
-  .screen p { max-width: 640px; margin-top: 18px; font-size: 16px; line-height: 1.6; color: #cfc8ba; letter-spacing: .04em; }
-  .btn { pointer-events: auto; margin-top: 26px; padding: 14px 42px; font-family: var(--ui); font-size: 18px; letter-spacing: .28em;
-    text-transform: uppercase; color: var(--bone); background: linear-gradient(180deg, rgba(200,16,46,.9), rgba(120,8,26,.9));
-    border: 1px solid rgba(255,140,120,.5); cursor: pointer; transition: transform .12s, box-shadow .2s, filter .2s; }
-  .btn:hover { transform: translateY(-2px); box-shadow: 0 10px 32px rgba(200,16,46,.45); filter: brightness(1.12); }
-  .btn.ghost { background: rgba(255,255,255,.06); border-color: rgba(232,226,214,.3); }
-  .btn-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
-  .keys { margin-top: 30px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 26px; max-width: 700px;
-    font-size: 13px; letter-spacing: .1em; color: #a9a294; }
-  .keys b { color: var(--bone); font-weight: 600; }
-  kbd { display: inline-block; min-width: 22px; padding: 2px 6px; border: 1px solid rgba(232,226,214,.35); border-bottom-width: 2px;
-    border-radius: 4px; font-family: var(--ui); font-size: 12px; color: var(--bone); background: rgba(255,255,255,.06); }
-  #ready { cursor: pointer; background: radial-gradient(ellipse at 50% 40%, rgba(40,6,10,.55), rgba(3,3,6,.82) 70%); }
-  #ready h1 { font-size: clamp(40px, 7vw, 90px); margin-top: 8px; }
-  .home { position: fixed; left: 18px; top: 14px; z-index: 12; pointer-events: auto; font-size: 12px; letter-spacing: .3em;
-    text-transform: uppercase; color: rgba(232,226,214,.55); text-decoration: none; }
-  .home:hover { color: var(--bone); }
+  #banner { position: fixed; left: 50%; top: 30%; transform: translateX(-50%); z-index: 8; pointer-events: none; text-align: center; font-family: var(--display); }
+  #banner .n { font-size: 13px; font-weight: 600; letter-spacing: .5em; color: var(--accent-2); }
+  #banner .t { font-size: clamp(36px, 6vw, 76px); font-weight: 700; letter-spacing: .04em; text-transform: uppercase; line-height: 1.05; margin-top: 4px;
+    text-shadow: 0 4px 30px rgba(0,0,0,.8); }
+  #banner .rule { width: 0; height: 2px; margin: 12px auto; background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+  #banner .o { font-family: var(--body); font-size: 15px; color: #d8d2c6; max-width: 560px; text-shadow: 0 2px 12px #000; }
+  #banner.go { animation: bnr 4s ease-out forwards; }
+  #banner.go .rule { animation: rule 4s ease-out forwards; }
+  @keyframes bnr { 0% { opacity: 0; transform: translate(-50%, 10px); } 10% { opacity: 1; transform: translate(-50%, 0); } 78% { opacity: 1; } 100% { opacity: 0; } }
+  @keyframes rule { 0% { width: 0; } 20% { width: 320px; } 100% { width: 320px; } }
 
-  #levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 14px; margin-top: 26px; width: min(920px, 92vw); }
-  .lv { pointer-events: auto; position: relative; padding: 16px; text-align: left; border: 1px solid rgba(232,226,214,.22);
-    background: linear-gradient(160deg, rgba(40,10,14,.85), rgba(8,8,12,.9)); cursor: pointer; overflow: hidden;
-    transition: border-color .2s, transform .12s; font-family: var(--ui); color: var(--bone); }
-  .lv:hover { border-color: var(--blood); transform: translateY(-3px); }
-  .lv .n { font-size: 11px; letter-spacing: .3em; color: var(--ember); }
-  .lv .t { font-size: 19px; letter-spacing: .06em; margin-top: 4px; text-transform: uppercase; }
-  .lv .d { font-size: 12px; color: #a49d90; margin-top: 6px; line-height: 1.5; }
-  .lv.locked { opacity: .45; cursor: not-allowed; }
-  .lv.locked:hover { border-color: rgba(232,226,214,.22); transform: none; }
-  .lv .lock { position: absolute; right: 14px; top: 14px; font-size: 15px; }
-  .lv.done { border-color: rgba(120,220,150,.45); }
-  .lv .best { font-size: 11px; letter-spacing: .2em; color: #7fd79a; margin-top: 8px; }
+  #lockHint { position: fixed; left: 50%; top: 58%; transform: translateX(-50%); z-index: 9; padding: 12px 24px; border-radius: 10px;
+    font-family: var(--display); font-size: 14px; font-weight: 600; letter-spacing: .2em; text-transform: uppercase;
+    background: rgba(12,11,16,.8); border: 1px solid var(--line); cursor: pointer; animation: pulse 1.4s infinite; }
 
-  #banner { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 8;
-    pointer-events: none; background: linear-gradient(180deg, rgba(0,0,0,.85), rgba(0,0,0,.4) 40%, rgba(0,0,0,.85)); }
-  #banner .n { font-size: 14px; letter-spacing: .5em; color: var(--ember); }
-  #banner .t { font-size: clamp(32px, 6vw, 74px); letter-spacing: .08em; text-transform: uppercase; margin-top: 8px; }
-  #banner .o { margin-top: 14px; font-size: 15px; letter-spacing: .25em; color: #bdb6a8; text-transform: uppercase; }
-  #banner.go { animation: bnr 3.8s ease-out forwards; }
-  @keyframes bnr { 0% { opacity: 0; } 10% { opacity: 1; } 76% { opacity: 1; } 100% { opacity: 0; } }
+  /* ============================================================== screens */
+  .screen { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 28px; overflow-y: auto; }
+  .scrim { background: linear-gradient(90deg, rgba(5,4,8,.92) 0%, rgba(5,4,8,.7) 45%, rgba(5,4,8,.25) 100%); }
+  .scrim-c { background: radial-gradient(ellipse at 50% 45%, rgba(8,6,10,.55), rgba(3,3,6,.9) 75%); }
 
-  #subtitle { position: fixed; left: 50%; bottom: 13%; transform: translateX(-50%); z-index: 7; pointer-events: none;
-    font-size: clamp(14px, 1.7vw, 19px); letter-spacing: .12em; color: #ded7c8; text-shadow: 0 3px 14px #000; text-align: center;
-    max-width: 80vw; opacity: 0; transition: opacity .4s; }
-  #subtitle.on { opacity: 1; }
+  .eyebrow { font-family: var(--display); font-size: 12px; font-weight: 600; letter-spacing: .4em; text-transform: uppercase; color: var(--accent-2); }
+  .title { font-family: var(--display); font-weight: 700; text-transform: uppercase; line-height: .9; letter-spacing: .02em; }
+  .lead { font-size: 16px; line-height: 1.6; color: #cfc9bd; max-width: 460px; }
 
-  #loading { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #05050a; }
-  #loading .bar { width: min(420px, 70vw); }
-  #loading .t { font-size: 13px; letter-spacing: .4em; text-transform: uppercase; margin-bottom: 12px; color: #9a9488; }
-  #loadFill { background: linear-gradient(90deg, var(--blood), var(--ember)); transform: scaleX(0); }
+  .btn { pointer-events: auto; cursor: pointer; display: inline-flex; align-items: center; justify-content: space-between; gap: 18px;
+    padding: 14px 20px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.05);
+    font-family: var(--display); font-size: 15px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
+    transition: background .18s, border-color .18s, transform .12s; white-space: nowrap; }
+  .btn:hover { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.28); transform: translateX(3px); }
+  .btn .k { font-size: 11px; color: var(--muted); letter-spacing: .1em; }
+  .btn.primary { background: linear-gradient(135deg, var(--accent), #e0431f); border-color: transparent; color: #fff;
+    box-shadow: 0 10px 30px rgba(255,106,43,.25); }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn.primary .k { color: rgba(255,255,255,.75); }
+  .stack { display: flex; flex-direction: column; gap: 10px; width: min(380px, 86vw); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  kbd { display: inline-block; min-width: 22px; padding: 2px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
+    border-radius: 5px; font-family: var(--display); font-size: 11px; font-weight: 600; text-align: center; color: var(--text); background: rgba(255,255,255,.06); }
 
-  #lockHint { position: fixed; left: 50%; top: 58%; transform: translateX(-50%); z-index: 9; padding: 12px 26px;
-    font-family: var(--ui); font-size: 15px; letter-spacing: .25em; text-transform: uppercase; color: var(--bone);
-    background: rgba(8,8,12,.78); border: 1px solid rgba(232,226,214,.35); cursor: pointer; animation: pulse 1.4s infinite; }
-  #fps { position: fixed; left: 10px; bottom: 6px; font-size: 11px; opacity: .4; z-index: 9; letter-spacing: .1em; }
-  .vig { position: fixed; inset: 0; pointer-events: none; z-index: 3;
-    background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,.72) 100%); }
+  /* main menu */
+  #menu { justify-content: flex-start; padding-left: clamp(28px, 7vw, 110px); }
+  .menu-col { display: flex; flex-direction: column; gap: 22px; max-width: 520px; }
+  #menu .title { font-size: clamp(64px, 10vw, 132px);
+    background: linear-gradient(180deg, #fff 20%, #ffb89a 55%, var(--blood) 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 8px 40px rgba(229,23,63,.35)); }
+  #menu .title span { display: block; font-size: .32em; letter-spacing: .38em; margin-top: 10px; color: var(--text); -webkit-text-fill-color: var(--text); }
+  .menu-meta { display: flex; gap: 18px; font-size: 12px; color: var(--muted); letter-spacing: .08em; }
+  .menu-meta b { color: var(--text); font-weight: 600; }
+  .controls { position: fixed; right: 26px; bottom: 22px; display: grid; grid-template-columns: auto auto; gap: 7px 16px;
+    padding: 14px 16px; font-size: 12px; color: var(--muted); align-items: center; }
+  .controls span:nth-child(odd) { text-align: right; }
+  @media (max-width: 900px) { .controls { display: none; } }
+
+  /* stage select */
+  .panel { width: min(1080px, 94vw); display: flex; flex-direction: column; gap: 22px; }
+  .panel-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+  .panel-head .title { font-size: clamp(34px, 4vw, 52px); }
+  #levels { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+  .lv { pointer-events: auto; position: relative; overflow: hidden; border-radius: 14px; border: 1px solid var(--line);
+    text-align: left; cursor: pointer; aspect-ratio: 16 / 10; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end;
+    background: var(--art, #222); transition: transform .18s, border-color .18s, box-shadow .18s; }
+  .lv::before { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 30%, rgba(0,0,0,.85)); }
+  .lv > * { position: relative; }
+  .lv:hover { transform: translateY(-3px); border-color: rgba(255,255,255,.35); box-shadow: 0 16px 40px rgba(0,0,0,.5); }
+  .lv .num { position: absolute; top: 12px; left: 16px; font-family: var(--display); font-size: 44px; font-weight: 700; color: rgba(255,255,255,.18); }
+  .lv .t { font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .lv .d { font-size: 13px; color: #cfc9bd; margin-top: 4px; line-height: 1.45; }
+  .lv .badge { position: absolute; top: 14px; right: 14px; font-family: var(--display); font-size: 11px; font-weight: 600; letter-spacing: .14em;
+    padding: 4px 9px; border-radius: 6px; background: rgba(0,0,0,.5); border: 1px solid var(--line); }
+  .lv .badge.done { color: var(--green); border-color: rgba(78,224,138,.4); }
+  .lv.locked { cursor: not-allowed; filter: grayscale(.85) brightness(.55); }
+  .lv.locked:hover { transform: none; box-shadow: none; border-color: var(--line); }
+
+  /* ready / pause / dead / clear cards */
+  .card { width: min(560px, 92vw); padding: 32px 34px; display: flex; flex-direction: column; gap: 16px; text-align: center; align-items: center; }
+  .card .title { font-size: clamp(40px, 6vw, 64px); }
+  #ready { cursor: pointer; }
+  #ready .card { pointer-events: none; }
+  .play-cta { display: inline-flex; align-items: center; gap: 12px; margin-top: 6px; padding: 14px 26px; border-radius: 999px;
+    background: linear-gradient(135deg, var(--accent), #e0431f); font-family: var(--display); font-size: 15px; font-weight: 700;
+    letter-spacing: .2em; text-transform: uppercase; box-shadow: 0 12px 34px rgba(255,106,43,.3); animation: breathe 2s ease-in-out infinite; }
+  @keyframes breathe { 50% { box-shadow: 0 12px 44px rgba(255,106,43,.55); transform: scale(1.03); } }
+  .hint-row { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: var(--muted); }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
+  .stat { padding: 12px 8px; border-radius: 10px; background: rgba(255,255,255,.04); border: 1px solid var(--line); }
+  .stat b { display: block; font-family: var(--display); font-size: 24px; font-weight: 700; }
+  .stat span { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+  #clearScore { font-family: var(--display); font-size: 16px; letter-spacing: .2em; color: var(--accent-2); }
+  .dead-title { color: var(--blood); text-shadow: 0 0 40px rgba(229,23,63,.5); }
+
+  #loading { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #06050a; }
+  #loading .t { font-family: var(--display); font-size: 12px; font-weight: 600; letter-spacing: .4em; text-transform: uppercase; color: var(--muted); }
+  #loading .track { width: min(360px, 70vw); height: 3px; }
+  #loadFill { background: linear-gradient(90deg, var(--accent), var(--accent-2)); transform: scaleX(0); }
+
+  .home { position: fixed; left: 20px; top: 16px; z-index: 12; pointer-events: auto; font-family: var(--display); font-size: 12px; font-weight: 600;
+    letter-spacing: .24em; text-transform: uppercase; color: var(--muted); text-decoration: none; }
+  .home:hover { color: var(--text); }
+  #fps { position: fixed; left: 10px; bottom: 4px; font-size: 11px; opacity: .45; z-index: 9; font-family: var(--display); }
+
+  body.mars #weapon, body.mars #stageTag { display: none; }
+  @media (max-width: 720px) {
+    #vitals { width: 220px; } #weapon { min-width: 180px; } #ammoNum { font-size: 38px; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 </style>
 </head>
 <body>
+  <!-- ------------------------------------------------------------ HUD -->
   <div id="hud" hidden>
     <div class="vig"></div>
-    <div class="corner tl">
-      <div id="objective">Objective</div>
-      <div id="compass">N</div>
-      <div id="threat"></div>
+
+    <div id="topbar">
+      <div id="compassStrip" class="glass"><div id="compassTape"></div><div id="compassNeedle"></div><div id="compassMark" class="off"></div></div>
+      <div id="objWrap" class="glass">
+        <div id="objective">Objective</div>
+        <div id="objMeta"><span id="objDist"></span><div id="objProgress" hidden><i id="objFill"></i></div></div>
+      </div>
     </div>
-    <div class="corner bl">
-      <div class="meter"><div class="lbl">Vitals</div><div class="bar" id="hpBar"><i id="hpFill"></i></div></div>
-      <div class="meter"><div class="lbl">Plating</div><div class="bar"><i id="armFill"></i></div></div>
-      <div class="meter"><div class="lbl">Stamina</div><div class="bar"><i id="stamFill"></i></div></div>
+
+    <div id="bossBar" hidden>
+      <div id="bossName">Vault Warden</div>
+      <div id="bossTrack"><div id="bossFill"></div></div>
     </div>
-    <div class="corner br" id="ammoBox">
-      <div id="ammoNum">12<small> / 48</small></div>
-      <div id="wepName">Sidearm</div>
-      <div id="reloadHint">Press R to reload</div>
+
+    <div id="stageTag">
+      <div id="stageName">Stage 1 · Ash Street</div>
+      <div id="threat" class="glass">0 HOSTILES</div>
     </div>
+
+    <div id="vitals" class="glass">
+      <div class="vrow">
+        <svg class="vico" viewBox="0 0 24 24" fill="#e5173f"><path d="M12 21s-7.5-4.6-9.6-9.2C.9 8.3 3 4.5 6.7 4.5c2.1 0 3.6 1.1 4.4 2.5.2.4.6.4.8 0 .8-1.4 2.3-2.5 4.4-2.5 3.7 0 5.8 3.8 4.3 7.3C18.5 16.4 12 21 12 21z"/></svg>
+        <div class="track seg"><i id="hpFill"></i></div>
+        <div class="vnum" id="hpNum">100</div>
+      </div>
+      <div class="vrow">
+        <svg class="vico" viewBox="0 0 24 24" fill="#5ec8ff"><path d="M12 2l8 3v6c0 5-3.4 9.3-8 11-4.6-1.7-8-6-8-11V5l8-3z"/></svg>
+        <div class="track seg"><i id="armFill"></i></div>
+        <div class="vnum" id="armNum">0</div>
+      </div>
+      <div class="vrow small">
+        <svg class="vico" viewBox="0 0 24 24" fill="#f3cf52"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>
+        <div class="track"><i id="stamFill"></i></div>
+        <div class="vnum" id="stamNum">100</div>
+      </div>
+    </div>
+
+    <div id="weapon" class="glass">
+      <div id="wepName">M9 Sidearm</div>
+      <div id="ammoRow"><div id="ammoNum">15</div><div id="ammoRes">/ 90</div></div>
+      <div id="magPips"></div>
+      <div id="slots"><span data-w="pistol">1 PISTOL</span><span data-w="shotgun">2 SHOTGUN</span><span data-w="plasma">3 LANCE</span></div>
+    </div>
+    <div id="reloadHint">R — Reload</div>
+
     <div id="killfeed"></div>
-    <div id="cross"><i class="h l"></i><i class="h r"></i><i class="v t"></i><i class="v b"></i></div>
+    <div id="dmgDirs"></div>
+    <div id="cross"><i class="h" id="chL"></i><i class="h" id="chR"></i><i class="v" id="chT"></i><i class="v" id="chB"></i><i class="dot"></i></div>
     <div id="hitmark"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>
   </div>
 
   <button id="lockHint" hidden>Click to look around</button>
   <div id="dmg"></div>
-  <div id="flash"></div>
   <div id="subtitle"></div>
   <div id="fps" hidden></div>
 
-  <div id="banner" hidden><div class="n" id="bnrNum"></div><div class="t" id="bnrName"></div><div class="o" id="bnrObj"></div></div>
+  <div id="banner" hidden><div class="n" id="bnrNum"></div><div class="t" id="bnrName"></div><div class="rule"></div><div class="o" id="bnrObj"></div></div>
 
   <div id="loading">
-    <div class="t" id="loadText">Forging the ruins…</div>
-    <div class="bar"><i id="loadFill"></i></div>
+    <div class="t" id="loadText">Forging the ruins</div>
+    <div class="track"><i id="loadFill"></i></div>
   </div>
 
   <a class="home" href="/" id="homeLink">← ARTGEOrge</a>
 
-  <div class="screen" id="menu" hidden>
-    <h1>Demon Fall</h1>
-    <div class="sub">Escape to Mars</div>
-    <p>The rift opened over the city and what came through turned people into something else. Fight to the Master Treasury,
-       take what is left of humanity's future, and reach the launch pad before the last ship burns for Mars.</p>
-    <div class="btn-row">
-      <button class="btn" id="playBtn">Enter the ruins</button>
-      <button class="btn ghost" id="levelsBtn">Levels</button>
+  <!-- --------------------------------------------------------- menus -->
+  <div class="screen scrim" id="menu" hidden>
+    <div class="menu-col">
+      <div class="eyebrow">A survival shooter</div>
+      <h1 class="title">Demon Fall<span>Escape to Mars</span></h1>
+      <p class="lead">The rift tore open over the city. Fight to the Master Treasury, take what's left of the future, and catch the last ship off Earth.</p>
+      <div class="stack">
+        <button class="btn primary" id="playBtn"><span id="playLabel">Start campaign</span><span class="k" id="playSub">Stage 1</span></button>
+        <button class="btn" id="levelsBtn"><span>Stages</span><span class="k" id="stagesSub">1 / 6</span></button>
+      </div>
+      <div class="menu-meta"><span><b>6</b> stages</span><span><b>3</b> weapons</span><span><b>1</b> way off Earth</span></div>
     </div>
-    <div class="keys">
-      <div><b><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></b> or <b>arrows</b> move</div>
-      <div><b><kbd>Shift</kbd></b> sprint</div>
-      <div><b><kbd>Space</kbd></b> jump</div>
-      <div><b>Mouse</b> aim · <b>Click</b> fire</div>
-      <div><b><kbd>R</kbd></b> reload</div>
-      <div><b><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></b> weapons</div>
-      <div><b><kbd>F</kbd></b> flashlight</div>
-      <div><b><kbd>E</kbd></b> use / pick up</div>
-      <div><b><kbd>Esc</kbd></b> pause</div>
-    </div>
-  </div>
-
-  <div class="screen" id="levelScreen" hidden>
-    <h2>Campaign</h2>
-    <div class="sub">Six stages, one way out</div>
-    <div id="levels"></div>
-    <button class="btn ghost" id="backBtn">Back</button>
-  </div>
-
-  <div class="screen" id="ready" hidden>
-    <div class="sub" id="readyNum">Stage 1</div>
-    <h1 id="readyName">Ash Street</h1>
-    <p id="readyObj"></p>
-    <button class="btn" id="readyBtn">Click to play</button>
-    <div class="keys">
-      <div><b>Mouse</b> look · <b>Click</b> fire</div>
-      <div><b><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></b> or <b>arrows</b> move</div>
-      <div><b><kbd>Esc</kbd></b> pause</div>
+    <div class="controls glass">
+      <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows</span><span>Move</span>
+      <span>Mouse · Click</span><span>Look · Fire</span>
+      <span>Right mouse</span><span>Steady aim</span>
+      <span><kbd>Shift</kbd> · <kbd>Space</kbd></span><span>Sprint · Jump</span>
+      <span><kbd>R</kbd> · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></span><span>Reload · Weapons</span>
+      <span><kbd>F</kbd> · <kbd>E</kbd></span><span>Torch · Use</span>
+      <span><kbd>Esc</kbd></span><span>Pause</span>
     </div>
   </div>
 
-  <div class="screen" id="pause" hidden>
-    <h2>Paused</h2>
-    <div class="sub" id="pauseSub"></div>
-    <div class="btn-row">
-      <button class="btn" id="resumeBtn">Resume</button>
-      <button class="btn ghost" id="restartBtn">Restart stage</button>
-      <button class="btn ghost" id="quitBtn">Main menu</button>
+  <div class="screen scrim-c" id="levelScreen" hidden>
+    <div class="panel">
+      <div class="panel-head">
+        <div><div class="eyebrow">Campaign</div><h2 class="title">Choose a stage</h2></div>
+        <button class="btn" id="backBtn"><span>Back</span><span class="k">Esc</span></button>
+      </div>
+      <div id="levels"></div>
     </div>
   </div>
 
-  <div class="screen" id="dead" hidden>
-    <h1>You Fell</h1>
-    <div class="sub" id="deadSub">The horde takes the city</div>
-    <div class="btn-row">
-      <button class="btn" id="retryBtn">Try again</button>
-      <button class="btn ghost" id="deadMenuBtn">Main menu</button>
+  <div class="screen scrim-c" id="ready" hidden>
+    <div class="card">
+      <div class="eyebrow" id="readyNum">Stage 1</div>
+      <h1 class="title" id="readyName">Ash Street</h1>
+      <p class="lead" id="readyObj"></p>
+      <div class="play-cta">Click to play</div>
+      <div class="hint-row"><span>Mouse to look</span><span>·</span><span>Click to fire</span><span>·</span><span>Esc to pause</span></div>
     </div>
   </div>
 
-  <div class="screen" id="cleared" hidden>
-    <h2 id="clearTitle">Stage Clear</h2>
-    <div class="sub" id="clearSub"></div>
-    <p id="clearStats"></p>
-    <div class="btn-row">
-      <button class="btn" id="nextBtn">Next stage</button>
-      <button class="btn ghost" id="clearMenuBtn">Main menu</button>
+  <div class="screen scrim-c" id="pause" hidden>
+    <div class="card glass">
+      <div class="eyebrow" id="pauseSub">Ash Street</div>
+      <h2 class="title">Paused</h2>
+      <div class="stack">
+        <button class="btn primary" id="resumeBtn"><span>Resume</span><span class="k">Click</span></button>
+        <button class="btn" id="restartBtn"><span>Restart stage</span></button>
+        <button class="btn" id="quitBtn"><span>Main menu</span></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen scrim-c" id="dead" hidden>
+    <div class="card glass">
+      <div class="eyebrow">Signal lost</div>
+      <h1 class="title dead-title">You Fell</h1>
+      <p class="lead" id="deadSub">The horde takes the city.</p>
+      <div class="stack">
+        <button class="btn primary" id="retryBtn"><span>Try again</span></button>
+        <button class="btn" id="deadMenuBtn"><span>Main menu</span></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="screen scrim-c" id="cleared" hidden>
+    <div class="card glass">
+      <div class="eyebrow" id="clearSub">Ash Street</div>
+      <h2 class="title" id="clearTitle">Stage Clear</h2>
+      <div class="stats">
+        <div class="stat"><b id="stTime">0:00</b><span>Time</span></div>
+        <div class="stat"><b id="stKills">0</b><span>Kills</span></div>
+        <div class="stat"><b id="stHead">0</b><span>Headshots</span></div>
+        <div class="stat"><b id="stAcc">0%</b><span>Accuracy</span></div>
+      </div>
+      <div id="clearScore">0 POINTS</div>
+      <p class="lead" id="clearExtra" hidden></p>
+      <div class="stack">
+        <button class="btn primary" id="nextBtn"><span id="nextLabel">Next stage</span></button>
+        <button class="btn" id="clearMenuBtn"><span>Main menu</span></button>
+      </div>
     </div>
   </div>
 

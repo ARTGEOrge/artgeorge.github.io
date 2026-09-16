@@ -522,7 +522,11 @@ export const LEVEL_3 = {
     }
     // vending machines glowing on the platforms
     for (const [vx, vz] of [[-10.2, 0], [10.2, -44], [-10.2, -116], [10.2, -150]]) {
-      world.box(vx, P + 1, vz, 0.8, 2, 1.2, 'rust', { uv: 1, mat: { color: 0x2a3a5a, emissive: 0x0a2a4a, emissiveIntensity: 1.2 } });
+      const sgn = vx < 0 ? 1 : -1;                         // front faces the platform
+      world.box(vx, P + 1, vz, 0.8, 2, 1.2, 'rust', { uv: 1, mat: { color: 0x3a3e46, metalness: 0.5 } });
+      world.box(vx + sgn * 0.41, P + 1.25, vz, 0.03, 1.1, 0.9, 'plaster', { uv: 1, collide: false, mat: { color: 0x9adfff, emissive: 0x2a8acc, emissiveIntensity: 1.1 } });
+      world.box(vx + sgn * 0.41, P + 1.92, vz, 0.03, 0.14, 0.9, 'plaster', { uv: 1, collide: false, mat: { color: 0xff5a3a, emissive: 0xc8321a, emissiveIntensity: 1.2 } });
+      world.box(vx + sgn * 0.41, P + 0.45, vz, 0.03, 0.22, 0.7, 'rust', { uv: 1, collide: false, mat: { color: 0x0a0a0c } });
     }
 
     // a derailed train sitting in the pit

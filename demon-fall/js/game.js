@@ -11,7 +11,7 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 import { World, makeSky } from './world.js';
-import { Fx, Shake } from './fx.js';
+import { Fx, Shake, Ash } from './fx.js';
 import { Player } from './player.js';
 import { Enemies, TYPES } from './enemies.js';
 import { Weapon, WEAPONS } from './weapons.js';
@@ -66,7 +66,7 @@ export class Game {
     this.hud = hud;
     this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 1.6));
-    this.renderer.setSize(innerWidth, innerHeight);
+    this.renderer.setSize(innerWidth, innerHeight, false);   // CSS sizes the canvas; this sets resolution
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -76,6 +76,10 @@ export class Game {
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(78, innerWidth / innerHeight, 0.05, 900);
     this.scene.add(this.camera);
+    // a soft fill that rides with the view, so the gun and gloves always read
+    const fill = new THREE.PointLight(0xffe2c8, 3, 1.6, 2);
+    fill.position.set(0.05, 0.15, 0.1);
+    this.camera.add(fill);
 
     this.fx = new Fx(this.scene);
     this.shake = new Shake();
@@ -143,7 +147,7 @@ export class Game {
     const w = innerWidth, h = innerHeight;
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(w, h);
+    this.renderer.setSize(w, h, false);
     this.composer.setSize(w, h);
     this.bloom.setSize(w, h);
     if (this.marsFlight) {
@@ -250,7 +254,7 @@ export class Game {
   }
 
   /* -------------------------------------------------------------- levels */
-  loadLevel(index, keepLoadout = false) {
+  loadLevel(index, keepLoadout = false, preview = false) {
     this.levelIndex = index;
     const def = LEVELS[index];
     this.levelDef = def;
@@ -273,6 +277,10 @@ export class Game {
     this.scene.background = new THREE.Color(theme.fog);
     this.sky = makeSky(theme);
     this.scene.add(this.sky);
+    // indoor stages get dust instead of falling ash
+    this.ash = new Ash(this.scene, theme.dark || theme.rift === 0
+      ? { count: 400, colour: 0x8a8478, embers: 0.02, size: 0.05 }
+      : { count: 800, colour: 0xb8aca0, embers: 0.14, size: 0.09 });
 
     const hemi = new THREE.HemisphereLight(theme.hemi[0], theme.hemi[1], theme.hemi[2] * 2.4);
     // a little ambient so shadowed corners stay readable rather than pure black
@@ -329,9 +337,13 @@ export class Game {
     this.levelDone = false;
     this.marsFlight = null;
 
+    if (preview) { this.stage = null; this.beacon.visible = false; return; }
     audio.startMusic(theme.music || 45);
     this.nextStage();
     this.bannerPending = true;         // shown when play actually starts
+    this.hud.slots(this.owned, this.current);
+    this.hud.hideBoss();
+    this.hud.objProgress(null);
   }
 
   nextStage() {
@@ -347,6 +359,7 @@ export class Game {
     this.interacted = 0;
 
     this.hud.objective(st.text);
+    this.hud.objProgress(st.kind === 'reach' ? null : 0);
     audio.sfx.objective();
     if (st.onEnterText) this.hud.subtitle(st.onEnterText);
 
@@ -433,6 +446,7 @@ export class Game {
     this.current = key;
     this.weapon.show(true);
     audio.sfx.ui();
+    this.hud.slots(this.owned, this.current);
     this.hud.ammo(this.weapon);
   }
 
@@ -529,9 +543,48 @@ export class Game {
   }
 
   /* ---------------------------------------------------------------- loop */
+  /** The main menu sits over a slow fly-through of the first stage. */
+  menuBackdrop() {
+    if (!this.backdropBuilt || this.levelIndex !== 0 || this.stage) {
+      this.loadLevel(0, false, true);
+      this.enemies.spawn('walker', new THREE.Vector3(3, 0, 40)).state = 'idle';
+      this.enemies.spawn('walker', new THREE.Vector3(-4, 0, 22)).state = 'idle';
+      this.enemies.spawn('runner', new THREE.Vector3(5, 0, 8)).state = 'idle';
+      this.backdropBuilt = true;
+    }
+    for (const w of Object.values(this.weapons)) w.show(false);
+    this.player.torchOn = false;
+    this.player.torch.intensity = 0;
+    this.state = 'menu';
+    this.menuT = 0;
+    this.runLoop();
+  }
+
+  updateMenu(dt) {
+    this.menuT += dt;
+    const t = this.menuT * 0.035;
+    const z = 70 - ((t * 60) % 150);
+    const cam = this.camera;
+    cam.position.set(Math.sin(t * 2.1) * 3 + 1, 2.3 + Math.sin(t * 3.3) * 0.25, z);
+    cam.rotation.set(0, 0, 0);
+    cam.rotateY(Math.sin(t * 1.3) * 0.35 + 0.15);
+    cam.rotateX(-0.02 + Math.sin(t * 1.7) * 0.03);
+    this.world.updateLights(cam.position, dt);
+    this.ash.update(dt, cam.position, this.time);
+    this.updateProps(dt);
+    this.fx.update(dt);
+    for (const e of this.enemies.list) e.animate(dt, 0.3, { fx: this.fx });
+    this.sun.target.position.copy(cam.position);
+    this.sun.position.copy(cam.position).add(new THREE.Vector3(...this.levelDef.theme.sun.pos).normalize().multiplyScalar(60));
+  }
+
   /** Level built and waiting behind the "click to play" screen. */
   ready() {
     this.state = 'ready';
+    this.resize();                     // in case the window changed while loading
+    // put the camera at the start so the card sits over the real view
+    this.player.update(0.0001, { forward: 0, right: 0, jump: false, sprint: false, crouch: false }, this.world, this.time);
+    this.world.updateLights(this.player.pos, 1);
     this.runLoop();
   }
 
@@ -583,6 +636,7 @@ export class Game {
     this.adaptQuality(raw);
 
     if (this.state === 'playing') this.updatePlaying(dt);
+    else if (this.state === 'menu') this.updateMenu(dt);
     else if (this.state === 'mars') this.updateMars(dt);
     else if (this.state === 'paused' || this.state === 'dead' || this.state === 'cleared') {
       // keep the world rendering behind the menus, just frozen
@@ -686,16 +740,19 @@ export class Game {
         player.hurt(damage, this.time);
         this.shake.add(0.25);
         this.hud.damage();
+        this.hitFrom(enemy.pos);
       },
-      onPlayerHit: damage => {
+      onPlayerHit: (damage, from) => {
         player.hurt(damage, this.time);
         this.shake.add(0.3);
         this.hud.damage();
+        if (from) this.hitFrom(from);
       }
     });
 
     // ---- world bits and pieces
     this.world.updateLights(player.pos, dt);
+    this.ash.update(dt, player.pos, this.time);
     this.updateProps(dt);
     this.updatePickups(dt);
     this.fx.update(dt);
@@ -718,6 +775,9 @@ export class Game {
     this.updateStage(dt);
 
     // ---- HUD
+    this.spread = damp(this.spread || 0,
+      (this.mouse.right ? 0 : 3) + speed * 1.6 + (player.grounded ? 0 : 8) + w.recoilPos * 90, 12, dt);
+    this.hud.crosshair(this.spread);
     this.hud.vitals(player);
     this.hud.ammo(w);
     this.hud.compass(player.yaw, this.beacon.visible ? this.beacon.position : null, player.pos);
@@ -728,6 +788,15 @@ export class Game {
     this.hud.threat(this.enemies.alive);
 
     if (player.dead && this.state === 'playing') this.die();
+  }
+
+  /** Show which way a hit came from, relative to where the player faces. */
+  hitFrom(pos) {
+    const p = this.player;
+    const heading = -p.yaw * 180 / Math.PI;
+    const bearing = Math.atan2(pos.x - p.pos.x, -(pos.z - p.pos.z)) * 180 / Math.PI;
+    const rel = ((bearing - heading + 540) % 360) - 180;
+    this.hud.damageFrom(rel);
   }
 
   updateProps(dt) {
@@ -804,12 +873,15 @@ export class Game {
     } else if (st.kind === 'kill') {
       done = this.stageKills >= st.count;
       this.hud.objective(st.text + '  ' + Math.min(this.stageKills, st.count) + '/' + st.count);
+      this.hud.objProgress(this.stageKills / st.count);
     } else if (st.kind === 'interact') {
       done = this.interacted >= st.count;
       this.hud.objective(st.text + '  ' + this.interacted + '/' + st.count);
+      this.hud.objProgress(this.interacted / st.count);
     } else if (st.kind === 'defend') {
       const left = Math.max(0, st.duration - this.stageT);
       this.hud.objective(st.text + '  ' + fmtTime(left));
+      this.hud.objProgress(1 - left / st.duration);
       done = left <= 0;
     } else if (st.kind === 'boss') {
       done = !this.boss;

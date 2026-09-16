@@ -5,7 +5,7 @@
  * Steering is direct with wall-sliding and crowd separation, which is enough
  * for an open ruined city and costs almost nothing per frame. */
 import * as THREE from 'three';
-import { material } from './textures.js';
+import { humanoid, quadruped } from './models.js';
 import { clamp, damp, randRange, TAU, angleDelta, tmpV1, tmpV2 } from './util.js';
 import * as audio from './audio.js';
 
@@ -41,103 +41,6 @@ export const TYPES = {
     scale: 0.95, colour: 0x6a2a6a, eyes: 0x9af0ff, score: 200, sight: 60, gib: 0x3a1a4a, demon: true
   }
 };
-
-/* ------------------------------------------------------------------ models */
-function limb(mat, w, h, d) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
-  m.castShadow = true;
-  return m;
-}
-
-function humanoid(type) {
-  const skin = type.demon
-    ? material('demonHide', { repeat: 2, roughness: 0.75, emissive: 0x2a0600, emissiveIntensity: 0.6 })
-    : material('flesh', { repeat: 2, roughness: 0.9 });
-  const cloth = new THREE.MeshStandardMaterial({ color: type.colour, roughness: 0.95 });
-  const g = new THREE.Group();
-
-  const hips = new THREE.Group();
-  hips.position.y = 0.95;
-  g.add(hips);
-
-  const torso = limb(cloth, 0.62, 0.78, 0.36);
-  torso.position.y = 0.36;
-  hips.add(torso);
-
-  const chest = limb(skin, 0.5, 0.22, 0.3);
-  chest.position.y = 0.72;
-  hips.add(chest);
-
-  const head = limb(skin, 0.34, 0.38, 0.34);
-  head.position.y = 1.0;
-  hips.add(head);
-
-  // eyes: unlit planes so they glow even in pitch darkness
-  const eyeMat = new THREE.MeshBasicMaterial({ color: type.eyes });
-  const eyeL = new THREE.Mesh(new THREE.PlaneGeometry(0.07, 0.045), eyeMat);
-  eyeL.position.set(-0.08, 1.04, 0.176);
-  const eyeR = eyeL.clone(); eyeR.position.x = 0.08;
-  hips.add(eyeL, eyeR);
-
-  if (type.demon) {   // horns
-    const hornMat = new THREE.MeshStandardMaterial({ color: 0x1a0d0c, roughness: 0.6 });
-    for (const s of [-1, 1]) {
-      const horn = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.34, 6), hornMat);
-      horn.position.set(s * 0.13, 1.24, -0.02);
-      horn.rotation.z = s * -0.5;
-      horn.rotation.x = -0.35;
-      horn.castShadow = true;
-      hips.add(horn);
-    }
-  }
-
-  const armL = limb(skin, 0.16, 0.64, 0.17);
-  armL.geometry.translate(0, -0.32, 0);     // pivot at the shoulder
-  armL.position.set(-0.38, 0.72, 0);
-  const armR = armL.clone(); armR.position.x = 0.38;
-  hips.add(armL, armR);
-
-  const legL = limb(cloth, 0.2, 0.78, 0.22);
-  legL.geometry.translate(0, -0.39, 0);
-  legL.position.set(-0.16, 0, 0);
-  const legR = legL.clone(); legR.position.x = 0.16;
-  hips.add(legL, legR);
-
-  return { group: g, hips, torso, head, armL, armR, legL, legR, eyes: [eyeL, eyeR] };
-}
-
-function quadruped(type) {
-  const skin = material('demonHide', { repeat: 2, roughness: 0.7, emissive: 0x2a0600, emissiveIntensity: 0.7 });
-  const g = new THREE.Group();
-  const hips = new THREE.Group();
-  hips.position.y = 0.62;
-  g.add(hips);
-
-  const body = limb(skin, 0.52, 0.46, 1.25);
-  hips.add(body);
-  const head = limb(skin, 0.34, 0.32, 0.46);
-  head.position.set(0, 0.16, 0.78);     // +z is forward, like the humanoids
-  hips.add(head);
-  const jaw = limb(skin, 0.26, 0.12, 0.34);
-  jaw.position.set(0, -0.02, 0.92);
-  hips.add(jaw);
-
-  const eyeMat = new THREE.MeshBasicMaterial({ color: type.eyes });
-  const eyeL = new THREE.Mesh(new THREE.PlaneGeometry(0.08, 0.05), eyeMat);
-  eyeL.position.set(-0.11, 0.24, 1.012);
-  const eyeR = eyeL.clone(); eyeR.position.x = 0.11;
-  hips.add(eyeL, eyeR);
-
-  const legs = [];
-  for (const [lx, lz] of [[-0.24, -0.45], [0.24, -0.45], [-0.24, 0.45], [0.24, 0.45]]) {
-    const l = limb(skin, 0.14, 0.62, 0.15);
-    l.geometry.translate(0, -0.31, 0);
-    l.position.set(lx, -0.12, lz);
-    hips.add(l);
-    legs.push(l);
-  }
-  return { group: g, hips, torso: body, head, armL: legs[0], armR: legs[1], legL: legs[2], legR: legs[3], eyes: [eyeL, eyeR] };
-}
 
 /* ------------------------------------------------------------------ enemy */
 let nextId = 1;
@@ -263,7 +166,6 @@ export class Enemy {
       parts.armR.rotation.x = damp(parts.armR.rotation.x, -1.4, 6, dt);
       if (this.deathT > 6) {
         this.obj.position.y -= dt * 0.4;        // sink away once forgotten
-        this.obj.traverse(o => { if (o.material && o.material.opacity != null) o.material.opacity -= dt; });
       }
       return;
     }
@@ -455,8 +357,13 @@ export class Enemy {
       P.armR.rotation.x = -s * amp;
       P.legL.rotation.x = -s * amp;
       P.legR.rotation.x = s * amp;
-      P.hips.position.y = 0.62 + Math.abs(s) * 0.05 * amp;
+      P.hips.position.y = 0.64 + Math.abs(s) * 0.05 * amp;
       P.head.rotation.x = -0.1 + s * 0.05;
+      // lower legs trail the upper ones
+      P.elbowL.rotation.x = Math.max(0, -s) * amp * 0.9;
+      P.elbowR.rotation.x = Math.max(0, s) * amp * 0.9;
+      P.kneeL.rotation.x = -Math.max(0, s) * amp * 0.9;
+      P.kneeR.rotation.x = -Math.max(0, -s) * amp * 0.9;
     } else {
       P.legL.rotation.x = s * amp;
       P.legR.rotation.x = -s * amp;
@@ -470,7 +377,17 @@ export class Enemy {
       P.torso.rotation.z = s * 0.06 * amp;
       P.head.rotation.z = -s * 0.05 * amp;
       P.head.rotation.x = this.state === 'chase' ? -0.12 : 0.08;
+      // knees bend as each leg swings through; elbows stay crooked, reaching
+      P.kneeL.rotation.x = 0.08 + Math.max(0, s) * amp * 1.1;
+      P.kneeR.rotation.x = 0.08 + Math.max(0, -s) * amp * 1.1;
+      const crook = this.state === 'chase' || this.state === 'attack' ? -0.55 : -0.25;
+      P.elbowL.rotation.x = damp(P.elbowL.rotation.x, crook + c * 0.1, 6, dt);
+      P.elbowR.rotation.x = damp(P.elbowR.rotation.x, crook - c * 0.1, 6, dt);
     }
+    // the jaw works constantly, and gapes on the swing
+    this.jawT = (this.jawT || Math.random() * 10) + dt;
+    const gape = this.state === 'attack' ? 0.55 : 0.12 + Math.max(0, Math.sin(this.jawT * 5)) * 0.18;
+    P.jaw.rotation.x = damp(P.jaw.rotation.x, gape, 14, dt);
 
     // attack swing
     if (this.state === 'attack') {
@@ -590,7 +507,7 @@ export class Enemies {
         this.fx.plasmaBurst(p.mesh.position, [1, 0.45, 0.15]);
         this.fx.light(p.mesh.position, p.colour, 3, 0.2, 14);
         audio.at(() => audio.sfx.hit(), player.pos.distanceTo(p.mesh.position));
-        if (hitPlayer) ctx.onPlayerHit(p.damage);
+        if (hitPlayer) ctx.onPlayerHit(p.damage, p.mesh.position.clone());
         this.scene.remove(p.mesh);
         p.mesh.material.dispose();
         this.projectiles.splice(i, 1);

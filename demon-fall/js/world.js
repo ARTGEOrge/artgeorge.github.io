@@ -477,6 +477,15 @@ export function lamp(world, x, z, colour = 0xffc27a, intensity = 14) {
   bulb.position.set(x + 0.4, 5.77, z);
   world.add(bulb);
   const l = world.light(colour, intensity, x + 0.4, 5.6, z, 26);
+  if (intensity > 0) {
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(2.6, 5.6, 20, 1, true),
+      new THREE.MeshBasicMaterial({ color: colour, transparent: true, opacity: 0.07, depthWrite: false,
+        blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    cone.position.set(x + 0.4, 2.9, z);
+    world.add(cone);
+  } else {
+    bulb.material.color.setHex(0x222222);   // a dead lamp
+  }
   return { pole, light: l, bulb };
 }
 
@@ -563,25 +572,123 @@ export function roomWalls(world, cx, cz, w, d, h, matName, opts = {}) {
 export function building(world, x, z, w, d, h, rng, opts = {}) {
   const wallMat = opts.wall || 'brick';
   roomWalls(world, x, z, w, d, h, wallMat, { mat: opts.mat, doors: opts.doors });
-  if (opts.roof !== false) world.box(x, h, z, w + 0.6, 0.5, d + 0.6, 'concrete', { uv: 0.4 });
-  // windows: dark glass squares punched along the facades, batched per style
+  const trim = { uv: 0.6, collide: false, mat: { color: 0xb8b0a4 } };
+
+  // the four facades: outward normal, length, and how to place along them
+  const faces = [
+    { name: 'south', nx: 0, nz: 1, len: w, cx: x, cz: z + d / 2, alongX: true },
+    { name: 'north', nx: 0, nz: -1, len: w, cx: x, cz: z - d / 2, alongX: true },
+    { name: 'east', nx: 1, nz: 0, len: d, cx: x + w / 2, cz: z, alongX: false },
+    { name: 'west', nx: -1, nz: 0, len: d, cx: x - w / 2, cz: z, alongX: false }
+  ];
+  const at = (f, along, out) => [f.cx + (f.alongX ? along : 0) + f.nx * out, f.cz + (f.alongX ? 0 : along) + f.nz * out];
+  const faceRot = f => Math.atan2(f.nx, f.nz);        // a plane facing outward
+
+  if (opts.roof !== false) {
+    world.box(x, h, z, w + 0.6, 0.5, d + 0.6, 'concrete', { uv: 0.4 });
+    // parapet round the roof edge
+    for (const f of faces) {
+      const [px, pz] = at(f, 0, 0.15);
+      world.box(px, h + 0.6, pz, f.alongX ? w + 0.6 : 0.25, 0.7, f.alongX ? 0.25 : d + 0.6, 'concrete', { uv: 0.5, collide: false });
+    }
+    // rooftop clutter: water tank, vents, aerials
+    if (h > 5 && rng.chance(0.55)) {
+      const tx = x + rng.range(-w / 4, w / 4), tz = z + rng.range(-d / 4, d / 4);
+      for (const [lx, lz] of [[-0.8, -0.8], [0.8, -0.8], [-0.8, 0.8], [0.8, 0.8]]) {
+        world.box(tx + lx, h + 1.2, tz + lz, 0.12, 1.9, 0.12, 'wood', { uv: 1, collide: false });
+      }
+      world.shape(new THREE.CylinderGeometry(1.2, 1.2, 2.2, 12), 'wood', { pos: [tx, h + 3.2, tz], uv: 1, collide: false });
+      world.shape(new THREE.ConeGeometry(1.3, 0.8, 12), 'rust', { pos: [tx, h + 4.7, tz], collide: false });
+    }
+    for (let k = 0; k < 2; k++) {
+      if (!rng.chance(0.5)) continue;
+      world.box(x + rng.range(-w / 3, w / 3), h + 0.7, z + rng.range(-d / 3, d / 3), 1.2, 0.9, 0.9, 'rust',
+        { uv: 1, collide: false, mat: { color: 0x9aa0a6, metalness: 0.5 } });
+    }
+    if (rng.chance(0.35)) {
+      world.shape(new THREE.CylinderGeometry(0.04, 0.06, 5, 5), 'rust', { pos: [x + w / 3, h + 2.7, z - d / 3], collide: false, shadow: false });
+    }
+  }
+
+  // ledges marking each floor
+  const floors = Math.max(1, Math.floor(h / 3.2));
+  for (let f = 1; f < floors; f++) {
+    const y = f * 3.2;
+    for (const face of faces) {
+      const [px, pz] = at(face, 0, 0.12);
+      world.box(px, y, pz, face.alongX ? w + 0.24 : 0.24, 0.16, face.alongX ? 0.24 : d + 0.24, 'concrete', trim);
+    }
+  }
+
+  // windows with sills and lintels; the odd air-con unit
   const glassKey = opts.lit ? 'glass-lit' : 'glass-dark';
   const glass = () => new THREE.MeshStandardMaterial({
-    color: 0x0b1016, roughness: 0.18, metalness: 0.4,
-    emissive: opts.lit ? 0x3a1a08 : 0x000000, emissiveIntensity: 1
+    color: 0x0b1016, roughness: 0.15, metalness: 0.5,
+    emissive: opts.lit ? 0x4a2208 : 0x000000, emissiveIntensity: 1
   });
-  const floors = Math.max(1, Math.floor(h / 3.2));
   for (let f = 0; f < floors; f++) {
     const y = 1.7 + f * 3.2;
     if (y > h - 1) break;
-    for (const [sx, sz, rot, len] of [[0, -d / 2 - 0.05, 0, w], [0, d / 2 + 0.05, 0, w], [-w / 2 - 0.05, 0, Math.PI / 2, d], [w / 2 + 0.05, 0, Math.PI / 2, d]]) {
-      const count = Math.max(1, Math.floor(len / 3));
+    for (const face of faces) {
+      const count = Math.max(1, Math.floor(face.len / 3));
+      const door = opts.doors && opts.doors[face.name];
       for (let i = 0; i < count; i++) {
-        if (rng.chance(0.22)) continue;   // boarded up or blown out
-        const t = (i + 0.5) / count - 0.5;
-        const px = x + sx + (rot ? 0 : t * len), pz = z + sz + (rot ? t * len : 0);
-        world.quad(px, y, pz, 1.3, 1.5, rot + (sx > 0 || sz > 0 ? Math.PI : 0), glassKey, glass);
+        const along = ((i + 0.5) / count - 0.5) * face.len;
+        if (f === 0 && door && Math.abs(along - door[0]) < door[1] / 2 + 0.9) continue;   // not over the doorway
+        const boarded = rng.chance(0.18);
+        const [gx, gz] = at(face, along, 0.05);
+        if (boarded) {
+          // planks nailed across
+          for (let k = 0; k < 3; k++) {
+            const [bx, bz] = at(face, along, 0.08);
+            world.shape(new THREE.BoxGeometry(1.5, 0.18, 0.04), 'wood', {
+              pos: [bx, y - 0.45 + k * 0.45, bz], rot: [0, faceRot(face), (k - 1) * 0.12], uv: 1, collide: false
+            });
+          }
+        } else {
+          world.quad(gx, y, gz, 1.3, 1.5, faceRot(face), glassKey, glass);
+        }
+        const [sx, sz] = at(face, along, 0.1);
+        world.box(sx, y - 0.82, sz, face.alongX ? 1.6 : 0.2, 0.1, face.alongX ? 0.2 : 1.6, 'concrete', trim);
+        world.box(sx, y + 0.82, sz, face.alongX ? 1.5 : 0.14, 0.12, face.alongX ? 0.14 : 1.5, 'concrete', trim);
+        if (!boarded && f > 0 && rng.chance(0.12)) {
+          const [ax, az] = at(face, along, 0.3);
+          world.box(ax, y - 1.1, az, face.alongX ? 0.7 : 0.45, 0.42, face.alongX ? 0.45 : 0.7, 'rust',
+            { uv: 1, collide: false, mat: { color: 0xc8ccd0, metalness: 0.4 } });
+        }
       }
+    }
+  }
+
+  // an awning over each doorway
+  for (const face of faces) {
+    const door = opts.doors && opts.doors[face.name];
+    if (!door) continue;
+    const [ax, az] = at(face, door[0], 0.6);
+    world.box(ax, Math.min(door[2] || 2.6, h - 0.5) + 0.25, az, face.alongX ? door[1] + 1 : 1.2, 0.12, face.alongX ? 1.2 : door[1] + 1, 'rust',
+      { uv: 0.8, collide: false, mat: { color: 0x5a2a24, roughness: 0.9 } });
+  }
+
+  // fire escape down one side of taller brick blocks
+  if (wallMat === 'brick' && floors >= 3 && rng.chance(0.55)) {
+    const face = faces[rng.int(0, 3)];
+    const along = rng.range(-face.len / 4, face.len / 4);
+    const iron = { uv: 1, collide: false, mat: { color: 0x2a2624, metalness: 0.6, roughness: 0.7 } };
+    for (let f = 1; f < floors; f++) {
+      const y = f * 3.2 + 0.05;
+      const [px, pz] = at(face, along, 0.75);
+      world.box(px, y, pz, face.alongX ? 3.2 : 1.3, 0.06, face.alongX ? 1.3 : 3.2, 'rust', iron);
+      const [rx, rz] = at(face, along, 1.38);
+      world.box(rx, y + 0.5, rz, face.alongX ? 3.2 : 0.04, 0.04, face.alongX ? 0.04 : 3.2, 'rust', iron);
+      for (let k = -1; k <= 1; k++) {
+        const [qx, qz] = at(face, along + k * 1.55, 1.38);
+        world.box(qx, y + 0.25, qz, 0.04, 0.5, 0.04, 'rust', iron);
+      }
+      // the stair down to the landing below
+      const [sx, sz] = at(face, along, 0.75);
+      world.shape(new THREE.BoxGeometry(0.6, 0.05, 3.9), 'rust', {
+        pos: [sx, y - 1.6, sz], rot: [0.95, face.alongX ? Math.PI / 2 : 0, 0], ...iron
+      });
     }
   }
   return { x, z, w, d, h };

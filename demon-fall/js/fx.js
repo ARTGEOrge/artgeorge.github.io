@@ -380,3 +380,56 @@ export class Shake {
     camera.rotateY(Math.sin(t * 1.1 + 4.2) * 0.05 * s);
   }
 }
+
+/**
+ * Ash and embers drifting through the air around the camera. The particles
+ * live in a box that follows the viewer and wrap round its edges, so the air
+ * always looks full without simulating the whole level.
+ */
+export class Ash {
+  constructor(scene, { count = 700, colour = 0xb8aca0, size = 0.09, embers = 0.12, box = 36 } = {}) {
+    this.box = box;
+    this.count = count;
+    const pos = new Float32Array(count * 3), col = new Float32Array(count * 3);
+    this.vel = new Float32Array(count * 3);
+    const base = new THREE.Color(colour), hot = new THREE.Color(0xff7a2f);
+    for (let i = 0; i < count; i++) {
+      pos[i * 3] = randRange(-box, box);
+      pos[i * 3 + 1] = randRange(0, box * 0.6);
+      pos[i * 3 + 2] = randRange(-box, box);
+      this.vel[i * 3] = randRange(-0.3, 0.6);
+      this.vel[i * 3 + 1] = randRange(-0.5, -0.15);
+      this.vel[i * 3 + 2] = randRange(-0.3, 0.3);
+      const c = Math.random() < embers ? hot : base;
+      col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+      if (c === hot) this.vel[i * 3 + 1] = randRange(0.1, 0.5);   // embers rise
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    this.points = new THREE.Points(geo, new THREE.PointsMaterial({
+      size, map: puffTexture('rgba(255,255,255,1)'), vertexColors: true, transparent: true,
+      opacity: 0.75, depthWrite: false, sizeAttenuation: true
+    }));
+    this.points.frustumCulled = false;
+    this.origin = new THREE.Vector3();
+    scene.add(this.points);
+  }
+
+  update(dt, centre, time) {
+    const p = this.points.geometry.attributes.position.array, v = this.vel, b = this.box;
+    const sway = Math.sin(time * 0.4) * 0.3;
+    for (let i = 0; i < this.count; i++) {
+      const i3 = i * 3;
+      p[i3] += (v[i3] + sway) * dt;
+      p[i3 + 1] += v[i3 + 1] * dt;
+      p[i3 + 2] += v[i3 + 2] * dt;
+      // wrap within a box centred on the viewer
+      const rx = p[i3] - centre.x, ry = p[i3 + 1] - centre.y, rz = p[i3 + 2] - centre.z;
+      if (rx > b) p[i3] -= 2 * b; else if (rx < -b) p[i3] += 2 * b;
+      if (rz > b) p[i3 + 2] -= 2 * b; else if (rz < -b) p[i3 + 2] += 2 * b;
+      if (ry < -4) p[i3 + 1] += b * 0.6 + 4; else if (ry > b * 0.6) p[i3 + 1] -= b * 0.6 + 4;
+    }
+    this.points.geometry.attributes.position.needsUpdate = true;
+  }
+}
