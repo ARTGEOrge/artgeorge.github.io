@@ -25,12 +25,13 @@
   /* ================================================================== HUD */
   #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; font-family: var(--display); }
   .vig { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,.6) 100%); }
-  .glass { background: var(--glass); border: 1px solid var(--line); border-radius: 10px;
+  .glass { background: var(--glass); border: 1px solid var(--line); border-radius: 22px;
     -webkit-backdrop-filter: blur(10px) saturate(140%); backdrop-filter: blur(10px) saturate(140%); }
 
   /* top centre: compass strip + objective */
   #topbar { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: min(560px, 70vw); text-align: center; }
-  #compassStrip { position: relative; height: 30px; overflow: hidden; border-radius: 8px; }
+  #compassStrip { position: relative; height: 30px; overflow: hidden; border-radius: 999px;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); }
   #compassTape { position: absolute; top: 0; left: 50%; height: 100%; white-space: nowrap; will-change: transform; }
   #compassTape span { position: absolute; top: 7px; transform: translateX(-50%); font-size: 12px; font-weight: 600; letter-spacing: .1em; color: var(--muted); }
   #compassTape span.card { color: var(--text); font-size: 13px; }
@@ -44,13 +45,13 @@
   #objective b { color: var(--accent-2); font-weight: 700; }
   #objMeta { display: flex; gap: 12px; align-items: center; font-size: 11px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; }
   #objDist { color: var(--accent-2); }
-  #objProgress { width: 180px; height: 3px; background: rgba(255,255,255,.12); border-radius: 2px; overflow: hidden; }
+  #objProgress { width: 180px; height: 4px; background: rgba(255,255,255,.12); border-radius: 999px; overflow: hidden; }
   #objProgress i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .25s; }
 
   /* boss bar */
   #bossBar { position: absolute; top: 118px; left: 50%; transform: translateX(-50%); width: min(520px, 64vw); text-align: center; }
   #bossName { font-size: 13px; font-weight: 700; letter-spacing: .3em; text-transform: uppercase; color: #ffd0c0; text-shadow: 0 0 12px rgba(229,23,63,.8); }
-  #bossTrack { margin-top: 6px; height: 8px; border-radius: 4px; background: rgba(0,0,0,.6); border: 1px solid rgba(229,23,63,.45); overflow: hidden; }
+  #bossTrack { margin-top: 6px; height: 10px; border-radius: 999px; background: rgba(0,0,0,.6); border: 1px solid rgba(229,23,63,.45); overflow: hidden; }
   #bossFill { height: 100%; width: 100%; background: linear-gradient(90deg, #7a0a1e, var(--blood) 70%, #ff6a7a); transition: width .15s; }
 
   /* top left: stage + hostiles */
@@ -67,8 +68,8 @@
   .vico { width: 22px; height: 22px; opacity: .9; }
   .vnum { font-size: 22px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; line-height: 1; }
   .vrow.small .vnum { font-size: 14px; color: var(--muted); }
-  .track { height: 8px; border-radius: 4px; background: rgba(255,255,255,.08); overflow: hidden; position: relative; }
-  .track i { position: absolute; inset: 0; transform-origin: left; transition: transform .18s ease-out; border-radius: 4px; }
+  .track { height: 8px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; position: relative; }
+  .track i { position: absolute; inset: 0; transform-origin: left; transition: transform .18s ease-out; border-radius: 999px; }
   .track.seg::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(90deg, transparent 0 calc(10% - 2px), rgba(0,0,0,.55) calc(10% - 2px) 10%); }
   .vrow.small .track { height: 4px; }
   #hpFill { background: linear-gradient(90deg, #b3122f, var(--blood) 55%, #ff6a7a); }
@@ -86,10 +87,10 @@
   #ammoRes { font-size: 18px; color: var(--muted); font-variant-numeric: tabular-nums; }
   #ammoRow.empty #ammoNum { color: var(--blood); }
   #magPips { display: flex; justify-content: flex-end; gap: 2px; margin-top: 6px; height: 6px; }
-  #magPips i { width: 5px; height: 6px; background: var(--accent-2); border-radius: 1px; }
+  #magPips i { width: 6px; height: 6px; background: var(--accent-2); border-radius: 50%; }
   #magPips i.spent { background: rgba(255,255,255,.14); }
   #slots { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }
-  #slots span { font-size: 11px; font-weight: 600; letter-spacing: .1em; padding: 3px 8px; border-radius: 5px;
+  #slots span { font-size: 11px; font-weight: 600; letter-spacing: .1em; padding: 3px 11px; border-radius: 999px;
     border: 1px solid var(--line); color: var(--muted); }
   #slots span.on { color: #111; background: var(--accent-2); border-color: var(--accent-2); }
   #slots span.locked { opacity: .3; }
@@ -99,7 +100,7 @@
 
   /* crosshair: four ticks that spread with movement and recoil */
   #cross { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
-  #cross i { position: absolute; background: rgba(255,255,255,.92); box-shadow: 0 0 3px rgba(0,0,0,.9); border-radius: 1px; }
+  #cross i { position: absolute; background: rgba(255,255,255,.92); box-shadow: 0 0 3px rgba(0,0,0,.9); border-radius: 999px; }
   #cross .h { width: 9px; height: 2px; top: -1px; }
   #cross .v { width: 2px; height: 9px; left: -1px; }
   #cross .dot { width: 2px; height: 2px; left: -1px; top: -1px; }
@@ -121,7 +122,7 @@
 
   /* kill feed */
   #killfeed { position: absolute; right: 18px; top: 16px; display: flex; flex-direction: column; align-items: flex-end; gap: 5px; }
-  #killfeed div { font-size: 12px; font-weight: 600; letter-spacing: .08em; padding: 5px 10px; border-radius: 6px;
+  #killfeed div { font-size: 12px; font-weight: 600; letter-spacing: .08em; padding: 5px 14px; border-radius: 999px;
     background: rgba(12,11,16,.55); border: 1px solid var(--line); animation: kf 2.6s ease-out forwards; }
   #killfeed div.pickup { color: var(--accent-2); }
   #killfeed div.head { color: #ffd0c0; border-color: rgba(229,23,63,.5); }
@@ -132,7 +133,7 @@
 
   #subtitle { position: fixed; left: 50%; bottom: 16%; transform: translate(-50%, 8px); z-index: 7; pointer-events: none;
     font-family: var(--display); font-size: clamp(14px, 1.6vw, 18px); font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
-    padding: 8px 18px; border-radius: 8px; background: rgba(12,11,16,.6); border: 1px solid var(--line);
+    padding: 9px 24px; border-radius: 999px; background: rgba(12,11,16,.6); border: 1px solid var(--line);
     opacity: 0; transition: opacity .35s, transform .35s; max-width: 80vw; text-align: center; }
   #subtitle.on { opacity: 1; transform: translate(-50%, 0); }
 
@@ -147,7 +148,7 @@
   @keyframes bnr { 0% { opacity: 0; transform: translate(-50%, 10px); } 10% { opacity: 1; transform: translate(-50%, 0); } 78% { opacity: 1; } 100% { opacity: 0; } }
   @keyframes rule { 0% { width: 0; } 20% { width: 320px; } 100% { width: 320px; } }
 
-  #lockHint { position: fixed; left: 50%; top: 58%; transform: translateX(-50%); z-index: 9; padding: 12px 24px; border-radius: 10px;
+  #lockHint { position: fixed; left: 50%; top: 58%; transform: translateX(-50%); z-index: 9; padding: 12px 28px; border-radius: 999px;
     font-family: var(--display); font-size: 14px; font-weight: 600; letter-spacing: .2em; text-transform: uppercase;
     background: rgba(12,11,16,.8); border: 1px solid var(--line); cursor: pointer; animation: pulse 1.4s infinite; }
 
@@ -161,7 +162,7 @@
   .lead { font-size: 16px; line-height: 1.6; color: #cfc9bd; max-width: 460px; }
 
   .btn { pointer-events: auto; cursor: pointer; display: inline-flex; align-items: center; justify-content: space-between; gap: 18px;
-    padding: 14px 20px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,.05);
+    padding: 14px 24px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.05);
     font-family: var(--display); font-size: 15px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
     transition: background .18s, border-color .18s, transform .12s; white-space: nowrap; }
   .btn:hover { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.28); transform: translateX(3px); }
@@ -173,7 +174,7 @@
   .stack { display: flex; flex-direction: column; gap: 10px; width: min(380px, 86vw); }
   .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
   kbd { display: inline-block; min-width: 22px; padding: 2px 6px; border: 1px solid var(--line); border-bottom-width: 2px;
-    border-radius: 5px; font-family: var(--display); font-size: 11px; font-weight: 600; text-align: center; color: var(--text); background: rgba(255,255,255,.06); }
+    border-radius: 8px; font-family: var(--display); font-size: 11px; font-weight: 600; text-align: center; color: var(--text); background: rgba(255,255,255,.06); }
 
   /* main menu */
   #menu { justify-content: flex-start; padding-left: clamp(28px, 7vw, 110px); }
@@ -194,7 +195,7 @@
   .panel-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
   .panel-head .title { font-size: clamp(34px, 4vw, 52px); }
   #levels { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
-  .lv { pointer-events: auto; position: relative; overflow: hidden; border-radius: 14px; border: 1px solid var(--line);
+  .lv { pointer-events: auto; position: relative; overflow: hidden; border-radius: 26px; border: 1px solid var(--line);
     text-align: left; cursor: pointer; aspect-ratio: 16 / 10; padding: 16px; display: flex; flex-direction: column; justify-content: flex-end;
     background: var(--art, #222); transition: transform .18s, border-color .18s, box-shadow .18s; }
   .lv::before { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 30%, rgba(0,0,0,.85)); }
@@ -204,12 +205,13 @@
   .lv .t { font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
   .lv .d { font-size: 13px; color: #cfc9bd; margin-top: 4px; line-height: 1.45; }
   .lv .badge { position: absolute; top: 14px; right: 14px; font-family: var(--display); font-size: 11px; font-weight: 600; letter-spacing: .14em;
-    padding: 4px 9px; border-radius: 6px; background: rgba(0,0,0,.5); border: 1px solid var(--line); }
+    padding: 4px 12px; border-radius: 999px; background: rgba(0,0,0,.5); border: 1px solid var(--line); }
   .lv .badge.done { color: var(--green); border-color: rgba(78,224,138,.4); }
   .lv.locked { cursor: not-allowed; filter: grayscale(.85) brightness(.55); }
   .lv.locked:hover { transform: none; box-shadow: none; border-color: var(--line); }
 
   /* ready / pause / dead / clear cards */
+  .card { border-radius: 32px; }
   .card { width: min(560px, 92vw); padding: 32px 34px; display: flex; flex-direction: column; gap: 16px; text-align: center; align-items: center; }
   .card .title { font-size: clamp(40px, 6vw, 64px); }
   #ready { cursor: pointer; }
@@ -220,7 +222,7 @@
   @keyframes breathe { 50% { box-shadow: 0 12px 44px rgba(255,106,43,.55); transform: scale(1.03); } }
   .hint-row { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: var(--muted); }
   .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; width: 100%; }
-  .stat { padding: 12px 8px; border-radius: 10px; background: rgba(255,255,255,.04); border: 1px solid var(--line); }
+  .stat { padding: 12px 8px; border-radius: 18px; background: rgba(255,255,255,.04); border: 1px solid var(--line); }
   .stat b { display: block; font-family: var(--display); font-size: 24px; font-weight: 700; }
   .stat span { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
   #clearScore { font-family: var(--display); font-size: 16px; letter-spacing: .2em; color: var(--accent-2); }

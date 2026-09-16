@@ -1,5 +1,6 @@
 /* Demon Fall — guns: the view model you see, and the maths behind each shot. */
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { clamp, damp, randRange, TAU } from './util.js';
 import * as audio from './audio.js';
 
@@ -38,7 +39,8 @@ function part(parent, geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) {
   parent.add(m);
   return m;
 }
-const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+// soft-edged boxes: every block on the guns and hands gets rounded corners
+const B = (w, h, d) => new RoundedBoxGeometry(w, h, d, 3, Math.min(w, h, d) * 0.42);
 const C = (rt, rb, h, s = 10) => new THREE.CylinderGeometry(rt, rb, h, s);
 
 /* ---- hands: gloves and sleeves, so the gun is held rather than floating */

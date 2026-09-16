@@ -4,6 +4,7 @@
  * elbows, hips, knees). Each joint's pieces are merged per material, so a
  * detailed zombie is still only a couple of dozen draw calls. */
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { material } from './textures.js';
 
@@ -48,7 +49,7 @@ class Rig {
 
 const cyl = (rt, rb, h, seg = 8) => new THREE.CylinderGeometry(rt, rb, h, seg);
 const ball = (r, w = 10, h = 8) => new THREE.SphereGeometry(r, w, h);
-const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+const box = (w, h, d) => new RoundedBoxGeometry(w, h, d, 3, Math.min(w, h, d) * 0.45);
 const cone = (r, h, seg = 6) => new THREE.ConeGeometry(r, h, seg);
 const tube = (rt, rb, h, seg = 12) => new THREE.CylinderGeometry(rt, rb, h, seg, 1, true);      // open-ended
 const dome = (r, w = 10, h = 6) => new THREE.SphereGeometry(r, w, h, 0, Math.PI * 2, 0, Math.PI / 2);
