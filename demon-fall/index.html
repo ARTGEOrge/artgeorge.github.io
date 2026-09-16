@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="description" content="Demon Fall — a 3D survival shooter. Fight through a demon-torn world, reach the Master Treasury, and escape to Mars." />
+<title>Demon Fall — Escape to Mars</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --blood: #c8102e; --ember: #ff7a2f; --bone: #e8e2d6; --ink: #07070b;
+    --ui: "Bahnschrift", "DIN Alternate", "Segoe UI Semibold", "Segoe UI", system-ui, sans-serif;
+  }
+  html, body { height: 100%; overflow: hidden; background: #000; }
+  body { font-family: var(--ui); color: var(--bone); user-select: none; -webkit-user-select: none; }
+  canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+  [hidden] { display: none !important; }
+
+  /* ---------------------------------------------------------------- HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  .corner { position: absolute; padding: 16px 20px; }
+  .bl { left: 0; bottom: 0; } .br { right: 0; bottom: 0; } .tl { left: 0; top: 0; }
+
+  .meter { width: 250px; }
+  .meter + .meter { margin-top: 10px; }
+  .meter .lbl { font-size: 11px; letter-spacing: .28em; text-transform: uppercase; opacity: .75; margin-bottom: 4px; }
+  .bar { height: 12px; background: rgba(0,0,0,.55); border: 1px solid rgba(232,226,214,.28); position: relative; overflow: hidden; }
+  .bar i { position: absolute; inset: 0; transform-origin: left; transition: transform .18s ease-out; }
+  #hpFill { background: linear-gradient(90deg, #8d0d20, var(--blood) 60%, #ff4d63); }
+  #armFill { background: linear-gradient(90deg, #1d5d86, #48b5ff); }
+  #stamFill { background: linear-gradient(90deg, #6a5a1d, #e8c34a); }
+  .bar.low i { animation: pulse .6s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .45; } }
+
+  #ammoBox { text-align: right; }
+  #ammoNum { font-size: 62px; line-height: .9; font-weight: 700; text-shadow: 0 3px 16px rgba(0,0,0,.9); font-variant-numeric: tabular-nums; }
+  #ammoNum small { font-size: 26px; opacity: .6; }
+  #wepName { font-size: 13px; letter-spacing: .3em; text-transform: uppercase; opacity: .8; margin-top: 4px; }
+  #reloadHint { font-size: 13px; letter-spacing: .2em; color: var(--ember); opacity: 0; transition: opacity .2s; }
+  #reloadHint.on { opacity: 1; animation: pulse .8s infinite; }
+
+  #objective { font-size: 15px; letter-spacing: .18em; text-transform: uppercase; text-shadow: 0 2px 10px #000; }
+  #objective b { color: var(--ember); }
+  #compass { margin-top: 6px; font-size: 12px; letter-spacing: .3em; opacity: .7; }
+  #threat { margin-top: 8px; font-size: 12px; letter-spacing: .25em; opacity: .85; color: var(--blood); }
+
+  #cross { position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; transform: translate(-50%, -50%); }
+  #cross i { position: absolute; background: rgba(232,226,214,.9); box-shadow: 0 0 4px #000; transition: transform .08s; }
+  #cross .h { width: 8px; height: 2px; top: 13px; } #cross .h.l { left: 0; } #cross .h.r { right: 0; }
+  #cross .v { width: 2px; height: 8px; left: 13px; } #cross .v.t { top: 0; } #cross .v.b { bottom: 0; }
+  #cross.hot i { background: var(--ember); }
+  #hitmark { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; transform: translate(-50%,-50%) rotate(45deg); opacity: 0; }
+  #hitmark i { position: absolute; background: #fff; }
+  #hitmark .a { width: 2px; height: 10px; left: 16px; top: 0; } #hitmark .b { width: 2px; height: 10px; left: 16px; bottom: 0; }
+  #hitmark .c { height: 2px; width: 10px; top: 16px; left: 0; } #hitmark .d { height: 2px; width: 10px; top: 16px; right: 0; }
+  #hitmark.show { animation: hm .22s ease-out; }
+  #hitmark.kill i { background: var(--blood); }
+  @keyframes hm { from { opacity: 1; transform: translate(-50%,-50%) rotate(45deg) scale(.7); } to { opacity: 0; transform: translate(-50%,-50%) rotate(45deg) scale(1.3); } }
+
+  #dmg { position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0;
+    background: radial-gradient(ellipse at center, rgba(180,0,20,0) 35%, rgba(150,0,16,.85) 100%); transition: opacity .35s ease-out; }
+  #flash { position: fixed; inset: 0; pointer-events: none; z-index: 6; background: #fff; opacity: 0; }
+
+  #killfeed { position: absolute; right: 20px; top: 16px; text-align: right; font-size: 13px; letter-spacing: .12em; }
+  #killfeed div { opacity: 0; animation: kf 2.6s ease-out forwards; text-shadow: 0 2px 8px #000; }
+  @keyframes kf { 8% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+  .pickup { color: var(--ember); }
+
+  /* ------------------------------------------------------------- screens */
+  .screen { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    text-align: center; padding: 24px; overflow-y: auto;
+    background: radial-gradient(ellipse at 50% 40%, rgba(40,6,10,.82), rgba(3,3,6,.97) 70%); }
+  .screen h1 { font-size: clamp(46px, 9vw, 120px); line-height: .92; letter-spacing: .04em; font-weight: 700;
+    background: linear-gradient(180deg, #fff 10%, var(--blood) 65%, #5c0713);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 6px 30px rgba(200,16,46,.5)); text-transform: uppercase; }
+  .screen h2 { font-size: clamp(22px, 3.4vw, 40px); letter-spacing: .22em; text-transform: uppercase; }
+  .screen .sub { margin-top: 10px; font-size: clamp(13px, 1.8vw, 18px); letter-spacing: .3em; text-transform: uppercase; color: #b9b2a5; }
+  .screen p { max-width: 640px; margin-top: 18px; font-size: 16px; line-height: 1.6; color: #cfc8ba; letter-spacing: .04em; }
+  .btn { pointer-events: auto; margin-top: 26px; padding: 14px 42px; font-family: var(--ui); font-size: 18px; letter-spacing: .28em;
+    text-transform: uppercase; color: var(--bone); background: linear-gradient(180deg, rgba(200,16,46,.9), rgba(120,8,26,.9));
+    border: 1px solid rgba(255,140,120,.5); cursor: pointer; transition: transform .12s, box-shadow .2s, filter .2s; }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 10px 32px rgba(200,16,46,.45); filter: brightness(1.12); }
+  .btn.ghost { background: rgba(255,255,255,.06); border-color: rgba(232,226,214,.3); }
+  .btn-row { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+  .keys { margin-top: 30px; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px 26px; max-width: 700px;
+    font-size: 13px; letter-spacing: .1em; color: #a9a294; }
+  .keys b { color: var(--bone); font-weight: 600; }
+  kbd { display: inline-block; min-width: 22px; padding: 2px 6px; border: 1px solid rgba(232,226,214,.35); border-bottom-width: 2px;
+    border-radius: 4px; font-family: var(--ui); font-size: 12px; color: var(--bone); background: rgba(255,255,255,.06); }
+  .home { position: fixed; left: 18px; top: 14px; z-index: 12; pointer-events: auto; font-size: 12px; letter-spacing: .3em;
+    text-transform: uppercase; color: rgba(232,226,214,.55); text-decoration: none; }
+  .home:hover { color: var(--bone); }
+
+  #levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 14px; margin-top: 26px; width: min(920px, 92vw); }
+  .lv { pointer-events: auto; position: relative; padding: 16px; text-align: left; border: 1px solid rgba(232,226,214,.22);
+    background: linear-gradient(160deg, rgba(40,10,14,.85), rgba(8,8,12,.9)); cursor: pointer; overflow: hidden;
+    transition: border-color .2s, transform .12s; font-family: var(--ui); color: var(--bone); }
+  .lv:hover { border-color: var(--blood); transform: translateY(-3px); }
+  .lv .n { font-size: 11px; letter-spacing: .3em; color: var(--ember); }
+  .lv .t { font-size: 19px; letter-spacing: .06em; margin-top: 4px; text-transform: uppercase; }
+  .lv .d { font-size: 12px; color: #a49d90; margin-top: 6px; line-height: 1.5; }
+  .lv.locked { opacity: .45; cursor: not-allowed; }
+  .lv.locked:hover { border-color: rgba(232,226,214,.22); transform: none; }
+  .lv .lock { position: absolute; right: 14px; top: 14px; font-size: 15px; }
+  .lv.done { border-color: rgba(120,220,150,.45); }
+  .lv .best { font-size: 11px; letter-spacing: .2em; color: #7fd79a; margin-top: 8px; }
+
+  #banner { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 8;
+    pointer-events: none; background: linear-gradient(180deg, rgba(0,0,0,.85), rgba(0,0,0,.4) 40%, rgba(0,0,0,.85)); }
+  #banner .n { font-size: 14px; letter-spacing: .5em; color: var(--ember); }
+  #banner .t { font-size: clamp(32px, 6vw, 74px); letter-spacing: .08em; text-transform: uppercase; margin-top: 8px; }
+  #banner .o { margin-top: 14px; font-size: 15px; letter-spacing: .25em; color: #bdb6a8; text-transform: uppercase; }
+  #banner.go { animation: bnr 3.8s ease-out forwards; }
+  @keyframes bnr { 0% { opacity: 0; } 10% { opacity: 1; } 76% { opacity: 1; } 100% { opacity: 0; } }
+
+  #subtitle { position: fixed; left: 50%; bottom: 13%; transform: translateX(-50%); z-index: 7; pointer-events: none;
+    font-size: clamp(14px, 1.7vw, 19px); letter-spacing: .12em; color: #ded7c8; text-shadow: 0 3px 14px #000; text-align: center;
+    max-width: 80vw; opacity: 0; transition: opacity .4s; }
+  #subtitle.on { opacity: 1; }
+
+  #loading { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; background: #05050a; }
+  #loading .bar { width: min(420px, 70vw); }
+  #loading .t { font-size: 13px; letter-spacing: .4em; text-transform: uppercase; margin-bottom: 12px; color: #9a9488; }
+  #loadFill { background: linear-gradient(90deg, var(--blood), var(--ember)); transform: scaleX(0); }
+
+  #fps { position: fixed; left: 10px; bottom: 6px; font-size: 11px; opacity: .4; z-index: 9; letter-spacing: .1em; }
+  .vig { position: fixed; inset: 0; pointer-events: none; z-index: 3;
+    background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,.72) 100%); }
+</style>
+</head>
+<body>
+  <div id="hud" hidden>
+    <div class="vig"></div>
+    <div class="corner tl">
+      <div id="objective">Objective</div>
+      <div id="compass">N</div>
+      <div id="threat"></div>
+    </div>
+    <div class="corner bl">
+      <div class="meter"><div class="lbl">Vitals</div><div class="bar" id="hpBar"><i id="hpFill"></i></div></div>
+      <div class="meter"><div class="lbl">Plating</div><div class="bar"><i id="armFill"></i></div></div>
+      <div class="meter"><div class="lbl">Stamina</div><div class="bar"><i id="stamFill"></i></div></div>
+    </div>
+    <div class="corner br" id="ammoBox">
+      <div id="ammoNum">12<small> / 48</small></div>
+      <div id="wepName">Sidearm</div>
+      <div id="reloadHint">Press R to reload</div>
+    </div>
+    <div id="killfeed"></div>
+    <div id="cross"><i class="h l"></i><i class="h r"></i><i class="v t"></i><i class="v b"></i></div>
+    <div id="hitmark"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>
+  </div>
+
+  <div id="dmg"></div>
+  <div id="flash"></div>
+  <div id="subtitle"></div>
+  <div id="fps" hidden></div>
+
+  <div id="banner" hidden><div class="n" id="bnrNum"></div><div class="t" id="bnrName"></div><div class="o" id="bnrObj"></div></div>
+
+  <div id="loading">
+    <div class="t">Forging the ruins…</div>
+    <div class="bar"><i id="loadFill"></i></div>
+  </div>
+
+  <a class="home" href="/" id="homeLink">← ARTGEOrge</a>
+
+  <div class="screen" id="menu" hidden>
+    <h1>Demon Fall</h1>
+    <div class="sub">Escape to Mars</div>
+    <p>The rift opened over the city and what came through turned people into something else. Fight to the Master Treasury,
+       take what is left of humanity's future, and reach the launch pad before the last ship burns for Mars.</p>
+    <div class="btn-row">
+      <button class="btn" id="playBtn">Enter the ruins</button>
+      <button class="btn ghost" id="levelsBtn">Levels</button>
+    </div>
+    <div class="keys">
+      <div><b><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></b> or <b>arrows</b> move</div>
+      <div><b><kbd>Shift</kbd></b> sprint</div>
+      <div><b><kbd>Space</kbd></b> jump</div>
+      <div><b>Mouse</b> aim · <b>Click</b> fire</div>
+      <div><b><kbd>R</kbd></b> reload</div>
+      <div><b><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></b> weapons</div>
+      <div><b><kbd>F</kbd></b> flashlight</div>
+      <div><b><kbd>E</kbd></b> use / pick up</div>
+      <div><b><kbd>Esc</kbd></b> pause</div>
+    </div>
+  </div>
+
+  <div class="screen" id="levelScreen" hidden>
+    <h2>Campaign</h2>
+    <div class="sub">Six stages, one way out</div>
+    <div id="levels"></div>
+    <button class="btn ghost" id="backBtn">Back</button>
+  </div>
+
+  <div class="screen" id="pause" hidden>
+    <h2>Paused</h2>
+    <div class="sub" id="pauseSub"></div>
+    <div class="btn-row">
+      <button class="btn" id="resumeBtn">Resume</button>
+      <button class="btn ghost" id="restartBtn">Restart stage</button>
+      <button class="btn ghost" id="quitBtn">Main menu</button>
+    </div>
+  </div>
+
+  <div class="screen" id="dead" hidden>
+    <h1>You Fell</h1>
+    <div class="sub" id="deadSub">The horde takes the city</div>
+    <div class="btn-row">
+      <button class="btn" id="retryBtn">Try again</button>
+      <button class="btn ghost" id="deadMenuBtn">Main menu</button>
+    </div>
+  </div>
+
+  <div class="screen" id="cleared" hidden>
+    <h2 id="clearTitle">Stage Clear</h2>
+    <div class="sub" id="clearSub"></div>
+    <p id="clearStats"></p>
+    <div class="btn-row">
+      <button class="btn" id="nextBtn">Next stage</button>
+      <button class="btn ghost" id="clearMenuBtn">Main menu</button>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.1/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.1/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
