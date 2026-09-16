@@ -158,6 +158,8 @@ const hud = {
     show('cleared');
   },
 
+  lockHint(on) { $('lockHint').hidden = !on; },
+
   pause(on, levelName) {
     if (on) { $('pauseSub').textContent = levelName; show('pause'); }
     else show(null);
@@ -202,28 +204,41 @@ function buildLevelList() {
   });
 }
 
-function startLevel(i) {
+/**
+ * Capture the mouse first, while the click still counts as a user gesture —
+ * building a level can take long enough that the browser would refuse later.
+ * Then show a loading screen and build on the next frame so it can paint.
+ */
+function runLevel(build) {
   audio.unlock();
+  game.lock();
   show(null);
-  game.loadLevel(i);
-  game.start();
+  $('loadText').textContent = 'Loading…';
+  $('loading').hidden = false;
+  setTimeout(() => {
+    build();
+    game.start();
+    $('loading').hidden = true;
+  }, 30);
+}
+
+function startLevel(i) {
+  runLevel(() => game.loadLevel(i));
 }
 
 $('playBtn').onclick = () => startLevel(Math.min(save.unlocked - 1, LEVELS.length - 1));
 $('levelsBtn').onclick = () => { audio.unlock(); buildLevelList(); show('levelScreen'); };
 $('backBtn').onclick = () => show('menu');
 $('resumeBtn').onclick = () => game.resume();
-$('restartBtn').onclick = () => { show(null); game.restart(); };
+$('restartBtn').onclick = () => runLevel(() => game.restart(true));
 $('quitBtn').onclick = () => { game.quitToMenu(); show('menu'); };
-$('retryBtn').onclick = () => { show(null); game.restart(); };
+$('retryBtn').onclick = () => runLevel(() => game.restart(true));
 $('deadMenuBtn').onclick = () => { game.quitToMenu(); show('menu'); };
 $('clearMenuBtn').onclick = () => { game.quitToMenu(); buildLevelList(); show('menu'); };
 $('nextBtn').onclick = () => {
   const next = game.levelIndex + 1;
   if (next >= LEVELS.length) { game.quitToMenu(); buildLevelList(); show('menu'); return; }
-  show(null);
-  game.loadLevel(next, true);
-  game.start();
+  runLevel(() => game.loadLevel(next, true));
 };
 
 addEventListener('keydown', e => {

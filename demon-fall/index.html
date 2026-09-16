@@ -124,6 +124,9 @@
   #loading .t { font-size: 13px; letter-spacing: .4em; text-transform: uppercase; margin-bottom: 12px; color: #9a9488; }
   #loadFill { background: linear-gradient(90deg, var(--blood), var(--ember)); transform: scaleX(0); }
 
+  #lockHint { position: fixed; left: 50%; top: 58%; transform: translateX(-50%); z-index: 9; padding: 12px 26px;
+    font-family: var(--ui); font-size: 15px; letter-spacing: .25em; text-transform: uppercase; color: var(--bone);
+    background: rgba(8,8,12,.78); border: 1px solid rgba(232,226,214,.35); cursor: pointer; animation: pulse 1.4s infinite; }
   #fps { position: fixed; left: 10px; bottom: 6px; font-size: 11px; opacity: .4; z-index: 9; letter-spacing: .1em; }
   .vig { position: fixed; inset: 0; pointer-events: none; z-index: 3;
     background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,.72) 100%); }
@@ -152,6 +155,7 @@
     <div id="hitmark"><i class="a"></i><i class="b"></i><i class="c"></i><i class="d"></i></div>
   </div>
 
+  <button id="lockHint" hidden>Click to look around</button>
   <div id="dmg"></div>
   <div id="flash"></div>
   <div id="subtitle"></div>
@@ -160,7 +164,7 @@
   <div id="banner" hidden><div class="n" id="bnrNum"></div><div class="t" id="bnrName"></div><div class="o" id="bnrObj"></div></div>
 
   <div id="loading">
-    <div class="t">Forging the ruins…</div>
+    <div class="t" id="loadText">Forging the ruins…</div>
     <div class="bar"><i id="loadFill"></i></div>
   </div>
 

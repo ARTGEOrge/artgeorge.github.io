@@ -178,16 +178,26 @@ export class Game {
     addEventListener('mousedown', e => {
       // menu clicks must not carry over into the level as a held trigger
       if (this.state !== 'playing' && this.state !== 'mars') return;
+      // without mouse capture there is no aiming, so the first click captures
+      // the mouse instead of firing
+      if (!this.locked) {
+        if (e.target === this.renderer.domElement || e.target.closest('#lockHint')) {
+          this.lock();
+          this.dragLook = true;      // until capture arrives, dragging still turns the view
+        }
+        return;
+      }
       if (e.button === 0) this.mouse.down = true;
       if (e.button === 2) this.mouse.right = true;
     });
     addEventListener('mouseup', e => {
+      this.dragLook = false;
       if (e.button === 0) this.mouse.down = false;
       if (e.button === 2) this.mouse.right = false;
     });
     addEventListener('contextmenu', e => e.preventDefault());
     addEventListener('mousemove', e => {
-      if (document.pointerLockElement !== this.renderer.domElement) return;
+      if (!this.locked && !this.dragLook) return;
       this.mouse.x += e.movementX;
       this.mouse.y += e.movementY;
     });
@@ -197,20 +207,41 @@ export class Game {
     }, { passive: true });
 
     document.addEventListener('pointerlockchange', () => {
-      const locked = document.pointerLockElement === this.renderer.domElement;
+      this.lockPending = false;
+      const locked = this.locked;
+      this.hud.lockHint(false);
       if (!locked && this.state === 'playing') this.pause();
     });
+    // the browser refused (e.g. the click was too long ago): ask for a click
+    document.addEventListener('pointerlockerror', () => {
+      this.lockPending = false;
+      if (this.state === 'playing' || this.state === 'mars') this.hud.lockHint(true);
+    });
+  }
+
+  get locked() { return document.pointerLockElement === this.renderer.domElement; }
+
+  /** If capture didn't happen, say how to get it. */
+  checkLock() {
+    setTimeout(() => {
+      if ((this.state === 'playing' || this.state === 'mars') && !this.locked) this.hud.lockHint(true);
+    }, 400);
   }
 
   lock() {
     const el = this.renderer.domElement;
+    // a second request while the first is still pending can cancel it
+    if (this.locked || this.lockPending) return;
+    this.lockPending = true;
     if (!el.requestPointerLock) return;
     // some embedded contexts refuse pointer lock; the game still plays, so
     // swallow the rejection rather than breaking the frame that asked for it
     try {
       const r = el.requestPointerLock();
-      if (r && r.catch) r.catch(() => {});
-    } catch (e) { /* no mouse capture available */ }
+      if (r && r.then) r.then(() => { this.lockPending = false; }, () => { this.lockPending = false; });
+    } catch (e) { this.lockPending = false; }
+    // older browsers return nothing; the change/error events clear the flag
+    setTimeout(() => { this.lockPending = false; }, 1500);
   }
 
   /* -------------------------------------------------------------- levels */
@@ -498,6 +529,7 @@ export class Game {
     this.mouse.down = this.mouse.right = false;
     this.firedThisClick = true;        // needs a fresh click before firing
     this.lock();
+    this.checkLock();
     this.lastFrame = performance.now();
     if (!this.running) {
       this.running = true;
@@ -518,6 +550,7 @@ export class Game {
     this.state = this.pausedFrom || 'playing';
     this.hud.pause(false);
     this.lock();
+    this.checkLock();
   }
 
   frame(now) {
@@ -802,7 +835,7 @@ export class Game {
     this.hud.died();
   }
 
-  restart() {
+  restart(noStart) {
     this.levelFailed = false;
     if (this.marsFlight) {
       this.renderPass.scene = this.scene;
@@ -812,7 +845,7 @@ export class Game {
       this.hud.marsMode(false);
     }
     this.loadLevel(this.levelIndex);
-    this.start();
+    if (!noStart) this.start();
   }
 
   quitToMenu() {
