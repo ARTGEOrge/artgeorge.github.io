@@ -3,6 +3,9 @@ import { Game, LEVELS } from './game.js';
 import { fmtTime, clamp, makeRng } from './util.js';
 import * as audio from './audio.js';
 
+// Played from a disc or folder (e.g. through Aria) there is no site to go home to.
+const OFFSITE = !location.pathname.includes('/demon-fall/');
+
 const $ = id => document.getElementById(id);
 const SAVE = 'demonFall.v1';
 
@@ -247,7 +250,7 @@ const SCREENS = ['menu', 'levelScreen', 'pause', 'dead', 'cleared', 'ready'];
 function show(id) {
   for (const s of SCREENS) $(s).hidden = s !== id;
   $('hud').hidden = id !== null;
-  $('homeLink').hidden = id !== 'menu' && id !== 'levelScreen';
+  $('homeLink').hidden = OFFSITE || (id !== 'menu' && id !== 'levelScreen');
   if (id) $('dmg').style.opacity = 0;
 }
 
