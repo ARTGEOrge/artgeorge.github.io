@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Relic Road — Six Cities</title>
+<meta name="description" content="A treasure hunt across six real cities, walked in 3D: Berlin, Rome, Cairo, Istanbul, Kyoto and Rio." />
+<!-- fonts and three.js are bundled in vendor/ so the game also runs offline (e.g. from a disc) -->
+<link href="vendor/fonts/fonts.css" rel="stylesheet" />
+<style>
+  :root {
+    --display: 'Chakra Petch', system-ui, sans-serif;
+    --body: 'Inter', system-ui, sans-serif;
+    --gold: #e8b45c;
+    --gold-2: #ffd98a;
+    --ink: #0d0f14;
+    --text: #f2ece0;
+    --muted: #a9a294;
+    --line: rgba(255,255,255,.14);
+    --glass: rgba(16,18,24,.62);
+    --green: #6fd08c;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: var(--ink); color: var(--text); overflow: hidden; }
+  body { font-family: var(--body); user-select: none; -webkit-font-smoothing: antialiased; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  [hidden] { display: none !important; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  .glass { background: var(--glass); border: 1px solid var(--line); border-radius: 22px;
+           -webkit-backdrop-filter: blur(12px) saturate(140%); backdrop-filter: blur(12px) saturate(140%); }
+
+  /* ------------------------------------------------------------------ HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; font-family: var(--display); }
+
+  #topbar { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); width: min(560px, 76vw); text-align: center; }
+  #compassStrip { position: relative; height: 30px; overflow: hidden; border-radius: 999px;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); }
+  #compassTape { position: absolute; top: 0; left: 0; height: 100%; white-space: nowrap; font-size: 12px;
+    letter-spacing: .1em; color: #cfc7b6; display: flex; align-items: center; }
+  #compassTape span { display: inline-block; width: 60px; text-align: center; }
+  #compassNeedle { position: absolute; left: 50%; top: 4px; width: 2px; height: 22px; background: var(--gold); transform: translateX(-50%); }
+  #compassMark { position: absolute; top: 3px; width: 10px; height: 10px; background: var(--gold-2); transform: translate(-50%, 0) rotate(45deg); border-radius: 2px; }
+  #compassMark.off { opacity: 0; }
+
+  #objWrap { margin-top: 8px; padding: 9px 18px; display: inline-flex; flex-direction: column; gap: 3px; }
+  #objective { font-size: 14px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
+  #objDist { font-size: 12px; color: var(--gold-2); letter-spacing: .14em; }
+
+  /* resonance meter: how close the nearest relic is */
+  #res { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); width: min(320px, 60vw); text-align: center; }
+  #resTrack { height: 7px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
+  #resFill { height: 100%; width: 0%; border-radius: 999px; background: linear-gradient(90deg, #6b7a8f, var(--gold) 60%, var(--gold-2)); transition: width .12s linear; }
+  #resLabel { margin-top: 6px; font-size: 11px; letter-spacing: .24em; text-transform: uppercase; color: var(--muted); }
+
+  #relics { position: absolute; left: 18px; bottom: 18px; padding: 14px 18px; min-width: 210px; }
+  #relics .h { font-size: 11px; letter-spacing: .24em; text-transform: uppercase; color: var(--muted); }
+  #relicRow { display: flex; gap: 8px; margin-top: 9px; }
+  #relicRow i { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--line); display: block; }
+  #relicRow i.on { background: radial-gradient(circle at 35% 30%, var(--gold-2), var(--gold)); border-color: var(--gold-2); box-shadow: 0 0 14px rgba(232,180,92,.55); }
+  #cityName { margin-top: 10px; font-size: 20px; font-weight: 700; letter-spacing: .03em; }
+  #cityWhere { font-family: var(--body); font-size: 12px; color: var(--muted); margin-top: 2px; max-width: 260px; }
+
+  #prompt { position: absolute; left: 50%; top: calc(50% + 40px); transform: translateX(-50%); font-size: 13px;
+            font-weight: 600; letter-spacing: .18em; text-transform: uppercase; color: var(--gold-2); text-shadow: 0 2px 10px #000; }
+  #cross { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; transform: translate(-50%, -50%);
+           border-radius: 50%; background: rgba(255,255,255,.85); box-shadow: 0 0 6px rgba(0,0,0,.8); }
+
+  /* journal */
+  #journal { position: absolute; right: 18px; bottom: 18px; width: min(360px, 42vw); padding: 16px 18px; }
+  #journal .h { font-size: 11px; letter-spacing: .24em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; }
+  #journalList { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; font-family: var(--body); }
+  #journalList .j { font-size: 13px; line-height: 1.45; }
+  #journalList .j b { display: block; font-family: var(--display); font-size: 13px; letter-spacing: .04em; color: var(--gold-2); }
+  #journalList .j span { color: #cfc7b6; }
+  #journalList .j em { color: var(--muted); font-style: normal; font-size: 11.5px; }
+  #journalList .none { font-size: 12.5px; color: var(--muted); }
+
+  #toast { position: absolute; left: 50%; top: 22%; transform: translate(-50%, 10px); opacity: 0; text-align: center;
+           padding: 14px 26px; border-radius: 22px; transition: opacity .3s, transform .3s; max-width: 70vw; }
+  #toast.on { opacity: 1; transform: translate(-50%, 0); }
+  #toast .t { font-size: 20px; font-weight: 700; letter-spacing: .03em; }
+  #toast .c { font-family: var(--body); font-size: 13.5px; color: #d8d0c0; margin-top: 6px; line-height: 1.5; }
+  #toast .w { font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--gold-2); margin-bottom: 4px; }
+
+  #fps { position: fixed; left: 10px; top: 8px; font-size: 11px; opacity: .4; z-index: 9; font-family: var(--display); }
+  #osm { position: fixed; right: 12px; top: 10px; font-size: 10.5px; letter-spacing: .04em; color: rgba(255,255,255,.45);
+         z-index: 9; font-family: var(--body); }
+  #lockHint { position: fixed; left: 50%; top: 58%; transform: translateX(-50%); z-index: 9; padding: 12px 28px; border-radius: 999px;
+    font-family: var(--display); font-size: 14px; font-weight: 600; letter-spacing: .2em; text-transform: uppercase;
+    background: rgba(12,11,16,.8); border: 1px solid var(--line); cursor: pointer; pointer-events: auto; animation: pulse 1.4s infinite; }
+  @keyframes pulse { 50% { opacity: .45; } }
+
+  /* --------------------------------------------------------------- screens */
+  .screen { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center; padding: 28px; overflow-y: auto; }
+  .scrim { background: linear-gradient(90deg, rgba(6,7,10,.94) 0%, rgba(6,7,10,.72) 45%, rgba(6,7,10,.3) 100%); }
+  .scrim-c { background: radial-gradient(ellipse at 50% 45%, rgba(8,9,12,.6), rgba(4,5,8,.92) 75%); }
+  .eyebrow { font-family: var(--display); font-size: 12px; font-weight: 600; letter-spacing: .4em; text-transform: uppercase; color: var(--gold); }
+  .title { font-family: var(--display); font-weight: 700; text-transform: uppercase; line-height: .92; letter-spacing: .02em; }
+  .lead { font-size: 15.5px; line-height: 1.65; color: #cfc7b6; max-width: 480px; }
+
+  .btn { pointer-events: auto; display: inline-flex; align-items: center; justify-content: space-between; gap: 18px;
+    padding: 14px 24px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,.05);
+    font-family: var(--display); font-size: 15px; font-weight: 600; letter-spacing: .16em; text-transform: uppercase;
+    transition: background .18s, border-color .18s, transform .12s; white-space: nowrap; }
+  .btn:hover { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.3); transform: translateX(3px); }
+  .btn.primary { background: linear-gradient(135deg, var(--gold), #c9832f); border-color: transparent; color: #1a1408;
+                 box-shadow: 0 10px 30px rgba(232,180,92,.28); }
+  .btn .k { font-size: 11px; color: rgba(0,0,0,.55); letter-spacing: .1em; }
+  .btn:not(.primary) .k { color: var(--muted); }
+  .stack { display: flex; flex-direction: column; gap: 10px; width: min(400px, 86vw); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  kbd { display: inline-block; min-width: 22px; padding: 2px 7px; border: 1px solid var(--line); border-bottom-width: 2px;
+        border-radius: 8px; font-family: var(--display); font-size: 11px; font-weight: 600; text-align: center; background: rgba(255,255,255,.06); }
+
+  #menu { justify-content: flex-start; padding-left: clamp(28px, 7vw, 110px); }
+  .menu-col { display: flex; flex-direction: column; gap: 22px; max-width: 540px; }
+  #menu .title { font-size: clamp(54px, 9vw, 116px);
+    background: linear-gradient(180deg, #fff 18%, var(--gold-2) 55%, #b9772a 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 8px 40px rgba(232,180,92,.3)); }
+  #menu .title span { display: block; font-size: .3em; letter-spacing: .36em; margin-top: 10px; color: var(--text); -webkit-text-fill-color: var(--text); }
+  .menu-meta { display: flex; gap: 18px; font-size: 12px; color: var(--muted); letter-spacing: .08em; font-family: var(--display); }
+  .menu-meta b { color: var(--text); font-weight: 600; }
+  .controls { position: fixed; right: 26px; bottom: 22px; display: grid; grid-template-columns: auto auto; gap: 7px 16px;
+              padding: 14px 18px; font-size: 12px; color: var(--muted); align-items: center; font-family: var(--display); }
+  .controls span:nth-child(odd) { text-align: right; }
+  @media (max-width: 900px) { .controls { display: none; } #journal { display: none; } }
+
+  .panel { width: min(1060px, 94vw); display: flex; flex-direction: column; gap: 22px; }
+  .panel-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+  .panel-head .title { font-size: clamp(30px, 4vw, 48px); }
+  #cityList { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
+  .cty { pointer-events: auto; position: relative; overflow: hidden; border-radius: 26px; border: 1px solid var(--line);
+    text-align: left; cursor: pointer; aspect-ratio: 16 / 10; padding: 18px; display: flex; flex-direction: column; justify-content: flex-end;
+    background: var(--art, #1b1e26); transition: transform .18s, border-color .18s, box-shadow .18s; }
+  .cty::before { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 28%, rgba(0,0,0,.88)); }
+  .cty > * { position: relative; }
+  .cty:hover { transform: translateY(-3px); border-color: rgba(255,255,255,.34); box-shadow: 0 16px 40px rgba(0,0,0,.5); }
+  .cty .num { position: absolute; top: 12px; left: 18px; font-family: var(--display); font-size: 40px; font-weight: 700; color: rgba(255,255,255,.2); }
+  .cty .t { font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .cty .d { font-size: 12.5px; color: #cfc7b6; margin-top: 4px; line-height: 1.45; }
+  .cty .badge { position: absolute; top: 14px; right: 16px; font-family: var(--display); font-size: 11px; font-weight: 600;
+    letter-spacing: .14em; padding: 4px 12px; border-radius: 999px; background: rgba(0,0,0,.5); border: 1px solid var(--line); }
+  .cty .badge.done { color: var(--green); border-color: rgba(111,208,140,.45); }
+  .cty.locked { cursor: not-allowed; filter: grayscale(.85) brightness(.5); }
+  .cty.locked:hover { transform: none; box-shadow: none; border-color: var(--line); }
+
+  .card { width: min(580px, 92vw); padding: 32px 34px; display: flex; flex-direction: column; gap: 16px; text-align: center; align-items: center; border-radius: 32px; }
+  .card .title { font-size: clamp(34px, 5.5vw, 58px); }
+  #ready { cursor: pointer; }
+  #ready .card { pointer-events: none; }
+  .play-cta { display: inline-flex; align-items: center; gap: 12px; margin-top: 6px; padding: 14px 28px; border-radius: 999px;
+    background: linear-gradient(135deg, var(--gold), #c9832f); color: #1a1408; font-family: var(--display); font-size: 15px; font-weight: 700;
+    letter-spacing: .2em; text-transform: uppercase; box-shadow: 0 12px 34px rgba(232,180,92,.3); animation: breathe 2s ease-in-out infinite; }
+  @keyframes breathe { 50% { box-shadow: 0 12px 44px rgba(232,180,92,.55); transform: scale(1.03); } }
+  .hint-row { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: var(--muted); font-family: var(--display); }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: 100%; }
+  .stat { padding: 12px 8px; border-radius: 18px; background: rgba(255,255,255,.04); border: 1px solid var(--line); }
+  .stat b { display: block; font-family: var(--display); font-size: 22px; font-weight: 700; }
+  .stat span { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+
+  #loading { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: #06070a; }
+  #loading .t { font-family: var(--display); font-size: 12px; font-weight: 600; letter-spacing: .34em; text-transform: uppercase; color: var(--muted); }
+  #loading .track { width: min(380px, 70vw); height: 4px; border-radius: 999px; background: rgba(255,255,255,.08); overflow: hidden; }
+  #loadFill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--gold), var(--gold-2)); border-radius: 999px; transition: width .2s; }
+  .home { position: fixed; left: 20px; top: 16px; z-index: 12; pointer-events: auto; font-family: var(--display); font-size: 12px;
+          font-weight: 600; letter-spacing: .24em; text-transform: uppercase; color: var(--muted); text-decoration: none; }
+  .home:hover { color: var(--text); }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="hud" hidden>
+  <div id="topbar">
+    <div id="compassStrip" class="glass"><div id="compassTape"></div><div id="compassNeedle"></div><div id="compassMark" class="off"></div></div>
+    <div id="objWrap" class="glass">
+      <div id="objective">Find three relics</div>
+      <div id="objDist"></div>
+    </div>
+  </div>
+
+  <div id="res">
+    <div id="resTrack"><div id="resFill"></div></div>
+    <div id="resLabel">Resonance</div>
+  </div>
+
+  <div id="relics" class="glass">
+    <div class="h">Relics found</div>
+    <div id="relicRow"><i></i><i></i><i></i></div>
+    <div id="cityName">Berlin</div>
+    <div id="cityWhere"></div>
+  </div>
+
+  <div id="journal" class="glass">
+    <div class="h"><span>Journal</span><span>J</span></div>
+    <div id="journalList"><div class="none">Relics you find leave notes here.</div></div>
+  </div>
+
+  <div id="prompt"></div>
+  <div id="cross"></div>
+  <div id="toast" class="glass"><div class="w">Relic found</div><div class="t"></div><div class="c"></div></div>
+</div>
+
+<div id="fps" hidden></div>
+<div id="osm" hidden>Map data © OpenStreetMap contributors</div>
+<div id="lockHint" hidden>Click to look around</div>
+<a class="home" href="/" id="homeLink">← ARTGEOrge</a>
+
+<!-- main menu -->
+<div class="screen scrim" id="menu" hidden>
+  <div class="menu-col">
+    <div class="eyebrow">A treasure hunt in six real cities</div>
+    <h1 class="title">Relic<span>Road</span></h1>
+    <p class="lead">Six districts, mapped from the real world: Berlin, Rome, Cairo, Istanbul, Kyoto and Rio.
+      Find three relics in each. Their notes name the next city on the road.</p>
+    <div class="stack">
+      <button class="btn primary" id="playBtn"><span id="playLabel">Start the hunt</span><span class="k" id="playSub">City 1 · Berlin</span></button>
+      <button class="btn" id="citiesBtn">Cities<span class="k" id="citiesSub">1 / 6</span></button>
+    </div>
+    <div class="menu-meta"><span><b>6</b> cities</span><span><b>18</b> relics</span><span><b>Real</b> streets</span></div>
+  </div>
+  <div class="controls glass">
+    <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows</span><span>Walk</span>
+    <span>Mouse</span><span>Look</span>
+    <span><kbd>Shift</kbd> · <kbd>Space</kbd></span><span>Run · Jump</span>
+    <span><kbd>E</kbd> / click</span><span>Take relic</span>
+    <span><kbd>J</kbd></span><span>Journal</span>
+    <span><kbd>Esc</kbd></span><span>Pause</span>
+  </div>
+</div>
+
+<!-- city select -->
+<div class="screen scrim-c" id="cityScreen" hidden>
+  <div class="panel">
+    <div class="panel-head">
+      <div>
+        <div class="eyebrow">The road</div>
+        <h2 class="title">Six cities</h2>
+      </div>
+      <button class="btn" id="backBtn">Back<span class="k">Esc</span></button>
+    </div>
+    <div id="cityList"></div>
+  </div>
+</div>
+
+<!-- ready card -->
+<div class="screen scrim-c" id="ready" hidden>
+  <div class="card glass">
+    <div class="eyebrow" id="readyNum">City 1 of 6</div>
+    <h1 class="title" id="readyName">Berlin</h1>
+    <p class="lead" id="readyIntro"></p>
+    <div class="stats" id="readyStats"></div>
+    <div class="play-cta">Click to play</div>
+    <div class="hint-row"><span>Mouse to look</span><span>·</span><span>E to take</span><span>·</span><span>Esc to pause</span></div>
+  </div>
+</div>
+
+<!-- pause -->
+<div class="screen scrim-c" id="pause" hidden>
+  <div class="card glass">
+    <div class="eyebrow">Paused</div>
+    <h1 class="title" id="pauseCity">Berlin</h1>
+    <div class="stack">
+      <button class="btn primary" id="resumeBtn">Resume<span class="k">Esc</span></button>
+      <button class="btn" id="restartBtn">Restart city</button>
+      <button class="btn" id="quitBtn">Leave the city</button>
+    </div>
+  </div>
+</div>
+
+<!-- city cleared -->
+<div class="screen scrim-c" id="cleared" hidden>
+  <div class="card glass">
+    <div class="eyebrow" id="clearEyebrow">City cleared</div>
+    <h1 class="title" id="clearTitle">Berlin</h1>
+    <p class="lead" id="clearText"></p>
+    <div class="stack">
+      <button class="btn primary" id="nextBtn"><span id="nextLabel">Travel on</span><span class="k" id="nextSub"></span></button>
+      <button class="btn" id="clearMenuBtn">Back to the map</button>
+    </div>
+  </div>
+</div>
+
+<div id="loading" hidden>
+  <div class="t" id="loadText">Loading</div>
+  <div class="track"><div id="loadFill"></div></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three/build/three.module.js",
+    "three/addons/": "./vendor/three/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="./js/main.js"></script>
+</body>
+</html>
