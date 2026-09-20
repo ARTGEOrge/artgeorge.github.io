@@ -60,8 +60,7 @@ const BALL_R   = 11;
 
 let player, ai, ball;
 let scoreP = 0, scoreA = 0;
-let bestScore = parseInt(localStorage.getItem('pingpong-best') ||
-                         localStorage.getItem('tennis-best') || '0', 10);   // old name kept for saved scores
+let bestScore = parseInt(localStorage.getItem('pingpong-best') || '0', 10);
 let serving = 'player';   // 'player' | 'ai'
 let inPlay = false;
 let gameOver = false, winner = null;
