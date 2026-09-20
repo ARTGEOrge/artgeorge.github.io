@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tennis</title>
+<title>Ping Pong</title>
 <style>
   html, body {
     margin: 0; padding: 0; height: 100%;
@@ -60,7 +60,8 @@ const BALL_R   = 11;
 
 let player, ai, ball;
 let scoreP = 0, scoreA = 0;
-let bestScore = parseInt(localStorage.getItem('tennis-best') || '0', 10);
+let bestScore = parseInt(localStorage.getItem('pingpong-best') ||
+                         localStorage.getItem('tennis-best') || '0', 10);   // old name kept for saved scores
 let serving = 'player';   // 'player' | 'ai'
 let inPlay = false;
 let gameOver = false, winner = null;
@@ -324,7 +325,7 @@ function checkGameOver() {
 function saveBest() {
   if (scoreP > bestScore) {
     bestScore = scoreP;
-    localStorage.setItem('tennis-best', String(scoreP));
+    localStorage.setItem('pingpong-best', String(scoreP));
   }
 }
 
@@ -531,7 +532,7 @@ function drawHUD() {
   ctx.fillStyle = '#fcd34d';
   ctx.font = 'bold 11px monospace';
   ctx.textAlign = 'center';
-  ctx.fillText('— TENNIS —', sx + sw / 2, sy + 14);
+  ctx.fillText('— PING PONG —', sx + sw / 2, sy + 14);
   ctx.font = 'bold 36px monospace';
   ctx.fillStyle = '#ef4444';
   ctx.fillText(scoreP, sx + 50, sy + 50);
@@ -621,7 +622,7 @@ function drawMenu() {
   ctx.textBaseline = 'middle';
   ctx.fillStyle = '#fcd34d';
   ctx.font = `900 ${Math.min(110, W * 0.10)}px Impact, "Arial Black", sans-serif`;
-  ctx.fillText('TENNIS', W / 2, H * 0.18);
+  ctx.fillText('PING PONG', W / 2, H * 0.18);
 
   menuButtons = [];
 
