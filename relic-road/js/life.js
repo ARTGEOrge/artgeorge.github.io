@@ -286,6 +286,7 @@ export class Life {
     this.shadows.count = nCars + nPeds;
 
     this.started = false;
+    this.threat = null;              // the car you drive, when you drive one: walkers get out of its way
     this.dodge = 1.4;                // how near the player a walker steps aside: wider round a car
   }
 
@@ -507,7 +508,8 @@ export class Life {
       }
       // step aside for the player rather than walk through them
       const dP = Math.hypot(p.x - P.x, p.z - P.z);
-      const moving = p.pause <= 0;
+      if (p.scare > 0) p.scare -= dt;
+      const moving = p.pause <= 0 && !(p.scare > 0);  // nobody strolls on while a car bears down
       if (moving) {
         p.s += p.speed * dt * p.dir;
         if (p.s > p.way.len || p.s < 0) this.turn(p, this.pedJ);
@@ -526,13 +528,22 @@ export class Life {
         const side = ((P.x - at.x) * -tz + (P.z - at.z) * tx) > 0 ? -1 : 1;
         p.lat = clamp(p.lat + side * dt * 1.8, -Math.max(1, p.way.w), Math.max(1, p.way.w));
       }
-      const x = at.x - tz * p.lat, z = at.z + tx * p.lat;
-      const yaw = Math.atan2(-tz, tx);
-      if (p.snap) { p.x = x; p.z = z; p.yaw = yaw; p.snap = false; }
-      else {
-        p.x = damp(p.x, x, 8, dt); p.z = damp(p.z, z, 8, dt);
-        p.yaw += angleDelta(p.yaw, yaw) * (1 - Math.exp(-6 * dt));
+      let yaw = Math.atan2(-tz, tx);
+      if (this.threat) yaw = this.evade(p, dt, yaw);
+      else if (p.ox || p.oz) {
+        // the car has gone: drift back to the pavement
+        p.ox = damp(p.ox, 0, 0.8, dt); p.oz = damp(p.oz, 0, 0.8, dt);
+        if (Math.abs(p.ox) + Math.abs(p.oz) < 0.02) p.ox = p.oz = 0;
       }
+      const x = at.x - tz * p.lat + (p.ox || 0), z = at.z + tx * p.lat + (p.oz || 0);
+      if (p.snap) { p.x = x; p.z = z; p.yaw = yaw; p.snap = false; p.ox = p.oz = 0; p.scare = 0; }
+      else {
+        const k = p.scare > 0 ? 16 : 8;          // a fright moves you fast
+        p.x = damp(p.x, x, k, dt); p.z = damp(p.z, z, k, dt);
+        p.yaw += angleDelta(p.yaw, yaw) * (1 - Math.exp(-(p.scare > 0 ? 14 : 6) * dt));
+      }
+      // never stand inside the car you are driving
+      if (this.threat) this.shove(p);
       this.placePed(p);
       dummy.position.set(p.x, 0.085, p.z);
       dummy.rotation.set(0, 0, 0);
@@ -543,6 +554,60 @@ export class Life {
     for (const m of [this.pedTorso, this.pedHead, this.pedHair, this.pedLegs, this.pedArms, this.shadows]) {
       m.instanceMatrix.needsUpdate = true;
     }
+  }
+
+  /**
+   * The car you drive is coming: anyone in the strip ahead of it (longer the
+   * faster you go) runs sideways out of its path, away from its centre line,
+   * and turns to watch it go by. Returns the way they should face.
+   */
+  evade(p, dt, yaw) {
+    const t = this.threat;
+    const hx = Math.cos(t.yaw), hz = -Math.sin(t.yaw);
+    const rx = p.x - t.x, rz = p.z - t.z;
+    const u = rx * hx + rz * hz;                 // ahead of the nose (+) or behind (-)
+    const s = -rx * hz + rz * hx;                // to the car's right (+) or left (-)
+    const v = t.v, sp = Math.abs(v);
+    const ahead = v >= 0 ? u : -u;               // reversing: behind is ahead
+    const reach = CAR_HALF[0] + 2 + sp * 1.3;    // about a second and a bit of warning
+    const clear = CAR_HALF[1] + 1.5;
+    const inPath = sp > 0.8 && ahead > -CAR_HALF[0] && ahead < reach && Math.abs(s) < clear;
+    const close = Math.hypot(rx, rz) < CAR_HALF[0] + 1.2;   // even creeping up on someone
+    if (!inPath && !close) return p.scare > 0 ? this.watch(p, t, yaw) : yaw;
+    // which side: whichever they are already on, and a coin toss dead centre
+    let side = Math.sign(s) || (p.i & 1 ? 1 : -1);
+    if (Math.abs(s) < 0.3 && p.side) side = p.side;
+    p.side = side;
+    const need = clear + 0.4 - Math.abs(s);
+    if (need > 0) {
+      const run = (sp > 6 ? 7 : 4.5) * dt;       // a sprint for a fast car, a hop for a slow one
+      const m = Math.min(need, run);
+      p.ox = (p.ox || 0) + (-hz * side) * m;
+      p.oz = (p.oz || 0) + (hx * side) * m;
+      p.phase += dt * 16;                        // legs going
+    }
+    p.scare = 1.4;
+    return this.watch(p, t, yaw);
+  }
+
+  /** Face the car while it is near. */
+  watch(p, t, yaw) {
+    return Math.atan2(-(t.z - p.z), t.x - p.x);
+  }
+
+  /** Push a walker out of the car's box, sideways. */
+  shove(p) {
+    const t = this.threat;
+    const hx = Math.cos(t.yaw), hz = -Math.sin(t.yaw);
+    const rx = p.x - t.x, rz = p.z - t.z;
+    const u = rx * hx + rz * hz, s = -rx * hz + rz * hx;
+    const bx = CAR_HALF[0] + 0.35, bz = CAR_HALF[1] + 0.35;
+    if (Math.abs(u) >= bx || Math.abs(s) >= bz) return;
+    const side = Math.sign(s) || 1, d = bz - Math.abs(s);
+    const px = -hz * side * d, pz = hx * side * d;
+    p.x += px; p.z += pz;
+    p.ox = (p.ox || 0) + px; p.oz = (p.oz || 0) + pz;
+    this.placePed(p);
   }
 
   placePed(p) {

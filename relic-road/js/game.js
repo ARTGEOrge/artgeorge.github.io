@@ -599,9 +599,11 @@ export class Game {
       this.player.pos.set(c.x, 0, c.z);
       this.player.yaw = this.drive.viewYaw();
       this.hud.speed(Math.abs(this.drive.speed) * 3.6);
+      if (this.life) this.life.threat = { x: c.x, z: c.z, yaw: c.yaw, v: this.drive.speed };
     } else if (this.state === 'playing') {
       this.readInput();
       this.player.update(dt, this.input, this.world, this.time);
+      if (this.life) this.life.threat = null;
       this.life?.pushPlayer(this.player.pos);
     }
     // the street keeps moving behind the ready card, and stops when you pause
