@@ -4,9 +4,9 @@
  * The district is painted once per city onto an offscreen canvas from the same
  * map data the 3D city is built from: parks, water, streets, footprints. The
  * corner map then only has to crop and turn that picture each frame, heading
- * up, with you in the middle. Relics are never drawn — finding them is the
- * game — but the ones you have found and, once all three are in, the map
- * table are.
+ * up, with you in the middle. The relics you have found are drawn, the map table
+ * once all three are in, and the next relic to find: a gold star, or an arrow on
+ * the rim when it is off the corner map, so you always know where to head.
  */
 import { isSolemn } from './osmcity.js';
 
@@ -119,8 +119,10 @@ export class MiniMap {
       const dx = (m.x - pos.x) * s, dz = (m.z - pos.z) * s;
       let x = dx * cy - dz * sy, y = dx * sy + dz * cy;
       const r = Math.hypot(x, y), edge = W / 2 - 8;
-      if (r > edge) { x *= edge / r; y *= edge / r; }    // off the map: pin it to the rim
-      mark(c, W / 2 + x, H / 2 + y, m.kind, 1);
+      const off = r > edge;
+      if (off) { x *= edge / r; y *= edge / r; }    // off the map: pin it to the rim
+      if (m.kind === 'target' && off) arrow(c, W / 2 + x, H / 2 + y, Math.atan2(y, x), 1);
+      else mark(c, W / 2 + x, H / 2 + y, m.kind, 1);
     }
     c.restore();
 
@@ -170,9 +172,28 @@ export class MiniMap {
       c.fillStyle = 'rgba(0,0,0,.65)'; c.fillText(p.n, x + 1, y - 4);
       c.fillStyle = '#efe7d6'; c.fillText(p.n, x, y - 5);
     }
+    const [px, py] = toS(pos.x, pos.z);
+    // a dashed route from you to the next relic, with the distance
+    for (const m of marks) {
+      if (m.kind !== 'target') continue;
+      const [x, y] = toS(m.x, m.z);
+      c.save();
+      c.setLineDash([10, 8]); c.lineDashOffset = -performance.now() / 40;
+      c.lineWidth = 3; c.strokeStyle = 'rgba(0,0,0,.55)';
+      c.beginPath(); c.moveTo(px, py); c.lineTo(x, y); c.stroke();
+      c.lineWidth = 2; c.strokeStyle = '#ffd98a';
+      c.beginPath(); c.moveTo(px, py); c.lineTo(x, y); c.stroke();
+      c.restore();
+      if (m.dist != null) {
+        c.font = `700 ${Math.round(12 * (W / 900) + 7)}px "Chakra Petch", sans-serif`;
+        c.textAlign = 'center'; c.textBaseline = 'top';
+        const t = `NEXT RELIC · ${Math.round(m.dist)} m`;
+        c.fillStyle = 'rgba(0,0,0,.7)'; c.fillText(t, x + 1, y + 15);
+        c.fillStyle = '#ffd98a'; c.fillText(t, x, y + 14);
+      }
+    }
     for (const m of marks) { const [x, y] = toS(m.x, m.z); mark(c, x, y, m.kind, 1.5); }
 
-    const [px, py] = toS(pos.x, pos.z);
     c.save(); c.translate(px, py); c.rotate(-yaw);
     c.fillStyle = '#fff'; c.strokeStyle = '#000'; c.lineWidth = 2;
     c.beginPath(); c.moveTo(0, -12); c.lineTo(8, 9); c.lineTo(0, 4); c.lineTo(-8, 9); c.closePath();
@@ -181,9 +202,30 @@ export class MiniMap {
   }
 }
 
+/** The next relic, off the edge of the corner map: an arrow on the rim pointing at it. */
+function arrow(c, x, y, ang, k) {
+  const pulse = 0.75 + 0.25 * Math.sin(performance.now() / 180);
+  c.save(); c.translate(x, y); c.rotate(ang);
+  c.shadowColor = '#ffd98a'; c.shadowBlur = 8 * pulse;
+  c.fillStyle = '#ffd98a'; c.strokeStyle = '#1a1408'; c.lineWidth = 1.5;
+  c.beginPath(); c.moveTo(8 * k, 0); c.lineTo(-5 * k, -6.5 * k); c.lineTo(-2 * k, 0); c.lineTo(-5 * k, 6.5 * k); c.closePath();
+  c.fill(); c.shadowBlur = 0; c.stroke();
+  c.restore();
+}
+
 function mark(c, x, y, kind, k) {
   c.save(); c.translate(x, y);
-  if (kind === 'table') {
+  if (kind === 'target') {
+    // the next relic: a pulsing gold beacon
+    const t = performance.now() / 1000, ping = (t % 1.4) / 1.4;
+    c.strokeStyle = `rgba(255,217,138,${1 - ping})`; c.lineWidth = 2;
+    c.beginPath(); c.arc(0, 0, (5 + ping * 12) * k, 0, Math.PI * 2); c.stroke();
+    c.shadowColor = '#ffd98a'; c.shadowBlur = 10;
+    c.fillStyle = '#ffd98a'; c.strokeStyle = '#1a1408'; c.lineWidth = 1.5;
+    c.beginPath();
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = (i % 2 ? 2.6 : 6) * k; c.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+    c.closePath(); c.fill(); c.shadowBlur = 0; c.stroke();
+  } else if (kind === 'table') {
     c.rotate(Math.PI / 4);
     c.fillStyle = '#ffd98a'; c.strokeStyle = '#1a1408'; c.lineWidth = 1.5;
     c.fillRect(-5 * k, -5 * k, 10 * k, 10 * k); c.strokeRect(-5 * k, -5 * k, 10 * k, 10 * k);

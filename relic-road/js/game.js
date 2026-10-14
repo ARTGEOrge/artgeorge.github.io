@@ -603,6 +603,8 @@ export class Game {
     if (this.map && this.state === 'playing') {
       const marks = this.relics.filter(r => r.found).map(r => ({ x: r.pos.x, z: r.pos.z, kind: 'found' }));
       if (this.table?.visible) marks.push({ x: this.table.position.x, z: this.table.position.z, kind: 'table' });
+      // where to go next: the nearest relic still to find (the table is already marked once it's out)
+      if (near && !near.target.table) marks.push({ x: near.target.pos.x, z: near.target.pos.z, kind: 'target', dist: near.dist });
       this.map.draw(dt, p, this.player.yaw, marks);
       this.map.drawBig(p, this.player.yaw, marks);
       this.locT -= dt;
