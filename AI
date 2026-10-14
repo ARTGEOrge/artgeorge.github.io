@@ -518,7 +518,7 @@
 
     return [
       `Today: ${dateStr} (year ${year}, ${timeStr} ${tz}). Browser language: ${lang}.`,
-      'In-browser AI on artgeorge.github.io (WebLLM + WebGPU). Messages never leave the device.',
+      'In-browser AI on Nexus Play (WebLLM + WebGPU). Messages never leave the device.',
       '',
       'RULES:',
       '1. Answer with multiple full sentences. NEVER reply with just a label like "Wikipedia: <topic>" — that is wrong.',

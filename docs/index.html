@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ARTGEOrge Docs</title>
+  <title>Nexus Play Docs</title>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     body { min-height: 100vh; display: flex; flex-direction: column;
@@ -209,7 +209,7 @@
   page.addEventListener("input", save);
   page.addEventListener("keyup", updateToolbar);
   page.addEventListener("mouseup", updateToolbar);
-  titleIn.addEventListener("input", function () { save(); document.title = (titleIn.value || "ARTGEOrge Docs"); });
+  titleIn.addEventListener("input", function () { save(); document.title = (titleIn.value || "Nexus Play Docs"); });
 
   // ---- export / print / new ----
   document.getElementById("printBtn").addEventListener("click", function () { window.print(); });
@@ -443,7 +443,7 @@
     var stylesXml = "<?xml version='1.0' encoding='UTF-8'?>\n<office:document-styles xmlns:office='" + ODF.office + "' xmlns:style='" + ODF.style +
       "' xmlns:fo='" + ODF.fo + "' office:version='1.2'><office:styles/></office:document-styles>";
     var metaXml = "<?xml version='1.0' encoding='UTF-8'?>\n<office:document-meta xmlns:office='" + ODF.office + "' xmlns:meta='" + ODF.meta +
-      "' office:version='1.2'><office:meta><meta:generator>ARTGEOrge Docs</meta:generator></office:meta></office:document-meta>";
+      "' office:version='1.2'><office:meta><meta:generator>Nexus Play Docs</meta:generator></office:meta></office:document-meta>";
 
     var files = [
       { name: "mimetype", data: "application/vnd.oasis.opendocument.text" },

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ARTGEOrge Slides</title>
+  <title>Nexus Play Slides</title>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     body { height: 100vh; display: flex; flex-direction: column; overflow: hidden;
@@ -193,7 +193,7 @@
       var d = JSON.parse(localStorage.getItem(KEY) || "null");
       if (d && d.slides && d.slides.length) { slides = d.slides; cur = Math.min(d.cur || 0, slides.length - 1); return; }
     } catch (e) {}
-    slides = [{ title: "My Presentation", body: "Made with ARTGEOrge Slides", bg: "#2a2240", fg: "#ffffff" }];
+    slides = [{ title: "My Presentation", body: "Made with Nexus Play Slides", bg: "#2a2240", fg: "#ffffff" }];
     cur = 0;
   }
 
@@ -489,7 +489,7 @@
   function buildMeta() {
     return "<?xml version='1.0' encoding='UTF-8'?>\n" +
       "<office:document-meta xmlns:office='" + ODF.office + "' xmlns:meta='" + ODF.meta + "' office:version='1.2'>" +
-      "<office:meta><meta:generator>ARTGEOrge Slides</meta:generator></office:meta></office:document-meta>";
+      "<office:meta><meta:generator>Nexus Play Slides</meta:generator></office:meta></office:document-meta>";
   }
 
   function dataUrlToBytesAndMime(u) {

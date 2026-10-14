@@ -1,38 +1,56 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- ARTGEOrge icon: a bold "A" on a glowing arcade-violet tile, with a spark -->
+  <!-- Nexus Play icon: a glowing play button at the heart of an orbit, on a deep-space tile -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#a855f7"/>
-      <stop offset=".5" stop-color="#5b4bf0"/>
-      <stop offset="1" stop-color="#0ea5e9"/>
+      <stop offset="0" stop-color="#2a1b6e"/>
+      <stop offset=".55" stop-color="#4b2fd6"/>
+      <stop offset="1" stop-color="#0b8fd8"/>
     </linearGradient>
-    <radialGradient id="shine" cx=".28" cy=".16" r=".9">
-      <stop offset="0" stop-color="#fff" stop-opacity=".42"/>
-      <stop offset=".45" stop-color="#fff" stop-opacity="0"/>
+    <radialGradient id="core" cx=".5" cy=".5" r=".5">
+      <stop offset="0" stop-color="#ff7ad9" stop-opacity=".9"/>
+      <stop offset=".45" stop-color="#a855f7" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#a855f7" stop-opacity="0"/>
     </radialGradient>
-    <radialGradient id="dusk" cx=".8" cy="1" r=".7">
-      <stop offset="0" stop-color="#ff5fa2" stop-opacity=".55"/>
-      <stop offset="1" stop-color="#ff5fa2" stop-opacity="0"/>
+    <radialGradient id="shine" cx=".25" cy=".12" r=".85">
+      <stop offset="0" stop-color="#fff" stop-opacity=".35"/>
+      <stop offset=".5" stop-color="#fff" stop-opacity="0"/>
     </radialGradient>
-    <linearGradient id="a" x1="0" y1="0" x2="0" y2="1">
+    <linearGradient id="play" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#ffffff"/>
-      <stop offset="1" stop-color="#dfe6ff"/>
+      <stop offset="1" stop-color="#bfe9ff"/>
     </linearGradient>
-    <linearGradient id="spark" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#fff7c2"/>
-      <stop offset="1" stop-color="#ffb21e"/>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5ee7ff"/>
+      <stop offset=".5" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#ff7ad9"/>
     </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="9" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
   </defs>
   <rect width="512" height="512" rx="116" fill="url(#bg)"/>
-  <rect width="512" height="512" rx="116" fill="url(#dusk)"/>
+  <!-- a few stars -->
+  <g fill="#fff">
+    <circle cx="96" cy="112" r="5" opacity=".8"/><circle cx="410" cy="92" r="4" opacity=".7"/>
+    <circle cx="436" cy="300" r="3.5" opacity=".6"/><circle cx="120" cy="404" r="4" opacity=".6"/>
+    <circle cx="70" cy="250" r="3" opacity=".5"/><circle cx="352" cy="438" r="3" opacity=".5"/>
+  </g>
+  <circle cx="256" cy="260" r="200" fill="url(#core)"/>
+  <!-- the orbit, behind and in front of the play button -->
+  <g transform="rotate(-24 256 256)">
+    <ellipse cx="256" cy="256" rx="206" ry="70" fill="none" stroke="url(#ring)" stroke-width="16" stroke-opacity=".55"/>
+  </g>
+  <!-- the play button -->
+  <path filter="url(#glow)" fill="url(#play)"
+        d="M206 156C206 140 223 130 237 138L370 236C382 244 382 268 370 276L237 374C223 382 206 372 206 356Z"/>
+  <!-- front half of the orbit over the button, with its nodes -->
+  <g transform="rotate(-24 256 256)">
+    <path d="M50 256A206 70 0 0 0 462 256" fill="none" stroke="url(#ring)" stroke-width="16" stroke-linecap="round"/>
+    <circle cx="462" cy="256" r="20" fill="#ff7ad9" filter="url(#glow)"/>
+    <circle cx="96" cy="300" r="15" fill="#5ee7ff" filter="url(#glow)"/>
+    <circle cx="300" cy="325" r="12" fill="#fff" filter="url(#glow)"/>
+  </g>
   <rect width="512" height="512" rx="116" fill="url(#shine)"/>
-  <rect x="6" y="6" width="500" height="500" rx="110" fill="none" stroke="#fff" stroke-opacity=".22" stroke-width="6"/>
-  <!-- the A: shadow, then letter (the counter is a triangle, like a play button pointing up) -->
-  <path fill="#1e1060" fill-opacity=".35" fill-rule="evenodd" transform="translate(0 14)"
-        d="M204 104H308L420 414H330L307 346H205L182 414H92ZM226 282H286L256 192Z"/>
-  <path fill="url(#a)" fill-rule="evenodd"
-        d="M204 104H308L420 414H330L307 346H205L182 414H92ZM226 282H286L256 192Z"/>
-  <!-- the spark -->
-  <path fill="url(#spark)" d="M404 70C410 104 420 114 454 120C420 126 410 136 404 170C398 136 388 126 354 120C388 114 398 104 404 70Z"/>
-  <circle cx="452" cy="182" r="11" fill="#fff7c2"/>
+  <rect x="6" y="6" width="500" height="500" rx="110" fill="none" stroke="#fff" stroke-opacity=".18" stroke-width="6"/>
 </svg>
