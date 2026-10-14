@@ -149,6 +149,7 @@ export class Enemy {
     this.state = 'dead';
     this.deathT = 0;
     this.headshotKill = !!head;
+    if (this.parts.halo) this.parts.halo.visible = false;   // the light goes out of its eyes
   }
 
   /** ctx: { dt, player, world, fx, enemies, time, onAttack, onFire } */
@@ -406,6 +407,22 @@ export class Enemy {
 
     const glow = this.hitFlash > 0 ? 1 : 0;
     P.eyes.forEach(e => { e.material.color.setHex(glow ? 0xffffff : this.type.eyes); });
+
+    // breathing, and a head that hunts for the player (idle ones look about)
+    this.breathT = (this.breathT || Math.random() * 10) + dt;
+    const breath = Math.sin(this.breathT * (this.state === 'chase' ? 4.2 : 1.8));
+    if (!this.type.quad) P.torso.scale.set(1 + breath * 0.012, 1, 1 + breath * 0.02);
+    if (ctx.player) {
+      const pp = ctx.player.pos, me = this.obj.position;
+      const alert = this.state === 'chase' || this.state === 'attack';
+      const look = alert ? clamp(angleDelta(this.facing, Math.atan2(pp.x - me.x, pp.z - me.z)), -0.7, 0.7)
+        : Math.sin(this.breathT * 0.45) * 0.5;
+      P.head.rotation.y = damp(P.head.rotation.y, look, alert ? 8 : 2, dt);
+    }
+    if (P.halo) {
+      P.halo.material.opacity = glow ? 1 : 0.4 + 0.18 * (breath * 0.5 + 0.5) + (this.state === 'attack' ? 0.25 : 0);
+      P.halo.material.color.setHex(glow ? 0xffffff : this.type.eyes);
+    }
 
     // demons smoulder
     if (this.type.demon && ctx.fx && Math.random() < dt * 6) {

@@ -259,17 +259,19 @@ const PAINT = {
     ctx.globalAlpha = 1;
   },
   sand(ctx, size, rng) {
-    ctx.fillStyle = '#9c4a2c'; ctx.fillRect(0, 0, size, size);
+    // weathered limestone and desert sand, nearly neutral so each city's
+    // palette decides the colour (Demon Fall's red Mars sand turned Giza rust)
+    ctx.fillStyle = '#d8ccb4'; ctx.fillRect(0, 0, size, size);
     for (let y = 0; y < size; y += 2) for (let x = 0; x < size; x += 2) {
       const n = fbm(x / 40, y / 40, 4, 55) * 0.7 + noise2(x / 6, y / 6, 3) * 0.3;
-      const v = 120 + n * 90;
-      ctx.fillStyle = `rgb(${v},${v * 0.52 | 0},${v * 0.34 | 0})`;
+      const v = 175 + n * 70;
+      ctx.fillStyle = `rgb(${v | 0},${v * 0.94 | 0},${v * 0.82 | 0})`;
       ctx.fillRect(x, y, 2, 2);
     }
     for (let i = 0; i < 700; i++) {   // pebbles
       const x = rng() * size, y = rng() * size, r = rng() * 2.6 + 0.5;
-      const v = 80 + rng() * 90;
-      ctx.fillStyle = `rgba(${v},${v * 0.5 | 0},${v * 0.36 | 0},0.85)`;
+      const v = 130 + rng() * 90;
+      ctx.fillStyle = `rgba(${v | 0},${v * 0.92 | 0},${v * 0.8 | 0},0.85)`;
       ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
     }
     grain(ctx, size, 0.1, false);

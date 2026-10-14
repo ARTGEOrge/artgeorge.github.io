@@ -26,6 +26,18 @@
   }
   ART.rr = rr;
 
+  // Lighten (f > 0) or darken (f < 0) a #rrggbb colour.
+  var tintCache = {};
+  function tint(hex, f) {
+    var key = hex + f;
+    if (tintCache[key]) return tintCache[key];
+    if (hex[0] !== '#' || hex.length !== 7) return hex;
+    var c = [1, 3, 5].map(function (i) { return parseInt(hex.substr(i, 2), 16); });
+    c = c.map(function (v) { return Math.round(f > 0 ? v + (255 - v) * f : v * (1 + f)); });
+    return (tintCache[key] = 'rgb(' + c.join(',') + ')');
+  }
+  ART.tint = tint;
+
   /* ---------------------------------------------------------------- themes */
   var THEMES = [
     { name: 'Meadow', far: 'peaks', props: 'trees', deco: 'flowers',
@@ -130,8 +142,37 @@
       ctx.arc(x + puffs[i][0] * s, y + puffs[i][1] * s, puffs[i][2] * s, 0, TAU);
     }
     ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.beginPath(); ctx.arc(x + 0.7 * s, y - 0.55 * s, 0.35 * s, 0, TAU); ctx.fill();
+    // sunlit crown: a brighter inner layer on the upper puffs
+    ctx.fillStyle = night ? 'rgba(200,200,255,0.12)' : 'rgba(255,255,255,0.55)';
+    ctx.beginPath();
+    for (i = 0; i < 3; i++) {
+      var q = puffs[i];
+      ctx.moveTo(x + q[0] * s - s * 0.1 + q[2] * s * 0.7, y + q[1] * s - s * 0.12);
+      ctx.arc(x + q[0] * s - s * 0.1, y + q[1] * s - s * 0.12, q[2] * s * 0.7, 0, TAU);
+    }
+    ctx.fill();
+    if (col === '#ffffff') {
+      ctx.fillStyle = 'rgba(255,255,255,0.45)';
+      ctx.beginPath(); ctx.arc(x + 0.7 * s, y - 0.55 * s, 0.35 * s, 0, TAU); ctx.fill();
+    }
+  }
+
+  // A small flock drifting across the sky, wings flapping.
+  function flock(ctx, W, H, camPx, t, u, night) {
+    var span = W + 400;
+    for (var f = 0; f < 2; f++) {
+      var fx = ((hash(f * 9.3) * span + t * (14 + f * 6) - camPx * 0.04) % span + span) % span - 200;
+      var fy = H * (0.12 + f * 0.13 + Math.sin(t * 0.3 + f) * 0.01);
+      for (var b = 0; b < 5; b++) {
+        var row = Math.ceil(b / 2), sd = b % 2 ? -1 : 1;
+        var bx = fx - row * 18 * u, by = fy + (b ? sd * row * 9 * u : 0) + Math.sin(t * 2 + b) * 2 * u;
+        var flap = Math.sin(t * 9 + b * 1.3 + f) * 4 * u, ws = (6 + f * 1.5) * u;
+        ctx.strokeStyle = night ? 'rgba(20,20,40,0.6)' : 'rgba(40,50,70,0.55)';
+        ctx.lineWidth = 1.6 * u; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.beginPath(); ctx.moveTo(bx - ws, by - flap); ctx.quadraticCurveTo(bx - ws * 0.4, by - flap * 0.2 - 2 * u, bx, by);
+        ctx.quadraticCurveTo(bx + ws * 0.4, by - flap * 0.2 - 2 * u, bx + ws, by - flap); ctx.stroke();
+      }
+    }
   }
 
   // Repeating silhouette layer; `f` is the parallax factor.
@@ -260,12 +301,24 @@
   function prop(ctx, kind, pal, tx, ty, ts, n, t) {
     if (kind === 'trees') {
       ctx.fillStyle = pal.trunk; ctx.fillRect(tx - 5 * ts, ty - 46 * ts, 10 * ts, 46 * ts);
+      ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(tx + 1 * ts, ty - 46 * ts, 4 * ts, 46 * ts);
+      ctx.strokeStyle = pal.trunk; ctx.lineWidth = 3 * ts; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(tx, ty - 30 * ts); ctx.lineTo(tx + 14 * ts, ty - 44 * ts); ctx.moveTo(tx, ty - 36 * ts); ctx.lineTo(tx - 12 * ts, ty - 48 * ts); ctx.stroke();
+      var sway2 = Math.sin(t * 0.9 + n) * 1.5 * ts;
       ctx.fillStyle = pal.tree;
       ctx.beginPath();
-      ctx.arc(tx, ty - 62 * ts, 30 * ts, 0, TAU); ctx.arc(tx - 22 * ts, ty - 46 * ts, 20 * ts, 0, TAU); ctx.arc(tx + 22 * ts, ty - 46 * ts, 20 * ts, 0, TAU);
+      ctx.moveTo(tx + sway2 + 30 * ts, ty - 62 * ts); ctx.arc(tx + sway2, ty - 62 * ts, 30 * ts, 0, TAU); ctx.moveTo(tx - 2 * ts, ty - 46 * ts); ctx.arc(tx - 22 * ts, ty - 46 * ts, 20 * ts, 0, TAU); ctx.moveTo(tx + 42 * ts, ty - 46 * ts); ctx.arc(tx + 22 * ts, ty - 46 * ts, 20 * ts, 0, TAU);
       ctx.fill();
+      ctx.fillStyle = 'rgba(0,30,10,0.18)';
+      ctx.beginPath(); ctx.ellipse(tx, ty - 36 * ts, 34 * ts, 9 * ts, 0, 0, TAU); ctx.fill();
       ctx.fillStyle = pal.treeLight;
-      ctx.beginPath(); ctx.arc(tx - 8 * ts, ty - 70 * ts, 15 * ts, 0, TAU); ctx.arc(tx - 24 * ts, ty - 52 * ts, 9 * ts, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(tx - 8 * ts + sway2 + 15 * ts, ty - 70 * ts); ctx.arc(tx - 8 * ts + sway2, ty - 70 * ts, 15 * ts, 0, TAU); ctx.moveTo(tx - 24 * ts + 9 * ts, ty - 52 * ts); ctx.arc(tx - 24 * ts, ty - 52 * ts, 9 * ts, 0, TAU); ctx.moveTo(tx + 14 * ts + 7 * ts, ty - 54 * ts); ctx.arc(tx + 14 * ts, ty - 54 * ts, 7 * ts, 0, TAU); ctx.fill();
+      ctx.fillStyle = tint(pal.treeLight, 0.3);
+      ctx.beginPath(); ctx.moveTo(tx - 12 * ts + sway2 + 6 * ts, ty - 76 * ts); ctx.arc(tx - 12 * ts + sway2, ty - 76 * ts, 6 * ts, 0, TAU); ctx.moveTo(tx - 27 * ts + 3.5 * ts, ty - 56 * ts); ctx.arc(tx - 27 * ts, ty - 56 * ts, 3.5 * ts, 0, TAU); ctx.fill();
+      if (hash(n * 4.4) > 0.6) {   // a few fruit
+        ctx.fillStyle = '#e8453a';
+        ctx.beginPath(); [[10, 50], [-14, 40], [2, 66]].forEach(function (fp) { ctx.moveTo(tx + fp[0] * ts + 2.6 * ts, ty - fp[1] * ts); ctx.moveTo(tx + fp[0] * ts + 2.6 * ts, ty - fp[1] * ts); ctx.arc(tx + fp[0] * ts, ty - fp[1] * ts, 2.6 * ts, 0, TAU); }); ctx.fill();
+      }
     } else if (kind === 'pines') {
       ctx.fillStyle = pal.trunk; ctx.fillRect(tx - 4 * ts, ty - 16 * ts, 8 * ts, 16 * ts);
       for (var k = 0; k < 3; k++) {
@@ -360,6 +413,11 @@
       cloud(ctx, cx, H * (0.08 + hash(i * 7.7) * 0.28), (24 + hash(i) * 22) * u, pal.cloud, pal.night);
     }
 
+    flock(ctx, W, H, camPx, t, u, pal.night);
+    // the farthest hills, washed out by the air between
+    ctx.save(); ctx.globalAlpha = 0.45;
+    ridge(ctx, W, groundY - 70 * u, camPx, 0.05, 700 * u, 150 * u, 5, pal.farCol, true);
+    ctx.restore();
     farLayer(ctx, W, H, pal, camPx, groundY, u, t);
 
     // haze band sits between far and mid layers for depth
@@ -404,29 +462,92 @@
 
   /* ---------------------------------------------------------------- ground */
   // World space with y DOWN: the surface is at y = 0 and the soil fills below.
+  // The soil (strata, pebbles, stones, roots, turf overhang) is painted once per
+  // world into a seamless tile 16 m wide and used as a pattern.
+  var SOIL_W = 16, SOIL_D = 8, SOIL_PX = 48, soilCache = {};
+  function soilTile(ctx, pal) {
+    var e = soilCache[pal.name];
+    if (!e) {
+      var cv = document.createElement('canvas');
+      cv.width = SOIL_W * SOIL_PX; cv.height = SOIL_D * SOIL_PX;
+      var c = cv.getContext('2d');
+      c.scale(SOIL_PX, SOIL_PX);
+      var dg = c.createLinearGradient(0, 0, 0, 5);
+      dg.addColorStop(0, pal.dirt); dg.addColorStop(1, pal.dirtDark);
+      c.fillStyle = dg; c.fillRect(0, 0, SOIL_W, SOIL_D);
+      c.fillStyle = 'rgba(0,0,0,0.08)';
+      c.fillRect(0, 1.4, SOIL_W, 0.25); c.fillRect(0, 3.1, SOIL_W, 0.35);
+      // wavy strata (whole periods across the tile so it wraps)
+      c.strokeStyle = 'rgba(0,0,0,0.1)'; c.lineWidth = 0.05;
+      [2.2, 4.0, 5.8].forEach(function (sy, si) {
+        c.beginPath();
+        for (var lx = 0; lx <= SOIL_W; lx += 0.25) {
+          var ly = sy + Math.sin(lx / SOIL_W * TAU * 2 + si * 2) * 0.12 + Math.sin(lx / SOIL_W * TAU * 5) * 0.05;
+          if (!lx) c.moveTo(lx, ly); else c.lineTo(lx, ly);
+        }
+        c.stroke();
+      });
+      function wrap(x, fn) { fn(x); if (x < 1.5) fn(x + SOIL_W); if (x > SOIL_W - 1.5) fn(x - SOIL_W); }
+      // pebbles
+      for (var s2 = 0; s2 < SOIL_W; s2 += 0.3) {
+        if (hash(s2 * 3.3) < 0.45) continue;
+        var py = 0.9 + hash(s2 * 1.7) * 6, pr = 0.08 + hash(s2 * 2) * 0.14;
+        wrap(s2 + hash(s2) * 0.6, function (px) {
+          c.fillStyle = 'rgba(0,0,0,0.16)';
+          c.beginPath(); c.ellipse(px, py + 0.04, pr, pr * 0.62, 0, 0, TAU); c.fill();
+          c.fillStyle = 'rgba(255,255,255,0.12)';
+          c.beginPath(); c.ellipse(px - pr * 0.25, py - pr * 0.2, pr * 0.45, pr * 0.25, 0, 0, TAU); c.fill();
+        });
+      }
+      // roots
+      c.strokeStyle = 'rgba(60,30,10,0.28)'; c.lineCap = 'round'; c.lineWidth = 0.05;
+      for (var rt = 0; rt < SOIL_W; rt += 2.3) {
+        if (hash(rt * 1.9 + 1) < 0.4) continue;
+        wrap(rt, function (rx) {
+          c.beginPath(); c.moveTo(rx, 0.4); c.quadraticCurveTo(rx + 0.3, 0.8, rx + 0.15, 1.3 + hash(rt) * 0.5);
+          c.moveTo(rx + 0.12, 0.75); c.quadraticCurveTo(rx + 0.45, 0.9, rx + 0.6, 1.1); c.stroke();
+        });
+      }
+      // larger buried stones with rims
+      for (var bs = 0; bs < SOIL_W; bs += 1.7) {
+        if (hash(bs * 2.7 + 3) < 0.45) continue;
+        var by2 = 1.2 + hash(bs * 3.1) * 5, br2 = 0.22 + hash(bs * 7) * 0.2;
+        wrap(bs + hash(bs * 5) * 1.2, function (bx2) {
+          c.fillStyle = 'rgba(0,0,0,0.18)';
+          c.beginPath(); c.ellipse(bx2 + 0.04, by2 + 0.05, br2, br2 * 0.65, 0.2, 0, TAU); c.fill();
+          c.fillStyle = tint(pal.dirt, 0.18);
+          c.beginPath(); c.ellipse(bx2, by2, br2, br2 * 0.65, 0.2, 0, TAU); c.fill();
+          c.fillStyle = 'rgba(255,255,255,0.18)';
+          c.beginPath(); c.ellipse(bx2 - br2 * 0.3, by2 - br2 * 0.25, br2 * 0.45, br2 * 0.2, 0.2, 0, TAU); c.fill();
+        });
+      }
+      // shadow under the turf, then the turf lip with scalloped overhang
+      var ts2 = c.createLinearGradient(0, 0.3, 0, 1.1);
+      ts2.addColorStop(0, 'rgba(0,0,0,0.25)'); ts2.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = ts2; c.fillRect(0, 0.3, SOIL_W, 0.8);
+      c.fillStyle = pal.grassDark;
+      c.fillRect(0, 0, SOIL_W, 0.5);
+      c.beginPath();
+      for (var sc = 0; sc < SOIL_W; sc += 0.5) {
+        var sr = 0.05 + hash(sc * 3) * 0.12;
+        c.moveTo(sc + 0.25 + sr, 0.45); c.arc(sc + 0.25, 0.45, sr, 0, Math.PI);
+      }
+      c.fill();
+      e = soilCache[pal.name] = { canvas: cv, pattern: null };
+    }
+    if (!e.pattern) e.pattern = ctx.createPattern(e.canvas, 'repeat-x');
+    if (e.pattern && e.pattern.setTransform && window.DOMMatrix) e.pattern.setTransform(new DOMMatrix().scale(1 / SOIL_PX));
+    return e.pattern;
+  }
+
+  // World space with y DOWN: the surface is at y = 0 and the soil fills below.
   ART.drawGround = function (ctx, pal, x0, x1) {
     var depth = 30;
-    var dg = ctx.createLinearGradient(0, 0, 0, 5);
-    dg.addColorStop(0, pal.dirt);
-    dg.addColorStop(1, pal.dirtDark);
-    ctx.fillStyle = dg;
-    ctx.fillRect(x0, 0, x1 - x0, depth);
-    // soil strata and buried pebbles
-    ctx.fillStyle = 'rgba(0,0,0,0.08)';
-    ctx.fillRect(x0, 1.4, x1 - x0, 0.25);
-    ctx.fillRect(x0, 3.1, x1 - x0, 0.35);
-    for (var s = Math.floor(x0); s < x1; s += 0.7) {
-      var hs = hash(s * 3.3);
-      if (hs < 0.45) continue;
-      var px = s + hash(s) * 0.6, py = 0.9 + hash(s * 1.7) * 3.2, pr = 0.1 + hash(s * 2) * 0.16;
-      ctx.fillStyle = 'rgba(0,0,0,0.16)';
-      ctx.beginPath(); ctx.ellipse(px, py + 0.04, pr, pr * 0.62, 0, 0, TAU); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.12)';
-      ctx.beginPath(); ctx.ellipse(px - pr * 0.25, py - pr * 0.2, pr * 0.45, pr * 0.25, 0, 0, TAU); ctx.fill();
-    }
-    // turf lip
-    ctx.fillStyle = pal.grassDark;
-    ctx.fillRect(x0, 0, x1 - x0, 0.5);
+    ctx.fillStyle = pal.dirtDark;
+    ctx.fillRect(x0, SOIL_D - 0.05, x1 - x0, depth);
+    var pat = soilTile(ctx, pal);
+    ctx.fillStyle = pat || pal.dirt;
+    ctx.fillRect(x0, 0, x1 - x0, SOIL_D);
     ctx.fillStyle = pal.grass;
     ctx.beginPath();
     ctx.moveTo(x0, 0.36);
@@ -481,6 +602,13 @@
         ctx.fillStyle = '#e8e0d0'; ctx.fillRect(dx - 0.03, -0.18, 0.06, 0.2);
         ctx.fillStyle = 'rgba(120,230,255,' + glow + ')';
         ctx.beginPath(); ctx.arc(dx, -0.18, 0.12, Math.PI, TAU); ctx.fill();
+      }
+      // a second, lighter tuft beside the first
+      if (pal.deco !== 'snow' && pal.deco !== 'shells' && pal.deco !== 'embers' && h > 0.55) {
+        ctx.fillStyle = pal.grassLight;
+        ctx.beginPath();
+        ctx.moveTo(dx + 0.22, 0.06); ctx.lineTo(dx + 0.27 + sway, -0.15); ctx.lineTo(dx + 0.31, 0.04); ctx.lineTo(dx + 0.36 + sway, -0.2); ctx.lineTo(dx + 0.4, 0.06);
+        ctx.fill();
       }
       // grass tufts everywhere except snow and sand
       if (pal.deco !== 'snow' && pal.deco !== 'shells' && pal.deco !== 'embers') {

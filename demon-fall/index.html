@@ -243,6 +243,28 @@
     .stats { grid-template-columns: repeat(2, 1fr); }
   }
   @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+  /* ---- detail pass: depth on the panels, brass rounds, a livelier reticle */
+  #vitals, #weapon { box-shadow: inset 0 1px 0 rgba(255,255,255,.07), inset 0 -18px 30px rgba(0,0,0,.18), 0 10px 30px rgba(0,0,0,.4); }
+  #vitals::before, #weapon::before { content: ''; position: absolute; top: -1px; height: 2px; border-radius: 2px; opacity: .85;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent); }
+  #vitals::before { left: 22px; right: 60%; }
+  #weapon::before { right: 22px; left: 60%; }
+  #vitals::after, #weapon::after { content: ''; position: absolute; width: 10px; height: 10px; bottom: 8px;
+    border-bottom: 2px solid rgba(255,255,255,.18); }
+  #vitals::after { left: 8px; border-left: 2px solid rgba(255,255,255,.18); }
+  #weapon::after { right: 8px; border-right: 2px solid rgba(255,255,255,.18); }
+  .track i { box-shadow: 0 0 10px rgba(255,255,255,.08); }
+  .track i::after { content: ''; position: absolute; inset: 0 0 50% 0; background: linear-gradient(rgba(255,255,255,.28), transparent); border-radius: 999px; }
+  #ammoNum { text-shadow: 0 0 18px rgba(255,170,80,.25), 0 2px 0 rgba(0,0,0,.5); }
+  #ammoRow.empty #ammoNum { animation: pulse .5s ease-in-out infinite; }
+  #magPips { gap: 3px; height: 9px; align-items: flex-end; }
+  #magPips i { width: 4px; height: 9px; border-radius: 2px 2px 1px 1px;
+    background: linear-gradient(180deg, #ffe2a0 0 30%, #c9922e 30% 100%); box-shadow: 0 0 4px rgba(255,180,80,.35); }
+  #magPips i.spent { background: rgba(255,255,255,.12); box-shadow: none; }
+  #slots span.on { box-shadow: 0 0 14px rgba(255,170,60,.45); }
+  #cross i { box-shadow: 0 0 3px rgba(0,0,0,.9), 0 0 6px rgba(255,255,255,.25); }
+  #objWrap { box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 8px 24px rgba(0,0,0,.35); }
 </style>
 </head>
 <body>

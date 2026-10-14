@@ -265,6 +265,7 @@
   function launch(vx, vy) {
     var type = S.loaded, px = REST.x + S.pull.x, py = REST.y + S.pull.y;
     var body = E.addBird(type, px, py);
+    S.twang = { t: E.t, x: S.pull.x, y: S.pull.y };
     body.setLinearVelocity(pl.Vec2(vx, vy));
     body.getUserData().launched = true;
     S.flying = [body];
@@ -314,6 +315,7 @@
       ud.age += dt;
       if (!ud.hit && touching(b)) {
         ud.hit = true; ud.hitAt = ud.age; ud.squash = 0.35;
+        if (Math.hypot(v.x, v.y) > 4) E.impact(p.x + v.x * 0.03, p.y + v.y * 0.03);
         E.burst(p.x, p.y, 'feather', [ART.BIRDS[ud.type].base, ART.BIRDS[ud.type].belly], 4, 0.18, 2);
       }
       if (!ud.hit && (ud.trail.length === 0 || Math.hypot(p.x - ud.trail[ud.trail.length - 1].x, p.y - ud.trail[ud.trail.length - 1].y) > 0.55)) {
@@ -415,7 +417,16 @@
 
   /* ---------------------------------------------------------------- render */
   function pouchPos() {
-    return S && S.pull ? { x: REST.x + S.pull.x, y: REST.y + S.pull.y } : REST;
+    if (S && S.pull) return { x: REST.x + S.pull.x, y: REST.y + S.pull.y };
+    // the band twangs back and wobbles for a moment after a launch (purely visual)
+    if (S && S.twang) {
+      var dt = E.t - S.twang.t;
+      if (dt >= 0 && dt < 0.9) {
+        var amp = Math.exp(-dt * 5) * Math.cos(dt * 38) * 0.4;
+        return { x: REST.x - S.twang.x * amp, y: REST.y - S.twang.y * amp };
+      }
+    }
+    return REST;
   }
 
   var hooks = {

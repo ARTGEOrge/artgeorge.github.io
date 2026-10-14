@@ -13,6 +13,8 @@
 import * as THREE from 'three';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import { material } from './textures.js';
+import { patchFacade, facadeAttributes } from './facade.js';
+import { Detail, landmarkKind, pyramidGeo, mastabaGeo, colourise } from './detail.js';
 
 const TILE = 250;               // metres per culling tile
 const ROAD_Y = 0.03;            // street surface sits just above the ground plane
@@ -29,6 +31,27 @@ export async function loadCity(id, onProgress) {
   onProgress?.(0.35);
   const data = await res.json();
   onProgress?.(0.5);
+  return sanitise(data);
+}
+
+/* The map is edited by people, and now and then somebody draws a "building"
+ * over half a park (Berlin's data has a six-point one covering 0.5 km² of the
+ * Tiergarten). Nothing real in these districts is anywhere near 60,000 m². */
+const MAX_FOOTPRINT = 60000;
+function sanitise(data) {
+  const bogus = new Set();
+  data.buildings = data.buildings.filter(rec => {
+    const f = rec[2], n = f.length / 2;
+    let a = 0;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      a += f[i * 2] * f[j * 2 + 1] - f[j * 2] * f[i * 2 + 1];
+    }
+    const ok = Math.abs(a) / 2 / 100 <= MAX_FOOTPRINT;       // decimetres squared -> m²
+    if (!ok && rec[3]) bogus.add(rec[3]);
+    return ok;
+  });
+  if (bogus.size) data.places = data.places.filter(p => !(bogus.has(p.n) && p.k === 'building'));
   return data;
 }
 
@@ -110,6 +133,22 @@ function tinted(name, colour, opts = {}) {
     m = material(name, opts).clone();         // clone shares the texture maps
     m.color.setHex(colour);
     tintCache.set(key, m);
+  }
+  return m;
+}
+
+/* Building walls get their own materials (never shared with a roof or a path
+ * that happens to have the same texture and colour) because they carry the
+ * facade shader. Each building's colour rides in its vertices, so a tile needs
+ * one wall material per texture, not one per paint colour: far fewer draw calls. */
+const wallCache = new Map();
+function wallMaterial(name, style = {}) {
+  const key = `${name}|${JSON.stringify(style)}`;
+  let m = wallCache.get(key);
+  if (!m) {
+    m = patchFacade(material(name, { repeat: 1, roughness: 0.93 }).clone(), style);
+    m.vertexColors = true;
+    wallCache.set(key, m);
   }
   return m;
 }
@@ -205,10 +244,21 @@ function buildingGeo(flat, height) {
  * @param {object} data   the parsed city json
  * @param {object} look   per-city palette: { wall:{kind:matName}, tint:{kind:0xrrggbb},
  *                        road, path, water, green, ground }
+ * @param {Roads} roads   the street index (roads.js), used to decide which
+ *                        buildings are on a street and get shopfronts
  */
-export function buildCity(world, data, look, onProgress) {
+export function buildCity(world, data, look, onProgress, roads = null, city = null) {
   const scene = world.scene;
   const batch = new Batcher(scene);
+  // cornices, pitched roofs, rooftop clutter, awnings and the landmarks' domes
+  // and minarets (detail.js); the pitched roofs show their undersides at the eaves
+  // one roof material for the whole city: each roof's colour is in its vertices
+  const roofVC = material(look.roofMat || 'tile', { repeat: 1, roughness: 0.85 }).clone();
+  roofVC.vertexColors = true;
+  roofVC.side = THREE.DoubleSide;
+  const roofMat = () => roofVC;
+  const detail = city ? new Detail(city, (g, key, mat, x, z) => batch.add(g, key, mat, x, z), roofMat) : null;
+  const style = (city && city.detail) || {};
   const stats = { buildings: 0, roads: 0, tallest: 0, tallestName: '' };
 
   // ---- ground: one big plane under everything
@@ -269,33 +319,54 @@ export function buildCity(world, data, look, onProgress) {
   for (const rec of data.buildings) {
     const [kind, h, flat, name] = rec;
     const m = toMetres(flat);
-    const height = h || DEFAULT_H[kind] || 14;
-    const geo = buildingGeo(m, height);
+    const special = landmarkKind(name, kind, city && city.id);
+    // a monument with no name and no height is a ruin or an old tomb, not a
+    // 26 m block: Giza's mastabas stand five or six metres
+    let height = h || DEFAULT_H[kind] || 14;
+    if (!h && kind === 'monument' && (!name || special === 'mastaba')) height = 4.5 + hash01(m[1], m[0]) * 2.5;
+    // the pyramids are pyramids, not prisms; mastabas lean in as they rise
+    const geo = special === 'pyramid' ? pyramidGeo(m, height)
+              : special === 'mastaba' ? mastabaGeo(m, height) : buildingGeo(m, height);
     if (!geo) continue;
     const [cx, cz] = centroid(m);
-    const matName = (look.wall && look.wall[kind]) || 'concrete';
-    const palette = (look.palette && look.palette[kind]) || [(look.tint && look.tint[kind]) || 0xc9c4b8];
-    const shade = pickColour(palette, cx, cz);
-    batch.add(geo, `${matName}|${shade}`, tinted(matName, shade, { repeat: 1, roughness: 0.93 }), cx, cz);
-
-    // a thin roof slab on top, in the city's roof colours (tiles, zinc, concrete)
-    const roofPal = (look.roof && (look.roof[kind] || look.roof.all)) || null;
-    if (roofPal) {
-      const roof = buildingGeo(m, 0.55);
-      if (roof) {
-        roof.translate(0, height, 0);
-        const rc = pickColour(roofPal, cz, cx);
-        batch.add(roof, `${look.roofMat || 'tile'}|${rc}`,
-                  tinted(look.roofMat || 'tile', rc, { repeat: 1, roughness: 0.85 }), cx, cz);
-      }
-    }
-
-    // collision: the footprint's bounding box is enough to keep the player out
     let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
     for (let i = 0; i < m.length; i += 2) {
       minX = Math.min(minX, m[i]); maxX = Math.max(maxX, m[i]);
       minZ = Math.min(minZ, m[i + 1]); maxZ = Math.max(maxZ, m[i + 1]);
     }
+
+    // a building with a street at its door gets a shop on the ground floor
+    let onStreet = false;
+    if (roads && (kind === 'block' || kind === 'civic')) {
+      const rad = Math.hypot(maxX - minX, maxZ - minZ) / 2;
+      const d = roads.edgeDist(cx, cz, rad + 14,
+        w => w.drive || w.cls === 'pedestrian' || w.cls === 'living_street');
+      onStreet = d - rad < 7;
+    }
+    const shop = facadeAttributes(geo, kind, height, hash01(cx * 1.7, cz * 2.3), onStreet,
+                                  special === 'pyramid' || special === 'arcade' || special === 'mastaba'
+                                    ? (special === 'mastaba' ? 'pyramid' : special) : null);
+
+    const matName = (look.wall && look.wall[kind]) || 'concrete';
+    const palette = (look.palette && look.palette[kind]) || [(look.tint && look.tint[kind]) || 0xc9c4b8];
+    const shade = pickColour(palette, cx, cz);
+    batch.add(colourise(geo, shade), `wall|${matName}`, wallMaterial(matName, style), cx, cz);
+
+    // a thin roof slab on top, in the city's roof colours (tiles, zinc, concrete),
+    // unless detail.js has given it a pitched roof (or it is a pyramid)
+    const roofPal = (look.roof && (look.roof[kind] || look.roof.all)) || null;
+    const roofDone = detail ? detail.building({ m, height, kind, name, cx, cz, shade, special, shop, roads,
+      roofColour: roofPal ? pickColour(roofPal, cz, cx) : null }) : false;
+    if (roofPal && !roofDone) {
+      const roof = buildingGeo(m, 0.55);
+      if (roof) {
+        roof.translate(0, height, 0);
+        const rc = pickColour(roofPal, cz, cx);
+        batch.add(colourise(roof, rc), 'roof', roofVC, cx, cz);
+      }
+    }
+
+    // collision: the footprint's bounding box is enough to keep the player out
     world.collider((minX + maxX) / 2, height / 2, (minZ + maxZ) / 2,
                    maxX - minX, height, maxZ - minZ, 0, 'building');
     stats.buildings++;
@@ -303,8 +374,12 @@ export function buildCity(world, data, look, onProgress) {
   }
   onProgress?.(0.9);
 
+  if (detail) detail.finish(scene, batch.meshes);
   const meshes = batch.finish();
-  return { meshes, stats };
+  // the world owns these, so they go when the city does
+  for (const mesh of meshes) if (!world.meshes.includes(mesh)) world.meshes.push(mesh);
+  if (detail) Object.assign(stats, detail.stats);
+  return { meshes, stats, detail };
 }
 
 function waterMaterial(look) {
@@ -336,19 +411,108 @@ export function nearSolemn(data, x, z, clear = 70) {
   return data.places.some(p => isSolemn(p.n) && Math.hypot(p.x - x, p.z - z) < clear);
 }
 
-/** A spot on open ground near (x, z): steps outward until it is clear of buildings. */
+/**
+ * A spot on open ground near (x, z): steps outward until it is clear of buildings.
+ *
+ * `radius` is how far to look first. Some landmarks are bigger than that: the
+ * Great Pyramid's base is 230 m across, so a relic sited on its map point and
+ * searched for within 70 m ends up inside the pyramid, where nobody can reach
+ * it. So when the near search finds nothing, it keeps widening (with finer
+ * steps round the bigger rings) until it reaches open ground; only a district
+ * with no open ground at all falls back to the landmark point itself.
+ */
 export function openSpotNear(world, x, z, radius = 60, avoid = null) {
   const probe = [];
+  const clear = (px, pz) => {
+    probe.length = 0;
+    world.near(px, pz, 1.4, probe);
+    return !probe.some(c => c.max.y > 0.6 && c.tag !== 'ground' &&
+                            px > c.min.x - 0.9 && px < c.max.x + 0.9 &&
+                            pz > c.min.z - 0.9 && pz < c.max.z + 0.9);
+  };
   for (let r = 0; r <= radius; r += 4) {
     for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
       const px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
-      probe.length = 0;
-      world.near(px, pz, 1.4, probe);
-      const blocked = probe.some(c => c.max.y > 0.6 && px > c.min.x - 0.9 && px < c.max.x + 0.9 &&
-                                      pz > c.min.z - 0.9 && pz < c.max.z + 0.9);
-      if (!blocked && !(avoid && avoid(px, pz))) return { x: px, z: pz };
+      if (clear(px, pz) && !(avoid && avoid(px, pz))) return { x: px, z: pz };
       if (r === 0) break;
     }
   }
+  // wider: the nearest clear point on each ring, rings 3 m apart
+  const far = Math.max(radius * 8, 600);
+  for (let r = radius + 3; r <= far; r += 3) {
+    const n = Math.max(16, Math.ceil((Math.PI * 2 * r) / 2.5));
+    for (let k = 0; k < n; k++) {
+      const a = (k / n) * Math.PI * 2;
+      const px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
+      if (clear(px, pz) && !(avoid && avoid(px, pz))) return { x: px, z: pz };
+    }
+  }
   return { x, z };
+}
+
+/**
+ * Which ground can be walked to from (sx, sz)? A flood fill over a coarse grid
+ * of the district, with every solid collider (inflated by the walker's radius)
+ * marked as wall. A cell counts as blocked if anything at all overlaps it, so
+ * "reachable" here errs on the side of caution.
+ *
+ * Returns { ok(x, z), nearest(x, z) }: whether a point is reachable, and the
+ * closest reachable point to it (null if the fill never got anywhere).
+ */
+export function walkableFrom(world, half, sx, sz, cell = 2) {
+  const ext = half + 300;
+  const n = Math.ceil((ext * 2) / cell);
+  const idx = (x, z) => {
+    const ix = Math.floor((x + ext) / cell), iz = Math.floor((z + ext) / cell);
+    return ix < 0 || iz < 0 || ix >= n || iz >= n ? -1 : iz * n + ix;
+  };
+  const wall = new Uint8Array(n * n);
+  const R = 0.45;
+  for (const c of world.colliders) {
+    if (c.tag === 'ground' || c.tag === 'edge' || c.max.y <= 0.6 || c.min.y > 1.7) continue;
+    const x0 = Math.max(0, Math.floor((c.min.x - R + ext) / cell)), x1 = Math.min(n - 1, Math.floor((c.max.x + R + ext) / cell));
+    const z0 = Math.max(0, Math.floor((c.min.z - R + ext) / cell)), z1 = Math.min(n - 1, Math.floor((c.max.z + R + ext) / cell));
+    for (let iz = z0; iz <= z1; iz++) wall.fill(1, iz * n + x0, iz * n + x1 + 1);
+  }
+  const seen = new Uint8Array(n * n);
+  const queue = new Int32Array(n * n);
+  let head = 0, tail = 0, count = 0;
+  const start = idx(sx, sz);
+  if (start >= 0) {
+    // the start cell itself may touch a lamp post; let the fill begin anyway
+    seen[start] = 1; queue[tail++] = start;
+    while (head < tail) {
+      const c = queue[head++]; count++;
+      const cx = c % n, cz = (c / n) | 0;
+      if (cx > 0 && !seen[c - 1] && !wall[c - 1]) { seen[c - 1] = 1; queue[tail++] = c - 1; }
+      if (cx < n - 1 && !seen[c + 1] && !wall[c + 1]) { seen[c + 1] = 1; queue[tail++] = c + 1; }
+      if (cz > 0 && !seen[c - n] && !wall[c - n]) { seen[c - n] = 1; queue[tail++] = c - n; }
+      if (cz < n - 1 && !seen[c + n] && !wall[c + n]) { seen[c + n] = 1; queue[tail++] = c + n; }
+    }
+  }
+  const ok = (x, z) => { const i = idx(x, z); return i >= 0 && seen[i] === 1; };
+  const nearest = (x, z) => {
+    if (ok(x, z)) return { x, z };
+    const cx = Math.floor((x + ext) / cell), cz = Math.floor((z + ext) / cell);
+    for (let r = 1; r < n; r++) {
+      let best = null, bestD = Infinity;
+      for (let dz = -r; dz <= r; dz++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (Math.abs(dx) !== r && Math.abs(dz) !== r) continue;       // the ring only
+          const ix = cx + dx, iz = cz + dz;
+          if (ix < 0 || iz < 0 || ix >= n || iz >= n) continue;
+          const i = iz * n + ix;
+          if (!seen[i] || i === start) continue;
+          // a cell whose neighbours are all open, so the spot is not wedged in a corner
+          if (wall[i - 1] || wall[i + 1] || wall[i - n] || wall[i + n]) continue;
+          const d = dx * dx + dz * dz;
+          if (d < bestD) { bestD = d; best = { x: (ix + 0.5) * cell - ext, z: (iz + 0.5) * cell - ext }; }
+        }
+      }
+      if (best) return best;
+      if (r > 400) break;
+    }
+    return null;
+  };
+  return { ok, nearest, cells: count };
 }

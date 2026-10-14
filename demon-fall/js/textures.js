@@ -501,3 +501,144 @@ export function disposeAll() {
   cache.forEach(v => { if (v.dispose) v.dispose(); });
   cache.clear();
 }
+
+/* ---------------------------------------------------- detail textures */
+
+/** Star-shaped muzzle flash: hot core, ragged petals. */
+export function flashTexture() {
+  if (cache.has('flash')) return cache.get('flash');
+  const cv = canvas(128), ctx = cv.getContext('2d'), rng = makeRng(17);
+  ctx.translate(64, 64);
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2 + rng() * 0.3, len = 34 + rng() * 28, w = 6 + rng() * 6;
+    const g = ctx.createLinearGradient(0, 0, Math.cos(a) * len, Math.sin(a) * len);
+    g.addColorStop(0, 'rgba(255,240,200,1)'); g.addColorStop(0.5, 'rgba(255,170,60,0.7)'); g.addColorStop(1, 'rgba(255,90,20,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a + 1.57) * w, Math.sin(a + 1.57) * w);
+    ctx.lineTo(Math.cos(a) * len, Math.sin(a) * len);
+    ctx.lineTo(Math.cos(a - 1.57) * w, Math.sin(a - 1.57) * w);
+    ctx.fill();
+  }
+  const core = ctx.createRadialGradient(0, 0, 0, 0, 0, 30);
+  core.addColorStop(0, 'rgba(255,255,240,1)'); core.addColorStop(0.4, 'rgba(255,210,120,0.85)'); core.addColorStop(1, 'rgba(255,120,40,0)');
+  ctx.fillStyle = core; ctx.beginPath(); ctx.arc(0, 0, 30, 0, Math.PI * 2); ctx.fill();
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  cache.set('flash', t);
+  return t;
+}
+
+/** Side view of the flash: a flame tongue along the barrel. */
+export function flameTexture() {
+  if (cache.has('flame')) return cache.get('flame');
+  const cv = document.createElement('canvas'); cv.width = 128; cv.height = 32;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 128, 0);
+  g.addColorStop(0, 'rgba(255,250,220,1)'); g.addColorStop(0.35, 'rgba(255,190,80,0.85)'); g.addColorStop(1, 'rgba(255,80,20,0)');
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.moveTo(0, 6); ctx.quadraticCurveTo(70, 0, 128, 16); ctx.quadraticCurveTo(70, 32, 0, 26); ctx.closePath(); ctx.fill();
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  cache.set('flame', t);
+  return t;
+}
+
+/** Bullet hole: dark crater, soot ring, chipped rim and hairline cracks. */
+export function holeTexture() {
+  if (cache.has('hole')) return cache.get('hole');
+  const cv = canvas(128), ctx = cv.getContext('2d'), rng = makeRng(23);
+  ctx.clearRect(0, 0, 128, 128);
+  const soot = ctx.createRadialGradient(64, 64, 6, 64, 64, 56);
+  soot.addColorStop(0, 'rgba(20,16,14,0.85)'); soot.addColorStop(0.5, 'rgba(30,26,22,0.35)'); soot.addColorStop(1, 'rgba(30,26,22,0)');
+  ctx.fillStyle = soot; ctx.fillRect(0, 0, 128, 128);
+  ctx.strokeStyle = 'rgba(15,12,10,0.8)'; ctx.lineWidth = 1.6;
+  for (let i = 0; i < 7; i++) {
+    let x = 64, y = 64, a = rng() * Math.PI * 2;
+    ctx.beginPath(); ctx.moveTo(x, y);
+    for (let k = 0; k < 5; k++) { a += (rng() - 0.5) * 0.8; x += Math.cos(a) * 8; y += Math.sin(a) * 8; ctx.lineTo(x, y); }
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(190,180,165,0.55)';   // chipped, paler rim
+  ctx.beginPath(); ctx.arc(64, 64, 15, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#060504';
+  ctx.beginPath();
+  for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2, r = 9 + rng() * 4; ctx.lineTo(64 + Math.cos(a) * r, 64 + Math.sin(a) * r); }
+  ctx.closePath(); ctx.fill();
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  cache.set('hole', t);
+  return t;
+}
+
+/**
+ * Atlas of 4 x 2 set-dressing decals (graffiti, posters, stains, cracks, sigils)
+ * with alpha. Cell i covers u in [(i % 4) / 4, +1/4] and v in [1 - ((i / 4 | 0) + 1) / 2, +1/2].
+ */
+export function dressAtlas() {
+  if (cache.has('dressAtlas')) return cache.get('dressAtlas');
+  const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 512;
+  const ctx = cv.getContext('2d'), rng = makeRng(311);
+  const cell = (i, fn) => { ctx.save(); ctx.translate((i % 4) * 256, (i / 4 | 0) * 256); ctx.beginPath(); ctx.rect(0, 0, 256, 256); ctx.clip(); fn(); ctx.restore(); };
+  const word = (txt, col, size, rot) => {
+    ctx.save(); ctx.translate(128, 128); ctx.rotate(rot);
+    ctx.font = '900 ' + size + 'px Impact, "Arial Black", sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round'; ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(10,8,8,0.85)'; ctx.strokeText(txt, 0, 0);
+    ctx.fillStyle = col; ctx.fillText(txt, 0, 0);
+    for (let d = 0; d < 7; d++) { const x = -90 + rng() * 180, l = 8 + rng() * 34; ctx.fillRect(x, size * 0.32, 3, l); }
+    ctx.restore();
+  };
+  cell(0, () => word('REPENT', 'rgba(200,30,30,0.9)', 58, -0.08));
+  cell(1, () => word('THEY RISE', 'rgba(230,220,200,0.85)', 44, 0.05));
+  cell(2, () => {    // a ritual sigil sprayed in red
+    ctx.strokeStyle = 'rgba(190,20,25,0.85)'; ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.arc(128, 128, 88, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath();
+    for (let i = 0; i <= 5; i++) { const a = -Math.PI / 2 + i * Math.PI * 4 / 5; ctx.lineTo(128 + Math.cos(a) * 84, 128 + Math.sin(a) * 84); }
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(190,20,25,0.8)';
+    for (let d = 0; d < 9; d++) ctx.fillRect(60 + rng() * 140, 200 + rng() * 10, 3, 10 + rng() * 40);
+  });
+  cell(3, () => {    // torn missing-person poster
+    ctx.save(); ctx.translate(128, 128); ctx.rotate(0.06);
+    ctx.fillStyle = 'rgba(214,204,178,0.95)'; ctx.fillRect(-70, -95, 140, 190);
+    ctx.fillStyle = 'rgba(30,28,26,0.9)'; ctx.font = 'bold 26px Impact, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('MISSING', 0, -62);
+    ctx.fillStyle = 'rgba(90,80,70,0.8)'; ctx.fillRect(-42, -45, 84, 84);
+    ctx.fillStyle = 'rgba(40,36,32,0.7)'; for (let l = 0; l < 4; l++) ctx.fillRect(-55, 52 + l * 10, 110 - l * 14, 4);
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.beginPath(); ctx.moveTo(30, 95); ctx.lineTo(70, 40); ctx.lineTo(70, 95); ctx.fill();
+    ctx.restore();
+  });
+  cell(4, () => {    // oil stain
+    for (let i = 0; i < 14; i++) {
+      const x = 128 + (rng() - 0.5) * 120, y = 128 + (rng() - 0.5) * 120, r = 20 + rng() * 50;
+      ctx.save(); ctx.translate(x, y); ctx.scale(r, r * (0.6 + rng() * 0.4));
+      const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+      g.addColorStop(0, 'rgba(10,8,8,0.55)'); g.addColorStop(1, 'rgba(10,8,8,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, 1, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    }
+  });
+  cell(5, () => {    // ground crack network
+    ctx.strokeStyle = 'rgba(8,6,6,0.85)'; ctx.lineCap = 'round';
+    for (let i = 0; i < 6; i++) {
+      let x = 128, y = 128, a = rng() * Math.PI * 2;
+      for (let k = 0; k < 9; k++) {
+        ctx.lineWidth = Math.max(1, 4 - k * 0.4);
+        ctx.beginPath(); ctx.moveTo(x, y);
+        a += (rng() - 0.5) * 0.9; x += Math.cos(a) * 14; y += Math.sin(a) * 14;
+        ctx.lineTo(x, y); ctx.stroke();
+      }
+    }
+  });
+  cell(6, () => {    // scorch
+    const g = ctx.createRadialGradient(128, 128, 10, 128, 128, 120);
+    g.addColorStop(0, 'rgba(5,4,4,0.9)'); g.addColorStop(0.6, 'rgba(20,14,10,0.5)'); g.addColorStop(1, 'rgba(20,14,10,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 256);
+  });
+  cell(7, () => word('NO GOD', 'rgba(255,140,40,0.9)', 62, 0.1));
+  const t = new THREE.CanvasTexture(cv);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  cache.set('dressAtlas', t);
+  return t;
+}

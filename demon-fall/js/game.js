@@ -19,6 +19,7 @@ import { pickup as makePickup } from './levels-a.js';
 import { LEVEL_1, LEVEL_2, LEVEL_3 } from './levels-a.js';
 import { LEVEL_4, LEVEL_5, LEVEL_6 } from './levels-b.js';
 import { MarsFlight } from './mars.js';
+import { dress } from './dressing.js';
 import { clamp, damp, makeRng, randRange, fmtTime, TAU, Rolling } from './util.js';
 import * as audio from './audio.js';
 
@@ -48,10 +49,10 @@ const GradeShader = {
       col.b = texture2D(tDiffuse, uv - d * ca).b;
       col.a = 1.0;
       // vignette
-      col.rgb *= 1.0 - r2 * (0.9 + hurt * 0.8) * strength;
+      col.rgb *= 1.0 - r2 * (0.55 + hurt * 0.8) * strength;
       // grade toward the level's tint in the shadows
       float lum = dot(col.rgb, vec3(0.299, 0.587, 0.114));
-      col.rgb = mix(col.rgb, tint + col.rgb * 0.7, (1.0 - lum) * 0.35 * strength);
+      col.rgb = mix(col.rgb, tint + col.rgb * 0.8, (1.0 - lum) * 0.2 * strength);
       // damage pulse
       col.rgb += vec3(0.5, 0.02, 0.05) * hurt * (0.4 + 0.3 * sin(time * 9.0)) * (0.3 + r2);
       // grain
@@ -70,7 +71,7 @@ export class Game {
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.3;
+    this.renderer.toneMappingExposure = 2.0;
     document.body.appendChild(this.renderer.domElement);
 
     this.scene = new THREE.Scene();
@@ -273,18 +274,20 @@ export class Game {
     this.fx.lights.forEach(l => this.scene.add(l.light));
 
     const theme = def.theme;
-    this.scene.fog = new THREE.FogExp2(theme.fog, theme.fogDensity);
-    this.scene.background = new THREE.Color(theme.fog);
+    // the fog keeps its colour but thins a little, and lifts toward a readable night blue
+    const fogCol = new THREE.Color(theme.fog).lerp(new THREE.Color(0x2a2c3a), 0.35);
+    this.scene.fog = new THREE.FogExp2(fogCol, theme.fogDensity * 0.8);
+    this.scene.background = fogCol.clone();
     this.sky = makeSky(theme);
     this.scene.add(this.sky);
     // indoor stages get dust instead of falling ash
     this.ash = new Ash(this.scene, theme.dark || theme.rift === 0
       ? { count: 400, colour: 0x8a8478, embers: 0.02, size: 0.05 }
-      : { count: 800, colour: 0xb8aca0, embers: 0.14, size: 0.09 });
+      : { count: 900, colour: 0xb8aca0, embers: 0.3, size: 0.09 });
 
-    const hemi = new THREE.HemisphereLight(theme.hemi[0], theme.hemi[1], theme.hemi[2] * 2.4);
+    const hemi = new THREE.HemisphereLight(new THREE.Color(theme.hemi[0]).lerp(new THREE.Color(0x8a90b0), 0.3), theme.hemi[1], theme.hemi[2] * 3.6);
     // a little ambient so shadowed corners stay readable rather than pure black
-    const ambient = new THREE.AmbientLight(theme.hemi[0], 0.6);
+    const ambient = new THREE.AmbientLight(new THREE.Color(theme.hemi[0]).lerp(new THREE.Color(0x9a8a90), 0.45), 2.4);
     this.scene.add(hemi, ambient);
 
     this.sun = new THREE.DirectionalLight(theme.sun.colour, theme.sun.intensity * 2.4);
@@ -302,6 +305,9 @@ export class Game {
     this.world = new World(this.scene, theme);
     const rng = makeRng(1000 + index * 7717);
     this.script = def.build(this.world, rng);
+    // set dressing has its own random stream, so layouts and spawns are unchanged
+    this.world.buildGrid();
+    dress(this.world, theme, index, this.quality >= 2 ? 1 : 0.5, this.script);
     this.world.finish();
 
     for (const [kind, x, y, z] of (this.script.pickups || [])) makePickup(this.world, kind, x, y, z);
@@ -630,7 +636,7 @@ export class Game {
     requestAnimationFrame(t => this.frame(t));
     const raw = (now - this.lastFrame) / 1000;
     this.lastFrame = now;
-    const dt = Math.min(0.05, raw);
+    const dt = Math.max(0, Math.min(0.05, raw));
     this.time += dt;
 
     this.adaptQuality(raw);

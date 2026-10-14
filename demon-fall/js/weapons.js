@@ -3,6 +3,23 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { clamp, damp, randRange, TAU } from './util.js';
 import * as audio from './audio.js';
+import { flashTexture, flameTexture } from './textures.js';
+
+/** Two non-indexed-safe geometries joined into one (for the crossed flash planes). */
+function mergeTwo(a, b) {
+  const g = new THREE.BufferGeometry();
+  for (const name of ['position', 'normal', 'uv']) {
+    const x = a.attributes[name], y = b.attributes[name];
+    const arr = new Float32Array(x.array.length + y.array.length);
+    arr.set(x.array); arr.set(y.array, x.array.length);
+    g.setAttribute(name, new THREE.BufferAttribute(arr, x.itemSize));
+  }
+  const ia = a.index.array, ib = b.index.array, n = a.attributes.position.count, idx = [];
+  for (const v of ia) idx.push(v);
+  for (const v of ib) idx.push(v + n);
+  g.setIndex(idx);
+  return g;
+}
 
 export const WEAPONS = {
   pistol: {
@@ -201,12 +218,20 @@ export class Weapon {
 
   makeFlash() {
     const g = new THREE.Group();
-    const mat = new THREE.MeshBasicMaterial({ color: 0xffd9a0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
-    for (let i = 0; i < 3; i++) {
-      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), mat.clone());
-      m.rotation.z = (i / 3) * TAU;
+    const mat = new THREE.MeshBasicMaterial({ color: 0xffe2b8, map: flashTexture(), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false });
+    for (let i = 0; i < 2; i++) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.4 - i * 0.12, 0.4 - i * 0.12), mat.clone());
+      m.rotation.z = (i / 2) * TAU + 0.4;
+      m.position.z = -i * 0.03;
       g.add(m);
     }
+    // the flame tongue seen from the side: two crossed planes reaching forward
+    const a = new THREE.PlaneGeometry(0.42, 0.11).translate(0.21, 0, 0).rotateY(Math.PI / 2);
+    const b = a.clone().rotateZ(Math.PI / 2);
+    const tongue = new THREE.Mesh(mergeTwo(a, b), new THREE.MeshBasicMaterial({
+      color: 0xffd9a0, map: flameTexture(), transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide
+    }));
+    g.add(tongue);
     g.position.copy(this.model.userData.muzzle);
     this.model.add(g);
     this.muzzleFlash = g;

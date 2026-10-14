@@ -37,6 +37,16 @@ export const CITIES = [
       },
       roof: { all: [0x5a5d61, 0x4c4f53, 0x6a6d70, 0x7a6a5c] }, roofMat: 'tile'
     },
+    street: {
+      // lindens down Unter den Linden, lantern posts, ivory taxis
+      drive: 'right', lamp: 'post', lampColour: 0xffd6a0, line: 0xe9e4d6,
+      trees: [['broad', 1]], canopy: [0x5f8a3c, 0x6b9444, 0x557f36, 0x76984a],
+      cars: [0x1c1f24, 0xc9ccd0, 0xe9e9e6, 0x2c3a52, 0x5a5f66, 0xe8dcc0, 0x7a1f24],
+      people: 1, traffic: 1, district: 'Mitte'
+    },
+    // linden leaves on the wind, swifts screaming over the rooftops
+    ambient: { leaves: [0x9aa83a, 0xb8a63a, 0x7f9a36], leafCount: 50, birds: 'swift' },
+    detail: { shutters: 0, balconies: 0.12, surrounds: 0.85, grime: 0.14, domes: 0x5f9a86, roofs: 'mansard', rooftop: ['chimney', 'vent', 'dish'], awnings: [0x2a3a52, 0x6a1f24, 0x2f4a3a, 0xd8d2c4] },
     spawn: { at: ['Brandenburger Tor'], offset: [95, 0], facing: Math.PI / 2 },
     relics: [
       { at: ['Brandenburger Tor'], name: 'Brass Quadriga Pin',
@@ -74,6 +84,16 @@ export const CITIES = [
       },
       roof: { all: [0xb4573a, 0xa54e33, 0xc2653f, 0x8f4530] }, roofMat: 'tile'
     },
+    street: {
+      // umbrella pines over the Forum, small white and red cars
+      drive: 'right', lamp: 'post', lampColour: 0xffc98a, line: 0xeae3d0,
+      trees: [['pine', 0.55], ['broad', 0.45]],
+      canopy: { pine: [0x44612f, 0x4f6e35, 0x3d5a2b], broad: [0x5a7a3a, 0x667f42, 0x6f8a44] },
+      cars: [0xefefea, 0xb8262a, 0xc4c7ca, 0x2a2e34, 0x3b5a7a, 0xe7e2d2],
+      people: 1.1, traffic: 0.9, district: 'Celio · Monti'
+    },
+    ambient: { birds: 'swift', birdCount: 18 },
+    detail: { shutters: 0.55, shutter: 0x3d5a36, domes: 0x8f9498, balconies: 0.14, surrounds: 0.5, grime: 0.2, roofs: 'hip', rooftop: ['chimney', 'aerial', 'terrace'], awnings: [0x8a2a22, 0x2f4a3a, 0xc9a24a, 0x3a2a22, 0xe6dcc6] },
     spawn: { at: ['Colosseo', 'Colosseum', 'Anfiteatro Flavio'], offset: [70, 40], facing: -Math.PI / 2 },
     relics: [
       { at: ['Colosseo', 'Colosseum', 'Anfiteatro Flavio'], name: 'Arena Ticket Shard',
@@ -99,7 +119,7 @@ export const CITIES = [
     },
     look: {
       // the plateau: limestone, sand-coloured concrete and flat pale roofs
-      ground: 'concrete', groundTint: 0xe2d4b0, road: 'asphalt', roadTint: 0x7d7566,
+      ground: 'sand', groundTint: 0xf2e6c8, road: 'asphalt', roadTint: 0x7d7566,
       path: 'sand', pathTint: 0xd9c091, green: 'foliage', greenTint: 0x789a4e, water: 0x3f86a0,
       wall: { house: 'plaster', block: 'plaster', civic: 'concrete', industrial: 'brick', monument: 'sand' },
       palette: {
@@ -111,6 +131,16 @@ export const CITIES = [
       },
       roof: { all: [0xc9b489, 0xb9a377, 0xa89468] }, roofMat: 'sand'
     },
+    street: {
+      // date palms, tall sodium masts, dusty white cars
+      drive: 'right', lamp: 'mast', lampColour: 0xffb060, line: 0xe6dcc0,
+      trees: [['palm', 1]], canopy: [0x6b8a3a, 0x7a9442, 0x5e7e34],
+      cars: [0xe8e4da, 0xd9cfb8, 0x1e2024, 0xa9a49a, 0x3a4a5a],
+      people: 0.7, traffic: 0.7, district: 'Giza'
+    },
+    // grit blowing off the plateau, kites riding the thermals
+    ambient: { sand: true, birds: 'kite' },
+    detail: { shutters: 0.25, shutter: 0x6a5a3a, balconies: 0.35, surrounds: 0.2, grime: 0.22, roofs: 'flat', rooftop: ['tank', 'dish', 'rebar', 'vent'], awnings: [0x2a6a7a, 0xc84a2a, 0xe8c040, 0x3a5a2a] },
     spawn: { at: ['Great Pyramid of Giza', 'Pyramid of Khufu', 'هرم خوفو'], offset: [140, 120], facing: -Math.PI / 4 },
     relics: [
       { at: ['Great Pyramid of Giza', 'Pyramid of Khufu', 'هرم خوفو'], name: 'Capstone Fragment',
@@ -148,6 +178,16 @@ export const CITIES = [
       },
       roof: { all: [0xa85a3c, 0xb96a45, 0x8e5a48, 0x6f6f72] }, roofMat: 'tile'
     },
+    street: {
+      // plane trees, lantern posts, yellow taxis everywhere
+      drive: 'right', lamp: 'post', lampColour: 0xffcf96, line: 0xe8e2d2,
+      trees: [['broad', 1]], canopy: [0x628a42, 0x6f9648, 0x587e3a],
+      cars: [0xf2c230, 0xf2c230, 0xe9e9e6, 0x1c1f24, 0xb9bcc0, 0x7a2a24],
+      people: 1.2, traffic: 1, district: 'Sultanahmet'
+    },
+    // gulls off the Bosphorus
+    ambient: { birds: 'gull', birdCount: 12 },
+    detail: { shutters: 0.3, shutter: 0x6a4a32, balconies: 0.16, surrounds: 0.5, grime: 0.18, domes: 0x8c9399, roofs: 'hip', rooftop: ['tank', 'dish', 'chimney'], awnings: [0xa82a2a, 0x2a4a7a, 0xe6dcc6, 0x2f5a3a] },
     spawn: { at: ['Ayasofya', 'Hagia Sophia', 'Ayasofya-i Kebir Cami-i Şerifi'], offset: [60, 60], facing: Math.PI / 2 },
     relics: [
       { at: ['Ayasofya', 'Hagia Sophia'], name: 'Mosaic Tessera',
@@ -185,6 +225,17 @@ export const CITIES = [
       },
       roof: { all: [0x3f4448, 0x34383c, 0x4a5055, 0x5a5f5c] }, roofMat: 'tile'
     },
+    street: {
+      // maples turning, black pines, low lanterns; Japan drives on the left
+      drive: 'left', lamp: 'lantern', lampColour: 0xffc27a, line: 0xeeeae0,
+      trees: [['broad', 0.6], ['pine', 0.4]],
+      canopy: { broad: [0x9a3a22, 0xc2622a, 0x5f8f3a, 0xa8452a, 0xb8862e], pine: [0x3d5a2e, 0x46663a, 0x344f28] },
+      cars: [0xf0f0ec, 0xc9ccd0, 0x16181c, 0x8fa6b8, 0x2a2e34],
+      people: 0.9, traffic: 0.6, district: 'Higashiyama'
+    },
+    // maple leaves coming down, crows overhead, fireflies by the canal at night
+    ambient: { leaves: [0xc2442a, 0xd8742a, 0xa8302a, 0xe0a030], leafCount: 150, birds: 'swift', birdCount: 7, fireflies: true },
+    detail: { shutters: 0, balconies: 0.25, surrounds: 0.1, grime: 0.12, roofs: 'temple', rooftop: ['vent', 'aerial'], awnings: [0x2a2a30, 0x6a5a3a, 0x8a2a22, 0x2a3a4a] },
     spawn: { at: ['銀閣', '慈照寺', 'Ginkaku'], offset: [70, 60], facing: -Math.PI / 2 },
     relics: [
       { at: ['銀閣', '慈照寺', 'Ginkaku'], name: 'Sand Garden Rake Head',
@@ -223,6 +274,16 @@ export const CITIES = [
       },
       roof: { all: [0xb45a3c, 0xa8503a, 0x9c6b52, 0x6f7276] }, roofMat: 'tile'
     },
+    street: {
+      // royal palms and forest giants, yellow centre lines, yellow taxis
+      drive: 'right', lamp: 'mast', lampColour: 0xffc07a, line: 0xe8c040,
+      trees: [['palm', 0.45], ['broad', 0.55]], canopy: [0x3f7a35, 0x4a8a3c, 0x356a2e, 0x5a9444],
+      cars: [0xf2c230, 0xe9e9e6, 0x1c1f24, 0xc4c7ca, 0x2f5a8a, 0x8a2a2a],
+      people: 0.8, traffic: 0.6, district: 'Alto da Boa Vista'
+    },
+    // vultures and frigatebirds gliding over the forest, fireflies after dark
+    ambient: { birds: 'kite', birdCount: 7, fireflies: true },
+    detail: { shutters: 0.3, shutter: 0x2a5a7a, balconies: 0.3, surrounds: 0.3, grime: 0.2, roofs: 'hip', rooftop: ['tank', 'dish'], awnings: [0x2a7a4a, 0xe8c040, 0x2a4a8a, 0xc84a2a] },
     spawn: { at: ['Cristo Redentor', 'Christ the Redeemer'], offset: [60, 60], facing: -Math.PI / 4 },
     relics: [
       { at: ['Cristo Redentor', 'Christ the Redeemer'], name: 'Soapstone Tile',

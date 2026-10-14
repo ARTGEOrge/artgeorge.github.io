@@ -47,7 +47,7 @@ export class Player {
     this.torch.target.position.set(0, 0, -1);
     camera.add(this.torch, this.torch.target);
     this.torchOn = true;
-    this.torchPower = 85;
+    this.torchPower = 60;
   }
 
   reset(pos, facing = 0, keep = null) {

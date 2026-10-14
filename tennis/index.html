@@ -28,6 +28,8 @@
     text-shadow: 1px 1px 0 #000;
     z-index: 5;
   }
+  /* keyboard hint would cover the serve prompt on phones / touch screens */
+  @media (max-width: 700px), (pointer: coarse) { #hint { display: none; } }
 </style>
 </head>
 <body>
@@ -58,7 +60,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.22;
+renderer.toneMappingExposure = 1.0;
 // Keep the older intensity scaling so the hand-tuned light values stay readable.
 renderer.useLegacyLights = true;
 
@@ -250,6 +252,19 @@ function makeCourtTexture() {
   cx.moveTo(0, ch / 2); cx.lineTo(cw, ch / 2);
   cx.stroke();
 
+  // Wear: skid marks behind the baselines, ball marks
+  for (const by of [ch * 0.02, ch * 0.98]) {
+    for (let i = 0; i < 70; i++) {
+      const x = cw * (0.2 + Math.random() * 0.6), y = by + (Math.random() - 0.5) * ch * 0.06;
+      cx.strokeStyle = 'rgba(' + (Math.random() < 0.5 ? '255,255,255' : '10,30,60') + ',' + (0.04 + Math.random() * 0.07) + ')';
+      cx.lineWidth = 2 + Math.random() * 5; cx.lineCap = 'round';
+      cx.beginPath(); cx.moveTo(x, y); cx.lineTo(x + (Math.random() - 0.5) * 60, y + (Math.random() - 0.5) * 18); cx.stroke();
+    }
+  }
+  for (let i = 0; i < 140; i++) {
+    const x = Math.random() * cw, y = Math.random() * ch;
+    cx.fillStyle = 'rgba(220,240,120,0.06)'; cx.beginPath(); cx.ellipse(x, y, 5, 3, Math.random() * 3, 0, Math.PI * 2); cx.fill();
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.anisotropy = 12;
   tex.colorSpace = THREE.SRGBColorSpace;
@@ -257,8 +272,17 @@ function makeCourtTexture() {
 }
 
 const courtTex = makeCourtTexture();
+// Grain bump for the acrylic surface + apron
+function makeGrainTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const g = c.getContext('2d'); g.fillStyle = '#808080'; g.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 9000; i++) { const v = (Math.random() * 255) | 0; g.fillStyle = 'rgba(' + v + ',' + v + ',' + v + ',0.35)'; g.fillRect(Math.random() * 256, Math.random() * 256, 1 + Math.random() * 1.5, 1 + Math.random() * 1.5); }
+  const t = new THREE.CanvasTexture(c); t.wrapS = t.wrapT = THREE.RepeatWrapping; return t;
+}
+const grainTex = makeGrainTexture();
+const courtGrain = grainTex.clone(); courtGrain.repeat.set(6, 13); courtGrain.needsUpdate = true;
 const courtMat = new THREE.MeshStandardMaterial({
-  map: courtTex, roughness: 0.42, metalness: 0.10,
+  map: courtTex, roughness: 0.42, metalness: 0.10, bumpMap: courtGrain, bumpScale: 0.6,
   envMapIntensity: 0.6,
 });
 const court = new THREE.Mesh(new THREE.PlaneGeometry(COURT_W, COURT_L), courtMat);
@@ -268,7 +292,8 @@ court.receiveShadow = true;
 scene.add(court);
 
 // Surrounding apron
-const apronMat = new THREE.MeshStandardMaterial({ color: 0x0d2a52, roughness: 0.85 });
+const apronGrain = grainTex.clone(); apronGrain.repeat.set(40, 40); apronGrain.needsUpdate = true;
+const apronMat = new THREE.MeshStandardMaterial({ color: 0x0f3a3a, roughness: 0.85, bumpMap: apronGrain, bumpScale: 0.8 });
 const apron = new THREE.Mesh(new THREE.PlaneGeometry(90, 90), apronMat);
 apron.rotation.x = -Math.PI / 2;
 apron.position.y = 0;
@@ -381,10 +406,7 @@ function buildCrowd() {
   const points = new THREE.Points(geo, mat);
   return points;
 }
-deferBuild(() => {
-  const crowd = buildCrowd();
-  scene.add(crowd);
-});
+// (the old point-sprite crowd was replaced by the instanced billboard crowd below)
 
 // Floodlight pylons in 4 corners
 const pylonGroup = new THREE.Group();
@@ -577,24 +599,279 @@ deferBuild(() => {
   }
 });
 
+// ================== STADIUM DETAIL (sky, seats, billboard crowd, roof, props) ==================
+// All of this is presentation; it is built after the first frame (deferBuild) and uses
+// instancing so the whole crowd + seating costs only a couple of draw calls.
+const crowdUniforms = { uTime: { value: 0 }, uCheer: { value: 0 } };
+let ribbonTex = null;
+
+function makeSkyTexture() {
+  const c = document.createElement('canvas'); c.width = 16; c.height = 512;
+  const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 0, 512);
+  gr.addColorStop(0, '#01030b'); gr.addColorStop(0.30, '#04102a'); gr.addColorStop(0.46, '#12305e');
+  gr.addColorStop(0.50, '#24497c'); gr.addColorStop(0.54, '#0b1f40'); gr.addColorStop(1, '#040a18');
+  g.fillStyle = gr; g.fillRect(0, 0, 16, 512);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+deferBuild(() => {
+  const sky = new THREE.Mesh(new THREE.SphereGeometry(160, 32, 16),
+    new THREE.MeshBasicMaterial({ map: makeSkyTexture(), side: THREE.BackSide, fog: false, depthWrite: false }));
+  sky.renderOrder = -10;
+  scene.add(sky);
+  const n = 500, pos = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, e = 0.12 + Math.random() * 1.3;
+    pos[i * 3] = Math.cos(a) * Math.cos(e) * 150; pos[i * 3 + 1] = Math.sin(e) * 150; pos[i * 3 + 2] = Math.sin(a) * Math.cos(e) * 150;
+  }
+  const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  scene.add(new THREE.Points(sg, new THREE.PointsMaterial({ color: 0xcfe0ff, size: 1.6, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.8 })));
+});
+
+// 12-cell fan atlas: 8 front-facing fans, 4 seen from behind (for the near stand)
+function makeFanAtlas() {
+  const CW = 64, CH = 128, N = 12;
+  const c = document.createElement('canvas'); c.width = CW * N; c.height = CH;
+  const g = c.getContext('2d');
+  const shirts = ['#ef4444', '#3b82f6', '#fcd34d', '#f8fafc', '#22c55e', '#a855f7', '#f97316', '#0f172a', '#ef4444', '#3b82f6', '#e5e7eb', '#14b8a6'];
+  const skins = ['#f1c9a5', '#d9a77e', '#b07850', '#7a4f2e', '#e8b48a', '#5a3a22'];
+  const hairs = ['#1a0e08', '#3e2008', '#7a4a1a', '#cf9a4a', '#222', '#a8a8a8'];
+  for (let i = 0; i < N; i++) {
+    const x0 = i * CW, cx = x0 + CW / 2, back = i >= 8;
+    const shirt = shirts[i], skin = skins[i % skins.length], hair = hairs[(i * 5) % hairs.length];
+    g.save(); g.beginPath(); g.rect(x0 + 1, 0, CW - 2, CH); g.clip();
+    // arms (raised on some)
+    const raised = !back && (i % 3 === 0);
+    g.strokeStyle = skin; g.lineWidth = 9; g.lineCap = 'round';
+    if (raised) { g.beginPath(); g.moveTo(cx - 16, 72); g.lineTo(cx - 24, 30); g.moveTo(cx + 16, 72); g.lineTo(cx + 24, 30); g.stroke(); }
+    // torso
+    g.fillStyle = shirt; g.beginPath();
+    g.moveTo(cx - 24, CH); g.lineTo(cx - 24, 78); g.quadraticCurveTo(cx - 22, 64, cx - 10, 62); g.lineTo(cx + 10, 62); g.quadraticCurveTo(cx + 22, 64, cx + 24, 78); g.lineTo(cx + 24, CH); g.closePath(); g.fill();
+    g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(cx + 10, 66, 14, CH - 66);
+    if (!back) { g.fillStyle = 'rgba(255,255,255,0.55)'; g.font = 'bold 14px Arial'; g.textAlign = 'center'; g.fillText(i % 2 ? '7' : '23', cx, 96); }
+    if (!raised) { g.strokeStyle = shirt; g.lineWidth = 10; g.beginPath(); g.moveTo(cx - 22, 74); g.lineTo(cx - 26, 108); g.moveTo(cx + 22, 74); g.lineTo(cx + 26, 108); g.stroke(); }
+    // head
+    g.fillStyle = skin; g.beginPath(); g.ellipse(cx, 44, 15, 17, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = hair;
+    if (back) { g.beginPath(); g.ellipse(cx, 42, 16, 17, 0, 0, Math.PI * 2); g.fill(); }
+    else {
+      g.beginPath(); g.arc(cx, 40, 16, Math.PI, Math.PI * 2); g.fill();
+      g.fillStyle = '#111'; g.beginPath(); g.arc(cx - 6, 46, 2.2, 0, Math.PI * 2); g.arc(cx + 6, 46, 2.2, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = '#5a1a10'; g.lineWidth = 2; g.beginPath();
+      if (raised) { g.fillStyle = '#3a0a0a'; g.ellipse(cx, 54, 4, 5, 0, 0, Math.PI * 2); g.fill(); }
+      else { g.arc(cx, 51, 5, 0.3, Math.PI - 0.3); g.stroke(); }
+    }
+    if (i === 2 || i === 9) { g.fillStyle = i === 2 ? '#ef4444' : '#3b82f6'; g.beginPath(); g.arc(cx, 36, 16, Math.PI, Math.PI * 2); g.fill(); g.fillRect(cx - 2, 33, 22, 5); }  // caps
+    if (i === 4) { g.fillStyle = '#fcd34d'; g.fillRect(cx - 28, 2, 56, 24); g.fillStyle = '#7a1d1d'; g.font = 'bold 12px Impact, Arial'; g.textAlign = 'center'; g.fillText('ACE!', cx, 19); }
+    if (i === 7) { g.fillStyle = '#3b82f6'; g.fillRect(cx + 14, 4, 12, 40); g.beginPath(); g.arc(cx + 20, 6, 6, 0, Math.PI * 2); g.fill(); }  // foam finger
+    g.restore();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
+  return t;
+}
+
+function makeRibbonTexture() {
+  const c = document.createElement('canvas'); c.width = 1024; c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#05070f'; g.fillRect(0, 0, 1024, 64);
+  const msgs = ['TENNIS 3D', 'GRAND RALLY', 'TOPSPIN PRO', 'POWER SLAM'];
+  g.font = '900 40px Impact, "Arial Black", sans-serif'; g.textBaseline = 'middle';
+  const cols = ['#fcd34d', '#a5f3fc', '#fca5a5', '#bef264'];
+  for (let i = 0; i < 4; i++) { g.fillStyle = cols[i]; g.fillText('★ ' + msgs[i], i * 256 + 12, 34); }
+  g.fillStyle = 'rgba(0,0,0,0.35)'; for (let y = 0; y < 64; y += 3) g.fillRect(0, y, 1024, 1);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping;
+  return t;
+}
+
+deferBuild(() => {
+  const TIERS = 4, tierD = 1.9, tierH = 0.9;
+  const fanSlots = [], seatSlots = [];
+  const camZ = CAM_BASE.z;
+  function sideSlots(xDir, zDir, length, offset, isLong, nearSide) {
+    for (let t = 0; t < TIERS; t++) {
+      const topY = 0.45 + t * 0.82 + tierH / 2;
+      const out = offset + t * tierD;
+      const tierW = length + t * 2.4;
+      for (const row of [-0.45, 0.45]) {
+        const o = out + row;
+        for (let s = -tierW / 2 + 0.4; s < tierW / 2 - 0.3; s += 0.52) {
+          if (isLong && Math.abs(s - Math.round(s / 7.5) * 7.5) < 0.4) continue;   // aisle stairs
+          const x = isLong ? xDir * o : s + (Math.random() - 0.5) * 0.06;
+          const z = isLong ? s + (Math.random() - 0.5) * 0.06 : zDir * o;
+          seatSlots.push({ x, y: topY, z, t });
+          if (Math.random() < 0.88) fanSlots.push({ x, y: topY + (row > 0 ? 0.08 : 0), z, near: nearSide, t });
+        }
+      }
+    }
+  }
+  sideSlots(+1, 0, COURT_L + 6, COURT_W / 2 + F + 1.8, true, false);
+  sideSlots(-1, 0, COURT_L + 6, COURT_W / 2 + F + 1.8, true, false);
+  sideSlots(0, +1, COURT_W + 12, COURT_L / 2 + F + 1.8, false, true);
+  sideSlots(0, -1, COURT_W + 12, COURT_L / 2 + F + 1.8, false, false);
+
+  const dummy = new THREE.Object3D();
+  // seats (one instanced mesh)
+  const seatGeo = new THREE.BoxGeometry(0.42, 0.34, 0.40);
+  seatGeo.translate(0, 0.17, 0);
+  const seatMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+  const seats = new THREE.InstancedMesh(seatGeo, seatMat, seatSlots.length);
+  const cA = new THREE.Color(0x1d4ed8), cB = new THREE.Color(0x7f1d1d), cC = new THREE.Color(0x0f2a52);
+  seatSlots.forEach((s, i) => {
+    dummy.position.set(s.x, s.y, s.z); dummy.rotation.set(0, Math.atan2(-s.x, -s.z), 0); dummy.updateMatrix();
+    seats.setMatrixAt(i, dummy.matrix);
+    seats.setColorAt(i, s.t % 2 ? cA : (Math.abs(s.x) > 6 ? cC : cB));
+  });
+  seats.instanceMatrix.needsUpdate = true;
+  scene.add(seats);
+
+  // crowd billboards (one instanced mesh, animated in the vertex shader)
+  const fanGeo = new THREE.PlaneGeometry(0.6, 1.2);
+  fanGeo.translate(0, 0.6, 0);
+  const cell = new Float32Array(fanSlots.length), phase = new Float32Array(fanSlots.length);
+  const fanMat = new THREE.MeshBasicMaterial({ map: makeFanAtlas(), alphaTest: 0.5, side: THREE.DoubleSide });
+  fanMat.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = crowdUniforms.uTime; sh.uniforms.uCheer = crowdUniforms.uCheer;
+    sh.vertexShader = 'attribute float aCell;\nattribute float aPhase;\nuniform float uTime;\nuniform float uCheer;\n' + sh.vertexShader
+      .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\n  vMapUv.x = (vMapUv.x + aCell) / 12.0;\n#endif')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\n  float bob = max(sin(uTime * (2.0 + uCheer * 7.0) + aPhase * 6.2831), 0.0);\n  float jumper = step(0.45, fract(aPhase * 7.0));\n  transformed.y += (0.015 + uCheer * 0.22 * jumper) * bob;\n  transformed.x += sin(uTime * 1.1 + aPhase * 20.0) * 0.02 * position.y;');
+  };
+  const fans = new THREE.InstancedMesh(fanGeo, fanMat, fanSlots.length);
+  const tint = new THREE.Color();
+  fanSlots.forEach((s, i) => {
+    dummy.position.set(s.x, s.y + 0.05, s.z);
+    dummy.rotation.set(0, Math.atan2(0 - s.x, camZ - s.z), 0);
+    const sc = 0.92 + Math.random() * 0.16; dummy.scale.set(sc, sc, sc);
+    dummy.updateMatrix(); fans.setMatrixAt(i, dummy.matrix);
+    cell[i] = s.near ? 8 + Math.floor(Math.random() * 4) : Math.floor(Math.random() * 8);
+    if ((cell[i] === 4 || cell[i] === 7) && Math.random() < 0.75) cell[i] = 1;   // keep signs + foam fingers rare
+    phase[i] = Math.random();
+    const b = 0.62 + s.t * 0.06 + Math.random() * 0.12; tint.setRGB(b, b, b * 1.04); fans.setColorAt(i, tint);
+  });
+  fanGeo.setAttribute('aCell', new THREE.InstancedBufferAttribute(cell, 1));
+  fanGeo.setAttribute('aPhase', new THREE.InstancedBufferAttribute(phase, 1));
+  fans.instanceMatrix.needsUpdate = true;
+  fans.frustumCulled = false;
+  scene.add(fans);
+
+  // stair aisles (light concrete strips) on the long sides
+  const stairMat = new THREE.MeshLambertMaterial({ color: 0x5a6b88 });
+  for (const xd of [-1, 1]) for (let s = -15; s <= 15; s += 7.5) {
+    for (let t = 0; t < TIERS; t++) {
+      const st = new THREE.Mesh(new THREE.BoxGeometry(tierD, 0.04, 0.7), stairMat);
+      st.position.set(xd * (COURT_W / 2 + F + 1.8 + t * tierD), 0.45 + t * 0.82 + tierH / 2 + 0.02, s);
+      standsGroup.add(st);
+    }
+  }
+
+  // roof canopies with light strips + LED ribbon fascia
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x0c1324, roughness: 0.8, metalness: 0.3 });
+  const stripMat = new THREE.MeshBasicMaterial({ color: 0xfff1c4 });
+  ribbonTex = makeRibbonTexture();
+  const ribbonMat = new THREE.MeshBasicMaterial({ map: ribbonTex });
+  const roofY = 0.45 + 3 * 0.82 + 3.4;
+  function canopy(xDir, zDir, length, offset, isLong) {
+    const out = offset + 2.2 * tierD;
+    const w = isLong ? 4.2 : length + 10, d = isLong ? length + 10 : 4.2;
+    const r = new THREE.Mesh(new THREE.BoxGeometry(w, 0.25, d), roofMat);
+    r.position.set(xDir * out, roofY, zDir * out); scene.add(r);
+    const sw = isLong ? 0.12 : length + 9, sd = isLong ? length + 9 : 0.12;
+    const s = new THREE.Mesh(new THREE.BoxGeometry(sw, 0.06, sd), stripMat);
+    s.position.set(xDir * (out - 2.0), roofY - 0.15, zDir * (out - 2.0)); scene.add(s);
+    // fascia LED ribbon on the front of tier 2
+    const fl = isLong ? length + 2 : length + 4;
+    const fas = new THREE.Mesh(new THREE.PlaneGeometry(fl, 0.32), ribbonMat);
+    const fo = offset + tierD * 2 - tierD / 2 - 0.01;
+    fas.position.set(xDir * fo, 0.45 + 2 * 0.82 + 0.05, zDir * fo);
+    fas.rotation.y = Math.atan2(-xDir, -zDir);
+    scene.add(fas);
+    // roof pillars
+    for (const k of [-0.5, 0, 0.5]) {
+      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, roofY, 8), roofMat);
+      const along = k * (length + 6);
+      p.position.set(isLong ? xDir * (out + 1.6) : along, roofY / 2, isLong ? along : zDir * (out + 1.6));
+      scene.add(p);
+    }
+  }
+  canopy(+1, 0, COURT_L + 6, COURT_W / 2 + F + 1.8, true);
+  canopy(-1, 0, COURT_L + 6, COURT_W / 2 + F + 1.8, true);
+  canopy(0, -1, COURT_W + 12, COURT_L / 2 + F + 1.8, false);
+
+  // umpire chair at the net, player benches, line-judge chairs
+  const metal = new THREE.MeshStandardMaterial({ color: 0x2b3240, roughness: 0.5, metalness: 0.6 });
+  const green = new THREE.MeshStandardMaterial({ color: 0x14532d, roughness: 0.7 });
+  const white = new THREE.MeshStandardMaterial({ color: 0xf1f5f9, roughness: 0.6 });
+  const uc = new THREE.Group();
+  for (const [lx, lz] of [[-0.35, -0.35], [0.35, -0.35], [-0.35, 0.35], [0.35, 0.35]]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.06, 1.9, 0.06), metal); leg.position.set(lx, 0.95, lz); leg.castShadow = true; uc.add(leg);
+  }
+  for (let r = 0.3; r < 1.8; r += 0.3) { const rung = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.7), metal); rung.position.set(-0.35, r, 0); uc.add(rung); }
+  const plat = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.08, 0.9), green); plat.position.y = 1.92; plat.castShadow = true; uc.add(plat);
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.12, 0.5), green); seat.position.set(0.1, 2.1, 0); uc.add(seat);
+  const backr = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.6, 0.55), green); backr.position.set(0.38, 2.4, 0); uc.add(backr);
+  const front = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.4, 0.9), white); front.position.set(-0.45, 2.15, 0); uc.add(front);
+  // umpire
+  const ub = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.2, 0.55, 10), new THREE.MeshStandardMaterial({ color: 0x1e3a8a, roughness: 0.6 }));
+  ub.position.set(0.1, 2.45, 0); ub.castShadow = true; uc.add(ub);
+  const uh = new THREE.Mesh(new THREE.SphereGeometry(0.13, 14, 12), new THREE.MeshStandardMaterial({ color: 0xe8b48a, roughness: 0.6 }));
+  uh.position.set(0.05, 2.85, 0); uc.add(uh);
+  const ucap = new THREE.Mesh(new THREE.SphereGeometry(0.135, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), white); ucap.position.set(0.05, 2.88, 0); uc.add(ucap);
+  uc.position.set(COURT_W / 2 + 1.25, 0, 0);
+  scene.add(uc);
+  // benches with towels and bottles
+  const towelMats = [new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.9 }), new THREE.MeshStandardMaterial({ color: 0x3b82f6, roughness: 0.9 })];
+  [-1.6, 1.6].forEach((bz, i) => {
+    const b = new THREE.Group();
+    const bench = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.08, 1.8), green); bench.position.y = 0.45; bench.castShadow = true; b.add(bench);
+    const bb = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.5, 1.8), green); bb.position.set(-0.28, 0.75, 0); b.add(bb);
+    for (const lz of [-0.8, 0.8]) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.45, 0.05), metal); l.position.set(0, 0.22, lz); b.add(l); }
+    const towel = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.05, 0.4), towelMats[i]); towel.position.set(0, 0.52, -0.4); towel.rotation.y = 0.2; b.add(towel);
+    for (let k = 0; k < 3; k++) {
+      const bot = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.22, 8), new THREE.MeshStandardMaterial({ color: [0x22d3ee, 0xf8fafc, 0xfacc15][k], roughness: 0.3 }));
+      bot.position.set(0.05, 0.6, 0.2 + k * 0.12); b.add(bot);
+    }
+    b.position.set(-(COURT_W / 2 + 1.35), 0, bz);
+    scene.add(b);
+  });
+  for (const [x, z] of [[COURT_W / 2 + 0.9, COURT_L / 2 + 0.9], [-(COURT_W / 2 + 0.9), -(COURT_L / 2 + 0.9)], [COURT_W / 2 + 0.9, -(COURT_L / 2 + 0.9)]]) {
+    const ch = new THREE.Group();
+    const s2 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.4), green); s2.position.y = 0.45; ch.add(s2);
+    const b2 = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.05), green); b2.position.set(0, 0.67, 0.18); ch.add(b2);
+    const lg = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.45, 0.36), metal); lg.position.y = 0.22; lg.scale.set(1, 1, 1); ch.add(lg);
+    ch.position.set(x, 0, z); ch.rotation.y = Math.atan2(-x, -z) + Math.PI; scene.add(ch);
+  }
+});
+
+// Fake contact shadow of the net on the court (the net mesh itself is alpha-tested and casts none)
+{
+  const c = document.createElement('canvas'); c.width = 8; c.height = 64;
+  const g = c.getContext('2d'); const gr = g.createLinearGradient(0, 0, 0, 64);
+  gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(0.5, 'rgba(0,0,0,0.55)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 8, 64);
+  const ns = new THREE.Mesh(new THREE.PlaneGeometry(NET_HALF_W * 2, 0.9), new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(c), transparent: true, depthWrite: false }));
+  ns.rotation.x = -Math.PI / 2; ns.position.set(0.15, 0.012, 0.25); scene.add(ns);
+}
+
+
 // ================== NET ==================
 function makeNetTexture() {
   const c = document.createElement('canvas');
-  c.width = 256; c.height = 64;
+  c.width = 512; c.height = 128;
   const cx = c.getContext('2d');
-  cx.clearRect(0, 0, 256, 64);
-  cx.strokeStyle = 'rgba(255,255,255,0.85)';
-  cx.lineWidth = 1.2;
-  for (let x = 0; x <= 256; x += 6) {
-    cx.beginPath(); cx.moveTo(x, 0); cx.lineTo(x, 64); cx.stroke();
+  cx.clearRect(0, 0, 512, 128);
+  cx.strokeStyle = 'rgba(255,255,255,0.9)';
+  cx.lineWidth = 1.3;
+  for (let x = -128; x <= 512; x += 8) {
+    cx.beginPath(); cx.moveTo(x, 0); cx.lineTo(x + 128, 128); cx.stroke();
+    cx.beginPath(); cx.moveTo(x + 128, 0); cx.lineTo(x, 128); cx.stroke();
   }
-  for (let y = 0; y <= 64; y += 6) {
-    cx.beginPath(); cx.moveTo(0, y); cx.lineTo(256, y); cx.stroke();
-  }
+  cx.fillStyle = 'rgba(255,255,255,0.95)';
+  for (let y = 0; y <= 128; y += 4) for (let x = (y / 4) % 2 ? 4 : 0; x <= 512; x += 8) cx.fillRect(x - 1, y - 1, 2, 2);
+  cx.fillStyle = 'rgba(255,255,255,0.9)'; cx.fillRect(0, 122, 512, 6);   // bottom cord
   const t = new THREE.CanvasTexture(c);
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.ClampToEdgeWrapping;
-  t.repeat.set(8, 1);
+  t.repeat.set(5, 1);
+  t.anisotropy = 8;
   return t;
 }
 const netGroup = new THREE.Group();
@@ -632,6 +909,17 @@ const cable = new THREE.Mesh(
 cable.rotation.z = Math.PI / 2;
 cable.position.set(0, NET_H + 0.105, 0);
 netGroup.add(cable);
+// centre strap + winders + post caps
+{
+  const strap = new THREE.Mesh(new THREE.BoxGeometry(0.06, NET_H - 0.05, 0.02), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 }));
+  strap.position.set(0, (NET_H - 0.05) / 2, 0.01); netGroup.add(strap);
+  const anchor = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 0.12), postMat); anchor.position.set(0, 0.015, 0); netGroup.add(anchor);
+  for (const sx of [-1, 1]) {
+    const wind = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.14, 8), postMat);
+    wind.rotation.z = Math.PI / 2; wind.position.set(sx * (COURT_W / 2 + 0.4), NET_H * 0.7, 0); netGroup.add(wind);
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.1, 12, 10), postMat); cap.position.set(sx * (COURT_W / 2 + 0.3), NET_H + 0.15, 0); netGroup.add(cap);
+  }
+}
 scene.add(netGroup);
 
 // ================== STRINGS TEXTURE (RACKET) ==================
@@ -1902,6 +2190,32 @@ function animatePlayer(player, dxAmount, isMoving, idleTime) {
     const targetSway = isMoving ? Math.sin(ud.movePhase + Math.PI) * 0.25 : Math.sin(idleTime * 1.8) * 0.04;
     ud.lShoulder.rotation.x = ud.lShoulder.rotation.x * 0.7 + targetSway * 0.3;
   }
+  polishPlayer(player, dxAmount, isMoving, idleTime);
+}
+// Secondary motion: ready crouch, lean into the run, head tracking the ball, off-arm reach.
+function polishPlayer(player, dx, isMoving, t) {
+  const ud = player.userData;
+  const isP1 = player === player1;
+  const swing = isP1 ? state.swingP1 : state.swingP2;
+  const lean = Math.max(-0.12, Math.min(0.12, dx * 2.2));
+  ud.leanZ = (ud.leanZ || 0) * 0.8 + (isP1 ? -lean : lean) * 0.2;
+  player.rotation.z = ud.leanZ;
+  if (!isMoving && ud.legs) {
+    const bounce = Math.max(0, Math.sin(t * 5.5)) * 0.05;
+    for (const L of ud.legs) { L.hip.rotation.x += (-0.28 - L.hip.rotation.x) * 0.15; L.knee.rotation.x += (0.5 + bounce - L.knee.rotation.x) * 0.15; }
+    player.position.y = -0.06 + bounce * 0.3;
+  }
+  if (ud.headGroup) {
+    const wx = ball.position.x - player.position.x, wz = ball.position.z - player.position.z;
+    let yaw = Math.atan2(wx, wz) - player.rotation.y;
+    while (yaw > Math.PI) yaw -= Math.PI * 2;
+    while (yaw < -Math.PI) yaw += Math.PI * 2;
+    yaw = Math.max(-0.9, Math.min(0.9, yaw));
+    ud.headGroup.rotation.y += (yaw - ud.headGroup.rotation.y) * 0.2;
+    const pitch = Math.max(-0.35, Math.min(0.3, -(ball.position.y - 2.1) * 0.12));
+    ud.headGroup.rotation.x += (pitch - ud.headGroup.rotation.x) * 0.2;
+  }
+  if (ud.lShoulder) ud.lShoulder.rotation.z = Math.PI * 0.08 + Math.sin(swing * Math.PI) * 0.9;
 }
 
 // ================== GUEST VISUAL SYNC ==================
@@ -2261,8 +2575,11 @@ function drawMenu() {
   hctx.fillRect(0, 0, W, H);
   hctx.textAlign = 'center';
   hctx.textBaseline = 'middle';
-  hctx.fillStyle = '#fcd34d';
   hctx.font = `900 ${Math.min(110, W * 0.10)}px Impact, "Arial Black", sans-serif`;
+  for (let i = 6; i > 0; i--) { hctx.fillStyle = `rgba(122,79,0,${0.9 - i * 0.1})`; hctx.fillText('TENNIS  3D', W / 2 + i, H * 0.18 + i); }
+  const tg = hctx.createLinearGradient(0, H * 0.12, 0, H * 0.24);
+  tg.addColorStop(0, '#fff3b0'); tg.addColorStop(0.5, '#fcd34d'); tg.addColorStop(1, '#f59e0b');
+  hctx.fillStyle = tg;
   hctx.fillText('TENNIS  3D', W / 2, H * 0.18);
 
   menuButtons.length = 0;
@@ -2291,6 +2608,7 @@ function drawMenu() {
         icon: '🌐', label: 'VS  ONLINE', sub: 'Share a link — host is P1' },
     ];
     for (const b of buttons) drawBigBtn(b);
+    hctx.textAlign = 'center';
 
     hctx.fillStyle = 'rgba(255,255,255,0.7)';
     hctx.font = '14px monospace';
@@ -2496,24 +2814,25 @@ function drawGameHUD() {
   hctx.fillText(state.vsMode === 'online' ? '— TENNIS 3D · ONLINE —' : '— TENNIS 3D —', sx + sw / 2, sy + 14);
   hctx.font = 'bold 36px monospace';
   hctx.fillStyle = '#ef4444';
-  hctx.fillText(state.scoreP, sx + 50, sy + 50);
-  hctx.fillStyle = '#fff';
-  hctx.fillText(':', sx + sw / 2, sy + 48);
+  hctx.fillText(state.scoreP, sx + 40, sy + 50);
   hctx.fillStyle = '#3b82f6';
-  hctx.fillText(state.scoreA, sx + sw - 50, sy + 50);
-
+  hctx.fillText(state.scoreA, sx + sw - 40, sy + 50);
+  // Clock lives inside the score panel, between the two scores, so it never sits over the 3D big screen
   if (state.timeLimit > 0) {
     const mm = Math.floor(state.timeLeft / 60).toString().padStart(2, '0');
     const ss = Math.floor(Math.max(0, state.timeLeft) % 60).toString().padStart(2, '0');
     const lowTime = !state.gameOver && state.timeLeft < 10;
     const blink = lowTime && Math.floor(performance.now() / 250) % 2 === 0;
+    hctx.fillStyle = 'rgba(255,255,255,0.08)';
+    roundRect(sx + sw / 2 - 42, sy + 25, 84, 30, 7); hctx.fill();
     hctx.fillStyle = blink ? '#ff3b3b' : '#fcd34d';
     hctx.font = 'bold 22px monospace';
-    hctx.fillText(`${mm}:${ss}`, sx + sw / 2, sy + sh + 26);
+    hctx.fillText(`${mm}:${ss}`, sx + sw / 2, sy + 48);
   } else {
     hctx.fillStyle = '#fcd34d';
-    hctx.font = 'bold 12px monospace';
-    hctx.fillText(`FIRST TO ${UNLIMITED_TARGET}`, sx + sw / 2, sy + sh + 18);
+    hctx.font = 'bold 11px monospace';
+    hctx.fillText('FIRST', sx + sw / 2, sy + 36);
+    hctx.fillText(`TO ${UNLIMITED_TARGET}`, sx + sw / 2, sy + 50);
   }
 
   hctx.fillStyle = '#fcd34d';
@@ -2541,7 +2860,8 @@ function drawGameHUD() {
     hctx.font = 'bold 22px monospace';
     hctx.textAlign = 'center';
     let msg;
-    if (state.serving === 'player') msg = (state.vsMode === 'ai' ? 'Press SPACE to serve' : 'P1: Press SPACE to serve');
+    const serveVerb = IS_TOUCH ? 'Tap to serve' : 'Press SPACE to serve';
+    if (state.serving === 'player') msg = (state.vsMode === 'ai' ? serveVerb : 'P1: ' + serveVerb);
     else                            msg = (state.vsMode === 'ai' ? 'Opponent serving…'   : 'P2: Press SPACE to serve');
     hctx.fillText(msg, W / 2, H - 60);
   }
@@ -2571,7 +2891,10 @@ function drawGameHUD() {
 }
 
 // ================== MAIN LOOP ==================
+// Touch devices: a tap fires mousedown, which serves, so the prompt says "Tap to serve".
+const IS_TOUCH = (window.matchMedia && matchMedia('(pointer: coarse)').matches) || ('ontouchstart' in window);
 let _lastNetState = 0;
+let _lastPts = 0, _cheer = 0, _lastFrameAt = 0, _ftEma = 16, _qFrames = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - lastTime) / 1000);
   lastTime = now;
@@ -2596,6 +2919,21 @@ function frame(now) {
   camera.position.y = CAM_BASE.y + Math.sin(t * 0.27 + 1) * 0.18;
   camera.position.z = zSign * CAM_BASE.z + Math.cos(t * 0.33) * 0.18;
   camera.lookAt(CAM_LOOK.x + Math.sin(t * 0.2) * 0.25, CAM_LOOK.y, zSign * CAM_LOOK.z);
+
+  // crowd: cheer when a point is scored; LED ribbons scroll
+  const pts = state.scoreP + state.scoreA;
+  if (pts !== _lastPts) { if (pts > _lastPts) _cheer = 1; _lastPts = pts; }
+  _cheer = Math.max(0, _cheer - dt * 0.35);
+  crowdUniforms.uTime.value = t;
+  crowdUniforms.uCheer.value = _cheer;
+  if (ribbonTex) ribbonTex.offset.x = (t * 0.04) % 1;
+  // automatic quality: if frames run long for ~2 s, step the pixel ratio down (never below 1)
+  const fi = now - _lastFrameAt; _lastFrameAt = now;
+  if (fi > 0 && fi < 200) _ftEma = _ftEma * 0.95 + fi * 0.05;
+  if (++_qFrames > 120 && _ftEma > 21 && renderer.getPixelRatio() > 1) {
+    renderer.setPixelRatio(Math.max(1, renderer.getPixelRatio() - 0.5));
+    resize(); _qFrames = 0; _ftEma = 16;
+  }
 
   renderer.render(scene, camera);
   drawHUD();

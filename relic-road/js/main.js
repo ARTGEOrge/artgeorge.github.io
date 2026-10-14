@@ -16,13 +16,31 @@ function show(id) {
   $('fps').hidden = id !== null;
   $('osm').hidden = id !== null;
   $('homeLink').hidden = !(id === 'menu' || id === 'cityScreen');
+  if (id !== null) $('bigmap').hidden = true;
 }
 
 /* ------------------------------------------------------------------- HUD */
-let toastTimer = 0;
+let toastTimer = 0, noteTimer = 0;
 let journalOpen = true;
 
 const hud = {
+  mapCanvases: { mini: $('minimap'), big: $('bigmapc') },
+
+  /** The line under the corner map: where you are, and in what part of town. */
+  location(big, sub) {
+    if ($('locBig').textContent !== big) $('locBig').textContent = big;
+    if ($('locSub').textContent !== sub) $('locSub').textContent = sub;
+  },
+
+  /** A small passing message, for things that are not relics. */
+  note(text) {
+    const n = $('note');
+    n.textContent = text;
+    n.classList.add('on');
+    clearTimeout(noteTimer);
+    noteTimer = setTimeout(() => n.classList.remove('on'), 2600);
+  },
+
   loading(p, text) {
     $('loading').hidden = false;
     $('loadFill').style.width = Math.round(p * 100) + '%';
@@ -41,7 +59,8 @@ const hud = {
     $('readyStats').innerHTML =
       `<div class="stat"><b>${stats.buildings.toLocaleString()}</b><span>buildings</span></div>` +
       `<div class="stat"><b>${stats.roads.toLocaleString()}</b><span>streets</span></div>` +
-      `<div class="stat"><b>2 km</b><span>across</span></div>`;
+      `<div class="stat"><b>${(stats.trees || 0).toLocaleString()}</b><span>trees</span></div>` +
+      `<div class="stat"><b>${(stats.lamps || 0).toLocaleString()}</b><span>street lamps</span></div>`;
   },
 
   relicCount(found, total) {
@@ -136,7 +155,9 @@ let currentIndex = 0;
 
 function cityArt(city, i) {
   const [a, b] = [city.theme.skyTop, city.theme.skyHorizon].map(c => '#' + c.toString(16).padStart(6, '0'));
-  const ground = '#' + (city.look.tint.block).toString(16).padStart(6, '0');
+  // the cities carry a palette per building kind, not a single tint
+  const block = (city.look.palette && city.look.palette.block && city.look.palette.block[0]) || 0x9a8f7c;
+  const ground = '#' + block.toString(16).padStart(6, '0');
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice">
     <defs><linearGradient id="g${i}" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs>

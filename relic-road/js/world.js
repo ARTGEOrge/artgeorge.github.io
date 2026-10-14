@@ -251,9 +251,11 @@ export class World {
     this.lightTimer -= dt;
     if (this.lightTimer <= 0 || !this.assigned) {
       this.lightTimer = 0.2;
-      // rank by how close the edge of each light's reach is to the viewer
+      // rank by how close the edge of each light's reach is to the viewer;
+      // a city has thousands of street lamps, so only look at the nearby ones
       const ranked = this.lights
-        .filter(l => l.intensity > 0.01)
+        .filter(l => l.intensity > 0.01 &&
+          Math.abs(l.position.x - viewPos.x) < 160 && Math.abs(l.position.z - viewPos.z) < 160)
         .map(l => ({ l, s: l.position.distanceTo(viewPos) - l.distance * 0.6 }))
         .sort((a, b) => a.s - b.s);
       this.assigned = ranked.slice(0, LIGHT_POOL).map(r => r.l);

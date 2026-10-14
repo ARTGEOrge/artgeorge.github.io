@@ -646,7 +646,24 @@ export function building(world, x, z, w, d, h, rng, opts = {}) {
             });
           }
         } else {
-          world.quad(gx, y, gz, 1.3, 1.5, faceRot(face), glassKey, glass);
+          // a lit room, a smashed pane, or dark glass; chosen by position so the level's dice are untouched
+          const hv = Math.abs(Math.sin(gx * 12.9898 + gz * 78.233 + y * 37.719) * 43758.5453) % 1;
+          if (hv < 0.24) world.quad(gx, y, gz, 1.3, 1.5, faceRot(face), 'glass-warm', () => new THREE.MeshStandardMaterial({
+            color: 0x1a0e06, roughness: 0.4, emissive: 0xffa04a, emissiveIntensity: 1.6 }));
+          else if (hv < 0.36) {
+            world.quad(gx, y, gz, 1.3, 1.5, faceRot(face), 'glass-broken', () => new THREE.MeshStandardMaterial({ color: 0x020203, roughness: 1 }));
+            const [hx, hz] = at(face, along, 0.06);
+            world.shape(new THREE.ConeGeometry(0.22, 0.55, 3), 'rust', { pos: [hx - (face.alongX ? 0.4 : 0), y + 0.5, hz - (face.alongX ? 0 : 0.4)], rot: [Math.PI, faceRot(face), 0.3], scale: [1, 1, 0.05], collide: false, shadow: false, mat: { color: 0x0b1016, metalness: 0.6, roughness: 0.1 } });
+          } else world.quad(gx, y, gz, 1.3, 1.5, faceRot(face), glassKey, glass);
+          // window frame: jambs, head and a centre mullion
+          const frame = { uv: 1, collide: false, mat: { color: 0x3a3430, roughness: 0.8 } };
+          for (const sd of [-0.69, 0.69]) {
+            const [fx, fz] = at(face, along + sd, 0.07);
+            world.box(fx, y, fz, face.alongX ? 0.09 : 0.08, 1.6, face.alongX ? 0.08 : 0.09, 'wood', frame);
+          }
+          const [mx, mz] = at(face, along, 0.07);
+          world.box(mx, y, mz, face.alongX ? 0.06 : 0.06, 1.5, face.alongX ? 0.06 : 0.06, 'wood', frame);
+          world.box(mx, y + 0.1, mz, face.alongX ? 1.3 : 0.06, 0.05, face.alongX ? 0.06 : 1.3, 'wood', frame);
         }
         const [sx, sz] = at(face, along, 0.1);
         world.box(sx, y - 0.82, sz, face.alongX ? 1.6 : 0.2, 0.1, face.alongX ? 0.2 : 1.6, 'concrete', trim);
@@ -657,6 +674,37 @@ export function building(world, x, z, w, d, h, rng, opts = {}) {
             { uv: 1, collide: false, mat: { color: 0xc8ccd0, metalness: 0.4 } });
         }
       }
+    }
+  }
+
+  // balconies on some upper windows, chimneys and aerials on the roofline (position-hashed, so the
+  // level's own dice are untouched; none of it collides)
+  const hz = (k) => Math.abs(Math.sin(x * 3.17 + z * 7.31 + k * 11.7) * 15731.743) % 1;
+  const iron2 = { uv: 1, collide: false, mat: { color: 0x2a2624, metalness: 0.6, roughness: 0.7 } };
+  for (let f = 1; f < floors; f++) {
+    const face = faces[Math.floor(hz(f) * 4)];
+    if (hz(f + 20) > 0.55) continue;
+    const along = (hz(f + 40) - 0.5) * face.len * 0.6, y = f * 3.2 + 0.05;
+    const [bx, bz] = at(face, along, 0.65);
+    world.box(bx, y, bz, face.alongX ? 2.2 : 1.1, 0.14, face.alongX ? 1.1 : 2.2, 'concrete', { uv: 0.8, collide: false });
+    const [rx, rz] = at(face, along, 1.18);
+    world.box(rx, y + 0.5, rz, face.alongX ? 2.2 : 0.05, 0.05, face.alongX ? 0.05 : 2.2, 'rust', iron2);
+    for (let k = -4; k <= 4; k++) {
+      const [qx, qz] = at(face, along + k * 0.27, 1.18);
+      world.box(qx, y + 0.25, qz, 0.03, 0.5, 0.03, 'rust', iron2);
+    }
+  }
+  if (opts.roof !== false) {
+    for (let k = 0; k < 2; k++) {
+      if (hz(k + 60) > 0.6) continue;
+      const cxh = x + (hz(k + 70) - 0.5) * w * 0.7, czh = z + (hz(k + 80) - 0.5) * d * 0.7;
+      world.box(cxh, h + 1.1, czh, 0.6, 1.8, 0.6, wallMat === 'brick' ? 'brick' : 'concrete', { uv: 1, collide: false });
+      world.box(cxh, h + 2.05, czh, 0.75, 0.12, 0.75, 'concrete', { uv: 1, collide: false });
+    }
+    if (hz(90) < 0.5) {   // a bent TV aerial against the sky
+      world.shape(new THREE.CylinderGeometry(0.03, 0.03, 2.6, 5), 'rust', { ...iron2, pos: [x - w / 4, h + 1.5, z + d / 4], shadow: false });
+      for (let k = 0; k < 3; k++) world.shape(new THREE.CylinderGeometry(0.015, 0.015, 1.2 - k * 0.25, 4), 'rust',
+        { ...iron2, pos: [x - w / 4, h + 2.2 + k * 0.3, z + d / 4], rot: [0, k * 0.2, Math.PI / 2 + (k - 1) * 0.12], shadow: false });
     }
   }
 

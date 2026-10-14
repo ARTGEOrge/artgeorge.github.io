@@ -1,20 +1,19 @@
 <#
 .SYNOPSIS
-  Publish this site to all five live hosts, then check that each one really
+  Publish this site to all three live hosts, then check that each one really
   serves what is on disk.
 
 .DESCRIPTION
-  Only GitHub Pages redeploys itself when you push. The other four each need an
-  explicit command, so "publish everywhere" is five separate steps and it is easy
-  to leave one behind. This runs all of them and then proves it.
+  Only GitHub Pages redeploys itself when you push. The other two each need an
+  explicit command, so "publish everywhere" is three separate steps and it is
+  easy to leave one behind. This runs all of them and then proves it.
 
-  The four CLI hosts upload the WORKING DIRECTORY. GitHub Pages serves the
+  The two CLI hosts upload the WORKING DIRECTORY. GitHub Pages serves the
   COMMIT. Deploy with uncommitted changes and the hosts silently disagree with
   each other, so this refuses to run on a dirty tree unless you insist.
 
 .PARAMETER Only
-  Deploy just these targets. Names: github, netlify, surge, surge-mirror,
-  firebase.
+  Deploy just these targets. Names: github, netlify, firebase.
 
 .PARAMETER Skip
   Deploy everything except these.
@@ -76,16 +75,8 @@ $Targets = @(
     What = 'netlify production'
     Run  = { netlify deploy --prod --dir . }
   },
-  [ordered]@{
-    Name = 'surge'; Tool = 'surge'; Url = 'https://artgeorge.surge.sh'
-    What = 'surge, primary domain'
-    Run  = { surge . artgeorge.surge.sh }
-  },
-  [ordered]@{
-    Name = 'surge-mirror'; Tool = 'surge'; Url = 'https://art-george.surge.sh'
-    What = 'surge, mirror domain'
-    Run  = { surge . art-george.surge.sh }
-  },
+  # Surge was shut down on 2026-10-09 (artgeorge.surge.sh and art-george.surge.sh
+  # were torn down). Deploying there again would put the sites back up.
   [ordered]@{
     # The CLI is not installed; credentials are. firebase.json names the SITE
     # but not the PROJECT, so --project is not optional here.

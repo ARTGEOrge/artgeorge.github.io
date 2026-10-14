@@ -6,8 +6,8 @@
 
   var MATERIAL = {
     wood:  { density: 0.7, friction: 0.7, restitution: 0.08, hp: 9,  score: 500, chips: ['#e0a45c', '#a8652c', '#f3c887'], kind: 'chip' },
-    stone: { density: 2.4, friction: 0.8, restitution: 0.02, hp: 24, score: 800, chips: ['#a3adb8', '#6f7a86', '#cdd4dc'], kind: 'chip' },
-    ice:   { density: 0.9, friction: 0.25, restitution: 0.05, hp: 4, score: 300, chips: ['#bfe9ff', '#7cc6f0', '#ffffff'], kind: 'shard' }
+    stone: { density: 2.4, friction: 0.8, restitution: 0.02, hp: 24, score: 800, chips: ['#a3adb8', '#6f7a86', '#cdd4dc'], kind: 'pebble' },
+    ice:   { density: 0.9, friction: 0.25, restitution: 0.05, hp: 4, score: 300, chips: ['#bfe9ff', '#7cc6f0', '#ffffff'], kind: 'glass' }
   };
   var BANDIT_HP = { small: 3, mid: 5.5, helmet: 7, big: 10, boss: 45, explorer: 6, miner: 8, chief: 22 };
   var BIRD_DENSITY = { rusty: 4, zip: 3.2, trio: 3.5, boomer: 4.5, tank: 5 };
@@ -92,9 +92,27 @@
         burst(cp.x, cp.y, 'dust', ['rgba(255,250,240,0.9)', 'rgba(220,205,180,0.9)'], 4, 0.18 + Math.min(0.3, imp * 0.01), 1.6);
       }
     }
+    if (imp > 9 && E.dustBudget > 2) {
+      var ga = a.getUserData(), gb = b.getUserData();
+      if ((ga && ga.kind === 'ground') || (gb && gb.kind === 'ground')) {
+        var gm = contact.getWorldManifold(null);
+        if (gm && gm.points && gm.points[0]) { E.dustBudget -= 2; dustCloud(gm.points[0].x, 0.1, 3, 'rgba(225,210,185,0.8)', 0.35 + Math.min(0.5, imp * 0.012)); }
+      }
+    }
     hurt(a, imp, b);
     hurt(b, imp, a);
   }
+
+  // Low rolling dust that spreads sideways along the ground.
+  function dustCloud(x, y, n, col, s) {
+    for (var i = 0; i < n; i++) {
+      var dir = i % 2 ? 1 : -1, life = 0.9 + Math.random() * 0.7;
+      E.particles.push({ kind: 'dustcloud', x: x + (Math.random() - 0.5) * s, y: Math.max(0.15, y - 0.1 + Math.random() * 0.3),
+        vx: dir * (0.8 + Math.random() * 2.2), vy: 0.2 + Math.random() * 0.6, a: 0, va: 0, s: s * (0.7 + Math.random() * 0.6),
+        col: col, life: life, max: life, grav: -0.3 });
+    }
+  }
+  E.dustCloud = dustCloud;
 
   function hurt(body, imp, other) {
     var ud = body.getUserData();
@@ -136,8 +154,11 @@
         var val = ud.kind === 'tnt' ? 1000 : m.score;
         E.score += val;
         var size = ud.shape === 'round' ? ud.r * 2 : Math.max(ud.w, ud.h);
-        burst(x, y, m.kind, m.chips, Math.round(6 + size * 4), 0.12, 5);
+        burst(x, y, m.kind, m.chips, Math.round(6 + size * 4), m.kind === 'glass' ? 0.1 : 0.12, 5);
         burst(x, y, 'puff', ['rgba(255,255,255,0.9)'], 3, 0.35, 1.5);
+        if (ud.m === 'wood' || ud.kind === 'tnt') burst(x, y, 'splinter', ['#d99a55', '#b8743a', '#f0c27f'], Math.round(4 + size * 2), 0.14, 6);
+        if (ud.m === 'stone') dustCloud(x, y, 4 + Math.round(size * 2), 'rgba(200,196,188,0.85)', 0.5 + size * 0.15);
+        if (ud.m === 'ice') burst(x, y, 'spark', ['#ffffff', '#d8f4ff'], 5, 0.12, 4);
         popup(x, y, String(val), '#ffffff', 0.55);
         shatter(body, ud);
         E.blocks.splice(E.blocks.indexOf(body), 1);
@@ -275,6 +296,9 @@
     E.particles.push({ kind: 'text', text: text, x: x, y: y + 0.4, vx: 0, vy: 1.4, a: 0, va: 0, s: size, col: col, life: 1.2, max: 1.2, grav: 0 });
   }
   E.burst = burst;
+  E.impact = function (x, y, col) {
+    E.particles.push({ kind: 'flash', x: x, y: y, vx: 0, vy: 0, a: Math.random(), va: 0, s: 0.75, col: col || '#ffd23f', life: 0.28, max: 0.28, grav: 0 });
+  };
   E.popup = popup;
 
   /* ------------------------------------------------------------------ step */
@@ -303,6 +327,7 @@
       p.life -= dt;
       if (p.life <= 0) { E.particles.splice(i, 1); continue; }
       p.vy -= p.grav * dt;
+      if (p.kind === 'dustcloud') { p.vx *= 0.95; p.vy *= 0.97; }
       if (p.kind === 'feather' || p.kind === 'confetti') { p.vx *= 0.96; p.vy = Math.max(p.vy, p.kind === 'confetti' ? -2.2 : -1.2); p.vx += Math.sin(E.t * 3 + p.a) * 0.02; }
       p.x += p.vx * dt; p.y += p.vy * dt; p.a += p.va * dt;
       if (p.y < 0.05 && p.grav > 0) { p.y = 0.05; p.vy *= -0.3; p.vx *= 0.7; }

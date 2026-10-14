@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
-import { material } from './textures.js';
+import { material, puffTexture } from './textures.js';
 
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
@@ -67,8 +67,8 @@ function shared() {
   if (SHARED) return SHARED;
   SHARED = {
     // base materials: the texture gives grime, vertex colours give the part
-    fleshBase: vertexed(material('flesh', { repeat: 2, roughness: 0.85 })),
-    hideBase: vertexed(material('demonHide', { repeat: 2, roughness: 0.7, emissive: 0x3a0800, emissiveIntensity: 0.7 })),
+    fleshBase: vertexed(material('flesh', { repeat: 2, roughness: 0.72, normalScale: 1.6 })),
+    hideBase: vertexed(material('demonHide', { repeat: 2, roughness: 0.5, metalness: 0.15, normalScale: 1.8, emissive: 0x3a0800, emissiveIntensity: 0.9 })),
     // paints (baked) — light colours are boosted because the texture darkens them
     flesh: { c: 0xffffff },
     fleshDark: { c: 0xb8b8a8 },
@@ -124,7 +124,19 @@ export function humanoid(type) {
   rig.add(torso, cyl(0.2 * bulk, 0.16 * bulk, 0.3, 10), skin, { pos: [0, 0.16, 0], scale: [1, 1, 0.66] });
   rig.add(torso, cyl(0.25 * bulk, 0.2 * bulk, 0.34, 10), skin, { pos: [0, 0.46, 0], scale: [1, 1, 0.62] });
   rig.add(torso, ball(0.17 * bulk, 10, 6), skin, { pos: [0, 0.6, 0], scale: [1.5, 0.6, 0.9] });   // trapezius
+  for (const s of [-1, 1]) {
+    rig.add(torso, ball(0.1 * bulk, 10, 8), skin, { pos: [s * 0.1 * bulk, 0.47, 0.09], scale: [1.2, 0.8, 0.6] });   // chest
+    rig.add(torso, cyl(0.018, 0.018, 0.2, 6), skin, { pos: [s * 0.12 * bulk, 0.62, 0.08], rot: [0, 0, s * 1.35] });   // collarbone
+  }
   rig.add(neck, cyl(0.06, 0.075, 0.14, 8), skin, { pos: [0, 0.02, 0] });
+  if (demon) {
+    // molten veins running down the flanks and across the back
+    for (let i = 0; i < 4; i++) {
+      const s = i % 2 ? 1 : -1;
+      rig.add(torso, box(0.012, 0.16 + rnd() * 0.12, 0.01), S.lava, { pos: [s * (0.17 + rnd() * 0.04) * bulk, 0.2 + rnd() * 0.3, 0.08], rot: [0, s * 0.9, (rnd() - 0.5) * 0.6] });
+      rig.add(torso, box(0.012, 0.14 + rnd() * 0.1, 0.01), S.lava, { pos: [(rnd() - 0.5) * 0.25, 0.25 + rnd() * 0.3, -0.155], rot: [0, 0, (rnd() - 0.5) * 1.2] });
+    }
+  }
 
   if (!demon) {
     // a torn shirt over the chest: open down one side, ribs showing through
@@ -133,6 +145,18 @@ export function humanoid(type) {
       rig.add(torso, box(0.13, 0.018, 0.02), S.bone, { pos: [0.1, 0.36 + i * 0.05, 0.165], rot: [0, 0, -0.25] });
     }
     rig.add(torso, box(0.09, 0.14, 0.02), S.gore, { pos: [0.1, 0.42, 0.158] });
+    // ragged hem: strips of shirt hanging loose round the waist
+    for (let i = 0; i < 7; i++) {
+      const a = -1.2 + i * 0.42 + rnd() * 0.2, len = 0.08 + rnd() * 0.12;
+      rig.add(torso, box(0.06, len, 0.012), shirt, {
+        pos: [Math.sin(a) * 0.22 * bulk, 0.02 - len * 0.4, Math.cos(a) * 0.15 * bulk], rot: [0.15, a, (rnd() - 0.5) * 0.4]
+      });
+    }
+    // dried blood soaked into the cloth, a dangling strap
+    for (let i = 0; i < 3; i++) {
+      rig.add(torso, box(0.05 + rnd() * 0.06, 0.04 + rnd() * 0.08, 0.012), S.gore, { pos: [(rnd() - 0.5) * 0.3, 0.2 + rnd() * 0.35, 0.16 + rnd() * 0.01], rot: [0, 0, rnd() * 3] });
+    }
+    if (rnd() < 0.5) rig.add(torso, box(0.03, 0.4, 0.012), S.belt, { pos: [-0.08, 0.22, 0.17], rot: [0, 0, 0.5] });
   } else {
     // demon: glowing cracks and a ridge of spines
     rig.add(torso, box(0.03, 0.26, 0.01), S.lava, { pos: [-0.05, 0.42, 0.16], rot: [0, 0, 0.3] });
@@ -184,8 +208,8 @@ export function humanoid(type) {
     for (const s of [-1, 1]) {
       for (let i = 0; i < 4; i++) {
         const t = i / 4;
-        rig.add(head, cyl(0.03 * (1 - t) + 0.008, 0.035 * (1 - t) + 0.012, 0.08), S.horn, {
-          pos: [s * (0.08 + t * 0.09), 0.23 + t * 0.07 - t * t * 0.1, -0.02 - t * 0.05], rot: [-0.4 - t * 0.5, 0, s * (-0.6 - t * 0.6)]
+        rig.add(head, cyl(0.042 * (1 - t) + 0.008, 0.048 * (1 - t) + 0.014, 0.11), S.horn, {
+          pos: [s * (0.08 + t * 0.12), 0.23 + t * 0.1 - t * t * 0.14, -0.02 - t * 0.07], rot: [-0.4 - t * 0.5, 0, s * (-0.6 - t * 0.6)]
         });
       }
     }
@@ -205,19 +229,34 @@ export function humanoid(type) {
     head.add(e);
     eyes.push(e);
   }
+  // a soft glow round the eyes that reads in the dark and pulses as they breathe
+  const halo = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: puffTexture(), color: type.eyes, transparent: true, opacity: 0.55,
+    blending: THREE.AdditiveBlending, depthWrite: false
+  }));
+  halo.scale.set(0.2, 0.09, 1);
+  halo.position.set(0, 0.13, 0.14);
+  head.add(halo);
 
   // arms: shoulder -> elbow -> hand
   const arm = side => {
     const sh = joint(torso, side * 0.27 * bulk, 0.56, 0);
     const armBulk = heavy ? 1.6 : boss ? 1.3 : 1;
     rig.add(sh, ball(0.07 * armBulk, 8, 6), skin, {});
+    rig.add(sh, ball(0.085 * armBulk, 10, 8), skin, { pos: [side * 0.015, -0.03, 0], scale: [1, 1.15, 1] });   // deltoid
+    if (demon) for (let k = 0; k < 3; k++) {
+      rig.add(sh, cone(0.03 - k * 0.006, 0.16 - k * 0.03), S.horn, { pos: [side * (0.04 + k * 0.025), 0.06 - k * 0.02, -0.02 - k * 0.04], rot: [-0.5 - k * 0.2, 0, side * -0.7] });
+    }
     rig.add(sh, cyl(0.055 * armBulk, 0.05 * armBulk, 0.3), skin, { pos: [0, -0.15, 0] });
     if (!demon && !heavy) rig.add(sh, tube(0.07, 0.068, 0.16, 8), shirt, { pos: [0, -0.07, 0] });   // sleeve
     const el = joint(sh, 0, -0.3, 0);
     rig.add(el, ball(0.045 * armBulk, 8, 6), skin, {});
+    if (demon) rig.add(el, cone(0.022, 0.12), S.horn, { pos: [0, 0, -0.05], rot: [-1.9, 0, 0] });   // elbow spur
     rig.add(el, cyl(0.048 * armBulk, 0.036 * armBulk, 0.28), skin, { pos: [0, -0.14, 0] });
     const hand = joint(el, 0, -0.29, 0);
     rig.add(hand, box(0.07 * armBulk, 0.08, 0.03), skin, { pos: [0, -0.03, 0] });
+    for (let f = 0; f < 4; f++) rig.add(hand, box(0.015, 0.045, 0.018), skin, { pos: [(f - 1.5) * 0.018 * armBulk, -0.085, 0.004], rot: [0.25, 0, 0] });   // fingers
+    rig.add(hand, box(0.016, 0.04, 0.018), skin, { pos: [side * -0.04 * armBulk, -0.045, 0.012], rot: [0, 0, side * 0.6] });   // thumb
     const claw = demon ? 0.09 : 0.05;
     for (let f = 0; f < 4; f++) {
       rig.add(hand, cone(0.008, claw), demon ? S.horn : skin, { pos: [(f - 1.5) * 0.017 * armBulk, -0.09 - claw * 0.3, 0.01], rot: [Math.PI + 0.3, 0, 0] });
@@ -245,9 +284,14 @@ export function humanoid(type) {
   };
   const LL = leg(-1), LR = leg(1);
 
+  // sleeves and forearms: torn cloth on the infected, glowing seams on demons
+  for (const sh of [L.sh, R.sh]) {
+    if (demon) rig.add(sh, box(0.01, 0.2, 0.01), S.lava, { pos: [0.03, -0.18, 0.05], rot: [0, 0, 0.2] });
+    else if (!heavy) for (let i = 0; i < 3; i++) rig.add(sh, box(0.03, 0.07 + rnd() * 0.05, 0.01), shirt, { pos: [Math.cos(i * 2.1) * 0.07, -0.18, Math.sin(i * 2.1) * 0.07], rot: [0, i * 2.1, 0.2] });
+  }
   rig.finish();
   return {
-    group: g, hips, torso, head, jaw, eyes,
+    group: g, hips, torso, head, jaw, eyes, halo,
     armL: L.sh, armR: R.sh, elbowL: L.el, elbowR: R.el,
     legL: LL.hip, legR: LR.hip, kneeL: LL.kn, kneeR: LR.kn
   };

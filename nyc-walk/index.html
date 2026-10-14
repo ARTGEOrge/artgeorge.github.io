@@ -486,11 +486,28 @@ scene.add(fill);
 
 const skyMat = new THREE.ShaderMaterial({
   side: THREE.BackSide, depthWrite:false,
-  uniforms:{ top:{value:new THREE.Color(SKY.day.top)}, bot:{value:new THREE.Color(SKY.day.bot)} },
-  vertexShader:`varying float h; void main(){ h = normalize(position).y;
+  uniforms:{ top:{value:new THREE.Color(SKY.day.top)}, bot:{value:new THREE.Color(SKY.day.bot)},
+             sunDir:{value:new THREE.Vector3(150, 180, 105).normalize()},
+             sunCol:{value:new THREE.Color(1.0, 0.92, 0.78)}, sunAmt:{value:1},
+             haze:{value:new THREE.Color(0.75, 0.80, 0.86)}, hazeAmt:{value:0.5},
+             glow:{value:new THREE.Color(0.55, 0.30, 0.12)}, glowAmt:{value:0} },
+  vertexShader:`varying vec3 vD; void main(){ vD = normalize(position);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`,
-  fragmentShader:`uniform vec3 top; uniform vec3 bot; varying float h;
-    void main(){ gl_FragColor = vec4(mix(bot, top, clamp(h*1.25+0.12,0.0,1.0)), 1.0); }`
+  /* The gradient is the sky; the rest is what air does to it. Light scatters
+   * round the sun, a pale band of haze sits along every horizon, and after dark
+   * the city lights the underside of its own sky orange from below. */
+  fragmentShader:`uniform vec3 top; uniform vec3 bot; uniform vec3 sunDir; uniform vec3 sunCol;
+    uniform float sunAmt; uniform vec3 haze; uniform float hazeAmt; uniform vec3 glow; uniform float glowAmt;
+    varying vec3 vD;
+    void main(){
+      vec3 d = normalize(vD); float h = d.y;
+      vec3 col = mix(bot, top, clamp(h*1.25+0.12,0.0,1.0));
+      float s = max(dot(d, sunDir), 0.0);
+      col += sunCol * (pow(s, 6.0)*0.16 + pow(s, 40.0)*0.30) * sunAmt;
+      col = mix(col, haze, exp(-max(h, 0.0)*11.0) * hazeAmt);
+      col += glow * exp(-max(h + 0.02, 0.0)*12.0) * glowAmt;
+      gl_FragColor = vec4(col, 1.0);
+    }`
 });
 const skyDome = new THREE.Mesh(new THREE.SphereGeometry(1180, 24, 16), skyMat);
 scene.add(skyDome);
@@ -585,12 +602,26 @@ const WARM = ['#ffd9a0','#ffe9c4','#fff4e0','#cfe4ff','#ffd06a'];
 
 // Masonry: punched windows in a brick/stone wall — deep reveals, stone sills
 // and lintels, a sash bar across each pane. What most of New York is made of.
+/* Drawn at twice the resolution it is laid out in: the layout below is in a
+ * 256-pixel square, scaled up, so the glazing bars, frames and the clutter in
+ * the windows stay crisp up close. The grain is made at the old size with the
+ * same random numbers as ever (the city's layout comes off the same stream, so
+ * nothing here may draw more of them) and stretched to fit; the new detail
+ * draws its own numbers from `xr`. */
+const xr = mulberry32(911);
 function masonry(base, glass, trim, litRatio, mortar){
-  const S = 256, cells = 8, cell = S/cells;
-  const ca = document.createElement('canvas'); ca.width = ca.height = S;
+  const S = 256, cells = 8, cell = S/cells, HI = 2;
+  const ca = document.createElement('canvas'); ca.width = ca.height = S*HI;
   const g  = ca.getContext('2d');
-  g.fillStyle = base; g.fillRect(0,0,S,S);
-  noise(g, S, 22);
+  {
+    const lo = document.createElement('canvas'); lo.width = lo.height = S;
+    const gl = lo.getContext('2d');
+    gl.fillStyle = base; gl.fillRect(0,0,S,S);
+    noise(gl, S, 22);
+    g.imageSmoothingEnabled = false;
+    g.drawImage(lo, 0, 0, S*HI, S*HI);
+  }
+  g.scale(HI, HI);
   // brick courses, and the perpends between them. Faint on their own, but a
   // wall without them reads as poured plastic at any distance you can see it.
   if(mortar){
@@ -605,9 +636,12 @@ function masonry(base, glass, trim, litRatio, mortar){
       g.fillRect(x, y + 1, 9, 3.6);
     }
   }
-  const cb = document.createElement('canvas'); cb.width = cb.height = S;
+  const cb = document.createElement('canvas'); cb.width = cb.height = S*HI;
   const e  = cb.getContext('2d');
+  e.scale(HI, HI);
   e.fillStyle = '#000'; e.fillRect(0,0,S,S);
+  // what the windows on this wall are painted: white, cream, black or green
+  const FRAME = ['#e8e4da', '#d9cfb8', '#1c1e20', '#2f4a3a'][Math.floor(xr()*4)];
   for(let y=0;y<cells;y++) for(let x=0;x<cells;x++){
     /* A New York window is wider and closer to its neighbour than it looks in a
      * photograph: on a tenement the pier between two windows is narrower than
@@ -642,12 +676,54 @@ function masonry(base, glass, trim, litRatio, mortar){
       g.fillRect(px, py, pw, ph);
     }
     g.fillStyle = 'rgba(255,255,255,.10)'; g.fillRect(px, py, pw, ph*0.10);
+    // curtains drawn back to each side, in somebody's choice of colour
+    const drapes = xr() < 0.16, dc = ['rgba(150,60,50,.75)','rgba(200,180,120,.7)','rgba(70,90,120,.7)','rgba(230,225,210,.7)'][Math.floor(xr()*4)];
+    if(drapes){ g.fillStyle = dc; g.fillRect(px, py, pw*0.22, ph); g.fillRect(px + pw*0.78, py, pw*0.22, ph); }
+    // the painted frame, and six-over-six glazing bars in the old sashes
+    g.fillStyle = FRAME;
+    g.fillRect(px, py, pw, 0.8); g.fillRect(px, py + ph - 0.8, pw, 0.8);
+    g.fillRect(px, py, 0.8, ph); g.fillRect(px + pw - 0.8, py, 0.8, ph);
+    const panes = mortar && xr() < 0.7;
+    if(panes){
+      g.fillStyle = 'rgba(20,22,26,.75)';
+      for(const f of [1/3, 2/3]) g.fillRect(px + pw*f - 0.3, py, 0.6, ph);
+      for(const f of [0.25, 0.75]) g.fillRect(px, py + ph*f - 0.3, pw, 0.6);
+    }
     g.fillStyle = 'rgba(14,18,24,.85)';                        // sash bar
     g.fillRect(px, py + ph*0.5 - 0.9, pw, 1.8);
+    // a keystone in the middle of the lintel
+    g.fillStyle = trim; g.fillRect(px + pw/2 - 2.2, py - 5, 4.4, 5);
+    g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(px + pw/2 + 2.2, py - 5, 0.7, 5);
+    // the shadow the sill throws, and the dirt that runs down from its ends
+    g.fillStyle = 'rgba(0,0,0,.22)'; g.fillRect(px - 3.5, py + ph + 4, pw + 7, 1.6);
+    g.fillStyle = 'rgba(0,0,0,.07)';
+    g.fillRect(px - 3, py + ph + 4, 1.4, cell*0.24); g.fillRect(px + pw + 1.6, py + ph + 4, 1.4, cell*0.24);
+    // an air conditioner in the lower sash, or a window box of geraniums
+    const ac = xr() < 0.13, box = !ac && xr() < 0.06;
+    if(ac){
+      const aw = pw*0.62, ah = ph*0.2, ax = px + (pw - aw)/2, ay = py + ph - ah;
+      g.fillStyle = '#c3c6c8'; g.fillRect(ax, ay, aw, ah);
+      g.fillStyle = 'rgba(0,0,0,.28)';
+      for(let s = ay + 1; s < ay + ah - 0.5; s += 1.4) g.fillRect(ax + 1, s, aw - 2, 0.5);
+      g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(ax, ay + ah, aw, 1.2);
+    } else if(box){
+      g.fillStyle = '#5a3a26'; g.fillRect(px - 1, py + ph - 3, pw + 2, 3.2);
+      for(let k = 0; k < 9; k++){
+        g.fillStyle = k % 3 ? '#3f6e32' : '#c23a2e';
+        g.fillRect(px + k*pw/9, py + ph - 5 - xr()*1.5, pw/9 + 0.4, 2.4);
+      }
+    }
     if(rnd() < litRatio){
       e.fillStyle = WARM[Math.floor(rnd()*WARM.length)];
       e.fillRect(px, py, pw, ph);
       e.fillStyle = 'rgba(0,0,0,.7)'; e.fillRect(px, py + ph*0.5 - 0.9, pw, 1.8);
+      if(panes){
+        e.fillStyle = 'rgba(0,0,0,.55)';
+        for(const f of [1/3, 2/3]) e.fillRect(px + pw*f - 0.3, py, 0.6, ph);
+        for(const f of [0.25, 0.75]) e.fillRect(px, py + ph*f - 0.3, pw, 0.6);
+      }
+      if(drapes){ e.fillStyle = 'rgba(0,0,0,.45)'; e.fillRect(px, py, pw*0.22, ph); e.fillRect(px + pw*0.78, py, pw*0.22, ph); }
+      if(ac){ e.fillStyle = '#000'; e.fillRect(px + pw*0.19, py + ph*0.8, pw*0.62, ph*0.2); }
     }
   }
   return { map: mkTex(ca), emissiveMap: mkTex(cb) };
@@ -656,13 +732,21 @@ function masonry(base, glass, trim, litRatio, mortar){
 // Curtain wall: continuous glass bands floor to floor, spandrel panel between,
 // thin vertical mullions. The Midtown / FiDi tower look.
 function curtain(spandrel, glassTop, glassBot, mullion, litRatio){
-  const S = 256, floors = 8, fh = S/floors, mull = 16, mw = S/mull;
-  const ca = document.createElement('canvas'); ca.width = ca.height = S;
+  const S = 256, floors = 8, fh = S/floors, mull = 16, mw = S/mull, HI = 2;
+  const ca = document.createElement('canvas'); ca.width = ca.height = S*HI;
   const g  = ca.getContext('2d');
-  g.fillStyle = spandrel; g.fillRect(0,0,S,S);
-  noise(g, S, 12);
-  const cb = document.createElement('canvas'); cb.width = cb.height = S;
+  {
+    const lo = document.createElement('canvas'); lo.width = lo.height = S;
+    const gl = lo.getContext('2d');
+    gl.fillStyle = spandrel; gl.fillRect(0,0,S,S);
+    noise(gl, S, 12);
+    g.imageSmoothingEnabled = false;
+    g.drawImage(lo, 0, 0, S*HI, S*HI);
+  }
+  g.scale(HI, HI);
+  const cb = document.createElement('canvas'); cb.width = cb.height = S*HI;
   const e  = cb.getContext('2d');
+  e.scale(HI, HI);
   e.fillStyle = '#000'; e.fillRect(0,0,S,S);
   for(let f=0;f<floors;f++){
     const y = f*fh + fh*0.14, h = fh*0.66;
@@ -695,6 +779,14 @@ function curtain(spandrel, glassTop, glassBot, mullion, litRatio){
     }
     g.fillStyle = mullion;                                     // floor lines
     g.fillRect(0, y - 2, S, 2); g.fillRect(0, y + h, S, 2);
+    // inside: the odd blind down, a ceiling light strip, a desk partition's top
+    for(let m=0;m<mull;m++){
+      const r1 = xr();
+      if(r1 < 0.10){ g.fillStyle = 'rgba(205,200,186,.55)'; g.fillRect(m*mw + 1, y, mw - 2, h*(0.3 + xr()*0.5)); }
+      else if(r1 < 0.16){ g.fillStyle = 'rgba(0,0,0,.25)'; g.fillRect(m*mw + 1, y + h*0.62, mw - 2, h*0.08); }
+    }
+    g.fillStyle = 'rgba(255,255,255,.06)'; g.fillRect(0, y + 1, S, 0.7);
+    g.fillStyle = 'rgba(0,0,0,.18)'; g.fillRect(0, y + h - 0.9, S, 0.9);   // the head of the sill in shadow
   }
   return { map: mkTex(ca), emissiveMap: mkTex(cb) };
 }
@@ -1264,8 +1356,26 @@ scene.add(cityGroup);
 {
   const t = flatTex('#1b3b52', 16, 128);
   t.repeat.set(120, 120);
+  /* Ripples as a normal map, drawn once: two sets of long low swells crossing,
+   * broken up with chop. The sun picks out a glittering road across them and
+   * the lit shore throws long streaks over them at night. */
+  const S = 256, ca = document.createElement('canvas'); ca.width = ca.height = S;
+  const g = ca.getContext('2d'), img = g.createImageData(S, S);
+  const hgt = (x, y) => Math.sin((x*2 + y)*6.2832/S*3) * 0.5 + Math.sin((x - y*2)*6.2832/S*5) * 0.35
+                      + Math.sin((x*3 + y*4)*6.2832/S*2) * 0.25 + Math.sin((x*7 - y*5)*6.2832/S) * 0.15;
+  for(let y=0;y<S;y++) for(let x=0;x<S;x++){
+    const dx = hgt(x+1, y) - hgt(x-1, y), dy = hgt(x, y+1) - hgt(x, y-1);
+    const k = (y*S + x)*4;
+    img.data[k] = 128 - dx*90; img.data[k+1] = 128 - dy*90; img.data[k+2] = 255; img.data[k+3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const nt = new THREE.CanvasTexture(ca);
+  nt.wrapS = nt.wrapT = THREE.RepeatWrapping;
+  nt.repeat.set(70, 70);
+  var waterNormal = nt;
   const w = new THREE.Mesh(new THREE.PlaneGeometry(GX*PITCH+900, GZ*PITCH+900),
-    new THREE.MeshLambertMaterial({map:t, color:0x9fc6dd}));
+    new THREE.MeshPhongMaterial({map:t, color:0x9fc6dd, normalMap:nt, normalScale:new THREE.Vector2(0.55, 0.55),
+                                 specular:0x8a96a0, shininess:90}));
   w.rotation.x = -Math.PI/2;
   w.position.y = -0.35;
   scene.add(w);
@@ -1773,6 +1883,7 @@ function spire(c, cx, cz, y, r0){
   const tip = colored(new THREE.SphereGeometry(0.42, 8, 6), 0x8a2020);
   tip.translate(cx, ry + nh + 0.3, cz);
   c.roof.push(tip);
+  airLights.push(cx, ry + nh + 0.75, cz);        // and the warning light that blinks on it
   return ry + nh;
 }
 // Spire, dome, mast or stepped cap — what you pick a tower out by from blocks away.
@@ -4522,6 +4633,8 @@ function latticeTower(tx, ty, z, top, col){
     strut(legs[0] - 1, y1, legs[1] + 1, y1, z, 0.7, col);
   }
   strut(legs[0] - 1, ty + bh*0.92, legs[1] + 1, ty + bh*0.92, z, 1.1, col);
+  bridgeBeacon(legs[0], ty + top + 0.8, z);
+  bridgeBeacon(legs[1], ty + top + 0.8, z);
 }
 // Granite, with the two pointed arches that make it the Brooklyn Bridge.
 function gothicTower(tx, ty, z, top, col){
@@ -4541,6 +4654,56 @@ function gothicTower(tx, ty, z, top, col){
   const cap = colored(new THREE.BoxGeometry(w*3 + gap*2 + 1.4, 1.2, 6.2), col);
   cap.translate(tx, ty + top*0.98, z);
   chunkOf(tx, z).prop.push(upper, cap);
+  // what the granite is dressed with: a footing at the deck, string courses,
+  // a cornice where the arches spring and a blind pointed arch in each bay above
+  const W = w*3 + gap*2, dark = shade(col, 0.72), pale = shade(col, 1.12);
+  const P = chunkOf(tx, z).prop;
+  for(const px of [tx - gap - w/2, tx, tx + gap + w/2])
+    P.push(colored(new THREE.BoxGeometry(w + 0.8, 1.6, 6.0), dark).translate(px, ty + 0.8, z));
+  for(const f of [0.30, 0.52, 0.66, 0.92])
+    P.push(colored(new THREE.BoxGeometry(W + (f === 0.52 ? 1.0 : 0.5), f === 0.52 ? 0.9 : 0.4, 5.2 + (f === 0.52 ? 1.0 : 0.5)), pale)
+      .translate(tx, ty + top*f, z));
+  for(const s of [-1, 1]){
+    const mid = tx + s*(gap + w)/2;
+    for(const fz of [-1, 1]){
+      const zz = z + fz*2.62;
+      P.push(colored(new THREE.BoxGeometry(gap*0.9, top*0.17, 0.06), dark).translate(mid, ty + top*0.755, zz));
+      // the pointed head of the blind arch
+      const a = colored(new THREE.BoxGeometry(gap*0.62, 0.35, 0.06), dark);
+      a.rotateZ(0.62).translate(mid - gap*0.2, ty + top*0.86, zz); P.push(a);
+      const b2 = colored(new THREE.BoxGeometry(gap*0.62, 0.35, 0.06), dark);
+      b2.rotateZ(-0.62).translate(mid + gap*0.2, ty + top*0.86, zz); P.push(b2);
+    }
+  }
+  bridgeBeacon(tx - W/2 + 0.6, ty + top + 0.9, z);
+  bridgeBeacon(tx + W/2 - 0.6, ty + top + 0.9, z);
+}
+
+/* ---------- the bridges after dark ---------------------------------------
+ * New York's bridges are strung with lights along their main cables — the
+ * necklaces — and lamp posts walk across each deck. Both are gathered here as
+ * points and drawn as one instanced mesh each when the city is put together;
+ * they come on with the street lamps. A red light marks the top of each tower. */
+const necklacePts = [], deckLampPts = [], airLights = [];
+function bridgeBeacon(x, y, z){ airLights.push(x, y, z); }
+function buildBridgeLights(){
+  const m4 = new THREE.Matrix4();
+  const make = (pts, geo, colour, gain) => {
+    const n = pts.length / 3;
+    if(!n) return null;
+    const mat = registerLit(new THREE.MeshBasicMaterial({ color: colour }), gain);
+    const inst = new THREE.InstancedMesh(geo, mat, n);
+    for(let k=0;k<n;k++) inst.setMatrixAt(k, m4.makeTranslation(pts[k*3], pts[k*3+1], pts[k*3+2]));
+    inst.computeBoundingSphere();
+    cityGroup.add(inst);
+    return inst;
+  };
+  const neck = make(necklacePts, new THREE.SphereGeometry(0.32, 6, 4), 0xfff4d8, 1.5);
+  if(neck){ neck.visible = false; lampGlows.push(neck); }
+  const deck = make(deckLampPts, new THREE.SphereGeometry(0.3, 8, 6), 0xffd9a0, 1.3);
+  if(deck){ deck.visible = false; lampGlows.push(deck); }
+  const air = make(airLights, new THREE.SphereGeometry(0.55, 8, 6), 0xff4444, 1.0);
+  if(air) beacons.push(air);
 }
 
 function suspensionBridge(b, len, col, Z){
@@ -4570,6 +4733,19 @@ function suspensionBridge(b, len, col, Z){
     const cx0 = b.a + len*k/N, cx1 = b.a + len*(k+1)/N;
     for(const s of [-1, 1])
       strut(cx0, cableY(cx0), cx1, cableY(cx1), b.line + s*Z, 0.5, col);
+  }
+  // the necklace: a light every few metres along both main cables
+  for(let x = b.a + 2; x < b.b - 2; x += 4.2)
+    for(const s of [-1, 1]) necklacePts.push(x, cableY(x) + 0.45, b.line + s*Z);
+  // lamp posts down both edges of the deck
+  for(let x = b.a + 8; x < b.b - 8; x += 18){
+    const dy = CURB + bridgeY(b, x);
+    for(const s of [-1, 1]){
+      const zz = b.line + s*(DECK_HALF - 0.6);
+      chunkOf(x, zz).prop.push(colored(new THREE.CylinderGeometry(0.08, 0.12, 5.2, 6), 0x2c3138).translate(x, dy + 2.6, zz));
+      chunkOf(x, zz).prop.push(colored(new THREE.BoxGeometry(0.5, 0.22, 0.5), 0x22262b).translate(x, dy + 5.3, zz));
+      deckLampPts.push(x, dy + 5.08, zz);
+    }
   }
   // the suspenders — the thing that reads as a suspension bridge up close
   for(let x = b.a + 3; x < b.b - 3; x += 5.5){
@@ -7092,15 +7268,66 @@ tasks.push(() => {
 
 // finalise every chunk into a handful of draw calls
 tasks.push(() => {
-  const trunk = colored(new THREE.CylinderGeometry(0.15,0.24,3.6,6), 0x54402e).translate(0,1.8,0);
-  const l1 = colored(new THREE.IcosahedronGeometry(1.9,0), 0x3d6f2f).translate(0,4.5,0);
-  const l2 = colored(new THREE.IcosahedronGeometry(1.4,0), 0x4c8038).translate(0.8,3.7,0.5);
-  const l3 = colored(new THREE.IcosahedronGeometry(1.2,0), 0x35632a).translate(-0.8,4.0,-0.5);
-  const treeGeo = mergeGeos([trunk,l1,l2,l3]);
-  const pole = colored(new THREE.CylinderGeometry(0.11,0.15,6.4,6), 0x2c3138).translate(0,3.2,0);
-  const arm  = colored(new THREE.BoxGeometry(1.5,0.16,0.16), 0x2c3138).translate(0.7,6.35,0);
-  const head = colored(new THREE.BoxGeometry(0.9,0.3,0.5), 0x22262b).translate(1.3,6.1,0);
-  const lampGeo = mergeGeos([pole,arm,head]);
+  /* A London plane, the street tree of New York: a forked trunk with a few
+   * limbs, and a crown of lobes that are lumpy rather than polished, sunlit on
+   * top and darker underneath and inside. Kept low-poly on purpose — there are
+   * thousands of them — but there is enough in each to read as a tree. */
+  const tr = mulberry32(4242);
+  const lobe = (r, x, y, z, sx, sy, sz, hex) => {
+    const g = new THREE.IcosahedronGeometry(r, 0);
+    const p = g.attributes.position, moved = new Map();
+    for(let k=0;k<p.count;k++){
+      const key = p.getX(k).toFixed(3) + ',' + p.getY(k).toFixed(3) + ',' + p.getZ(k).toFixed(3);
+      let f = moved.get(key); if(f === undefined){ f = 0.8 + tr()*0.4; moved.set(key, f); }
+      p.setXYZ(k, p.getX(k)*f*sx, p.getY(k)*f*sy, p.getZ(k)*f*sz);
+    }
+    g.computeVertexNormals();
+    const c = colored(g, hex).translate(x, y, z);
+    const cc = c.attributes.color, pp = c.attributes.position;
+    for(let k=0;k<pp.count;k++){
+      const up = (pp.getY(k) - (y - r*sy)) / (2*r*sy);
+      const s = 0.68 + up*0.48 + (tr() - 0.5)*0.08;
+      cc.setXYZ(k, cc.getX(k)*s, cc.getY(k)*s, cc.getZ(k)*s);
+    }
+    return c;
+  };
+  const treeGeo = mergeGeos([
+    colored(new THREE.CylinderGeometry(0.14,0.25,3.4,7), 0x6a5a48).translate(0,1.7,0),
+    colored(new THREE.CylinderGeometry(0.06,0.12,1.9,5), 0x6a5a48).rotateZ(-0.6).translate(0.45,3.6,0),
+    colored(new THREE.CylinderGeometry(0.06,0.11,1.8,5), 0x6a5a48).rotateX(0.55).translate(0,3.55,0.42),
+    colored(new THREE.CylinderGeometry(0.05,0.1,1.7,5), 0x6a5a48).rotateZ(0.65).translate(-0.42,3.5,-0.1),
+    lobe(1.0, 0, 4.7, 0, 1.9, 1.5, 1.9, 0x46793a),
+    lobe(1.0, 1.1, 4.2, 0.4, 1.3, 1.1, 1.3, 0x528a40),
+    lobe(1.0, -1.0, 4.4, -0.5, 1.3, 1.15, 1.25, 0x3f7034),
+    lobe(1.0, 0.2, 5.6, -0.6, 1.2, 1.0, 1.2, 0x5a9446),
+    lobe(1.0, -0.4, 4.0, 1.1, 1.15, 1.0, 1.1, 0x4a8038),
+    lobe(1.0, 0.6, 3.8, -1.2, 1.0, 0.9, 1.0, 0x3d6c31)
+  ]);
+  /* The Manhattan street light: a tapered octagonal pole on a fluted base,
+   * a davit arm curving out over the road, and the cobra head on the end of it
+   * with its glass bowl underneath. The glow sphere still sits at (1.3, 5.95). */
+  // (there are thousands of these: every piece is as few sides as it can be)
+  const lampParts = [
+    colored(new THREE.CylinderGeometry(0.30,0.36,0.9,6,1,true), 0x283036).translate(0,0.45,0),
+    colored(new THREE.CylinderGeometry(0.33,0.33,0.08,6,1,true), 0x3a434a).translate(0,0.92,0),
+    colored(new THREE.CylinderGeometry(0.09,0.15,5.6,6,1,true), 0x2c3138).translate(0,3.6,0),
+    colored(new THREE.CylinderGeometry(0.13,0.13,0.12,6,1,true), 0x3a434a).translate(0,2.2,0)
+  ];
+  // the arm, in short straight pieces round a quarter circle
+  for(let k=0;k<3;k++){
+    const a0 = (k/3)*Math.PI/2, a1 = ((k+1)/3)*Math.PI/2, R = 0.75;
+    const x0 = R - Math.cos(a0)*R, y0 = 6.25 + Math.sin(a0)*R*0.35;
+    const x1 = R - Math.cos(a1)*R, y1 = 6.25 + Math.sin(a1)*R*0.35;
+    const L = Math.hypot(x1 - x0, y1 - y0);
+    lampParts.push(colored(new THREE.CylinderGeometry(0.06,0.06,L+0.02,4,1,true), 0x2c3138)
+      .rotateZ(-Math.atan2(x1 - x0, y1 - y0)).translate((x0+x1)/2, (y0+y1)/2, 0));
+  }
+  lampParts.push(colored(new THREE.CylinderGeometry(0.06,0.06,0.6,4,1,true), 0x2c3138).rotateZ(Math.PI/2).translate(1.0,6.52,0));
+  // the cobra head: a long low shell, and its bowl
+  lampParts.push(colored(new THREE.SphereGeometry(0.5,8,3,0,Math.PI*2,0,Math.PI/2), 0x3a4148)
+    .scale(1.25,0.42,0.62).translate(1.35,6.12,0));
+  lampParts.push(colored(new THREE.PlaneGeometry(1.1,0.56).rotateX(Math.PI/2), 0x22262b).translate(1.35,6.08,0));
+  const lampGeo = mergeGeos(lampParts);
   const glowGeo = new THREE.SphereGeometry(0.34, 8, 6);
   const glowMat = registerLit(new THREE.MeshBasicMaterial({color:0xffd27a}), 1.3);
   const parkGeo = parkedGeo();
@@ -8497,6 +8724,10 @@ function applySky(){
    * chosen to be instead of washing out two stops. */
   skyMat.uniforms.top.value.copy(_wcA.setHex(s.top).lerp(_wcB, g)).convertSRGBToLinear();
   skyMat.uniforms.bot.value.copy(_wcA.setHex(s.bot).lerp(_wcB, g*0.85)).convertSRGBToLinear();
+  skyMat.uniforms.haze.value.copy(_wcA.setHex(night ? 0x2a2f3c : 0xd6dde4).lerp(_wcB, g*0.8)).convertSRGBToLinear();
+  skyMat.uniforms.hazeAmt.value = night ? 0.35 : 0.55 + g*0.3;
+  skyMat.uniforms.sunAmt.value = night ? 0 : 1 - w.grey;
+  skyMat.uniforms.glowAmt.value = night ? 0.3 + g*0.4 : 0;
   scene.fog.color.copy(_wcA.setHex(s.fog).lerp(_wcB, g*0.9));
   scene.fog.density = (night ? 0.0060 : 0.0046) * w.fog;
   /* Real shadows and the fill light are doing the same job from opposite ends.
@@ -9025,6 +9256,7 @@ let greenPhase = 0;                    // 0 = avenues green, 1 = cross streets
 
 function tick(){
   requestAnimationFrame(tick);
+  const _t0 = performance.now();
   const dt = Math.min(0.05, clock.getDelta());
   const t  = clock.elapsedTime;
   // set before traffic reads it
@@ -9098,6 +9330,8 @@ function tick(){
   }
   waterTex.offset.x = t * 0.004;
   waterTex.offset.y = t * 0.0025;
+  waterNormal.offset.x = t * 0.011;
+  waterNormal.offset.y = -t * 0.007;
   skyDome.position.set(camera.position.x, 0, camera.position.z);
   stars.position.copy(skyDome.position);
 
@@ -9172,7 +9406,24 @@ function tick(){
   }
 
   renderPost();
+  // frame timing for the automated checks (?test): CPU and GPU, synced
+  if(TEST){
+    if(TEST.sync){ const gl = renderer.getContext(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, TEST.px); }
+    TEST.times.push(performance.now() - _t0);
+    if(TEST.grab){ TEST.shot = canvas.toDataURL('image/jpeg', 0.86); TEST.grab = false; }
+  }
 }
+
+/* A handle for the scripted checks: only with ?test in the address, and it
+ * changes nothing about how the walk looks or plays. */
+const TEST = location.search.includes('test') ? { times: [], sync: false, px: new Uint8Array(4) } : null;
+if(TEST) window.NYC = Object.assign(TEST, {
+  player, camera, renderer, scene, keys,
+  setNight: v => setNight(v, true), setWeather: i => setWeather(i, true),
+  setQuality: i => { qi = i; applyQuality(true); },
+  lock: v => { locked = v; },
+  get drive(){ return drive; }
+});
 
 function updateWalking(dt, mf, ms){
   const mag = Math.hypot(mf, ms);
@@ -10626,6 +10877,7 @@ function start(){
   // the crowd is instanced: the meshes themselves never move, only the
   // per-instance matrices, so they can stay static like the rest of the city
 
+  buildBridgeLights();
   peds.forEach(relocatePed);
   steams.forEach(s => { s.x = player.x + rr(-70,70); s.z = player.z + rr(-70,70); });
   // ?rain, ?snow and the rest let you drop straight into the weather you want

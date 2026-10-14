@@ -3,7 +3,7 @@
  * Everything lives in fixed-size pools that are allocated once at level start:
  * mid-fight is the worst possible moment for the garbage collector to run. */
 import * as THREE from 'three';
-import { puffTexture, splatTexture } from './textures.js';
+import { puffTexture, splatTexture, holeTexture } from './textures.js';
 import { clamp, randRange, TAU } from './util.js';
 
 const MAX_SOFT = 900;    // blood, smoke, dust — normal blending
@@ -151,6 +151,7 @@ export class Fx {
       );
       m.visible = false;
       m.userData.life = 0;
+      m.userData.splat = splats[i % 3];
       scene.add(m);
       this.decals.push(m);
     }
@@ -271,9 +272,12 @@ export class Fx {
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
     m.quaternion.copy(q);
     m.rotateZ(Math.random() * TAU);
-    if (colourIndex != null) m.material.color.setHex(colourIndex);
+    // wall hits (tinted calls) get a proper bullet hole; blood keeps its splat
+    if (colourIndex != null) { m.material.map = this.holeTex || (this.holeTex = holeTexture()); m.material.color.setHex(0xffffff); }
+    else { m.material.map = m.userData.splat; m.material.color.setHex(0xffffff); }
     return m;
   }
+
 
   gib(p, vel, colour = 0x8c2230, scale = 1) {
     const m = this.gibs[this.gibAt++ % MAX_GIBS];
