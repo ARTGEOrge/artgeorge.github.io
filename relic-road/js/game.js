@@ -12,6 +12,7 @@ import { loadCity, buildCity, findPlace, openSpotNear, nearSolemn, isSolemn, wal
 import { Roads } from './roads.js';
 import { buildStreets } from './streets.js';
 import { Life } from './life.js';
+import { Drive } from './drive.js';
 import { MiniMap } from './minimap.js';
 import { facade } from './facade.js';
 import { CITIES } from './cities.js';
@@ -20,6 +21,8 @@ import * as audio from './audio.js';
 
 const SAVE = 'relicRoad.v1';
 const REACH = 3.2;              // how close you must be to pick something up
+const CAR_REACH = 8;            // how near a car must be to get into it
+const _ray = new THREE.Vector3();
 
 /* What every city turns into after dark. The sky keeps a warm glow low on the
  * horizon, the way a lit city does, and the fog closes in. */
@@ -107,6 +110,10 @@ export class Game {
     this.map = hud.mapCanvases ? new MiniMap(hud.mapCanvases.mini, hud.mapCanvases.big) : null;
     this.locT = 0;
 
+    this.drive = new Drive();
+    // ?test: lets a script get in and out without pointer lock (headless runs have none)
+    this.test = new URLSearchParams(location.search).has('test');
+
     this.lockPending = false;
     this.lockChangedAt = 0;
     this.dragLook = false;
@@ -133,13 +140,14 @@ export class Game {
       const k = e.code;
       if (down) this.keys.add(k); else this.keys.delete(k);
       if (down && k === 'KeyE') this.interact();
+      if (down && k === 'KeyF' && !e.repeat) this.useCar();
       if (down && k === 'KeyJ') this.hud.toggleJournal();
       if (down && k === 'KeyN' && this.state === 'playing' && !e.repeat) this.toggleNight();
       if (down && k === 'KeyM' && this.state === 'playing' && !e.repeat) this.map?.toggle();
       if (down && k === 'KeyG' && this.state === 'playing' && !e.repeat) this.cycleQuality();
       if (down && k === 'Escape' && this.state === 'playing') this.pause();
       const used = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
-                    'Space', 'ShiftLeft', 'ControlLeft', 'KeyE', 'KeyJ', 'KeyN', 'KeyM', 'KeyG'];
+                    'Space', 'ShiftLeft', 'ControlLeft', 'KeyE', 'KeyF', 'KeyJ', 'KeyN', 'KeyM', 'KeyG'];
       if (used.includes(k)) e.preventDefault();
     };
     addEventListener('keydown', e => setKey(e, true));
@@ -149,7 +157,10 @@ export class Game {
       if (this.state !== 'playing') return;
       if (!this.locked) { this.lock(); this.dragLook = true; }
       if (e.button === 0) this.interact();
+      // right-click: get into the car you are looking at, or out of the one you are in
+      if (e.button === 2 && (this.locked || this.test)) this.useCar();
     });
+    this.canvas.addEventListener('contextmenu', e => e.preventDefault());
     addEventListener('mouseup', () => { this.dragLook = false; });
 
     addEventListener('mousemove', e => {
@@ -158,6 +169,7 @@ export class Game {
       if (!this.locked && !this.dragLook) return;
       const dx = e.movementX || 0, dy = e.movementY || 0;
       if (Math.abs(dx) > 250 || Math.abs(dy) > 250) return;
+      if (this.drive.active) { this.drive.look(dx, dy); return; }
       this.player.yaw -= dx * 0.0022;
       this.player.pitch = clamp(this.player.pitch - dy * 0.0022, -1.45, 1.45);
     });
@@ -313,6 +325,8 @@ export class Game {
   pause() {
     if (this.state !== 'playing') return;
     this.state = 'paused';
+    // keys let go while paused never send their keyup: start clean on resume
+    this.keys.clear();
     document.exitPointerLock?.();
     this.map?.toggle(false);
     this.hud.pause(true);
@@ -453,6 +467,8 @@ export class Game {
   }
 
   clear() {
+    this.drive.reset();
+    this.hud.speed?.(null);
     if (this.world) { this.world.dispose(); this.world = null; }
     if (this.sky) { this.scene.remove(this.sky); this.sky.geometry.dispose(); this.sky.material.dispose(); this.sky = null; }
     if (this.dust) this.dust.dispose();
@@ -484,7 +500,7 @@ export class Game {
   }
 
   interact() {
-    if (this.state !== 'playing') return;
+    if (this.state !== 'playing' || this.drive.active) return;     // relics are taken on foot
     const near = this.nearest();
     if (!near || near.dist > REACH) return;
     if (near.target.table) return this.finishCity();
@@ -512,6 +528,34 @@ export class Game {
       this.table.visible = true;
       this.hud.tableReady(city.vault.label);
     }
+  }
+
+  /* ---------------------------------------------------------------- cars */
+  /** The car under the crosshair, within reach, or null. */
+  aimedCar() {
+    if (!this.life) return null;
+    this.camera.getWorldDirection(_ray);
+    return this.life.pickCar(this.camera.position, _ray, CAR_REACH);
+  }
+
+  /** Get into the car in front of you, or out of the one you are in. */
+  useCar() {
+    if (this.state !== 'playing' || !this.life) return;
+    if (this.drive.active) {
+      const yaw = this.drive.viewYaw();
+      const spot = this.drive.exit(this.life, this.world, this.walk, openSpotNear);
+      if (!spot) return;
+      this.player.pos.set(spot.x, 0, spot.z);
+      this.player.vel.set(0, 0, 0);
+      this.player.yaw = yaw;
+      this.player.pitch = -0.08;
+      this.hud.speed(null);
+      return;
+    }
+    const car = this.aimedCar();
+    if (!car) return;
+    this.drive.enter(car, this.life, this.camera);
+    this.hud.speed(0);
   }
 
   finishCity() {
@@ -548,7 +592,14 @@ export class Game {
 
   update(dt) {
     if (!this.world) return;
-    if (this.state === 'playing') {
+    if (this.state === 'playing' && this.drive.active) {
+      // you go where the car goes: the compass, the map and the traffic all follow it
+      this.drive.update(dt, this.keys, this.world, this.life, this.data.half, this.camera, this.night);
+      const c = this.drive.car;
+      this.player.pos.set(c.x, 0, c.z);
+      this.player.yaw = this.drive.viewYaw();
+      this.hud.speed(Math.abs(this.drive.speed) * 3.6);
+    } else if (this.state === 'playing') {
       this.readInput();
       this.player.update(dt, this.input, this.world, this.time);
       this.life?.pushPlayer(this.player.pos);
@@ -592,11 +643,19 @@ export class Game {
       const warm = clamp(1 - (near.dist - REACH) / 120, 0, 1);
       this.heat = damp(this.heat || 0, warm, 6, dt);
       this.hud.resonance(this.heat, near.dist, near.target.table);
-      this.hud.prompt(near.dist <= REACH ? (near.target.table ? 'Read the map  [E]' : 'Take the relic  [E]') : '');
     } else {
       this.hud.resonance(0, 0, false);
-      this.hud.prompt('');
     }
+    // what you can do from here: take a relic on foot, or get into the car in front of you
+    let prompt = '';
+    if (this.drive.active) {
+      if (near && near.dist <= REACH + 2) prompt = near.target.table ? 'Get out to read the map' : 'Get out to take the relic';
+    } else if (near && near.dist <= REACH) {
+      prompt = near.target.table ? 'Read the map  [E]' : 'Take the relic  [E]';
+    } else if (this.state === 'playing' && (this.locked || this.test)) {
+      if (this.aimedCar()) prompt = 'Right-click to drive';
+    }
+    this.hud.prompt(prompt);
     this.hud.compass(this.player.yaw, near ? near.target.pos : null, p);
     this.hud.fps(1 / Math.max(dt, 0.0001));
 

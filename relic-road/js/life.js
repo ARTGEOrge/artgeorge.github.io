@@ -16,7 +16,9 @@ import { makeRng, clamp, damp, TAU, angleDelta } from './util.js';
 
 const CAR_N = 46, PED_N = 150, FLOCKS = 3, PER_FLOCK = 11;
 const CAR_FAR = 330, PED_FAR = 160;
-const CAR_HALF = [2.15, 0.9];
+export const CAR_HALF = [2.15, 0.9];
+const CAR_TOP = 1.5;                 // roof height, for picking a car out with the crosshair
+const PARK_FAR = 140;                // a car you left goes back into traffic past this, out of sight
 
 const SKIN = [0xf2cdad, 0xe8b48c, 0xd49b71, 0xc98d63, 0xa8703f, 0x8d5a3a, 0x6b4128, 0xf0d2b8];
 const HAIR = [0x1a130e, 0x241a12, 0x3a2517, 0x4a2f1c, 0x6b4a2a, 0x8a6a3a, 0xb8a58a, 0x9a9a9a, 0x2a2a2a];
@@ -214,7 +216,8 @@ export class Life {
     const palette = st.cars || [0xe9e9e6, 0x1c1f24, 0xc9ccd0];
     this.cars = [];
     for (let i = 0; i < nCars; i++) {
-      const c = { i, x: 0, z: 0, yaw: 0, v: 0, alive: false, hint: 0, wait: 0 };
+      // owned: you are driving it; parked: you left it, and it waits for you
+      const c = { i, x: 0, z: 0, yaw: 0, v: 0, alive: false, hint: 0, wait: 0, owned: false, parked: false };
       this.carBody.setColorAt(i, new THREE.Color(palette[i % palette.length]));
       this.cars.push(c);
     }
@@ -283,6 +286,7 @@ export class Life {
     this.shadows.count = nCars + nPeds;
 
     this.started = false;
+    this.dodge = 1.4;                // how near the player a walker steps aside: wider round a car
   }
 
   /* ----------------------------------------------------------- placing */
@@ -375,6 +379,14 @@ export class Life {
     const lane = this.left ? -1 : 1;
     let respawns = 0;
     for (const c of this.cars) {
+      // yours: the driving code moves it, traffic leaves it alone
+      if (c.owned) { this.placeCar(c); continue; }
+      if (c.parked) {
+        // where you left it, until it is far away and out of sight
+        const dx = c.x - P.x, dz = c.z - P.z, d = Math.hypot(dx, dz);
+        if (d < PARK_FAR || ((dx * f2.x + dz * f2.z) / d > 0.15 && d < CAR_FAR)) { this.placeCar(c); continue; }
+        c.parked = false; c.alive = false;
+      }
       if (!c.alive || Math.hypot(c.x - P.x, c.z - P.z) > CAR_FAR) {
         if (respawns++ < 2) this.spawnCar(c, P, f2, false);
         if (!c.alive) {
@@ -395,6 +407,14 @@ export class Life {
       for (const o of this.cars) {
         if (o === c || !o.alive) continue;
         if (Math.abs(o.x - c.x) > 16 || Math.abs(o.z - c.z) > 16) continue;
+        // the car you drive or left parked is in the way whichever way it points
+        if (o.owned || o.parked) {
+          look(o.x, o.z, 2.6, 6.2);
+          // and right up against it: stop dead rather than drive into it
+          const rx = o.x - c.x, rz = o.z - c.z, along = rx * hx + rz * hz;
+          if (along > 0 && along < 5.6 && Math.abs(rx * hz - rz * hx) < 2.8) { want = 0; c.v = 0; }
+          continue;
+        }
         if (Math.cos(o.yaw - c.yaw) < 0.4) continue;       // only cars going our way
         look(o.x, o.z, 1.7, 6.5);
       }
@@ -417,23 +437,65 @@ export class Life {
         c.yaw += angleDelta(c.yaw, yaw) * (1 - Math.exp(-7 * dt));
       }
 
-      dummy.position.set(c.x, 0.02, c.z);
-      dummy.rotation.set(0, c.yaw, 0);
-      dummy.scale.set(1, 1, 1);
-      dummy.updateMatrix();
-      this.carBody.setMatrixAt(c.i, dummy.matrix);
-      this.carTrim.setMatrixAt(c.i, dummy.matrix);
-      this.carLights.setMatrixAt(c.i, dummy.matrix);
-      dummy.position.y = 0.08;
-      dummy.scale.set(2.7, 1, 1.35);
-      dummy.updateMatrix();
-      this.shadows.setMatrixAt(c.i, dummy.matrix);
+      this.placeCar(c);
     }
     this.carBody.instanceMatrix.needsUpdate = this.carTrim.instanceMatrix.needsUpdate =
       this.carLights.instanceMatrix.needsUpdate = true;
     const glow = 0.4 + night * 0.9;
     this.carLightMat.color.setRGB(glow, glow, glow);
   }
+
+  placeCar(c) {
+    dummy.position.set(c.x, 0.02, c.z);
+    dummy.rotation.set(0, c.yaw, 0);
+    dummy.scale.set(1, 1, 1);
+    dummy.updateMatrix();
+    this.carBody.setMatrixAt(c.i, dummy.matrix);
+    this.carTrim.setMatrixAt(c.i, dummy.matrix);
+    this.carLights.setMatrixAt(c.i, dummy.matrix);
+    dummy.position.y = 0.08;
+    dummy.scale.set(2.7, 1, 1.35);
+    dummy.updateMatrix();
+    this.shadows.setMatrixAt(c.i, dummy.matrix);
+  }
+
+  /**
+   * The car a ray hits, if any within `maxDist`: each car is a box turned to
+   * its heading, so the ray goes into the car's own frame and meets the box
+   * there. `pad` widens the box a little, so near the crosshair is enough.
+   */
+  pickCar(o, d, maxDist, pad = 0.25) {
+    let best = null, bestT = maxDist;
+    for (const c of this.cars) {
+      if (!c.alive) continue;
+      const rx = o.x - c.x, rz = o.z - c.z;
+      if (rx * rx + rz * rz > (maxDist + 3) * (maxDist + 3)) continue;
+      const hx = Math.cos(c.yaw), hz = -Math.sin(c.yaw);
+      const ox = rx * hx + rz * hz, oz = -rx * hz + rz * hx, oy = o.y;
+      const dx = d.x * hx + d.z * hz, dz = -d.x * hz + d.z * hx, dy = d.y;
+      let t0 = 0, t1 = bestT;
+      // x, y, z slabs in turn
+      for (let a = 0; a < 3 && t0 <= t1; a++) {
+        const org = a === 0 ? ox : a === 1 ? oy : oz, dir = a === 0 ? dx : a === 1 ? dy : dz;
+        const lo = a === 0 ? -CAR_HALF[0] - pad : a === 1 ? 0 : -CAR_HALF[1] - pad;
+        const hi = a === 0 ? CAR_HALF[0] + pad : a === 1 ? CAR_TOP : CAR_HALF[1] + pad;
+        if (Math.abs(dir) < 1e-6) { if (org < lo || org > hi) t0 = Infinity; continue; }
+        let tn = (lo - org) / dir, tf = (hi - org) / dir;
+        if (tn > tf) { const k = tn; tn = tf; tf = k; }
+        if (tn > t0) t0 = tn;
+        if (tf < t1) t1 = tf;
+      }
+      if (t0 <= t1 && t0 < bestT) { bestT = t0; best = c; }
+    }
+    if (best) best.pickDist = bestT;
+    return best;
+  }
+
+  /** Take a car out of traffic: it is yours now. */
+  takeCar(c) { c.owned = true; c.parked = false; c.v = 0; c.wait = 0; }
+
+  /** Leave it where it stands; traffic may have it back once you are well away. */
+  parkCar(c) { c.owned = false; c.parked = true; c.v = 0; }
 
   updatePeds(dt, P, f2) {
     const nC = this.cars.length;
@@ -460,7 +522,7 @@ export class Life {
       pointAt(p.way, p.s, at, p.hint);
       p.hint = at.seg;
       const tx = at.dx * p.dir, tz = at.dz * p.dir;
-      if (dP < 1.4) {
+      if (dP < this.dodge) {
         const side = ((P.x - at.x) * -tz + (P.z - at.z) * tx) > 0 ? -1 : 1;
         p.lat = clamp(p.lat + side * dt * 1.8, -Math.max(1, p.way.w), Math.max(1, p.way.w));
       }
@@ -586,7 +648,7 @@ export class Life {
   pushPlayer(pos) {
     const R = 0.38;
     for (const c of this.cars) {
-      if (!c.alive || pos.y > 1.5) continue;
+      if (!c.alive || c.owned || pos.y > 1.5) continue;
       const rx = pos.x - c.x, rz = pos.z - c.z;
       if (rx * rx + rz * rz > 9) continue;
       const hx = Math.cos(c.yaw), hz = -Math.sin(c.yaw);

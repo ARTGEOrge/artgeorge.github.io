@@ -22,6 +22,7 @@ function show(id) {
 /* ------------------------------------------------------------------- HUD */
 let toastTimer = 0, noteTimer = 0;
 let journalOpen = true;
+let lastKmh = -1;
 
 const hud = {
   mapCanvases: { mini: $('minimap'), big: $('bigmapc') },
@@ -107,6 +108,15 @@ const hud = {
   },
 
   prompt(text) { $('prompt').textContent = text; },
+
+  /** The speedometer, while driving: km/h, or null to put it away. */
+  speed(kmh) {
+    const el = $('speedo');
+    if (kmh == null) { el.hidden = true; $('cross').hidden = false; lastKmh = -1; return; }
+    if (el.hidden) { el.hidden = false; $('cross').hidden = true; }    // no crosshair on the car roof
+    const v = Math.round(kmh);
+    if (v !== lastKmh) { lastKmh = v; $('speedVal').textContent = v; }
+  },
 
   compass(yaw, target, from) {
     const deg = (-yaw * 180 / Math.PI + 360000) % 360;
