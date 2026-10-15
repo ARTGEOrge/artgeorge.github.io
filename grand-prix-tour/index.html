@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="description" content="Grand Prix World Tour — a 3D Formula-style road race across ten world locations, from Monte Carlo to Singapore." />
+<title>Grand Prix World Tour — Nexus Play</title>
+<link href="vendor/fonts/fonts.css" rel="stylesheet" />
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --red: #e10600; --gold: #ffcb3a; --silver: #cfd6de; --bronze: #d58a4a; --green: #20d070; --purple: #b14cff;
+    --text: #f4f4f6; --muted: #9aa0aa; --line: rgba(255,255,255,.14); --glass: rgba(14,15,20,.62);
+    --display: "Chakra Petch", "Bahnschrift", "Segoe UI Semibold", system-ui, sans-serif;
+    --body: "Inter", "Segoe UI", system-ui, sans-serif;
+  }
+  html, body { height: 100%; overflow: hidden; background: #07080c; }
+  body { font-family: var(--body); color: var(--text); user-select: none; -webkit-user-select: none; -webkit-font-smoothing: antialiased; touch-action: none; }
+  canvas#gl { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+  [hidden] { display: none !important; }
+  button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+  .glass { background: var(--glass); border: 1px solid var(--line); -webkit-backdrop-filter: blur(10px) saturate(140%); backdrop-filter: blur(10px) saturate(140%); }
+  .disp { font-family: var(--display); }
+
+  /* ------------------------------------------------ screens */
+  .screen { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; overflow-y: auto; }
+  .screen.dim { background: linear-gradient(180deg, rgba(5,6,10,.55), rgba(5,6,10,.85)); }
+  .brand { font-family: var(--display); font-size: 13px; letter-spacing: .4em; color: var(--muted); text-transform: uppercase; }
+  .logo { font-family: var(--display); font-weight: 700; font-size: clamp(38px, 8vw, 84px); line-height: .92; text-align: center; letter-spacing: .02em; text-transform: uppercase; font-style: italic; margin: 10px 0 6px; text-shadow: 0 6px 40px rgba(0,0,0,.6); }
+  .logo span { color: var(--red); }
+  .tag { color: #c9ced6; font-size: 15px; margin-bottom: 26px; text-align: center; max-width: 520px; }
+  .btns { display: flex; flex-direction: column; gap: 10px; width: min(320px, 100%); }
+  .btn { font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: .12em; text-transform: uppercase; padding: 14px 20px; border-radius: 12px; background: rgba(255,255,255,.08); border: 1px solid var(--line); transition: background .15s, transform .15s; text-align: center; }
+  .btn:hover, .btn:focus-visible { background: rgba(255,255,255,.16); outline: none; }
+  .btn:active { transform: scale(.98); }
+  .btn.primary { background: var(--red); border-color: transparent; }
+  .btn.primary:hover { background: #ff2a1a; }
+  .btn.small { font-size: 13px; padding: 10px 14px; }
+  a.btn { color: inherit; text-decoration: none; display: block; }
+  @media (min-width: 900px) and (min-aspect-ratio: 6/5) {
+    #menu { align-items: flex-start; padding-left: 8vw; }
+    #menu .logo, #menu .tag { text-align: left; }
+    #menu .brand { padding-left: 4px; }
+  }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  h2.title { font-family: var(--display); font-size: clamp(26px, 4vw, 40px); letter-spacing: .06em; text-transform: uppercase; font-style: italic; margin-bottom: 4px; }
+  .sub { color: var(--muted); margin-bottom: 18px; font-size: 14px; text-align: center; }
+
+  /* level select */
+  #levelGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 14px; width: min(1180px, 100%); margin-bottom: 18px; }
+  .lv { position: relative; border-radius: 14px; overflow: hidden; background: #111; border: 1px solid var(--line); text-align: left; transition: transform .15s, border-color .15s; }
+  .lv:hover:not(.locked) { transform: translateY(-3px); border-color: rgba(255,255,255,.4); }
+  .lv svg { display: block; width: 100%; aspect-ratio: 240/140; }
+  .lv .meta { padding: 10px 12px 12px; }
+  .lv .n { font-family: var(--display); font-size: 12px; color: var(--muted); letter-spacing: .14em; }
+  .lv .route { font-family: var(--display); font-weight: 700; font-size: 16px; margin: 2px 0; }
+  .lv .info { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 6px; }
+  .lv.locked svg { filter: grayscale(1) brightness(.35); }
+  .lv.locked .lock { position: absolute; inset: 0 0 auto 0; aspect-ratio: 240/140; display: grid; place-items: center; font-family: var(--display); font-size: 13px; letter-spacing: .14em; color: #ddd; text-align: center; }
+  .medal { display: inline-block; width: 22px; height: 22px; border-radius: 50%; font-family: var(--display); font-size: 11px; font-weight: 700; color: #222; line-height: 22px; text-align: center; vertical-align: middle; box-shadow: inset 0 -2px 0 rgba(0,0,0,.25); }
+  .medal.gold { background: var(--gold); } .medal.silver { background: var(--silver); } .medal.bronze { background: var(--bronze); }
+  .lv .medal { position: absolute; top: 8px; right: 8px; }
+  .stars { color: var(--red); letter-spacing: 2px; }
+
+  /* garage */
+  #garage { justify-content: flex-end; padding-bottom: 36px; }
+  #livList { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin: 12px 0 16px; }
+  .liv { padding: 10px 14px; border-radius: 12px; border: 2px solid var(--line); background: rgba(10,10,14,.6); min-width: 150px; text-align: left; }
+  .liv.on { border-color: #fff; }
+  .liv .sw { display: flex; gap: 4px; margin-bottom: 6px; } .liv .sw i { width: 22px; height: 12px; border-radius: 3px; display: block; }
+  .liv b { font-family: var(--display); display: block; } .liv small { color: var(--muted); }
+
+  /* intro card */
+  #intro { justify-content: flex-end; padding-bottom: 40px; }
+  .card { width: min(560px, 100%); border-radius: 18px; overflow: hidden; }
+  .card .art svg { display: block; width: 100%; height: 150px; }
+  .card .body { padding: 16px 20px 20px; }
+  .card .k { font-family: var(--display); color: var(--muted); font-size: 12px; letter-spacing: .2em; text-transform: uppercase; }
+  .card .route { font-family: var(--display); font-weight: 700; font-size: clamp(24px, 4.4vw, 34px); font-style: italic; text-transform: uppercase; margin: 2px 0 6px; }
+  .card .route i { color: var(--red); font-style: normal; padding: 0 6px; }
+  .card p { color: #cdd2da; font-size: 14px; line-height: 1.45; margin-bottom: 12px; }
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 14px; }
+  .facts div { background: rgba(255,255,255,.06); border-radius: 10px; padding: 8px; }
+  .facts small { display: block; color: var(--muted); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+  .facts b { font-family: var(--display); font-size: 14px; }
+
+  /* results */
+  #results .card { width: min(620px, 100%); }
+  table.res { width: 100%; border-collapse: collapse; font-size: 14px; margin: 6px 0 14px; }
+  table.res td { padding: 5px 6px; border-bottom: 1px solid rgba(255,255,255,.06); }
+  table.res td.p { font-family: var(--display); font-weight: 700; width: 32px; }
+  table.res td.t { text-align: right; font-family: var(--display); font-variant-numeric: tabular-nums; }
+  table.res tr.me { background: rgba(225,6,0,.22); }
+  table.res .bar { display: inline-block; width: 4px; height: 14px; border-radius: 2px; vertical-align: middle; margin-right: 8px; }
+  .bigmedal { display: flex; align-items: center; gap: 14px; margin: 4px 0 8px; }
+  .bigmedal .medal { width: 54px; height: 54px; line-height: 54px; font-size: 22px; }
+  .bigmedal b { font-family: var(--display); font-size: 26px; }
+
+  /* ------------------------------------------------ HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; font-family: var(--display); }
+  #tower { position: absolute; left: 14px; top: 14px; width: 168px; border-radius: 10px; overflow: hidden; font-size: 12px; }
+  #tower .hd { background: var(--red); padding: 5px 9px; font-weight: 700; letter-spacing: .1em; display: flex; justify-content: space-between; }
+  #tower .r { display: flex; align-items: center; gap: 6px; padding: 2.5px 8px; height: 21px; }
+  #tower .r:nth-child(odd) { background: rgba(255,255,255,.03); }
+  #tower .r.me { background: rgba(255,255,255,.92); color: #111; }
+  #tower .r .p { width: 16px; text-align: right; font-weight: 700; }
+  #tower .r i { width: 3px; height: 13px; border-radius: 2px; }
+  #tower .r .nm { flex: 1; letter-spacing: .06em; font-weight: 600; }
+  #tower .r .g { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 11px; }
+  #tower .r.me .g { color: #333; }
+  #topc { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; }
+  #timer { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+  #split { font-size: 15px; font-weight: 600; padding: 4px 12px; border-radius: 8px; margin-top: 4px; display: inline-block; opacity: 0; transition: opacity .3s; }
+  #split.on { opacity: 1; }
+  #route { position: absolute; top: 14px; right: 14px; width: 210px; border-radius: 12px; padding: 10px; }
+  #mini { width: 190px; height: 150px; display: block; }
+  #route .lbl span { max-width: 48%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #route .lbl { display: flex; justify-content: space-between; gap: 6px; font-size: 11px; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; margin-top: 6px; }
+  #prog { height: 5px; background: rgba(255,255,255,.12); border-radius: 3px; overflow: hidden; margin-top: 5px; position: relative; }
+  #prog i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, var(--red), #ff7a5a); width: 0; }
+  #dist { font-size: 18px; font-weight: 700; margin-top: 6px; }
+  #dist small { font-size: 11px; color: var(--muted); font-weight: 500; letter-spacing: .1em; }
+  #pos { position: absolute; left: 196px; top: 14px; font-size: 52px; font-weight: 700; font-style: italic; line-height: 1; text-shadow: 0 3px 16px rgba(0,0,0,.6); }
+  #pos small { font-size: 20px; color: #d8dce2; }
+  #cpInfo { position: absolute; left: 198px; top: 72px; font-size: 12px; letter-spacing: .14em; color: #d8dce2; text-shadow: 0 1px 6px #000; }
+  #dash { position: absolute; right: 16px; bottom: 16px; width: 250px; border-radius: 16px; padding: 12px 16px 14px; }
+  #rpm { display: flex; gap: 3px; margin-bottom: 8px; }
+  #rpm i { flex: 1; height: 8px; border-radius: 2px; background: rgba(255,255,255,.1); }
+  #rpm i.g { background: var(--green); } #rpm i.r { background: var(--red); } #rpm i.b { background: #3a8bff; }
+  #spd { display: flex; align-items: flex-end; justify-content: space-between; }
+  #spd b { font-size: 58px; line-height: .9; font-weight: 700; font-variant-numeric: tabular-nums; }
+  #spd small { font-size: 12px; color: var(--muted); letter-spacing: .14em; display: block; text-align: right; }
+  #gear { font-size: 40px; font-weight: 700; width: 44px; height: 52px; display: grid; place-items: center; border: 2px solid rgba(255,255,255,.3); border-radius: 10px; }
+  #tags { display: flex; gap: 6px; margin-top: 10px; }
+  #tags span { font-size: 11px; font-weight: 700; letter-spacing: .14em; padding: 4px 8px; border-radius: 6px; background: rgba(255,255,255,.08); color: var(--muted); }
+  #tags span.av { color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+  #tags span.on { background: var(--green); color: #062; }
+  #tags span.sl { background: #3a8bff; color: #fff; }
+  #lights { position: absolute; top: 18%; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; padding: 14px 18px; border-radius: 16px; }
+  #lights i { width: 46px; height: 46px; border-radius: 50%; background: #2a0a0a; box-shadow: inset 0 0 0 3px #111; }
+  #lights i.on { background: radial-gradient(circle at 40% 35%, #ff8a8a, #ff1010 55%, #a00000); box-shadow: 0 0 26px #ff2020; }
+  #msg { position: absolute; top: 34%; left: 50%; transform: translate(-50%, -50%); font-size: clamp(36px, 7vw, 84px); font-weight: 700; font-style: italic; letter-spacing: .04em; text-transform: uppercase; text-shadow: 0 4px 30px rgba(0,0,0,.7); opacity: 0; transition: opacity .25s; white-space: nowrap; }
+  #msg.on { opacity: 1; }
+  #msg.green { color: var(--green); } #msg.red { color: #ff4a3a; } #msg.gold { color: var(--gold); }
+  #hint { position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%); font-family: var(--body); font-size: 12px; color: rgba(255,255,255,.7); text-shadow: 0 1px 4px #000; white-space: nowrap; }
+  #vig { position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.45) 100%); }
+  #hit { position: absolute; inset: 0; box-shadow: inset 0 0 120px rgba(255,40,20,.6); opacity: 0; transition: opacity .2s; }
+
+  /* touch */
+  #touch { position: fixed; inset: 0; z-index: 8; pointer-events: none; }
+  #touch .tb { position: absolute; pointer-events: auto; border-radius: 50%; background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.28); display: grid; place-items: center; font-family: var(--display); font-weight: 700; font-size: 14px; letter-spacing: .08em; color: rgba(255,255,255,.85); -webkit-tap-highlight-color: transparent; }
+  #touch .tb.on { background: rgba(255,255,255,.32); }
+  #tLeft { left: 18px; bottom: 26px; width: 84px; height: 84px; } #tRight { left: 116px; bottom: 26px; width: 84px; height: 84px; }
+  #tGas { right: 18px; bottom: 24px; width: 104px; height: 104px; background: rgba(32,208,112,.25) !important; }
+  #tBrake { right: 134px; bottom: 18px; width: 84px; height: 84px; background: rgba(225,6,0,.25) !important; }
+  #tDrs { right: 140px; bottom: 112px; width: 56px; height: 56px; font-size: 11px !important; }
+  #tCam { left: 18px; bottom: 124px; width: 48px; height: 48px; font-size: 10px !important; } #tPause { left: 74px; bottom: 124px; width: 48px; height: 48px; }
+  body.touch #dash { bottom: 8px; right: 50%; transform: translateX(50%) scale(.72); transform-origin: bottom center; }
+  body.touch #hint { display: none; }
+
+  #help ul { list-style: none; display: grid; grid-template-columns: auto 1fr; gap: 8px 18px; font-size: 14px; margin: 10px 0 18px; }
+  #help kbd { font-family: var(--display); background: rgba(255,255,255,.12); border-radius: 6px; padding: 2px 8px; font-size: 13px; }
+  #loading { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: #07080c; font-family: var(--display); letter-spacing: .3em; color: var(--muted); }
+
+  @media (max-width: 760px) {
+    #tower { width: 128px; font-size: 10px; } #tower .r { height: 17px; } #tower .r .g { display: none; }
+    #pos { left: 150px; font-size: 38px; } #cpInfo { left: 152px; top: 56px; }
+    #route { width: 150px; padding: 8px; } #mini { width: 134px; height: 100px; }
+    #dash { width: 200px; } #spd b { font-size: 44px; } #gear { font-size: 30px; height: 42px; width: 36px; }
+    .facts { grid-template-columns: repeat(2, 1fr); }
+    #lights i { width: 32px; height: 32px; }
+  }
+  @media (max-height: 520px) { #tower .r:nth-child(n+6):not(.me) { display: none; } #route { transform: scale(.8); transform-origin: top right; } #pos { font-size: 34px; } #cpInfo { top: 54px; } }
+</style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <div id="loading">LOADING</div>
+
+  <div id="hud" hidden>
+    <div id="vig"></div><div id="hit"></div>
+    <div id="tower" class="glass"><div class="hd"><span>POS</span><span id="towerCp">CP 0/5</span></div><div id="towerRows"></div></div>
+    <div id="pos">P<span id="posN">1</span><small>/12</small></div>
+    <div id="cpInfo"></div>
+    <div id="topc"><div id="timer">0:00.000</div><div id="split"></div></div>
+    <div id="route" class="glass"><canvas id="mini" width="380" height="300"></canvas>
+      <div id="prog"><i></i></div>
+      <div class="lbl"><span id="rFrom"></span><span id="rTo"></span></div>
+      <div id="dist">0.00 <small>KM TO GO</small></div>
+    </div>
+    <div id="dash" class="glass">
+      <div id="rpm"></div>
+      <div id="spd"><div id="gear">N</div><div><b id="kmh">0</b><small>KM/H</small></div></div>
+      <div id="tags"><span id="tagDrs">DRS</span><span id="tagSlip">SLIPSTREAM</span><span id="tagCam">CHASE</span></div>
+    </div>
+    <div id="lights" class="glass" hidden><i></i><i></i><i></i><i></i><i></i></div>
+    <div id="msg"></div>
+    <div id="hint">W/↑ throttle · S/↓ brake · A D steer · Space handbrake · Shift/E DRS · C camera · R reset · Esc pause</div>
+  </div>
+
+  <div id="touch" hidden>
+    <div class="tb" id="tLeft">◀</div><div class="tb" id="tRight">▶</div>
+    <div class="tb" id="tGas">GAS</div><div class="tb" id="tBrake">BRAKE</div><div class="tb" id="tDrs">DRS</div>
+    <div class="tb" id="tCam">CAM</div><div class="tb" id="tPause">II</div>
+  </div>
+
+  <div id="menu" class="screen" hidden>
+    <div class="brand">Nexus Play presents</div>
+    <div class="logo">Grand Prix<br><span>World Tour</span></div>
+    <div class="tag">Ten road races across the world, from Monte Carlo to Singapore. Eleven rivals. One car. Finish on the podium to unlock the next country.</div>
+    <div class="btns">
+      <button class="btn primary" id="bRace">Race</button>
+      <button class="btn" id="bGarage">Garage · Livery</button>
+      <button class="btn" id="bHelp">How to play</button>
+      <div class="row"><button class="btn small" id="bSound">Sound: on</button><button class="btn small" id="bQuality">Quality: auto</button></div>
+      <a class="btn small" id="bHome" href="/">← Nexus Play</a>
+    </div>
+  </div>
+
+  <div id="levels" class="screen dim" hidden>
+    <h2 class="title">World Tour</h2>
+    <div class="sub" id="tourSub">Finish in the top three to unlock the next race.</div>
+    <div id="levelGrid"></div>
+    <button class="btn small" id="bLvBack">Back</button>
+  </div>
+
+  <div id="garage" class="screen" hidden>
+    <h2 class="title">Garage</h2>
+    <div class="sub">Pick your team colours. Rivals run the other liveries.</div>
+    <div id="livList"></div>
+    <button class="btn primary" id="bGarBack" style="min-width:200px">Done</button>
+  </div>
+
+  <div id="help" class="screen dim" hidden>
+    <div class="card glass"><div class="body">
+      <h2 class="title">How to play</h2>
+      <p>Every race is a point-to-point road race between two towns. Start from the grid when the five red lights go out, pass the checkpoints and cross the finish line in the top three to unlock the next location.</p>
+      <ul>
+        <li><kbd>W</kbd> <kbd>↑</kbd></li><li>Throttle</li>
+        <li><kbd>S</kbd> <kbd>↓</kbd></li><li>Brake (hold when stopped to reverse)</li>
+        <li><kbd>A</kbd> <kbd>D</kbd> <kbd>←</kbd> <kbd>→</kbd></li><li>Steer</li>
+        <li><kbd>Space</kbd></li><li>Handbrake — kicks the rear round in hairpins</li>
+        <li><kbd>Shift</kbd> <kbd>E</kbd></li><li>Open DRS inside a green DRS zone (+25 km/h, closes when you brake)</li>
+        <li><kbd>C</kbd></li><li>Chase / cockpit camera</li>
+        <li><kbd>R</kbd></li><li>Reset onto the road</li>
+        <li><kbd>Esc</kbd> <kbd>P</kbd></li><li>Pause</li>
+      </ul>
+      <p>Tuck in behind a rival for a slipstream tow. Barriers scrub speed, grass and gravel slow you right down. Phones and tablets get on-screen pedals.</p>
+      <button class="btn primary" id="bHelpBack">Got it</button>
+    </div></div>
+  </div>
+
+  <div id="intro" class="screen" hidden>
+    <div class="card glass">
+      <div class="art" id="introArt"></div>
+      <div class="body">
+        <div class="k" id="introK">Race 1 of 10</div>
+        <div class="route" id="introRoute"></div>
+        <p id="introBlurb"></p>
+        <div class="facts" id="introFacts"></div>
+        <div class="row" style="justify-content:flex-start"><button class="btn primary" id="bGo">Start race</button><button class="btn" id="bIntroBack">Back</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="pause" class="screen dim" hidden>
+    <h2 class="title">Paused</h2>
+    <div class="btns" style="margin-top:14px">
+      <button class="btn primary" id="bResume">Resume</button>
+      <button class="btn" id="bRestart">Restart race</button>
+      <button class="btn" id="bCamP">Camera: chase</button>
+      <button class="btn" id="bQuit">Quit to tour</button>
+    </div>
+  </div>
+
+  <div id="results" class="screen dim" hidden>
+    <div class="card glass"><div class="body">
+      <div class="k" id="resK">Race result</div>
+      <div class="route" id="resRoute"></div>
+      <div class="bigmedal" id="resMedal"></div>
+      <table class="res" id="resTable"></table>
+      <div class="row" style="justify-content:flex-start">
+        <button class="btn primary" id="bNext">Next race</button>
+        <button class="btn" id="bRetry">Retry</button>
+        <button class="btn" id="bResTour">Tour</button>
+      </div>
+    </div></div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/build/three.module.js",
+      "three/addons/": "./vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
