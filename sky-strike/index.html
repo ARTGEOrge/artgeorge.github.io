@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="description" content="Sky Strike — fly a fighter jet in 3D, bomb Iron Crown outposts, convoys, ships and fortresses across eight missions." />
+<title>Sky Strike — Nexus Play</title>
+<link href="vendor/fonts/fonts.css" rel="stylesheet" />
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --acc: #ffb030; --acc2: #1fc9b0; --hud: #5dff9a; --red: #ff4a3a; --gold: #ffcb3a;
+    --text: #f2f4f6; --muted: #9aa3ad; --line: rgba(255,255,255,.14); --glass: rgba(10,14,18,.66);
+    --display: "Chakra Petch", "Bahnschrift", "Segoe UI Semibold", system-ui, sans-serif;
+    --body: "Inter", "Segoe UI", system-ui, sans-serif;
+  }
+  html, body { height: 100%; overflow: hidden; background: #06080b; }
+  body { font-family: var(--body); color: var(--text); user-select: none; -webkit-user-select: none; -webkit-font-smoothing: antialiased; touch-action: none; }
+  canvas#gl, canvas#hud { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+  canvas#hud { pointer-events: none; z-index: 4; }
+  [hidden] { display: none !important; }
+  button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+  .glass { background: var(--glass); border: 1px solid var(--line); -webkit-backdrop-filter: blur(10px) saturate(140%); backdrop-filter: blur(10px) saturate(140%); }
+
+  .screen { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px 16px; overflow-y: auto; }
+  .screen.dim { background: linear-gradient(180deg, rgba(4,6,9,.5), rgba(4,6,9,.86)); }
+  .brand { font-family: var(--display); font-size: 13px; letter-spacing: .4em; color: var(--muted); text-transform: uppercase; }
+  .logo { font-family: var(--display); font-weight: 700; font-size: clamp(44px, 9vw, 96px); line-height: .9; letter-spacing: .02em; text-transform: uppercase; font-style: italic; margin: 10px 0 8px; text-shadow: 0 6px 40px rgba(0,0,0,.6); }
+  .logo span { color: var(--acc); }
+  .tag { color: #c9ced6; font-size: 15px; margin-bottom: 24px; max-width: 520px; line-height: 1.45; }
+  .btns { display: flex; flex-direction: column; gap: 10px; width: min(330px, 100%); }
+  .btn { font-family: var(--display); font-weight: 600; font-size: 17px; letter-spacing: .12em; text-transform: uppercase; padding: 13px 20px; border-radius: 10px; background: rgba(255,255,255,.08); border: 1px solid var(--line); transition: background .15s, transform .15s; text-align: center; }
+  .btn:hover, .btn:focus-visible { background: rgba(255,255,255,.16); outline: none; }
+  .btn:active { transform: scale(.98); }
+  .btn.primary { background: var(--acc); color: #1a1206; border-color: transparent; }
+  .btn.primary:hover { background: #ffc250; }
+  .btn.small { font-size: 12px; padding: 9px 12px; }
+  a.btn { color: inherit; text-decoration: none; display: block; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  #menu { align-items: flex-start; padding-left: max(16px, 7vw); }
+  #menu .tag { text-align: left; }
+  @media (max-width: 700px) { #menu { align-items: center; padding-left: 16px; } #menu .logo, #menu .tag, #menu .brand { text-align: center; } }
+  h2.title { font-family: var(--display); font-size: clamp(26px, 4vw, 40px); letter-spacing: .06em; text-transform: uppercase; font-style: italic; margin-bottom: 4px; }
+  .sub { color: var(--muted); margin-bottom: 18px; font-size: 14px; text-align: center; }
+
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; width: min(1100px, 100%); margin-bottom: 18px; }
+  .ms { position: relative; border-radius: 12px; overflow: hidden; background: #0d1014; border: 1px solid var(--line); text-align: left; transition: transform .15s, border-color .15s; }
+  .ms:hover:not(.locked) { transform: translateY(-3px); border-color: rgba(255,176,48,.6); }
+  .ms svg { display: block; width: 100%; aspect-ratio: 240/140; }
+  .ms .meta { padding: 9px 12px 12px; }
+  .ms .n { font-family: var(--display); font-size: 11px; color: var(--muted); letter-spacing: .16em; }
+  .ms .nm { font-family: var(--display); font-weight: 700; font-size: 18px; margin: 2px 0; text-transform: uppercase; font-style: italic; }
+  .ms .info { font-size: 12px; color: var(--muted); display: flex; justify-content: space-between; gap: 6px; }
+  .ms.locked svg { filter: grayscale(1) brightness(.35); }
+  .ms .lock { position: absolute; inset: 0 0 auto 0; aspect-ratio: 240/140; display: grid; place-items: center; font-family: var(--display); font-size: 13px; letter-spacing: .14em; color: #ddd; text-align: center; }
+  .st { color: var(--gold); letter-spacing: 2px; font-size: 14px; }
+  .st i { color: #4a4f56; font-style: normal; }
+
+  .card { width: min(580px, 100%); border-radius: 16px; overflow: hidden; }
+  .card .art svg { display: block; width: 100%; height: 150px; }
+  .card .body { padding: 16px 20px 20px; }
+  .card .k { font-family: var(--display); color: var(--muted); font-size: 12px; letter-spacing: .2em; text-transform: uppercase; }
+  .card .nm { font-family: var(--display); font-weight: 700; font-size: clamp(26px, 4.4vw, 36px); font-style: italic; text-transform: uppercase; margin: 2px 0 6px; }
+  .card .nm i { color: var(--acc); font-style: italic; }
+  .card p { color: #cdd2da; font-size: 14px; line-height: 1.45; margin-bottom: 12px; }
+  .facts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .facts div { background: rgba(255,255,255,.06); border-radius: 9px; padding: 7px 9px; }
+  .facts small { display: block; color: var(--muted); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+  .facts b { font-family: var(--display); font-size: 14px; }
+  .facts .wide { grid-column: 1 / -1; }
+  #brief { justify-content: flex-end; padding-bottom: 30px; }
+  #help ul { list-style: none; display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 10px 0 14px; font-size: 14px; }
+  kbd { font-family: var(--display); font-size: 12px; background: rgba(255,255,255,.12); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; margin-right: 3px; white-space: nowrap; }
+  #results .card { width: min(560px, 100%); }
+  .bigstars { font-size: 46px; letter-spacing: 8px; color: var(--gold); margin: 4px 0 6px; text-shadow: 0 0 20px rgba(255,203,58,.4); }
+  .bigstars i { color: #3a3f46; font-style: normal; text-shadow: none; }
+  table.res { width: 100%; border-collapse: collapse; font-size: 14px; margin: 6px 0 14px; }
+  table.res td { padding: 5px 4px; border-bottom: 1px solid rgba(255,255,255,.07); }
+  table.res td:last-child { text-align: right; font-family: var(--display); font-variant-numeric: tabular-nums; }
+  table.res tr.tot td { font-weight: 700; color: var(--acc); font-size: 16px; border: 0; }
+  #loading { position: fixed; inset: 0; z-index: 40; display: grid; place-items: center; background: #06080b; font-family: var(--display); letter-spacing: .3em; color: var(--muted); font-size: 14px; text-align: center; padding: 20px; }
+
+  /* ---------------------------------------- in-flight DOM HUD */
+  #hudDom { position: fixed; inset: 0; z-index: 5; pointer-events: none; font-family: var(--display); }
+  #objs { position: absolute; left: 14px; top: 14px; width: 220px; border-radius: 10px; overflow: hidden; font-size: 13px; }
+  #objs .hd { background: rgba(255,176,48,.9); color: #1a1206; padding: 5px 10px; font-weight: 700; letter-spacing: .12em; display: flex; justify-content: space-between; }
+  #objs .o { display: flex; justify-content: space-between; padding: 4px 10px; gap: 8px; }
+  #objs .o.done { color: var(--hud); }
+  #objs .o.done b::before { content: '✓ '; }
+  #topR { position: absolute; right: 14px; top: 14px; text-align: right; }
+  #timer { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  #score { font-size: 14px; color: var(--acc); letter-spacing: .1em; }
+  #camTag { font-size: 11px; color: var(--muted); letter-spacing: .2em; margin-top: 2px; }
+  #msg { position: absolute; left: 50%; top: 21%; transform: translateX(-50%); font-size: clamp(18px, 3vw, 28px); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; text-shadow: 0 2px 12px rgba(0,0,0,.7); opacity: 0; transition: opacity .2s; white-space: nowrap; }
+  #msg.on { opacity: 1; } #msg.red { color: var(--red); } #msg.green { color: var(--hud); } #msg.amber { color: var(--acc); }
+  #feed { position: absolute; right: 14px; top: 92px; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; font-size: 13px; }
+  #feed div { background: rgba(0,0,0,.45); padding: 3px 9px; border-radius: 6px; animation: fade 2.6s forwards; }
+  #feed div b { color: var(--acc); margin-right: 6px; }
+  #feed div.p { border-left: 3px solid var(--red); }
+  @keyframes fade { 0% { opacity: 0; transform: translateX(10px); } 8% { opacity: 1; transform: none; } 75% { opacity: 1; } 100% { opacity: 0; } }
+  #mini { position: absolute; left: 14px; bottom: 14px; width: 180px; height: 180px; border-radius: 50%; }
+  #cloud { position: fixed; inset: 0; z-index: 3; pointer-events: none; background: #e8eef4; opacity: 0; }
+  #hit { position: fixed; inset: 0; z-index: 3; pointer-events: none; background: radial-gradient(ellipse at center, rgba(255,0,0,0) 45%, rgba(255,30,20,.55)); opacity: 0; }
+  #mouseHint { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); font-size: 12px; letter-spacing: .14em; color: var(--muted); background: rgba(0,0,0,.4); padding: 5px 12px; border-radius: 20px; }
+
+  /* ---------------------------------------- touch */
+  #touch { position: fixed; inset: 0; z-index: 6; pointer-events: none; font-family: var(--display); }
+  #stick { position: absolute; left: max(18px, env(safe-area-inset-left)); bottom: 18px; width: 150px; height: 150px; border-radius: 50%; background: rgba(255,255,255,.07); border: 2px solid rgba(255,255,255,.22); pointer-events: auto; touch-action: none; }
+  #knob { position: absolute; left: 50%; top: 50%; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; background: rgba(255,255,255,.28); border: 2px solid rgba(255,255,255,.5); }
+  .tb { position: absolute; display: grid; place-items: center; border-radius: 50%; background: rgba(0,0,0,.35); border: 2px solid rgba(255,255,255,.3); color: #fff; font-weight: 700; font-size: 12px; letter-spacing: .06em; pointer-events: auto; touch-action: none; }
+  .tb.on { background: rgba(255,176,48,.55); }
+  #tGun { right: 20px; bottom: 26px; width: 84px; height: 84px; font-size: 15px; }
+  #tBomb { right: 116px; bottom: 18px; width: 64px; height: 64px; }
+  #tMsl { right: 28px; bottom: 124px; width: 64px; height: 64px; }
+  #tFlr { right: 108px; bottom: 96px; width: 54px; height: 54px; }
+  #tAb { left: 186px; bottom: 76px; width: 58px; height: 58px; }
+  #tBrk { left: 186px; bottom: 12px; width: 58px; height: 58px; }
+  #tCam { right: 16px; top: 112px; width: 46px; height: 46px; font-size: 11px; }
+  #tPause { right: 16px; top: 64px; width: 42px; height: 42px; }
+  body.touch #mini { left: auto; right: 72px; top: 12px; bottom: auto; width: 120px; height: 120px; }
+  body.touch #topR { right: 200px; }
+  body.touch #objs { width: 190px; font-size: 12px; }
+  body.touch #feed { top: 140px; right: 72px; }
+  body.touch #mouseHint { display: none; }
+  @media (max-height: 460px) { #objs .o { padding: 2px 10px; } .card .art svg { height: 90px; } .card .body { padding: 10px 16px 14px; } .card p { margin-bottom: 6px; font-size: 13px; } .facts { margin-bottom: 8px; } }
+</style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <canvas id="hud"></canvas>
+  <div id="cloud"></div><div id="hit"></div>
+  <div id="loading">LOADING</div>
+
+  <div id="hudDom" hidden>
+    <div id="objs" class="glass"><div class="hd"><span id="objTitle">OBJECTIVES</span><span id="objCount"></span></div><div id="objRows"></div></div>
+    <div id="topR"><div id="timer">0:00</div><div id="score">0</div><div id="camTag">CHASE</div></div>
+    <div id="msg"></div>
+    <div id="feed"></div>
+    <canvas id="mini" width="180" height="180"></canvas>
+    <div id="mouseHint">CLICK TO FLY WITH THE MOUSE · ESC TO PAUSE</div>
+  </div>
+
+  <div id="touch" hidden>
+    <div id="stick"><div id="knob"></div></div>
+    <div class="tb" id="tGun">GUN</div><div class="tb" id="tBomb">BOMB</div><div class="tb" id="tMsl">MSL</div><div class="tb" id="tFlr">FLR</div>
+    <div class="tb" id="tAb">AB</div><div class="tb" id="tBrk">BRK</div><div class="tb" id="tCam">CAM</div><div class="tb" id="tPause">❚❚</div>
+  </div>
+
+  <div id="menu" class="screen" hidden>
+    <div class="brand">Nexus Play presents</div>
+    <div class="logo">Sky<br><span>Strike</span></div>
+    <div class="tag">Take a fighter jet into eight strike missions against the Iron Crown: desert outposts, armoured convoys, mountain radars, harbours, canyons, an island airbase, a night raid and the final fortress.</div>
+    <div class="btns">
+      <button class="btn primary" id="bPlay">Fly</button>
+      <button class="btn" id="bHelp">Controls</button>
+      <div class="row"><button class="btn small" id="bSound">Sound: on</button><button class="btn small" id="bQuality">Quality: auto</button><button class="btn small" id="bInvert">Pitch: flight</button></div>
+      <a class="btn small" id="bHome" href="/">← Nexus Play</a>
+    </div>
+  </div>
+
+  <div id="missions" class="screen dim" hidden>
+    <h2 class="title">Campaign</h2>
+    <div class="sub" id="campSub">Complete a mission to unlock the next.</div>
+    <div id="grid"></div>
+    <button class="btn small" id="bMsBack">Back</button>
+  </div>
+
+  <div id="brief" class="screen" hidden>
+    <div class="card glass">
+      <div class="art" id="briefArt"></div>
+      <div class="body">
+        <div class="k" id="briefK">Mission 1 of 8</div>
+        <div class="nm" id="briefName"></div>
+        <p id="briefBlurb"></p>
+        <div class="facts" id="briefFacts"></div>
+        <div class="row" style="justify-content:flex-start"><button class="btn primary" id="bLaunch">Launch</button><button class="btn" id="bBriefBack">Back</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="help" class="screen dim" hidden>
+    <div class="card glass"><div class="body">
+      <h2 class="title">Controls</h2>
+      <ul>
+        <li><kbd>W</kbd><kbd>S</kbd> <kbd>↑</kbd><kbd>↓</kbd></li><li>Pitch — S / ↓ pulls the nose up (swap with “Pitch” on the menu)</li>
+        <li><kbd>A</kbd><kbd>D</kbd> <kbd>←</kbd><kbd>→</kbd></li><li>Roll</li>
+        <li><kbd>Q</kbd><kbd>E</kbd></li><li>Yaw (rudder)</li>
+        <li><kbd>Mouse</kbd></li><li>Click the screen to fly with the mouse (it works like a centring stick)</li>
+        <li><kbd>Shift</kbd></li><li>Afterburner — watch the heat bar</li>
+        <li><kbd>Z</kbd> <kbd>Ctrl</kbd></li><li>Airbrake</li>
+        <li><kbd>Space</kbd> <kbd>LMB</kbd></li><li>Cannon</li>
+        <li><kbd>B</kbd> <kbd>RMB</kbd></li><li>Drop a bomb — put the round pipper on the target</li>
+        <li><kbd>F</kbd></li><li>Missile — hold a target in the nose until it says LOCK</li>
+        <li><kbd>X</kbd></li><li>Flares — decoy incoming missiles</li>
+        <li><kbd>C</kbd></li><li>Chase / cockpit camera</li>
+        <li><kbd>Esc</kbd> <kbd>P</kbd></li><li>Pause</li>
+      </ul>
+      <p>SAMs can't see you below about 40 m or behind hills. Green rings rearm and repair you. Phones and tablets get a stick and buttons.</p>
+      <button class="btn primary" id="bHelpBack">Got it</button>
+    </div></div>
+  </div>
+
+  <div id="pause" class="screen dim" hidden>
+    <h2 class="title">Paused</h2>
+    <div class="btns" style="margin-top:14px">
+      <button class="btn primary" id="bResume">Resume</button>
+      <button class="btn" id="bRestart">Restart mission</button>
+      <button class="btn" id="bCamP">Camera: chase</button>
+      <button class="btn" id="bQuit">Quit to campaign</button>
+    </div>
+  </div>
+
+  <div id="results" class="screen dim" hidden>
+    <div class="card glass"><div class="body">
+      <div class="k" id="resK">Mission result</div>
+      <div class="nm" id="resName"></div>
+      <div class="bigstars" id="resStars"></div>
+      <div class="sub" id="resWhy" style="text-align:left;margin-bottom:6px"></div>
+      <table class="res" id="resTable"></table>
+      <div class="row" style="justify-content:flex-start">
+        <button class="btn primary" id="bNext">Next mission</button>
+        <button class="btn" id="bRetry">Retry</button>
+        <button class="btn" id="bResCamp">Campaign</button>
+      </div>
+    </div></div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/build/three.module.js",
+      "three/addons/": "./vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
