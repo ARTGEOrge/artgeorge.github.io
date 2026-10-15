@@ -146,12 +146,12 @@ export class Player {
     }
 
     if (input.jump && this.grounded) {
-      this.vel.y = 6.6;
+      this.vel.y = this.jumpSpeed || 6.6;
       this.grounded = false;
       audio.sfx.jump();
     }
 
-    this.vel.y -= 22 * dt;
+    this.vel.y -= (this.gravity || 22) * dt;
     if (this.vel.y < -55) this.vel.y = -55;
 
     const wasGrounded = this.grounded;

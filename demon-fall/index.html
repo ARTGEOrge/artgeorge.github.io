@@ -207,6 +207,12 @@
     padding: 4px 12px; border-radius: 999px; background: rgba(0,0,0,.5); border: 1px solid var(--line); }
   .lv .badge.done { color: var(--green); border-color: rgba(78,224,138,.4); }
   .lv.locked { cursor: not-allowed; filter: grayscale(.85) brightness(.55); }
+  #levelScreen { align-items: flex-start; padding-top: 64px; }
+  .lvGroup { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 14px; margin: 10px 2px -2px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .lvGroup:first-child { margin-top: 0; }
+  .lvGroup b { font-family: var(--display); font-size: 20px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+  .lvGroup span { font-size: 12px; color: var(--muted); letter-spacing: .08em; }
+  .lvGroup.locked b { color: var(--muted); }
   .lv.locked:hover { transform: none; box-shadow: none; border-color: var(--line); }
 
   /* ready / pause / dead / clear cards */
@@ -340,13 +346,13 @@
   <div class="screen scrim" id="menu" hidden>
     <div class="menu-col">
       <div class="eyebrow">A survival shooter</div>
-      <h1 class="title">Demon Fall<span>Escape to Mars</span></h1>
-      <p class="lead">The rift tore open over the city. Fight to the Master Treasury, take what's left of the future, and catch the last ship off Earth.</p>
+      <h1 class="title">Demon Fall<span>Earth · Mars · Moon</span></h1>
+      <p class="lead">The rift tore open over the city. Catch the last ship off Earth — then find out what the colonists brought to Mars, and what is waiting on the Moon.</p>
       <div class="stack">
         <button class="btn primary" id="playBtn"><span id="playLabel">Start campaign</span><span class="k" id="playSub">Stage 1</span></button>
-        <button class="btn" id="levelsBtn"><span>Stages</span><span class="k" id="stagesSub">1 / 6</span></button>
+        <button class="btn" id="levelsBtn"><span>Stages</span><span class="k" id="stagesSub">1 / 18</span></button>
       </div>
-      <div class="menu-meta"><span><b>6</b> stages</span><span><b>3</b> weapons</span><span><b>1</b> way off Earth</span></div>
+      <div class="menu-meta"><span><b>18</b> stages</span><span><b>3</b> worlds</span><span><b>3</b> weapons</span></div>
     </div>
     <div class="controls glass">
       <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows</span><span>Move</span>

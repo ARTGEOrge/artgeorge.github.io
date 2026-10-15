@@ -1,23 +1,40 @@
-/* Demon Fall — the escape flight.
+/* Demon Fall — the escape flights.
  *
- * After boarding, the game swaps to this scene: you fly the last ship out of
- * Earth orbit, shooting through rift debris, and set down on Mars. It is its
- * own little arcade game with its own scene, so nothing from the shooter has
- * to be unloaded mid-cutscene. */
+ * After boarding, the game swaps to this scene: you fly the ship out, shooting
+ * through debris, and set down at the destination. It is its own little arcade
+ * game with its own scene, so nothing from the shooter has to be unloaded
+ * mid-cutscene. Two routes share it:
+ *   'mars' — Earth falls away behind, rift debris, land at the Tharsis colony
+ *   'moon' — Mars falls away, a field of wrecked transports, land at Artemis
+ *            (a little longer and denser: the campaign keeps getting harder) */
 import * as THREE from 'three';
 import { material, puffTexture } from './textures.js';
 import { clamp, damp, randRange, TAU, makeRng } from './util.js';
 import * as audio from './audio.js';
 
-const FLIGHT_LENGTH = 62;      // seconds of flight before Mars approach
 const LANDING_TIME = 13;
 
+const ROUTES = {
+  mars: {
+    name: 'MARS', length: 62, density: 1, rockHp: 1,
+    debrisText: 'Rift debris ahead — clear a path', approachText: 'Mars approach — hold her steady'
+  },
+  moon: {
+    name: 'MOON', length: 58, density: 1.3, rockHp: 1.25,
+    debrisText: 'Wrecked evac ships ahead — clear a path', approachText: 'Lunar approach — no air to brake, hold her steady'
+  }
+};
+
 export class MarsFlight {
-  constructor(hud) {
+  constructor(hud, opts = {}) {
     this.hud = hud;
+    this.dest = opts.dest === 'moon' ? 'moon' : 'mars';
+    this.route = ROUTES[this.dest];
+    this.destName = this.route.name;
+    this.length = this.route.length;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(72, 1, 0.1, 6000);
-    this.rng = makeRng(20260915);
+    this.rng = makeRng(this.dest === 'moon' ? 20261014 : 20260915);
     this.build();
     this.reset();
   }
@@ -51,37 +68,52 @@ export class MarsFlight {
     sunLight.position.set(-60, 30, 120);
     scene.add(sunLight, new THREE.AmbientLight(0x2a3050, 0.7));
 
-    // Earth falling away behind
-    this.earth = new THREE.Mesh(
-      new THREE.SphereGeometry(140, 48, 32),
-      new THREE.MeshStandardMaterial({
-        color: 0x2a5a8a, roughness: 0.9,
-        emissive: 0x3a0a08, emissiveIntensity: 0.35   // the rift burning on the night side
-      })
-    );
+    const moon = this.dest === 'moon';
+    // where you left falling away behind: Earth, or Mars on the way to the Moon
+    this.earth = moon
+      ? new THREE.Mesh(new THREE.SphereGeometry(120, 48, 32), material('sand', { repeat: 4, roughness: 1 }))
+      : new THREE.Mesh(
+        new THREE.SphereGeometry(140, 48, 32),
+        new THREE.MeshStandardMaterial({
+          color: 0x2a5a8a, roughness: 0.9,
+          emissive: 0x3a0a08, emissiveIntensity: 0.35   // the rift burning on the night side
+        })
+      );
     this.earth.position.set(40, -60, 520);
     scene.add(this.earth);
-    const glow = new THREE.Mesh(new THREE.SphereGeometry(148, 32, 24),
-      new THREE.MeshBasicMaterial({ color: 0x4a86c8, transparent: true, opacity: 0.18, side: THREE.BackSide }));
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(moon ? 126 : 148, 32, 24),
+      new THREE.MeshBasicMaterial({ color: moon ? 0xff8a5a : 0x4a86c8, transparent: true, opacity: moon ? 0.14 : 0.18, side: THREE.BackSide }));
     this.earth.add(glow);
 
-    // Mars ahead — starts a dot, ends filling the screen
+    // the destination ahead — starts a dot, ends filling the screen
     this.mars = new THREE.Mesh(
       new THREE.SphereGeometry(120, 48, 32),
-      material('sand', { repeat: 4, roughness: 1 })
+      moon ? material('regolith', { repeat: 3, roughness: 1, color: 0xd8d8dc }) : material('sand', { repeat: 4, roughness: 1 })
     );
     this.mars.position.set(0, 0, -4200);
     scene.add(this.mars);
-    const halo = new THREE.Mesh(new THREE.SphereGeometry(126, 32, 24),
-      new THREE.MeshBasicMaterial({ color: 0xff8a5a, transparent: true, opacity: 0.14, side: THREE.BackSide }));
-    this.mars.add(halo);
+    if (!moon) {
+      const halo = new THREE.Mesh(new THREE.SphereGeometry(126, 32, 24),
+        new THREE.MeshBasicMaterial({ color: 0xff8a5a, transparent: true, opacity: 0.14, side: THREE.BackSide }));
+      this.mars.add(halo);
+    } else {
+      // home, hanging beside the Moon as you come in
+      const home = new THREE.Mesh(new THREE.SphereGeometry(150, 48, 32),
+        new THREE.MeshStandardMaterial({ color: 0x2a5a8a, roughness: 0.9, emissive: 0x3a0a08, emissiveIntensity: 0.3 }));
+      home.position.set(-520, 160, -900);
+      const homeGlow = new THREE.Mesh(new THREE.SphereGeometry(158, 32, 24),
+        new THREE.MeshBasicMaterial({ color: 0x4a86c8, transparent: true, opacity: 0.18, side: THREE.BackSide }));
+      home.add(homeGlow);
+      this.mars.add(home);
+    }
 
     // the ship's nose and cockpit frame, seen from inside
     this.ship = new THREE.Group();
     const hull = material('hull', { repeat: 2, metalness: 0.8, roughness: 0.3 });
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(1.5, 4.5, 20), hull);
+    // the nose sits low and ahead: its base used to sit a metre from your eyes and fill the windscreen
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.9, 4.5, 20), hull);
     nose.rotation.x = -Math.PI / 2;
-    nose.position.set(0, -0.7, -3.4);
+    nose.position.set(0, -1.75, -5.2);
     const frameMat = new THREE.MeshStandardMaterial({ color: 0x2a3038, metalness: 0.7, roughness: 0.4 });
     const frame = new THREE.Mesh(new THREE.TorusGeometry(1.5, 0.12, 8, 24), frameMat);
     frame.position.set(0, -0.15, -1.6);
@@ -106,7 +138,7 @@ export class MarsFlight {
 
     // debris field: instanced rocks streaming past
     this.rockGeo = new THREE.IcosahedronGeometry(1, 0);
-    this.rockMat = material('sand', { repeat: 1, roughness: 1, color: 0x6a5a52 });
+    this.rockMat = moon ? material('hull', { repeat: 1, roughness: 0.6, metalness: 0.6, color: 0x7a7e86 }) : material('sand', { repeat: 1, roughness: 1, color: 0x6a5a52 });
     this.rocks = [];
     for (let i = 0; i < 90; i++) {
       const m = new THREE.Mesh(this.rockGeo, this.rockMat);
@@ -154,13 +186,25 @@ export class MarsFlight {
       p.setY(i, Math.sin(x * 0.01) * 6 + Math.cos(z * 0.013) * 7 + Math.sin((x + z) * 0.03) * 2);
     }
     surfGeo.computeVertexNormals();
-    const surf = new THREE.Mesh(surfGeo, material('sand', { repeat: 30, roughness: 1 }));
+    if (moon) {
+      // craters: dish-shaped dents with a raised lip
+      for (let c = 0; c < 26; c++) {
+        const cx = (this.rng() - 0.5) * 1000, cz = (this.rng() - 0.5) * 1000, cr = 20 + this.rng() * 70;
+        for (let i = 0; i < p.count; i++) {
+          const d = Math.hypot(p.getX(i) - cx, p.getZ(i) - cz) / cr;
+          if (d < 1.3) p.setY(i, p.getY(i) + (d < 1 ? -(1 - d * d) * cr * 0.25 : (1.3 - d) * cr * 0.2));
+        }
+      }
+      surfGeo.computeVertexNormals();
+    }
+    const surf = new THREE.Mesh(surfGeo, moon ? material('regolith', { repeat: 30, roughness: 1 }) : material('sand', { repeat: 30, roughness: 1 }));
     surf.position.y = -60;
     this.surface.add(surf);
-    // the colony: domes and a mast
+    // the colony: domes and a mast (on the Moon: low base modules)
     for (let i = 0; i < 7; i++) {
       const a = (i / 7) * TAU;
-      const dome = new THREE.Mesh(new THREE.SphereGeometry(8 + this.rng() * 6, 20, 12, 0, TAU, 0, Math.PI / 2),
+      const dome = new THREE.Mesh(moon ? new THREE.CylinderGeometry(4, 4, 18 + this.rng() * 10, 16).rotateZ(Math.PI / 2).rotateY(a)
+        : new THREE.SphereGeometry(8 + this.rng() * 6, 20, 12, 0, TAU, 0, Math.PI / 2),
         new THREE.MeshStandardMaterial({ color: 0xcfd6dd, roughness: 0.5, metalness: 0.3 }));
       dome.position.set(Math.cos(a) * (46 + this.rng() * 30), -58, -170 + Math.sin(a) * (40 + this.rng() * 30));
       this.surface.add(dome);
@@ -177,7 +221,7 @@ export class MarsFlight {
 
     this.dust = [];
     for (let i = 0; i < 80; i++) {
-      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.sparkTex, color: 0xc06a3a, opacity: 0.5, depthWrite: false }));
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.sparkTex, color: moon ? 0x9a9a9e : 0xc06a3a, opacity: 0.5, depthWrite: false }));
       s.visible = false;
       s.userData = { vel: new THREE.Vector3(), life: 0 };
       scene.add(s);
@@ -246,14 +290,14 @@ export class MarsFlight {
 
     if (this.phase === 'launch' && this.t > 4) {
       this.phase = 'flight';
-      this.hud.subtitle('Rift debris ahead — clear a path');
+      this.hud.subtitle(this.route.debrisText);
     }
 
     if (this.phase === 'flight') {
       this.flightUpdate(dt, input, speed);
-      if (this.t > FLIGHT_LENGTH) {
+      if (this.t > this.length) {
         this.phase = 'approach';
-        this.hud.subtitle('Mars approach — hold her steady');
+        this.hud.subtitle(this.route.approachText);
         audio.sfx.objective();
       }
     } else if (this.phase === 'approach') {
@@ -293,7 +337,7 @@ export class MarsFlight {
 
   flightUpdate(dt, input, speed) {
     // spawn debris ahead at a rate that rises through the flight
-    const intensity = 0.4 + (this.t / FLIGHT_LENGTH) * 1.6;
+    const intensity = (0.4 + (this.t / this.length) * 1.6) * this.route.density;
     this.spawnAt -= dt * intensity;
     if (this.spawnAt <= 0) {
       this.spawnAt = randRange(0.12, 0.4);
@@ -332,7 +376,7 @@ export class MarsFlight {
     r.visible = true;
     r.scale.setScalar(size);
     r.userData.size = size;
-    r.userData.hp = Math.ceil(size);
+    r.userData.hp = Math.ceil(size * this.route.rockHp);
     r.position.set(randRange(-38, 38), randRange(-26, 26), -randRange(420, 700));
     r.userData.vel.set(randRange(-3, 3), randRange(-3, 3), 0);
     r.userData.spin.set(randRange(-2, 2), randRange(-2, 2), randRange(-2, 2));
@@ -432,7 +476,7 @@ export class MarsFlight {
     }
   }
 
-  get progress() { return clamp(this.t / FLIGHT_LENGTH, 0, 1); }
+  get progress() { return clamp(this.t / this.length, 0, 1); }
 
   dispose() {
     this.scene.traverse(o => {

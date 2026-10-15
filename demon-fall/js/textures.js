@@ -274,6 +274,93 @@ const PAINT = {
     }
     grain(ctx, size, 0.1, false);
   },
+  /* --- Mars and Moon surfaces --- */
+  redrock(ctx, size, rng) {
+    ctx.fillStyle = '#6a2c1c'; ctx.fillRect(0, 0, size, size);
+    for (let y = 0; y < size; y += 2) for (let x = 0; x < size; x += 2) {
+      // strata: bands that wander, broken up by noise
+      const band = Math.sin((y + fbm(x / 60, y / 60, 3, 77) * 90) / 9) * 0.5 + 0.5;
+      const n = fbm(x / 30, y / 30, 4, 71) * 0.7 + band * 0.3;
+      const v = 70 + n * 100;
+      ctx.fillStyle = `rgb(${v | 0},${v * 0.46 | 0},${v * 0.3 | 0})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+    for (let i = 0; i < 6; i++) crack(ctx, rng() * size, rng() * size, 40, rng() * 6.28, 2.2, 'rgba(30,10,6,0.8)', rng);
+    grain(ctx, size, 0.1);
+  },
+  regolith(ctx, size, rng) {
+    ctx.fillStyle = '#76767a'; ctx.fillRect(0, 0, size, size);
+    for (let y = 0; y < size; y += 2) for (let x = 0; x < size; x += 2) {
+      const n = fbm(x / 44, y / 44, 4, 133) * 0.65 + noise2(x / 5, y / 5, 9) * 0.35;
+      const v = 92 + n * 92;
+      ctx.fillStyle = `rgb(${v | 0},${v | 0},${v + 4 | 0})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+    // tiny craters: a dark rim on one side, light on the other
+    for (let i = 0; i < 60; i++) {
+      const x = rng() * size, y = rng() * size, r = 2 + rng() * 9;
+      ctx.strokeStyle = 'rgba(40,40,44,0.55)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(x, y, r, Math.PI * 0.9, Math.PI * 1.9); ctx.stroke();
+      ctx.strokeStyle = 'rgba(220,220,224,0.45)';
+      ctx.beginPath(); ctx.arc(x, y, r, Math.PI * 1.9, Math.PI * 2.9); ctx.stroke();
+    }
+    for (let i = 0; i < 900; i++) {   // pebbles
+      const v = 60 + rng() * 140;
+      ctx.fillStyle = `rgba(${v},${v},${v + 3},0.8)`;
+      ctx.beginPath(); ctx.arc(rng() * size, rng() * size, rng() * 1.8 + 0.3, 0, Math.PI * 2); ctx.fill();
+    }
+    grain(ctx, size, 0.08, false);
+  },
+  panel(ctx, size, rng) {
+    // habitat wall cladding: big off-white panels, seams, bolts, scuffs
+    ctx.fillStyle = '#c9ccd0'; ctx.fillRect(0, 0, size, size);
+    for (let y = 0; y < size; y += 2) for (let x = 0; x < size; x += 2) {
+      const v = 182 + fbm(x / 80, y / 80, 3, 41) * 40;
+      ctx.fillStyle = `rgb(${v | 0},${v + 3 | 0},${v + 7 | 0})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+    const n = 2, s = size / n;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      ctx.strokeStyle = 'rgba(40,46,56,0.7)'; ctx.lineWidth = 3;
+      ctx.strokeRect(i * s + 2, j * s + 2, s - 4, s - 4);
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1;
+      ctx.strokeRect(i * s + 5, j * s + 5, s - 10, s - 10);
+      ctx.fillStyle = 'rgba(50,56,66,0.8)';
+      for (const [bx, by] of [[12, 12], [s - 12, 12], [12, s - 12], [s - 12, s - 12]]) {
+        ctx.beginPath(); ctx.arc(i * s + bx, j * s + by, 3, 0, Math.PI * 2); ctx.fill();
+      }
+      if (rng() < 0.5) {   // a hazard / service stripe
+        ctx.fillStyle = 'rgba(210,120,40,0.75)';
+        ctx.fillRect(i * s + 20, j * s + s * 0.72, s - 40, 10);
+      }
+    }
+    // scuffs and grime, the odd scorch
+    ctx.globalAlpha = 0.18;
+    for (let i = 0; i < 30; i++) {
+      ctx.strokeStyle = rng() < 0.8 ? '#3a3a40' : '#5a2010'; ctx.lineWidth = 1 + rng() * 3;
+      const x = rng() * size, y = rng() * size;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + rng() * 60 - 30, y + rng() * 14 - 7); ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    grain(ctx, size, 0.05);
+  },
+  grate(ctx, size, rng) {
+    // deck plating: diamond tread with drainage slots
+    ctx.fillStyle = '#4a4e54'; ctx.fillRect(0, 0, size, size);
+    for (let y = 0; y < size; y += 16) for (let x = (y / 16) % 2 ? 8 : 0; x < size; x += 16) {
+      ctx.fillStyle = 'rgba(150,156,166,0.55)';
+      ctx.beginPath(); ctx.moveTo(x + 8, y + 3); ctx.lineTo(x + 13, y + 8); ctx.lineTo(x + 8, y + 13); ctx.lineTo(x + 3, y + 8); ctx.fill();
+    }
+    ctx.fillStyle = 'rgba(10,10,12,0.9)';
+    for (let i = 0; i < 4; i++) ctx.fillRect(0, i * size / 4 + size / 8 - 3, size, 6);
+    for (let i = 0; i < 5; i++) {   // rust and dust in the corners
+      const x = rng() * size, y = rng() * size, r = 20 + rng() * 60;
+      const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+      g.addColorStop(0, 'rgba(120,60,30,0.35)'); g.addColorStop(1, 'rgba(120,60,30,0)');
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    }
+    grain(ctx, size, 0.08);
+  },
   hull(ctx, size, rng) {
     ctx.fillStyle = '#b9bec6'; ctx.fillRect(0, 0, size, size);
     for (let y = 0; y < size; y += 2) for (let x = 0; x < size; x += 2) {

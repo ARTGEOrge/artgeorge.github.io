@@ -22,7 +22,7 @@ const SKY_FRAG = `
   varying vec3 vDir;
   uniform vec3 top, horizon, ground, glow;
   uniform vec3 glowDir;
-  uniform float time, stars, rift;
+  uniform float time, stars, rift, clouds;
   // cheap hash-noise for star field and cloud bands
   float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
   float noise(vec3 p) {
@@ -52,7 +52,7 @@ const SKY_FRAG = `
     // slow torn cloud bands
     float c = noise(d * 3.0 + vec3(time * 0.01, 0.0, time * 0.006));
     c = smoothstep(0.52, 0.85, c) * smoothstep(0.0, 0.35, d.y);
-    col = mix(col, col * 0.55 + vec3(0.06, 0.03, 0.03), c * 0.7);
+    col = mix(col, col * 0.55 + vec3(0.06, 0.03, 0.03), c * 0.7 * clouds);
     // the rift: a bruised tear near the horizon
     if (rift > 0.0) {
       vec3 rd = normalize(vec3(0.3, 0.42, -1.0));
@@ -78,7 +78,8 @@ export function makeSky(theme) {
       ground: { value: new THREE.Color(theme.skyGround) },
       glow: { value: new THREE.Color(theme.skyGlow || 0x000000) },
       glowDir: { value: new THREE.Vector3(...(theme.glowDir || [0.4, 0.2, -1])) },
-      time: { value: 0 }, stars: { value: theme.stars || 0 }, rift: { value: theme.rift || 0 }
+      time: { value: 0 }, stars: { value: theme.stars || 0 }, rift: { value: theme.rift || 0 },
+      clouds: { value: theme.clouds == null ? 1 : theme.clouds }
     },
     vertexShader: SKY_VERT, fragmentShader: SKY_FRAG
   });

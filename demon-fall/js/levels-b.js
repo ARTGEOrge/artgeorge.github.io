@@ -430,7 +430,7 @@ function crane(world, x, z, rotY) {
 
 export const LEVEL_6 = {
   id: 6,
-  name: 'Last Launch',
+  name: 'Last Launch', flight: 'mars',
   subtitle: 'Orbital pad 7',
   brief: 'The last ship burns for Mars in minutes. Fight across the spaceport and get aboard.',
   theme: {

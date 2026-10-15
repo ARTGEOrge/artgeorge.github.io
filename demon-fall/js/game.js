@@ -18,12 +18,27 @@ import { Weapon, WEAPONS } from './weapons.js';
 import { pickup as makePickup } from './levels-a.js';
 import { LEVEL_1, LEVEL_2, LEVEL_3 } from './levels-a.js';
 import { LEVEL_4, LEVEL_5, LEVEL_6 } from './levels-b.js';
+import { MARS_1, MARS_2, MARS_3, MARS_4, MARS_5, MARS_6 } from './levels-mars.js';
+import { MOON_1, MOON_2, MOON_3, MOON_4, MOON_5, MOON_6 } from './levels-moon.js';
 import { MarsFlight } from './mars.js';
 import { dress } from './dressing.js';
 import { clamp, damp, makeRng, randRange, fmtTime, TAU, Rolling } from './util.js';
 import * as audio from './audio.js';
 
-export const LEVELS = [LEVEL_1, LEVEL_2, LEVEL_3, LEVEL_4, LEVEL_5, LEVEL_6];
+/* Earth (1–6), then the flight to Mars; Mars (7–12), then the flight to the
+ * Moon; the Moon (13–18), then it is over. A level's `flight` says where its
+ * last stage flies you, and `world` groups it in the menus. */
+export const LEVELS = [
+  LEVEL_1, LEVEL_2, LEVEL_3, LEVEL_4, LEVEL_5, LEVEL_6,
+  MARS_1, MARS_2, MARS_3, MARS_4, MARS_5, MARS_6,
+  MOON_1, MOON_2, MOON_3, MOON_4, MOON_5, MOON_6
+];
+export const WORLDS = [
+  { key: 'earth', name: 'Earth', from: 0, to: 5 },
+  { key: 'mars', name: 'Mars', from: 6, to: 11 },
+  { key: 'moon', name: 'The Moon', from: 12, to: 17 }
+];
+export const worldOf = i => WORLDS.find(w => i >= w.from && i <= w.to) || WORLDS[0];
 
 /* Film grade: vignette, grain, a touch of chromatic aberration and the red
  * pulse when you are hurt. Cheap, and it does most of the "cinematic" work. */
@@ -256,6 +271,14 @@ export class Game {
 
   /* -------------------------------------------------------------- levels */
   loadLevel(index, keepLoadout = false, preview = false) {
+    // coming straight off a flight (Next on the landing screen): hand the renderer back to the shooter scene
+    if (this.marsFlight) {
+      this.renderPass.scene = this.scene;
+      this.renderPass.camera = this.camera;
+      this.marsFlight.dispose();
+      this.marsFlight = null;
+      this.hud.marsMode(false);
+    }
     this.levelIndex = index;
     const def = LEVELS[index];
     this.levelDef = def;
@@ -275,19 +298,19 @@ export class Game {
 
     const theme = def.theme;
     // the fog keeps its colour but thins a little, and lifts toward a readable night blue
-    const fogCol = new THREE.Color(theme.fog).lerp(new THREE.Color(0x2a2c3a), 0.35);
+    const fogCol = new THREE.Color(theme.fog).lerp(new THREE.Color(0x2a2c3a), theme.fogMix == null ? 0.35 : theme.fogMix);
     this.scene.fog = new THREE.FogExp2(fogCol, theme.fogDensity * 0.8);
     this.scene.background = fogCol.clone();
     this.sky = makeSky(theme);
     this.scene.add(this.sky);
     // indoor stages get dust instead of falling ash
-    this.ash = new Ash(this.scene, theme.dark || theme.rift === 0
+    this.ash = new Ash(this.scene, theme.particles || (theme.dark || theme.rift === 0
       ? { count: 400, colour: 0x8a8478, embers: 0.02, size: 0.05 }
-      : { count: 900, colour: 0xb8aca0, embers: 0.3, size: 0.09 });
+      : { count: 900, colour: 0xb8aca0, embers: 0.3, size: 0.09 }));
 
     const hemi = new THREE.HemisphereLight(new THREE.Color(theme.hemi[0]).lerp(new THREE.Color(0x8a90b0), 0.3), theme.hemi[1], theme.hemi[2] * 3.6);
     // a little ambient so shadowed corners stay readable rather than pure black
-    const ambient = new THREE.AmbientLight(new THREE.Color(theme.hemi[0]).lerp(new THREE.Color(0x9a8a90), 0.45), 2.4);
+    const ambient = new THREE.AmbientLight(new THREE.Color(theme.hemi[0]).lerp(new THREE.Color(0x9a8a90), 0.45), theme.ambient == null ? 2.4 : theme.ambient);
     this.scene.add(hemi, ambient);
 
     this.sun = new THREE.DirectionalLight(theme.sun.colour, theme.sun.intensity * 2.4);
@@ -313,6 +336,18 @@ export class Game {
     for (const [kind, x, y, z] of (this.script.pickups || [])) makePickup(this.world, kind, x, y, z);
 
     this.enemies = new Enemies(this.scene, this.world, this.fx);
+    this.enemies.setMods(def.diff);          // Earth has none; Mars and the Moon get harder stage by stage
+    const kinds = new Set();
+    for (const st of this.script.stages) {
+      for (const s of st.spawns || []) kinds.add(s.kind);
+      for (const k of st.waveKinds || []) kinds.add(k);
+      if (st.boss) kinds.add(st.boss.kind);
+    }
+    this.enemies.prewarm(kinds);
+    // Mars and the Moon pull less: higher, floatier jumps
+    this.gravity = theme.gravity || 22;
+    this.player.gravity = this.gravity;
+    this.player.jumpSpeed = theme.jump || 6.6;
 
     // loadout
     if (!keepLoadout) {
@@ -327,7 +362,7 @@ export class Game {
     for (const key of this.owned) {
       const w = new Weapon(key, this.camera, this.fx);
       // later levels start with fuller pouches
-      w.reserve = Math.round(WEAPONS[key].reserve * (1 + index * 0.08));
+      w.reserve = Math.round(WEAPONS[key].reserve * (1 + Math.min(index, 8) * 0.08));
       this.weapons[key] = w;
     }
     this.current = this.owned[this.owned.length - 1];
@@ -342,6 +377,7 @@ export class Game {
     this.stats = { kills: 0, headshots: 0, shots: 0, hits: 0, started: this.time, score: 0 };
     this.levelDone = false;
     this.marsFlight = null;
+    this.updateFollow();
 
     if (preview) { this.stage = null; this.beacon.visible = false; return; }
     audio.startMusic(theme.music || 45);
@@ -369,13 +405,20 @@ export class Game {
     audio.sfx.objective();
     if (st.onEnterText) this.hud.subtitle(st.onEnterText);
 
-    // one-off spawns for this stage
+    // one-off spawns for this stage; the opening ones never start on top of you
+    const start = this.world.playerStart, safe = this.stageIndex === 0 && this.levelDef.diff ? 26 : 0;
     for (const sp of st.spawns || []) {
       const pos = new THREE.Vector3(sp.at[0], sp.at[1] || 0, sp.at[2]);
+      const dx = pos.x - start.x, dz = pos.z - start.z, d = Math.hypot(dx, dz);
+      if (d < safe) {
+        const k = d > 0.1 ? safe / d : 0;
+        pos.x = start.x + (k ? dx * k : 0); pos.z = start.z + (k ? dz * k : -safe);
+      }
+      this.freeSpot(pos);
       this.enemies.spawn(sp.kind, pos);
     }
     if (st.boss) {
-      const b = this.enemies.spawn(st.boss.kind, new THREE.Vector3(...st.boss.at));
+      const b = this.enemies.spawn(st.boss.kind, this.freeSpot(new THREE.Vector3(...st.boss.at), 1.4));
       this.boss = b;
       this.hud.showBoss(TYPES[st.boss.kind].name);
     }
@@ -392,6 +435,34 @@ export class Game {
     }
   }
 
+  /** Nudge a spawn point out of any wall, rock or crate it landed inside. */
+  freeSpot(pos, radius = 0.6) {
+    const near = [];
+    for (let pass = 0; pass < 6; pass++) {
+      let moved = false;
+      for (const c of this.world.near(pos.x, pos.z, radius + 0.5, near)) {
+        if (c.tag === 'ground' || c.tag === 'edge') continue;
+        if (c.max.y < pos.y + 0.5 || c.min.y > pos.y + 1.8) continue;
+        if (pos.x + radius <= c.min.x || pos.x - radius >= c.max.x || pos.z + radius <= c.min.z || pos.z - radius >= c.max.z) continue;
+        const left = pos.x + radius - c.min.x, right = c.max.x - (pos.x - radius);
+        const back = pos.z + radius - c.min.z, front = c.max.z - (pos.z - radius);
+        const m = Math.min(left, right, back, front);
+        if (m === left) pos.x -= left + 0.05; else if (m === right) pos.x += right + 0.05;
+        else if (m === back) pos.z -= back + 0.05; else pos.z += front + 0.05;
+        moved = true;
+      }
+      if (!moved) break;
+    }
+    return pos;
+  }
+
+  /** Things pinned to the sky (Earth over the Moon, Phobos) ride with the camera. */
+  updateFollow() {
+    const list = this.script && this.script.follow;
+    if (!list) return;
+    for (const f of list) f.obj.position.copy(this.camera.position).add(f.offset);
+  }
+
   updateInteractBeacon() {
     const next = this.world.props.find(p => p.kind === 'terminal' && !p.used);
     if (next) {
@@ -405,16 +476,18 @@ export class Game {
     this.levelDone = true;
     this.beacon.visible = false;
 
-    // the last stage of the campaign hands over to the flight to Mars
-    if (this.levelIndex === LEVELS.length - 1) {
-      this.startMars();
+    // Earth's last stage flies you to Mars, Mars's last flies you to the Moon
+    if (this.levelDef.flight) {
+      this.startMars(this.levelDef.flight);
       return;
     }
     this.state = 'cleared';
     document.exitPointerLock();
     audio.stopMusic();
     audio.sfx.win();
-    this.hud.levelCleared(this.levelSummary());
+    const summary = this.levelSummary();
+    if (this.levelIndex === LEVELS.length - 1) summary.victory = true;   // the whole war, won
+    this.hud.levelCleared(summary);
   }
 
   levelSummary() {
@@ -427,19 +500,19 @@ export class Game {
     };
   }
 
-  startMars() {
+  startMars(dest = 'mars') {
     this.state = 'mars';
     audio.stopMusic();
     this.marsFlight = new MarsFlight({
       subtitle: t => this.hud.subtitle(t),
       damage: () => this.hud.damage()
-    });
+    }, { dest });
     this.marsFlight.camera.aspect = innerWidth / innerHeight;
     this.marsFlight.camera.updateProjectionMatrix();
     this.renderPass.scene = this.marsFlight.scene;
     this.renderPass.camera = this.marsFlight.camera;
     this.hud.marsMode(true);
-    this.hud.objective('Fly to Mars');
+    this.hud.objective(dest === 'moon' ? 'Fly to the Moon' : 'Fly to Mars');
     this.hud.subtitle('Lift-off. Hold on.');
   }
 
@@ -540,6 +613,14 @@ export class Game {
         new THREE.Vector3(randRange(-3, 3), randRange(2, 5), randRange(-3, 3)), enemy.type.gib, enemy.type.scale);
     }
     audio.at(() => audio.sfx.gib(), this.player.pos.distanceTo(enemy.pos));
+    // Mars and the Moon: during waves and boss fights the odd body drops a clip, so a long hold
+    // can't starve you outright (placed crates get rarer stage by stage)
+    const drop = this.levelDef.diff && this.levelDef.diff.drop;
+    if (drop && this.stage && (this.stage.kind === 'defend' || this.stage.kind === 'boss') && Math.random() < drop &&
+        this.world.pickups.filter(p => !p.taken && p.dropped).length < 6) {
+      const p = makePickup(this.world, 'ammo', enemy.pos.x, enemy.pos.y, enemy.pos.z);
+      p.dropped = true;
+    }
     if (enemy === this.boss) {
       this.hud.hideBoss();
       this.boss = null;
@@ -591,6 +672,7 @@ export class Game {
     // put the camera at the start so the card sits over the real view
     this.player.update(0.0001, { forward: 0, right: 0, jump: false, sprint: false, crouch: false }, this.world, this.time);
     this.world.updateLights(this.player.pos, 1);
+    this.updateFollow();
     this.runLoop();
   }
 
@@ -741,7 +823,7 @@ export class Game {
 
     // ---- enemies
     this.enemies.update({
-      dt, player, world: this.world, fx: this.fx, time: this.time,
+      dt, player, world: this.world, fx: this.fx, time: this.time, gravity: this.gravity,
       onAttack: (enemy, damage) => {
         player.hurt(damage, this.time);
         this.shake.add(0.25);
@@ -769,6 +851,8 @@ export class Game {
         if (s.bobY != null) s.obj.position.y = s.bobY + Math.sin(this.time * 1.6) * 0.12;
       }
     }
+
+    this.updateFollow();
 
     // sun shadow follows the player so the shadow map stays tight
     this.sun.target.position.copy(player.pos);
@@ -863,11 +947,11 @@ export class Game {
       this.waveAt -= dt;
       if (this.waveAt <= 0 && this.enemies.alive < (st.maxAlive || 14)) {
         this.waveAt = st.waveEvery;
-        const n = st.kind === 'boss' ? 2 : 3;
+        const n = st.waveSize || (st.kind === 'boss' ? 2 : 3);
         for (let i = 0; i < n; i++) {
           const pt = st.wavePoints[Math.floor(Math.random() * st.wavePoints.length)];
           const kind = st.waveKinds[Math.floor(Math.random() * st.waveKinds.length)];
-          this.enemies.spawn(kind, new THREE.Vector3(pt[0] + randRange(-3, 3), pt[1] || 0, pt[2] + randRange(-3, 3)));
+          this.enemies.spawn(kind, this.freeSpot(new THREE.Vector3(pt[0] + randRange(-3, 3), pt[1] || 0, pt[2] + randRange(-3, 3))));
         }
       }
     }
@@ -911,7 +995,7 @@ export class Game {
       this.state = 'dead';
       document.exitPointerLock();
       audio.sfx.lose();
-      this.hud.died('The ship broke up in the debris field');
+      this.hud.died(flight.dest === 'moon' ? 'The ship broke up in the wreckage field' : 'The ship broke up in the debris field');
       return;
     }
     if (finished) {
@@ -921,6 +1005,7 @@ export class Game {
       const summary = this.levelSummary();
       summary.mars = { score: flight.score, destroyed: flight.destroyed, hull: Math.round(flight.hull) };
       summary.final = true;
+      summary.flight = flight.dest;
       this.hud.levelCleared(summary);
     }
   }

@@ -15,6 +15,10 @@ const UP = new THREE.Vector3(0, -1, 0);
 export function dress(world, theme, index, quality = 1, script = null) {
   const rng = makeRng(7919 + index * 104729);
   const outdoor = !theme.dark && theme.rift > 0;
+  // Mars and the Moon: rock and panel debris instead of brick, dust drifts instead of puddles
+  const space = theme.space || null;
+  const stone = space === 'mars' ? 'redrock' : space === 'moon' ? 'regolith' : 'concrete';
+  const drift = space && !theme.dark ? { collide: false, shadow: false, mat: { color: space === 'mars' ? 0xe8a888 : 0xb8b8bc } } : null;
   const decals = [];            // { pos, normal, size, cell, rot }
 
   // the walkable area: everything inside the floor collider that isn't a wall
@@ -72,7 +76,7 @@ export function dress(world, theme, index, quality = 1, script = null) {
   for (let i = 0; i < pts.length; i++) {
     const [x, y, z] = pts[i], r = rng();
     if (r < 0.2) {
-      const mat = rng() < 0.5 ? 'concrete' : 'brick';
+      const mat = space ? (rng() < 0.8 ? stone : 'rust') : rng() < 0.5 ? 'concrete' : 'brick';
       for (let k = rng.int(4, 9); k > 0; k--) {     // tumbled chunks, sitting on whatever floor this is
         const a = rng() * TAU, d = rng() * 1.4, sz = rng.range(0.12, 0.45);
         world.box(x + Math.cos(a) * d, y + sz * 0.35, z + Math.sin(a) * d, sz, sz * rng.range(0.4, 0.9), sz * rng.range(0.6, 1.4), mat, { collide: false, rotY: rng() * TAU, uv: 1.2 });
@@ -92,7 +96,8 @@ export function dress(world, theme, index, quality = 1, script = null) {
     } else if (r < 0.62) {
       // a still, black puddle that mirrors the lights
       const g = new THREE.CircleGeometry(1, 14).rotateX(-Math.PI / 2);
-      world.shape(g, 'asphalt', { ...puddle, pos: [x, y + 0.012, z], scale: [rng.range(0.4, 1.0), 1, rng.range(0.3, 0.8)], rot: [0, rng() * TAU, 0] });
+      if (drift) world.shape(g, space === 'mars' ? 'sand' : 'regolith', { ...drift, pos: [x, y + 0.012, z], scale: [rng.range(0.8, 2), 1, rng.range(0.5, 1.2)], rot: [0, rng() * TAU, 0] });
+      else world.shape(g, 'asphalt', { ...puddle, pos: [x, y + 0.012, z], scale: [rng.range(0.4, 1.0), 1, rng.range(0.3, 0.8)], rot: [0, rng() * TAU, 0] });
     } else if (r < 0.72) {
       // broken planks and a length of pipe
       world.box(x, y + 0.04, z, rng.range(1, 2.2), 0.06, 0.2, 'wood', { uv: 1, collide: false, rotY: rng() * TAU });

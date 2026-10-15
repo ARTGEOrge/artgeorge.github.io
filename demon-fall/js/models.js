@@ -47,12 +47,72 @@ class Rig {
   }
 }
 
-const cyl = (rt, rb, h, seg = 8) => new THREE.CylinderGeometry(rt, rb, h, seg);
-const ball = (r, w = 10, h = 8) => new THREE.SphereGeometry(r, w, h);
-const box = (w, h, d) => new RoundedBoxGeometry(w, h, d, 3, Math.min(w, h, d) * 0.45);
-const cone = (r, h, seg = 6) => new THREE.ConeGeometry(r, h, seg);
-const tube = (rt, rb, h, seg = 12) => new THREE.CylinderGeometry(rt, rb, h, seg, 1, true);      // open-ended
-const dome = (r, w = 10, h = 6) => new THREE.SphereGeometry(r, w, h, 0, Math.PI * 2, 0, Math.PI / 2);
+/* Primitives are memoised (already indexed), so building a body is mostly
+ * matrix maths rather than generating and welding the same shapes again.
+ * Sizes are rounded to the centimetre so random ones still hit the cache. */
+const MEMO = new Map();
+const q = v => Math.round(v * 100) / 100;
+function memo(key, make) {
+  let g = MEMO.get(key);
+  if (!g) {
+    g = make();
+    if (!g.index) g = BufferGeometryUtils.mergeVertices(g);
+    MEMO.set(key, g);
+  }
+  return g;
+}
+const cyl = (rt, rb, h, seg = 8) => memo(`c${q(rt)},${q(rb)},${q(h)},${seg}`, () => new THREE.CylinderGeometry(q(rt), q(rb), q(h), seg));
+const ball = (r, w = 10, h = 8) => memo(`s${q(r)},${w},${h}`, () => new THREE.SphereGeometry(q(r), w, h));
+const box = (w, h, d) => memo(`b${q(w)},${q(h)},${q(d)}`, () => {
+  const W = Math.max(0.01, q(w)), H = Math.max(0.01, q(h)), D = Math.max(0.01, q(d));
+  return new RoundedBoxGeometry(W, H, D, 3, Math.min(W, H, D) * 0.45);
+});
+const cone = (r, h, seg = 6) => memo(`k${q(r)},${q(h)},${seg}`, () => new THREE.ConeGeometry(q(r), q(h), seg));
+const tube = (rt, rb, h, seg = 12) => memo(`t${q(rt)},${q(rb)},${q(h)},${seg}`, () => new THREE.CylinderGeometry(q(rt), q(rb), q(h), seg, 1, true));      // open-ended
+const dome = (r, w = 10, h = 6) => memo(`d${q(r)},${w},${h}`, () => new THREE.SphereGeometry(q(r), w, h, 0, Math.PI * 2, 0, Math.PI / 2));
+
+/** Joint names, so a finished body can be cloned and its joints found again. */
+const JOINTS = ['hips', 'torso', 'head', 'jaw', 'armL', 'armR', 'elbowL', 'elbowR', 'legL', 'legR', 'kneeL', 'kneeR'];
+function named(parts) {
+  for (const k of JOINTS) parts[k].name = k;
+  parts.eyes.forEach(e => { e.name = 'eye'; });
+  if (parts.halo) parts.halo.name = 'halo';
+  return parts;
+}
+
+/**
+ * A fresh body for this enemy type. The first few of each kind are built for
+ * real and kept as templates; after that a spawn is a clone that shares their
+ * geometry, so a wave of twenty costs next to nothing. Eyes and the eye glow
+ * get their own materials (they flash when that one body is hit).
+ */
+const TEMPLATES = new Map();
+const VARIANTS = 4;
+export function bodyFor(kind, type) {
+  let list = TEMPLATES.get(kind);
+  if (!list) TEMPLATES.set(kind, (list = []));
+  if (list.length < VARIANTS) list.push(type.quad ? quadruped(type) : humanoid(type));
+  const src = list[(Math.random() * list.length) | 0];
+  const group = src.group.clone(true);
+  const parts = { group };
+  for (const k of JOINTS) parts[k] = group.getObjectByName(k);
+  parts.eyes = [];
+  group.traverse(o => { if (o.name === 'eye') parts.eyes.push(o); });
+  const eyeMat = parts.eyes[0].material.clone();
+  parts.eyes.forEach(e => { e.material = eyeMat; });
+  const halo = group.getObjectByName('halo');
+  if (halo) { halo.material = halo.material.clone(); parts.halo = halo; }
+  return parts;
+}
+/** Build the templates ahead of time (behind the loading screen). */
+export function prewarm(kinds, types) {
+  for (const k of kinds) {
+    if (!types[k]) continue;
+    let list = TEMPLATES.get(k);
+    if (!list) TEMPLATES.set(k, (list = []));
+    while (list.length < VARIANTS) list.push(types[k].quad ? quadruped(types[k]) : humanoid(types[k]));
+  }
+}
 
 function joint(parent, x, y, z) {
   const j = new THREE.Group();
@@ -105,10 +165,13 @@ export function humanoid(type) {
   const demon = !!type.demon, heavy = !!type.heavy, boss = !!type.boss;
   const rig = new Rig(demon ? S.hideBase : S.fleshBase);
   const rnd = Math.random;
-  const skin = demon ? S.hide : (rnd() < 0.5 ? S.flesh : S.fleshDark);
-  const shirt = { c: SHIRTS[(rnd() * SHIRTS.length) | 0], k: 1.5 };
-  const pants = { c: PANTS[(rnd() * PANTS.length) | 0], k: 1.5 };
-  const bulk = heavy ? 1.35 : boss ? 1.25 : 1;
+  const outfit = type.outfit || null;
+  const skin = demon ? S.hide : type.skin ? { c: type.skin, k: 1.2 } : (rnd() < 0.5 ? S.flesh : S.fleshDark);
+  // colonists wear their uniforms: one colour top to bottom, picked from the type's palette
+  const cloth = type.cloth ? type.cloth[(rnd() * type.cloth.length) | 0] : null;
+  const shirt = { c: cloth || SHIRTS[(rnd() * SHIRTS.length) | 0], k: 1.5 };
+  const pants = { c: outfit === 'labcoat' ? PANTS[(rnd() * PANTS.length) | 0] : cloth || PANTS[(rnd() * PANTS.length) | 0], k: 1.5 };
+  const bulk = (heavy ? 1.35 : boss ? 1.25 : 1) * (outfit === 'suit' ? 1.12 : 1);
 
   const g = new THREE.Group();
   const hips = joint(g, 0, 0.95, 0);
@@ -187,6 +250,8 @@ export function humanoid(type) {
       rig.add(torso, box(0.015, 0.1, 0.01), S.lava, { pos: [Math.cos(a) * 0.12, 0.44 + Math.sin(a) * 0.12, 0.18], rot: [0, 0, a + Math.PI / 2] });
     }
   }
+
+  if (outfit) dressOutfit(rig, S, outfit, { torso, hips, head, shirt, bulk, rnd, type });
 
   // head: skull, brow, jaw, teeth, ears, sunken sockets
   rig.add(head, ball(0.125, 12, 10), skin, { pos: [0, 0.13, 0], scale: [0.95, 1.15, 1.05] });
@@ -290,18 +355,21 @@ export function humanoid(type) {
     else if (!heavy) for (let i = 0; i < 3; i++) rig.add(sh, box(0.03, 0.07 + rnd() * 0.05, 0.01), shirt, { pos: [Math.cos(i * 2.1) * 0.07, -0.18, Math.sin(i * 2.1) * 0.07], rot: [0, i * 2.1, 0.2] });
   }
   rig.finish();
-  return {
+  return named({
     group: g, hips, torso, head, jaw, eyes, halo,
     armL: L.sh, armR: R.sh, elbowL: L.el, elbowR: R.el,
     legL: LL.hip, legR: LR.hip, kneeL: LL.kn, kneeR: LR.kn
-  };
+  });
 }
 
 /** The hellhound. Same joint names so the shared animation code can drive it. */
 export function quadruped(type) {
   const S = shared();
-  const rig = new Rig(S.hideBase);
-  const skin = S.hide;
+  // a "flesh" quadruped is an infected colonist gone down on all fours: pale skin, bone, scraps of uniform
+  const flesh = !!type.flesh;
+  const rig = new Rig(flesh ? S.fleshBase : S.hideBase);
+  const skin = flesh ? { c: type.skin || 0xd8d0c8, k: 1.2 } : S.hide;
+  const horn = flesh ? S.bone : S.horn;
   const g = new THREE.Group();
   const hips = joint(g, 0, 0.64, 0);
   const torso = joint(hips, 0, 0, 0);
@@ -311,9 +379,15 @@ export function quadruped(type) {
   for (let i = 0; i < 6; i++) {
     const z = 0.32 - i * 0.1;
     for (const s of [-1, 1]) rig.add(torso, box(0.02, 0.2, 0.03), S.bone, { pos: [s * 0.22, -0.02, z], rot: [0, 0, s * 0.25] });
-    rig.add(torso, cone(0.03, 0.16), S.horn, { pos: [0, 0.3, z - 0.05], rot: [-0.5, 0, 0] });
+    rig.add(torso, cone(0.03, 0.16), horn, { pos: [0, 0.3, z - 0.05], rot: [-0.5, 0, 0] });
   }
-  rig.add(torso, box(0.03, 0.4, 0.01), S.lava, { pos: [0.12, 0.02, 0.2], rot: [1.4, 0.3, 0] });
+  if (!flesh) rig.add(torso, box(0.03, 0.4, 0.01), S.lava, { pos: [0.12, 0.02, 0.2], rot: [1.4, 0.3, 0] });
+  else {
+    // what is left of the jumpsuit, and a burst-open back
+    const rag = { c: type.cloth ? type.cloth[(Math.random() * type.cloth.length) | 0] : 0x8a5a2a, k: 1.5 };
+    rig.add(torso, tube(0.24, 0.27, 0.42, 12), rag, { pos: [0, 0.02, -0.12], rot: [Math.PI / 2, 0, 0], scale: [1, 1, 0.92] });
+    rig.add(torso, box(0.16, 0.3, 0.02), S.gore, { pos: [0, 0.21, 0.0], rot: [Math.PI / 2, 0, 0.2] });
+  }
 
   // neck and head with an open, toothed jaw
   const head = joint(torso, 0, 0.14, 0.62);
@@ -323,7 +397,7 @@ export function quadruped(type) {
   rig.add(head, box(0.12, 0.012, 0.2), S.teeth, { pos: [0, -0.035, 0.29] });
   for (const s of [-1, 1]) {
     rig.add(head, cone(0.04, 0.16, 5), skin, { pos: [s * 0.09, 0.2, 0.02], rot: [-0.4, 0, s * -0.4] });   // ears
-    rig.add(head, cyl(0.02, 0.03, 0.16), S.horn, { pos: [s * 0.08, 0.17, -0.02], rot: [-1, 0, s * -0.5] });
+    rig.add(head, cyl(0.02, 0.03, 0.16), horn, { pos: [s * 0.08, 0.17, -0.02], rot: [-1, 0, s * -0.5] });
     rig.add(head, ball(0.025, 8, 6), S.socket, { pos: [s * 0.07, 0.07, 0.19] });
   }
   const jaw = joint(head, 0, -0.05, 0.14);
@@ -345,7 +419,7 @@ export function quadruped(type) {
     const kn = joint(hip, 0, -0.34, 0);
     rig.add(kn, cyl(0.045, 0.035, 0.3), skin, { pos: [0, -0.14, back ? -0.02 : 0.02], rot: [back ? 0.35 : -0.2, 0, 0] });
     rig.add(kn, box(0.08, 0.04, 0.12), skin, { pos: [0, -0.29, 0.04] });
-    for (let f = -1; f <= 1; f++) rig.add(kn, cone(0.01, 0.06), S.horn, { pos: [f * 0.025, -0.3, 0.12], rot: [Math.PI / 2, 0, 0] });
+    for (let f = -1; f <= 1; f++) rig.add(kn, cone(0.01, 0.06), horn, { pos: [f * 0.025, -0.3, 0.12], rot: [Math.PI / 2, 0, 0] });
     return { hip, kn };
   };
   const FL = leg(-0.18, 0.4, false), FR = leg(0.18, 0.4, false);
@@ -358,9 +432,53 @@ export function quadruped(type) {
   }
 
   rig.finish();
-  return {
+  return named({
     group: g, hips, torso, head, jaw, eyes,
     armL: FL.hip, armR: FR.hip, legL: BL.hip, legR: BR.hip,
     kneeL: BL.kn, kneeR: BR.kn, elbowL: FL.kn, elbowR: FR.kn
-  };
+  });
+}
+
+/* Colony and moon-base uniforms layered over the infected body. */
+let GLASS = null;
+function dressOutfit(rig, S, outfit, { torso, hips, head, shirt, bulk, rnd, type }) {
+  const white = { c: 0xc8c4bc, k: 1.05 };     // bright cloth blows out under the torch otherwise
+  const dark = { c: 0x2a2e34, k: 1.2 };
+  const accent = { c: type.accent || 0xd8701a, k: 1.6 };
+  if (outfit === 'jumpsuit' || outfit === 'suit' || outfit === 'miner') {
+    // name tape, collar and reflective bands
+    rig.add(torso, box(0.09, 0.04, 0.012), white, { pos: [-0.1 * bulk, 0.5, 0.165] });
+    rig.add(torso, box(0.05, 0.05, 0.012), accent, { pos: [0.11 * bulk, 0.5, 0.162] });
+    rig.add(torso, tube(0.12, 0.15, 0.06, 10), shirt, { pos: [0, 0.66, 0], scale: [1, 1, 0.8] });
+    rig.add(hips, tube(0.18 * bulk, 0.18 * bulk, 0.04, 10), accent, { pos: [0, -0.02, 0], scale: [1, 1, 0.72] });
+  }
+  if (outfit === 'labcoat') {
+    const coat = { c: 0x9e9a90, k: 1.0 };   // grubby, not lab-fresh: white cloth glares under the torch
+    // a long white coat flapping open over the knees, ID badge, pens
+    rig.add(hips, tube(0.2 * bulk, 0.27 * bulk, 0.56, 12), coat, { pos: [0, -0.22, -0.01], scale: [1, 1, 0.78] });
+    rig.add(torso, tube(0.266 * bulk, 0.216 * bulk, 0.6, 12), coat, { pos: [0, 0.34, 0], scale: [1, 1, 0.66] });
+    for (const s of [-1, 1]) rig.add(torso, box(0.05, 0.3, 0.012), coat, { pos: [s * 0.07, 0.48, 0.17], rot: [0, 0, s * -0.35] });   // lapels
+    rig.add(torso, box(0.05, 0.07, 0.01), accent, { pos: [0.12, 0.42, 0.172] });
+    rig.add(torso, box(0.008, 0.06, 0.008), dark, { pos: [-0.12, 0.47, 0.172] });
+    rig.add(hips, box(0.12, 0.2, 0.012), S.gore, { pos: [0.08, -0.25, 0.2] });   // a long bloody smear
+  }
+  if (outfit === 'suit') {
+    // EVA suit: life-support pack, chest unit, a helmet smashed open at the front
+    rig.add(torso, box(0.34 * bulk, 0.44, 0.16), white, { pos: [0, 0.38, -0.22] });
+    rig.add(torso, box(0.3 * bulk, 0.06, 0.17), accent, { pos: [0, 0.58, -0.22] });
+    rig.add(torso, box(0.16, 0.1, 0.06), dark, { pos: [0, 0.3, 0.2] });
+    rig.add(torso, box(0.03, 0.02, 0.01), { c: 0x4ae06a, k: 1.6 }, { pos: [-0.04, 0.32, 0.232] });
+    rig.add(torso, tube(0.16, 0.18, 0.07, 14), white, { pos: [0, 0.66, 0], scale: [1, 1, 0.9] });   // neck ring
+    if (!GLASS) GLASS = new THREE.MeshStandardMaterial({ color: type.visor || 0xbfe2ff, transparent: true, opacity: 0.28, roughness: 0.05, metalness: 0.7, depthWrite: false, side: THREE.DoubleSide });
+    // the back two thirds of the bubble: the faceplate is gone
+    rig.add(head, new THREE.SphereGeometry(0.21, 14, 10, Math.PI * 0.85, Math.PI * 1.3), GLASS, { pos: [0, 0.12, -0.01] });
+    rig.add(head, cyl(0.022, 0.022, 0.05, 6), dark, { pos: [0.16, 0.2, -0.04], rot: [0, 0, -0.5] });   // helmet lamp
+  }
+  if (outfit === 'miner') {
+    // hard hat and hi-vis
+    rig.add(head, dome(0.15, 12, 6), { c: 0xe8b020, k: 1.6 }, { pos: [0, 0.2, 0], scale: [1, 0.85, 1.12] });
+    rig.add(head, cyl(0.17, 0.17, 0.015, 14), { c: 0xe8b020, k: 1.6 }, { pos: [0, 0.2, 0.01] });
+    rig.add(head, cyl(0.03, 0.03, 0.03, 8), S.lava, { pos: [0, 0.24, 0.14], rot: [Math.PI / 2, 0, 0] });
+    for (const y of [0.24, 0.44]) rig.add(torso, tube(0.25 * bulk, 0.24 * bulk, 0.035, 12), { c: 0xd8e04a, k: 1.6 }, { pos: [0, y, 0], scale: [1, 1, 0.66] });
+  }
 }

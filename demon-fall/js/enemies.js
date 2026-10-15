@@ -5,7 +5,7 @@
  * Steering is direct with wall-sliding and crowd separation, which is enough
  * for an open ruined city and costs almost nothing per frame. */
 import * as THREE from 'three';
-import { humanoid, quadruped } from './models.js';
+import { bodyFor, prewarm } from './models.js';
 import { clamp, damp, randRange, TAU, angleDelta, tmpV1, tmpV2 } from './util.js';
 import * as audio from './audio.js';
 
@@ -39,19 +39,109 @@ export const TYPES = {
   marsSpawn: {
     name: 'Rift Spawn', hp: 60, speed: 3.4, run: 4.4, damage: 13, reach: 1.5, attackTime: 0.8, windup: 0.3,
     scale: 0.95, colour: 0x6a2a6a, eyes: 0x9af0ff, score: 200, sight: 60, gib: 0x3a1a4a, demon: true
+  },
+
+  /* ---- Mars: the colonists who got out, and brought it with them ----
+   * bodyMult < 1 means armour (EVA suits, hard hats): body shots do less, the head does not. */
+  colonist: {
+    name: 'Infected Colonist', hp: 52, speed: 1.7, run: 2.3, damage: 10, reach: 1.45, attackTime: 1.1, windup: 0.42,
+    scale: 1, eyes: 0x9af06a, score: 120, sight: 50, gib: 0x6a1a20,
+    outfit: 'jumpsuit', cloth: [0xc0602a, 0x2a6a7a, 0x8a8a90, 0xa8402a], accent: 0xe8e0d0, skin: 0xc8bcb0
+  },
+  sprinter: {
+    name: 'Lab Runner', hp: 34, speed: 4.6, run: 5.9, damage: 9, reach: 1.4, attackTime: 0.75, windup: 0.28,
+    scale: 0.94, eyes: 0x9af06a, score: 170, sight: 56, gib: 0x7a1a24, lunges: true,
+    outfit: 'labcoat', accent: 0x3a8ac8, skin: 0xd0c4b8
+  },
+  suit: {
+    name: 'Suit Walker', hp: 92, speed: 1.6, run: 2.2, damage: 14, reach: 1.5, attackTime: 1.2, windup: 0.45,
+    scale: 1, eyes: 0x9af06a, score: 230, sight: 50, gib: 0x6a1a20, bodyMult: 0.7,
+    outfit: 'suit', cloth: [0xb0aca2, 0xa49e92], accent: 0xd8701a, skin: 0xb8b0a8
+  },
+  crawler: {
+    name: 'Crawler', hp: 40, speed: 5.4, run: 6.9, damage: 11, reach: 1.5, attackTime: 0.65, windup: 0.22,
+    scale: 0.82, eyes: 0x9af06a, score: 200, sight: 58, gib: 0x6a1a20, quad: true, flesh: true, lunges: true,
+    cloth: [0xc0602a, 0x2a6a7a], skin: 0xd8ccc0
+  },
+  spitter: {
+    name: 'Spitter', hp: 58, speed: 2.2, run: 2.9, damage: 10, reach: 1.4, attackTime: 1.0, windup: 0.4,
+    scale: 0.96, eyes: 0xb4ff3a, score: 250, sight: 58, gib: 0x5a2a10,
+    outfit: 'labcoat', accent: 0x4ac86a, skin: 0xa8b490,
+    ranged: { range: 30, cooldown: 2.9, speed: 14, damage: 12 }
+  },
+  hulk: {
+    name: 'Mine Hulk', hp: 300, speed: 1.9, run: 2.7, damage: 24, reach: 2.2, attackTime: 1.6, windup: 0.75,
+    scale: 1.8, eyes: 0x9af06a, score: 520, sight: 48, gib: 0x6d1420, heavy: true, bodyMult: 0.85,
+    outfit: 'miner', cloth: [0xd86a1a, 0xc85a14], accent: 0xd8e04a, skin: 0xb0a090
+  },
+  overseer: {
+    name: 'Colony Overseer', hp: 2000, speed: 2.2, run: 3.1, damage: 30, reach: 3.0, attackTime: 1.6, windup: 0.7,
+    scale: 2.9, eyes: 0xb4ff3a, score: 4000, sight: 90, gib: 0x5a1a10, boss: true,
+    outfit: 'suit', cloth: [0xa8a294], accent: 0xc8102e, skin: 0x9aa088,
+    ranged: { range: 36, cooldown: 2.6, speed: 16, damage: 13, volley: 3 }
+  },
+
+  /* ---- the Moon: base crews, a long way from help ---- */
+  crew: {
+    name: 'Infected Crew', hp: 60, speed: 1.8, run: 2.5, damage: 12, reach: 1.45, attackTime: 1.05, windup: 0.4,
+    scale: 1, eyes: 0x7ae8ff, score: 150, sight: 52, gib: 0x6a1a20,
+    outfit: 'jumpsuit', cloth: [0x3a4a6a, 0x5a5e68, 0x2a3a4a, 0x6a4a7a], accent: 0x4ac8ff, skin: 0xbcc0c8
+  },
+  leaper: {
+    name: 'Leaper', hp: 50, speed: 3.2, run: 4.2, damage: 11, reach: 1.5, attackTime: 0.8, windup: 0.3,
+    scale: 0.95, eyes: 0x7ae8ff, score: 240, sight: 60, gib: 0x6a1a20, leaps: true, lunges: true,
+    outfit: 'labcoat', accent: 0x4ac8ff, skin: 0xc4c8d0
+  },
+  voidSuit: {
+    name: 'Void Suit', hp: 120, speed: 1.7, run: 2.4, damage: 16, reach: 1.5, attackTime: 1.15, windup: 0.42,
+    scale: 1.02, eyes: 0x7ae8ff, score: 280, sight: 52, gib: 0x6a1a20, bodyMult: 0.65,
+    outfit: 'suit', cloth: [0xb4b4b0, 0xa4a8b0], accent: 0x2a6ac8, skin: 0xb0b4c0, visor: 0xffd27a
+  },
+  lunarCrawler: {
+    name: 'Crawler', hp: 48, speed: 5.8, run: 7.4, damage: 13, reach: 1.5, attackTime: 0.62, windup: 0.2,
+    scale: 0.84, eyes: 0x7ae8ff, score: 230, sight: 60, gib: 0x6a1a20, quad: true, flesh: true, lunges: true,
+    cloth: [0x3a4a6a, 0x5a5e68], skin: 0xc8ccd4
+  },
+  lunarSpitter: {
+    name: 'Spitter', hp: 66, speed: 2.3, run: 3.0, damage: 12, reach: 1.4, attackTime: 1.0, windup: 0.4,
+    scale: 0.96, eyes: 0x5af0ff, score: 280, sight: 60, gib: 0x2a4a5a,
+    outfit: 'jumpsuit', cloth: [0x5a5e68, 0x3a4a6a], accent: 0x5af0ff, skin: 0x98a8b4,
+    ranged: { range: 32, cooldown: 2.8, speed: 15, damage: 13 }
+  },
+  titan: {
+    name: 'Regolith Titan', hp: 340, speed: 1.9, run: 2.7, damage: 24, reach: 2.3, attackTime: 1.5, windup: 0.7,
+    scale: 1.9, eyes: 0x7ae8ff, score: 650, sight: 50, gib: 0x6d1420, heavy: true, bodyMult: 0.8,
+    outfit: 'miner', cloth: [0x4a5a7a, 0x5a5e68], accent: 0xd8e04a, skin: 0xa8acb4
+  },
+  matriarch: {
+    name: 'The Matriarch', hp: 2700, speed: 2.4, run: 3.4, damage: 40, reach: 3.3, attackTime: 1.5, windup: 0.65,
+    scale: 3.4, eyes: 0x7ae8ff, score: 8000, sight: 100, gib: 0x3a1a4a, boss: true, leaps: true,
+    outfit: 'labcoat', accent: 0x5af0ff, skin: 0x8a90a0,
+    ranged: { range: 40, cooldown: 2.3, speed: 17, damage: 14, volley: 4 }
   }
 };
+
+/** A copy of a type with the level's difficulty applied (cached per level). */
+function scaledType(base, mods) {
+  if (!mods) return base;
+  const t = { ...base };
+  t.hp = Math.round(base.hp * (mods.hp || 1));
+  t.speed = base.speed * (mods.speed || 1);
+  t.run = base.run * (mods.speed || 1);
+  t.damage = Math.round(base.damage * (mods.damage || 1));
+  if (base.ranged) t.ranged = { ...base.ranged, damage: Math.round(base.ranged.damage * (mods.damage || 1)), cooldown: base.ranged.cooldown / (mods.fire || 1) };
+  return t;
+}
 
 /* ------------------------------------------------------------------ enemy */
 let nextId = 1;
 
 export class Enemy {
-  constructor(kind, pos) {
-    const type = TYPES[kind];
+  constructor(kind, pos, type = TYPES[kind]) {
     this.id = nextId++;
     this.kind = kind;
     this.type = type;
-    this.parts = type.quad ? quadruped(type) : humanoid(type);
+    this.parts = bodyFor(kind, type);
     this.obj = this.parts.group;
     this.obj.scale.setScalar(type.scale);
     this.obj.position.copy(pos);
@@ -80,6 +170,12 @@ export class Enemy {
   }
 
   get pos() { return this.obj.position; }
+
+  /** Bodies share their geometry with a template; only the eye materials are this one's own. */
+  dispose() {
+    if (this.parts.eyes[0]) this.parts.eyes[0].material.dispose();
+    if (this.parts.halo) this.parts.halo.material.dispose();
+  }
 
   headPos(out = tmpV1) { return out.copy(this.obj.position).setY(this.obj.position.y + this.headY); }
   bodyPos(out = tmpV1) { return out.copy(this.obj.position).setY(this.obj.position.y + this.height * 0.52); }
@@ -125,7 +221,7 @@ export class Enemy {
 
   hurt(amount, dir, head) {
     if (this.dead) return 0;
-    const dmg = head ? amount * 2.3 : amount;
+    const dmg = head ? amount * 2.3 : amount * (this.type.bodyMult || 1);
     this.hp -= dmg;
     this.hitFlash = 0.12;
     this.flinch = Math.min(0.35, this.flinch + (this.type.heavy ? 0.08 : 0.2));
@@ -222,6 +318,20 @@ export class Enemy {
       }
     }
 
+    // ---- leapers bound at you; in low gravity they hang in the air
+    this.leaping = Math.max(0, (this.leaping || 0) - dt);
+    if (this.type.leaps && this.state === 'chase' && seeing && dist > 4 && dist < 15 &&
+        ctx.time > (this.leapAt || 0) && Math.abs(this.vel.y) < 0.01 && this.stagger < 0.1) {
+      this.leapAt = ctx.time + randRange(3.5, 5.5);
+      const g = ctx.gravity || 22, flight = clamp(dist / 9, 0.6, 1.3);
+      this.vel.y = g * flight * 0.5;
+      // land a couple of metres short: you get a beat to react
+      this.vel.x = (toPlayer.x / dist) * (dist - 2.6) / flight;
+      this.vel.z = (toPlayer.z / dist) * (dist - 2.6) / flight;
+      this.leaping = flight;
+      audio.at(() => audio.sfx.screech(), dist);
+    }
+
     // ---- move
     let speed = 0;
     if (this.state === 'chase') speed = (dist > 9 ? this.type.run : this.type.speed) * (1 - this.stagger);
@@ -253,7 +363,9 @@ export class Enemy {
       if (l > 0.001) { dir.x /= l; dir.z /= l; }
     }
 
-    if (speed > 0) {
+    if (this.leaping > 0) {
+      // committed to the jump: no steering until it lands
+    } else if (speed > 0) {
       // wall avoidance: if the way ahead is blocked, pick a way round and stick
       // with it for a moment — re-deciding every frame makes them jitter in
       // place against a parked car
@@ -290,9 +402,10 @@ export class Enemy {
     }
 
     // gravity + ground
-    this.vel.y -= 22 * dt;
+    this.vel.y -= (ctx.gravity || 22) * dt;
     p.addScaledVector(this.vel, dt);
     this.resolve(world, p);
+    if (this.leaping > 0 && this.vel.y === 0) this.leaping = 0;
 
     // face the way it moves (or the player when close)
     const wantFacing = (this.state === 'chase' || this.state === 'attack')
@@ -443,8 +556,19 @@ export class Enemies {
     this.projGeo = new THREE.SphereGeometry(0.16, 10, 8);
   }
 
+  /** Build the body templates for every kind a level uses, so the first wave doesn't stutter. */
+  prewarm(kinds) { prewarm(kinds, TYPES); }
+
+  /** Level difficulty: { hp, speed, damage, fire } multipliers applied to every spawn. */
+  setMods(mods) { this.mods = mods || null; this.typeCache = new Map(); }
+
   spawn(kind, pos) {
-    const e = new Enemy(kind, pos);
+    let type = TYPES[kind];
+    if (this.mods) {
+      if (!this.typeCache.has(kind)) this.typeCache.set(kind, scaledType(type, this.mods));
+      type = this.typeCache.get(kind);
+    }
+    const e = new Enemy(kind, pos, type);
     this.scene.add(e.obj);
     this.list.push(e);
     return e;
@@ -485,7 +609,7 @@ export class Enemies {
   update(ctx) {
     const { dt, player, world, fx } = ctx;
     const shared = {
-      dt, player, world, fx, time: ctx.time, enemies: this.list,
+      dt, player, world, fx, time: ctx.time, enemies: this.list, gravity: ctx.gravity,
       onAttack: ctx.onAttack,
       onFire: (enemy, spread, delay) => {
         const from = enemy.bodyPos(new THREE.Vector3()).setY(enemy.pos.y + enemy.headY * 0.86);
@@ -504,6 +628,7 @@ export class Enemies {
       const e = this.list[i];
       if (e.dead && e.deathT > 12) {
         this.scene.remove(e.obj);
+        e.dispose();
         this.list.splice(i, 1);
       }
     }
@@ -518,7 +643,13 @@ export class Enemies {
       this.fx.embers(p.mesh.position, 1, 0.12);
 
       const toPlayer = tmpV1.copy(player.pos).setY(player.pos.y + 0.9).sub(p.mesh.position);
-      const hitPlayer = toPlayer.length() < 0.7;
+      let hitPlayer = toPlayer.length() < 0.7;
+      if (this.mods) {
+        // Mars and Moon: test the whole body (a shot aimed at your eyes used to pass just over the chest point).
+        // Earth keeps its original check so its difficulty is untouched.
+        const m = p.mesh.position, dy = m.y - player.pos.y;
+        hitPlayer = dy > 0.1 && dy < 1.85 && Math.hypot(m.x - player.pos.x, m.z - player.pos.z) < 0.55;
+      }
 
       if (hitPlayer || hitWorld || p.life <= 0) {
         this.fx.plasmaBurst(p.mesh.position, [1, 0.45, 0.15]);
@@ -533,7 +664,7 @@ export class Enemies {
   }
 
   clear() {
-    for (const e of this.list) this.scene.remove(e.obj);
+    for (const e of this.list) { this.scene.remove(e.obj); e.dispose(); }
     for (const p of this.projectiles) this.scene.remove(p.mesh);
     this.list.length = 0;
     this.projectiles.length = 0;
