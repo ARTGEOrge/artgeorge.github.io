@@ -5,6 +5,7 @@
  * barriers, terrain, racing line, AI speed profile — is derived from it. */
 import * as THREE from 'three';
 import * as TX from './textures.js';
+import * as HD from './textures-hd.js';
 
 export const DS = 2;
 export const START_S = 140;          // the start line; the grid sits behind it
@@ -257,18 +258,24 @@ export class Track {
   }
 
   /* ---------------------------------------------- meshes */
-  build(scene, quality) {
+  build(scene, quality, tier = null) {
+    const hd = !!tier && tier.name !== 'low', shadows = !!(tier && tier.shadows);
     const L = this.L, group = new THREE.Group(); group.name = 'track';
     this.group = group;
     this.chunks = [];
-    const asphalt = TX.asphalt(L.road, L.line, !!L.wet);
-    const roadMat = new THREE.MeshStandardMaterial({ map: asphalt, roughness: L.wet ? 0.28 : 0.86, metalness: L.wet ? 0.25 : 0.02, color: L.night ? '#d8d8e0' : '#ffffff' });
-    const kerbMat = new THREE.MeshLambertMaterial({ map: TX.kerb() });
+    let roadMat;
+    if (hd) {
+      const A = HD.asphaltHD(L.road, L.line, !!L.wet);
+      roadMat = new THREE.MeshStandardMaterial({ map: A.map, roughnessMap: A.rough, roughness: 1, metalness: L.wet ? 0.18 : 0.02, envMapIntensity: L.wet ? 1.2 : 0.6, color: L.night ? '#d8d8e0' : '#ffffff' });
+    } else roadMat = new THREE.MeshStandardMaterial({ map: TX.asphalt(L.road, L.line, !!L.wet), roughness: L.wet ? 0.28 : 0.86, metalness: L.wet ? 0.25 : 0.02, color: L.night ? '#d8d8e0' : '#ffffff' });
+    const kerbMat = new THREE.MeshLambertMaterial({ map: hd ? HD.kerbHD() : TX.kerb() });
+    const gk = L.city ? 'pavement' : L.theme === 'alps' ? 'snow' : L.theme === 'desert' ? 'sand' : (L.theme === 'outback' || L.theme === 'vegas') ? 'dirt' : 'grass';
+    this.groundMap = hd ? HD.groundTex(gk) : TX.detail(); this.shadowsOn = shadows;
     const neonCols = { tokyo: '#ff2fa8', vegas: '#ffcf2a', singapore: '#2fe0ff' };
     const barTex = TX.barrier(L.barrier, neonCols[L.theme] || '#ff2fa8');
     const barMat = L.barrier === 'neon' ? new THREE.MeshBasicMaterial({ map: barTex, side: THREE.DoubleSide })
       : new THREE.MeshLambertMaterial({ map: barTex, side: THREE.DoubleSide });
-    const runMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: TX.detail() });
+    const runMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: this.groundMap });
     TX.detail().repeat.set(1, 1);
     this.materials = [roadMat, kerbMat, barMat, runMat];
     const barH = L.barrier === 'armco' ? 0.95 : L.barrier === 'tecpro' ? 1.15 : 1.5;
@@ -282,12 +289,16 @@ export class Track {
       for (const side of [1, -1]) ch.add(new THREE.Mesh(this.wallGeo(c0, c1, side, barH), barMat));
       ch.userData.s0 = c0 * DS; ch.userData.s1 = c1 * DS;
       const mid = (c0 + c1) >> 1; ch.userData.cx = this.x[mid]; ch.userData.cz = this.z[mid];
-      ch.children.forEach(m => { m.matrixAutoUpdate = false; m.updateMatrix(); });
+      ch.children.forEach(m => { m.matrixAutoUpdate = false; m.updateMatrix(); m.receiveShadow = shadows; });
       group.add(ch); this.chunks.push(ch);
     }
     this.buildTerrain(group, quality);
     if (L.sea) {
-      const sea = new THREE.Mesh(new THREE.PlaneGeometry(30000, 30000), new THREE.MeshStandardMaterial({ color: L.sea, roughness: 0.18, metalness: 0.3 }));
+      const waves = !!tier && tier.water === 'waves';
+      let wn = null;
+      if (waves) { wn = HD.waterNormals(); wn.repeat.set(700, 700); }
+      const sea = new THREE.Mesh(new THREE.PlaneGeometry(30000, 30000), new THREE.MeshStandardMaterial({ color: L.sea, roughness: waves ? 0.12 : 0.18, metalness: 0.3, normalMap: wn, normalScale: new THREE.Vector2(0.55, 0.55) }));
+      this.seaNormal = wn;
       sea.rotation.x = -Math.PI / 2; sea.position.set(this.x[this.n >> 1], this.seaY, this.z[this.n >> 1]);
       group.add(sea); this.sea = sea;
     }
@@ -432,8 +443,8 @@ export class Track {
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     geo.setIndex(new THREE.BufferAttribute(idx, 1)); geo.computeVertexNormals(); geo.computeBoundingSphere();
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, map: TX.detail() });
-    const mesh = new THREE.Mesh(geo, mat); mesh.matrixAutoUpdate = false;
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, map: this.groundMap });
+    const mesh = new THREE.Mesh(geo, mat); mesh.matrixAutoUpdate = false; mesh.receiveShadow = this.shadowsOn;
     group.add(mesh); this.terrain = mesh;
   }
 

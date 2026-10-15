@@ -2,6 +2,7 @@
  * the camera and per-frame effects. Simulation runs in fixed 1/60 s steps
  * (step) and is decoupled from drawing (frame), so tests can fast-forward. */
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Track, DS, START_S } from './track.js';
 import { populate } from './scenery.js';
 import { makeCar, wheelGeometry, WHEELS } from './car.js';
@@ -9,6 +10,8 @@ import { makeSky, Particles, Weather, SpeedLines } from './fx.js';
 import { LIVERIES, fieldFor } from './levels.js';
 import * as TX from './textures.js';
 import * as audio from './audio.js';
+import { TIERS } from './quality.js';
+import * as HD from './textures-hd.js';
 
 export const STEP = 1 / 60;
 const V_TOP = 92;               // 331 km/h flat out
@@ -21,6 +24,7 @@ export class Race {
   constructor(L, renderer, opts) {
     this.L = L; this.renderer = renderer; this.opts = opts;
     this.quality = opts.quality ?? 0;
+    this.tier = opts.tier || TIERS.high;
     const scene = this.scene = new THREE.Scene();
     scene.fog = new THREE.Fog(L.fog.col, L.fog.near, L.fog.far);
     scene.background = new THREE.Color(L.fog.col);
@@ -29,8 +33,14 @@ export class Race {
     // light
     const hemi = new THREE.HemisphereLight(L.light.sky, L.light.gnd, L.light.hemi); scene.add(hemi);
     const sun = this.sun = new THREE.DirectionalLight(L.light.sun, L.light.sunI);
-    sun.position.set(...L.sky.sun).multiplyScalar(100); scene.add(sun);
-    this.sky = makeSky(L); scene.add(this.sky);
+    sun.position.set(...L.sky.sun).multiplyScalar(100); scene.add(sun); scene.add(sun.target);
+    if (this.tier.shadows) {
+      const B = this.tier.shadowBox / 2;
+      sun.castShadow = true; sun.shadow.mapSize.set(this.tier.shadows, this.tier.shadows);
+      Object.assign(sun.shadow.camera, { left: -B, right: B, top: B, bottom: -B, near: 1, far: 500 });
+      sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.04; sun.shadow.camera.updateProjectionMatrix();
+    }
+    this.sky = makeSky(L, { clouds: this.tier.clouds }); scene.add(this.sky);
     if (L.night) { // floodlight that travels with the player so cars read at night
       this.carLight = new THREE.PointLight('#fff2e0', 60, 70, 1.2); scene.add(this.carLight);
       hemi.intensity *= 1.35;
@@ -43,8 +53,9 @@ export class Race {
     } catch (e) { /* no env */ }
     // world
     this.track = new Track(L);
-    this.track.build(scene, this.quality);
+    this.track.build(scene, this.quality, this.tier);
     this.scenery = populate(this.track, L, this.quality, scene);
+    if (this.tier.shadows) this.scenery.group.traverse(o => { if (o.isMesh && !o.material.transparent && !o.material.isMeshBasicMaterial) o.castShadow = true; });
     this.buildFurniture();
     // fx
     this.smoke = new Particles(500); scene.add(this.smoke.points);
@@ -84,7 +95,7 @@ export class Race {
       if (!isP) ai++;
       const p = t.at(car.s, car.d, {});
       car.x = p.x; car.z = p.z; car.y = p.y; car.yaw = p.th; car.idx = t.idx(car.s);
-      car.mesh = makeCar(liv); scene.add(car.mesh);
+      car.mesh = makeCar(liv, { detail: this.tier.carDetail, shadows: !!this.tier.shadows }); scene.add(car.mesh);
       this.cars.push(car);
     }
     this.player = this.cars[slot];
@@ -93,9 +104,9 @@ export class Race {
     const wm = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0.1 });
     this.wheelMesh = new THREE.InstancedMesh(wheelGeometry(), wm, N * 4);
     this.wheelMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); this.wheelMesh.frustumCulled = false;
-    scene.add(this.wheelMesh);
+    this.wheelMesh.castShadow = !!this.tier.shadows; scene.add(this.wheelMesh);
     const bg = new THREE.PlaneGeometry(1, 1); bg.rotateX(-Math.PI / 2);
-    this.shadowMesh = new THREE.InstancedMesh(bg, new THREE.MeshBasicMaterial({ map: TX.blob(), transparent: true, depthWrite: false, opacity: this.L.night ? 0.5 : 0.85 }), N);
+    this.shadowMesh = new THREE.InstancedMesh(bg, new THREE.MeshBasicMaterial({ map: TX.blob(), transparent: true, depthWrite: false, opacity: (this.L.night ? 0.5 : 0.85) * (this.tier.shadows ? 0.6 : 1) }), N);
     this.shadowMesh.frustumCulled = false; scene.add(this.shadowMesh);
     this.aiProf = t.profile(37 * L.grip, 30 * L.grip, V_TOP - 1);
     this.apProf = t.profile(38.5 * L.grip, 32 * L.grip, V_TOP);
@@ -171,7 +182,54 @@ export class Race {
     };
     for (const s of [START_S - 50, START_S + 10]) for (const sd of [1, -1]) if (t.nearest(...this.sidePos(s, sd * 20)).dist > 10) stand(s, sd);
     for (const s of [t.finishS - 40, t.finishS + 15]) for (const sd of [1, -1]) stand(s, sd);
+    if (this.tier.extras) {
+      for (const s of t.checkpoints) for (const sd of [1, -1]) if (t.nearest(...this.sidePos(s + 20, sd * 30)).dist > 12) stand(s + 20, sd);
+      this.buildExtras(g);
+    }
     scene.add(g); this.furniture = g;
+  }
+
+  /* Billboards with fictional brands and flag poles along the route. */
+  buildExtras(g) {
+    const t = this.track, L = this.L, tmp = {}, r = TX.rng(L.seed + 77);
+    const faces = [], backs = [], flagM = [], poleM = [], flagC = [];
+    const cols = ['#e10600', '#ffd400', '#1f4fd8', '#16c060', '#ffffff', '#ff7a1a', '#b14cff'].map(c => new THREE.Color(c));
+    const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), V = new THREE.Vector3(), S = new THREE.Vector3();
+    let side = 1;
+    for (let s = START_S + 60; s < t.finishS + 100; s += 120 + r() * 60) {
+      side = -side;
+      const lat = t.w[t.idx(s)] / 2 + t.runoff + 0.9;
+      t.at(s, side * lat, tmp);
+      if (t.nearest(tmp.x, tmp.z).dist < lat - 0.5) continue;
+      const brand = (r() * 8) | 0, u0 = (brand % 4) / 4, v0 = brand < 4 ? 0.5 : 0;
+      const ry = tmp.th + (side > 0 ? -Math.PI / 2 : Math.PI / 2);
+      const f = new THREE.PlaneGeometry(7, 1.75); const uv = f.attributes.uv;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, u0 + uv.getX(i) * 0.25, v0 + uv.getY(i) * 0.5);
+      f.rotateY(ry); f.translate(tmp.x - Math.sin(ry) * -0.06, tmp.y + 2.3, tmp.z - Math.cos(ry) * -0.06);
+      faces.push(f);
+      const b = new THREE.BoxGeometry(7.2, 2.0, 0.1); b.translate(0, 2.3, -0.02); b.rotateY(ry); b.translate(tmp.x, tmp.y, tmp.z); b.deleteAttribute('uv'); backs.push(b);
+      for (const px of [-2.8, 2.8]) { const p = new THREE.BoxGeometry(0.15, 1.4, 0.15); p.translate(px, 0.7, -0.05); p.rotateY(ry); p.translate(tmp.x, tmp.y, tmp.z); p.deleteAttribute('uv'); backs.push(p); }
+    }
+    for (const s0 of [START_S, ...t.checkpoints, t.finishS]) for (let k = -3; k <= 3; k++) for (const sd of [1, -1]) {
+      const s = s0 + k * 7, lat = t.w[t.idx(s)] / 2 + t.runoff + 0.5;
+      t.at(s, sd * lat, tmp);
+      Q.setFromAxisAngle(V.set(0, 1, 0), tmp.th);
+      poleM.push(M.compose(V.set(tmp.x, tmp.y, tmp.z), Q, S.set(1, 1, 1)).clone());
+      flagM.push(M.compose(V.set(tmp.x, tmp.y + 5.6, tmp.z), Q, S.set(1, 1, 1)).clone());
+      flagC.push(cols[(r() * cols.length) | 0]);
+    }
+    const night = !!L.night;
+    if (faces.length) {
+      const atlas = HD.billboards();
+      g.add(new THREE.Mesh(mergeGeometries(faces), new THREE.MeshLambertMaterial({ map: atlas, emissive: night ? '#ffffff' : '#000000', emissiveMap: night ? atlas : null, emissiveIntensity: 0.7 })));
+      g.add(new THREE.Mesh(mergeGeometries(backs), new THREE.MeshLambertMaterial({ color: '#2a2c32' })));
+    }
+    const pg = new THREE.CylinderGeometry(0.05, 0.06, 6.4, 6); pg.translate(0, 3.2, 0);
+    const poles = new THREE.InstancedMesh(pg, new THREE.MeshLambertMaterial({ color: '#c8ccd4' }), poleM.length);
+    const fg = new THREE.PlaneGeometry(1.5, 0.9); fg.translate(0, 0, -0.78); fg.rotateY(Math.PI / 2);
+    const flags = new THREE.InstancedMesh(fg, new THREE.MeshLambertMaterial({ side: THREE.DoubleSide }), flagM.length);
+    poleM.forEach((m, i) => poles.setMatrixAt(i, m)); flagM.forEach((m, i) => { flags.setMatrixAt(i, m); flags.setColorAt(i, flagC[i]); });
+    g.add(poles, flags); this.flags = flags; this.flagBase = flagM;
   }
   sidePos(s, d) { const p = this.track.at(s, d, {}); return [p.x, p.z]; }
 
@@ -491,6 +549,7 @@ export class Race {
       g.position.set(c.x, c.y, c.z);
       g.rotation.set(c.pitch, c.yaw + (c.visYaw || 0), c.roll, 'YXZ');
       g.userData.flap.rotation.x = c.drs ? 1.15 : 0.55;
+      if (g.userData.hi) { const near = c.isPlayer || dx * dx + dz * dz < this.tier.carLodDist * this.tier.carLodDist; g.userData.hi.visible = near; g.userData.lo.visible = !near; }
       g.updateMatrix();
       c.spin = (c.spin + c.v * dt / 0.36) % (Math.PI * 2);
       for (const w of WHEELS) {
@@ -512,8 +571,15 @@ export class Race {
     p.mesh.userData.dec.visible = this.camMode !== 'cockpit';
     this.sky.position.copy(cam.position);
     if (this.carLight) this.carLight.position.set(p.x + Math.sin(p.yaw) * 6, p.y + 9, p.z + Math.cos(p.yaw) * 6);
-    this.sun.position.copy(cam.position).add(new THREE.Vector3(...this.L.sky.sun).multiplyScalar(200));
-    this.sun.target.position.copy(cam.position); this.sun.target.updateMatrixWorld();
+    { // shadow box follows the player, snapped to texels to avoid shimmer
+      const B = this.tier.shadowBox || 100, step = this.tier.shadows ? (2 * B / 2) / this.tier.shadows * 4 : 1;
+      const tx = Math.round((p.x + Math.sin(p.yaw) * B * 0.25) / step) * step, tz = Math.round((p.z + Math.cos(p.yaw) * B * 0.25) / step) * step;
+      this.sun.target.position.set(tx, p.y, tz);
+      this.sun.position.set(...this.L.sky.sun).normalize().multiplyScalar(220).add(this.sun.target.position);
+      this.sun.target.updateMatrixWorld();
+      this.sky.material.uniforms.time.value += dt;
+      if (t.seaNormal) { t.seaNormal.offset.x += dt * 0.004; t.seaNormal.offset.y += dt * 0.0025; }
+    }
     t.cull(cam.position.x, cam.position.z, this.drawDist);
     this.scenery.cull(cam.position.x, cam.position.z, this.drawDist);
     this.smoke.update(dt); this.sparks.update(dt);
@@ -583,6 +649,7 @@ export class Race {
     }
     // high-speed buzz and kerb rumble
     if (p.offroad && speed > 10) { cam.position.y += (Math.random() - 0.5) * 0.05; }
+    else if (p.w && Math.abs(p.d) > p.w / 2 - 0.3 && speed > 15) { cam.position.y += (Math.random() - 0.5) * 0.03 * Math.min(1, speed / 60); }
     cam.updateProjectionMatrix();
   }
 

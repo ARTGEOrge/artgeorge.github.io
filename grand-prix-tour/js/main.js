@@ -5,6 +5,11 @@ import { Race, STEP } from './race.js';
 import { makeCar } from './car.js';
 import { cardArt } from './art.js';
 import * as audio from './audio.js';
+import { TIERS } from './quality.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 
 const $ = id => document.getElementById(id);
 const SAVE = 'nexusRacing.v1';
@@ -17,7 +22,7 @@ function loadSave() {
     const r = JSON.parse(localStorage.getItem(SAVE) || '{}');
     return {
       unlocked: Math.min(LEVELS.length, Math.max(1, r.unlocked | 0 || 1)), best: r.best || {}, livery: (r.livery | 0) % LIVERIES.length,
-      cam: r.cam === 'cockpit' ? 'cockpit' : 'chase', quality: ['auto', 'high', 'medium', 'low'].includes(r.quality) ? r.quality : 'auto', muted: !!r.muted
+      cam: r.cam === 'cockpit' ? 'cockpit' : 'chase', quality: ['auto', 'ultra', 'high', 'medium', 'low'].includes(r.quality) ? r.quality : 'auto', muted: !!r.muted
     };
   } catch (e) { return { unlocked: 1, best: {}, livery: 0, cam: 'chase', quality: 'auto', muted: false }; }
 }
@@ -32,9 +37,31 @@ const canvas = $('gl');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const QPR = [Math.min(devicePixelRatio || 1, 1.75), 1, 0.72];
-let q = save.quality === 'auto' ? (devicePixelRatio > 1.5 && Math.min(innerWidth, innerHeight) < 700 ? 1 : 0) : { high: 0, medium: 1, low: 2 }[save.quality];
-function applyQuality() { renderer.setPixelRatio(QPR[q]); renderer.setSize(innerWidth, innerHeight, false); if (race) race.drawDist = race.L.fog.far * [1.05, 0.9, 0.72][q] + 80; }
+const tierOf = () => q === 0 ? (save.quality === 'ultra' ? TIERS.ultra : TIERS.high) : q === 1 ? TIERS.medium : TIERS.low;
+let composer = null;
+let q = save.quality === 'auto' ? (devicePixelRatio > 1.5 && Math.min(innerWidth, innerHeight) < 700 ? 1 : 0) : { ultra: 0, high: 0, medium: 1, low: 2 }[save.quality];
+function applyQuality() {
+  const pr = q === 0 && save.quality === 'ultra' ? Math.min(devicePixelRatio || 1, 2) : QPR[q];
+  renderer.setPixelRatio(pr); renderer.setSize(innerWidth, innerHeight, false);
+  if (race) {
+    race.drawDist = race.L.fog.far * [save.quality === 'ultra' ? 1.25 : 1.05, 0.9, 0.72][q] + 80;
+    if (q > 0) { race.sun.castShadow = false; composer = null; } // stepped down at runtime: drop the expensive passes
+  }
+  if (composer) { composer.setPixelRatio(pr); composer.setSize(innerWidth, innerHeight); }
+}
+function buildComposer() {
+  composer = null;
+  const T = race.tier;
+  if (!(T.bloom === 'always' || (T.bloom === 'night' && race.L.night))) return;
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(race.scene, race.camera));
+  const night = !!race.L.night;
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), night ? 0.42 : 0.25, 0.4, night ? 0.92 : 0.97));
+  composer.addPass(new OutputPass());
+  composer.setPixelRatio(renderer.getPixelRatio()); composer.setSize(innerWidth, innerHeight);
+}
 applyQuality();
 addEventListener('resize', applyQuality);
 
@@ -93,8 +120,8 @@ $('bSound').onclick = () => { save.muted = !save.muted; audio.setMuted(save.mute
 soundLabel();
 function qualLabel() { $('bQuality').textContent = 'Quality: ' + save.quality; }
 $('bQuality').onclick = () => {
-  const o = ['auto', 'high', 'medium', 'low']; save.quality = o[(o.indexOf(save.quality) + 1) % 4]; store(); qualLabel();
-  if (save.quality !== 'auto') q = { high: 0, medium: 1, low: 2 }[save.quality];
+  const o = ['auto', 'ultra', 'high', 'medium', 'low']; save.quality = o[(o.indexOf(save.quality) + 1) % 5]; store(); qualLabel();
+  if (save.quality !== 'auto') q = { ultra: 0, high: 0, medium: 1, low: 2 }[save.quality];
   applyQuality();
 };
 qualLabel();
@@ -141,6 +168,7 @@ let mini = null, best = null, splitTimer = 0, msgTimer = 0;
 function disposeRace() {
   audio.stopEngine();
   if (race) { race.dispose(); race = null; }
+  composer = null;
 }
 
 function openLevel(id, { skipIntro = false } = {}) {
@@ -148,8 +176,8 @@ function openLevel(id, { skipIntro = false } = {}) {
   level = LEVELS[id - 1];
   $('loading').hidden = false; $('loading').textContent = 'BUILDING ' + level.from.toUpperCase() + ' → ' + level.to.toUpperCase();
   return new Promise(res => setTimeout(() => {
-    race = new Race(level, renderer, { livery: save.livery, quality: q, cam: save.cam });
-    applyQuality();
+    race = new Race(level, renderer, { livery: save.livery, quality: q, cam: save.cam, tier: tierOf() });
+    applyQuality(); buildComposer();
     buildMini();
     buildTower();
     best = save.best[level.id] || null;
@@ -379,7 +407,7 @@ function loop(now) {
       }
       feedAudio();
     }
-    renderer.render(race.scene, race.camera);
+    if (composer) composer.render(); else renderer.render(race.scene, race.camera);
   } else {
     show.t += dt;
     const a = show.t * 0.35 + (screen === 'garage' ? 0.8 : 2.2), r = screen === 'garage' ? 8.6 : 9.5;
@@ -448,5 +476,6 @@ window.GAME = {
   perf() { return { frame: stat(perf.frames), work: stat(perf.work) }; },
   perfReset(sync = false) { perf.frames.length = 0; perf.work.length = 0; perf.sync = sync; },
   setQuality(n) { q = n; applyQuality(); },
+  setTier(name) { save.quality = name; q = { ultra: 0, high: 0, medium: 1, low: 2 }[name] ?? 0; applyQuality(); },
   go, showResults, pause, resetSave() { localStorage.removeItem(SAVE); Object.assign(save, loadSave()); }
 };

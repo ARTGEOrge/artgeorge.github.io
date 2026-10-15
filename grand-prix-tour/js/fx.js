@@ -2,23 +2,44 @@
 import * as THREE from 'three';
 import * as TX from './textures.js';
 
-export function makeSky(L) {
+export function makeSky(L, { clouds = true } = {}) {
   const sun = new THREE.Vector3(...L.sky.sun).normalize();
+  const cover = !clouds ? 0 : L.weather === 'rain' ? 0.85 : L.weather === 'snow' ? 0.7 : L.theme === 'desert' ? 0.12 : L.night ? 0.3 : 0.42;
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
     uniforms: {
       top: { value: new THREE.Color(L.sky.top) }, hor: { value: new THREE.Color(L.sky.hor) }, bot: { value: new THREE.Color(L.sky.bot) },
-      sunDir: { value: sun }, sunCol: { value: new THREE.Color(L.sky.sunCol) }, sunSize: { value: L.sky.sunSize }, stars: { value: L.sky.stars }
+      sunDir: { value: sun }, sunCol: { value: new THREE.Color(L.sky.sunCol) }, sunSize: { value: L.sky.sunSize }, stars: { value: L.sky.stars },
+      time: { value: 0 }, cover: { value: cover }, night: { value: L.night ? 1 : 0 }, fogCol: { value: new THREE.Color(L.fog.col) }
     },
     vertexShader: `varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = projectionMatrix * modelViewMatrix * vec4(position,1.0); gl_Position = p.xyww; }`,
-    fragmentShader: `uniform vec3 top, hor, bot, sunCol, sunDir; uniform float sunSize, stars; varying vec3 vDir;
+    fragmentShader: `uniform vec3 top, hor, bot, sunCol, sunDir, fogCol; uniform float sunSize, stars, time, cover, night; varying vec3 vDir;
       float h3(vec3 p){ return fract(sin(dot(p, vec3(12.9898,78.233,37.719))) * 43758.5453); }
+      float h2(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+      float n2(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.0-2.0*f);
+        return mix(mix(h2(i), h2(i+vec2(1,0)), f.x), mix(h2(i+vec2(0,1)), h2(i+vec2(1,1)), f.x), f.y); }
+      float fbm(vec2 p){ float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * n2(p); p *= 2.03; a *= 0.5; } return s; }
       void main(){
         vec3 d = normalize(vDir); float h = d.y;
         vec3 c = h > 0.0 ? mix(hor, top, pow(clamp(h,0.0,1.0), 0.55)) : mix(hor, bot, pow(clamp(-h,0.0,1.0), 0.4));
         float sd = max(dot(d, normalize(sunDir)), 0.0);
-        if (sunSize > 0.0) { c += sunCol * (pow(sd, 900.0 / sunSize) * 2.5 + pow(sd, 12.0) * 0.28 * sunSize); }
-        if (stars > 0.0 && h > 0.02) { vec3 q = floor(d * 380.0); float s = step(0.9975, h3(q)); c += vec3(s) * stars * smoothstep(0.02, 0.35, h) * (0.5 + 0.5 * h3(q + 1.0)); }
+        // warm glow around the sun bleeding into the haze
+        c += sunCol * pow(sd, 6.0) * 0.12 * sunSize;
+        if (sunSize > 0.0) c += sunCol * (pow(sd, 900.0 / sunSize) * 2.5 + pow(sd, 12.0) * 0.28 * sunSize);
+        if (stars > 0.0 && h > 0.02) { vec3 q = floor(d * 380.0); float s = step(0.9975, h3(q)); c += vec3(s) * stars * smoothstep(0.02, 0.35, h) * (0.5 + 0.5 * h3(q + 1.0)) * (1.0 - cover * 0.8); }
+        if (cover > 0.0 && h > 0.0) {
+          vec2 uv = d.xz / (h + 0.12) * 0.9 + vec2(time * 0.004, time * 0.0015);
+          float f = fbm(uv * 1.6);
+          float cl = smoothstep(1.0 - cover - 0.05, 1.0 - cover + 0.35, f) * smoothstep(0.0, 0.16, h);
+          float shade = fbm(uv * 1.6 + normalize(sunDir).xz * 0.06);
+          vec3 lit = mix(vec3(1.0), sunCol, 0.35) * (night > 0.5 ? 0.22 : 1.0);
+          vec3 dark = mix(hor, top, 0.4) * (night > 0.5 ? 0.6 : 0.82);
+          vec3 cc = mix(lit, dark, clamp((f - shade) * 4.0 + 0.45, 0.0, 1.0));
+          cc += sunCol * pow(sd, 8.0) * 0.4 * (1.0 - night);
+          c = mix(c, cc, cl * 0.92);
+        }
+        // haze band at the horizon blends into the fog colour
+        c = mix(c, fogCol, (1.0 - smoothstep(0.0, 0.14, abs(h))) * 0.55);
         gl_FragColor = vec4(c, 1.0);
         #include <colorspace_fragment>
       }`
