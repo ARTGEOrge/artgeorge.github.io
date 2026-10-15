@@ -560,11 +560,11 @@ export function roomWalls(world, cx, cz, w, d, h, matName, opts = {}) {
     if (horizontal) {
       if (a > 0.05) world.box(x - len / 2 + a / 2, h / 2, z, a, h, t, matName, opts.mat);
       if (b > 0.05) world.box(x + len / 2 - b / 2, h / 2, z, b, h, t, matName, opts.mat);
-      if (dh < h) world.box(x - len / 2 + off, dh + (h - dh) / 2, z, dw, h - dh, t, matName, opts.mat);
+      if (dh < h) world.box(x + off, dh + (h - dh) / 2, z, dw, h - dh, t, matName, opts.mat);
     } else {
       if (a > 0.05) world.box(x, h / 2, z - len / 2 + a / 2, t, h, a, matName, opts.mat);
       if (b > 0.05) world.box(x, h / 2, z + len / 2 - b / 2, t, h, b, matName, opts.mat);
-      if (dh < h) world.box(x, dh + (h - dh) / 2, z - len / 2 + off, t, h - dh, dw, matName, opts.mat);
+      if (dh < h) world.box(x, dh + (h - dh) / 2, z + off, t, h - dh, dw, matName, opts.mat);
     }
   }
 }

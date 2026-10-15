@@ -203,7 +203,7 @@ export const MARS_2 = {
   theme: { ...INSIDE, music: 40 },
   build(world, rng) {
     const d = spaceDiff(2);
-    ground(world, 420, 'grate', { uv: 0.4, mat: { color: 0x7a7e86 } });
+    ground(world, 480, 'grate', { uv: 0.4, mat: { color: 0x7a7e86 } });
     const H = 4.2, zTop = 24, zBot = -172;
     const west = [4, -46, -96, -140], east = [-22, -70, -118];
     const relays = new Map([[-22, 'RELAY A'], [-96, 'RELAY B'], [-140, 'RELAY C']]);
