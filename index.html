@@ -946,8 +946,8 @@
 </style>
 <script>
 /* Games and apps open inside the home page instead of navigating to their own
-   address, so the address bar never changes while you play. The small button
-   (or a game's own "Nexus Play" link) returns to the list. Ctrl/middle-click
+   address, so the address bar never changes while you play. The browser's Back
+   button, the small button, or a game's own "Nexus Play" link returns to the list. Ctrl/middle-click
    still opens a link the normal way. */
 (function () {
   // this home page loaded inside the player (a game's own "Nexus Play" link): close the player instead
@@ -965,12 +965,26 @@
     frame = document.createElement('iframe');
     frame.title = 'Game';
     frame.setAttribute('allow', 'fullscreen; autoplay; gamepad; clipboard-write; screen-wake-lock');
+    // Start on a blank placeholder page, then move the frame on to the game. That move is a
+    // history entry of the frame, not of this page: the browser's Back button steps the frame
+    // back to the placeholder (and we close), while the address bar is never touched.
+    var started = false, entered = false, me = frame;
     frame.addEventListener('load', function () {
+      if (frame !== me) return;
+      var loc = null;
+      try { loc = me.contentWindow.location; } catch (e) {}
+      if (!started) {
+        started = true;
+        setTimeout(function () { try { me.contentWindow.location.href = path; } catch (e) { me.removeAttribute('srcdoc'); me.src = path; } }, 0);
+        return;
+      }
+      if (loc && loc.href === 'about:srcdoc') { if (entered) hide(); return; }   // Back from the game
+      entered = true;
       // a game's own "back to Nexus Play" link loads the home page in here: treat it as closing
-      try { if (isHome(frame.contentWindow.location.pathname)) { close(true); return; } } catch (e) {}
-      try { frame.contentWindow.focus(); } catch (e) {}
+      try { if (loc && isHome(loc.pathname)) { hide(); return; } } catch (e) {}
+      try { me.contentWindow.focus(); } catch (e) {}
     });
-    frame.src = path;
+    frame.srcdoc = '<!doctype html><meta charset="utf-8"><body style="margin:0;background:#000">';
     box.insertBefore(frame, closeBtn);
     box.hidden = false;
     document.documentElement.style.overflow = 'hidden';
