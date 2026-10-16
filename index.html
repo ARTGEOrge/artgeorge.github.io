@@ -962,13 +962,25 @@
   var cloaked = false;
   try { cloaked = window.parent !== window && !!window.parent.nxBlankTab; } catch (e) {}
 
-  // the blank-tab button: the whole site inside an about:blank tab, so the address bar
-  // only ever says about:blank, even after the browser's back arrow
+  // The blank-tab button: the whole site inside an about:blank tab, so the address bar only
+  // ever says about:blank, even after the browser's back arrow. Pressing it once remembers the
+  // choice: later visits open the blank tab by themselves (on the first click or key press,
+  // since browsers only allow new tabs then). Pressing it inside the blank tab turns that off.
+  var PREF = 'nexusBlankTab';
   var blankBtn = document.getElementById('blankBtn');
-  if (cloaked) blankBtn.hidden = true;
-  blankBtn.addEventListener('click', function () {
+  function pref() { try { return localStorage.getItem(PREF) === '1'; } catch (e) { return false; } }
+  function setPref(on) { try { on ? localStorage.setItem(PREF, '1') : localStorage.removeItem(PREF); } catch (e) {} }
+  function toast(msg) {
+    var t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;left:50%;top:64px;transform:translateX(-50%);z-index:10001;background:rgba(20,20,24,.92);color:#fff;' +
+      'font:600 13px/1.3 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif;padding:10px 16px;border-radius:12px;max-width:90vw;text-align:center';
+    document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 3200);
+  }
+  function openBlank() {
     var w = window.open('about:blank', '_blank');
-    if (!w) { alert('Your browser blocked the new tab. Allow pop-ups for this site, then press the button again.'); return; }
+    if (!w) return false;
     var d = w.document;
     d.open();
     d.write('<!doctype html><html><head><meta charset="utf-8"><title>Nexus Play</title>' +
@@ -977,7 +989,52 @@
       '</head><body><iframe allow="fullscreen; autoplay; gamepad; clipboard-write; screen-wake-lock" src="' + location.origin + '/"></iframe></body></html>');
     d.close();
     w.nxBlankTab = true;   // document.write gives the tab our URL internally; this marks it instead
-  });
+    return true;
+  }
+  function leftBehind() {
+    // this tab stays behind: say where the site went, and offer the way back
+    var c = document.createElement('div');
+    c.style.cssText = 'position:fixed;inset:0;z-index:10002;background:#f5f5f7;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;' +
+      'font:500 16px/1.4 -apple-system,"Segoe UI",Helvetica,Arial,sans-serif;color:#1d1d1f;text-align:center;padding:24px';
+    c.innerHTML = '<div style="font-size:22px;font-weight:700">Nexus Play opened in a blank tab</div>' +
+      '<div>You can close this tab.</div>' +
+      '<button type="button" style="font:600 14px -apple-system,Segoe UI,Arial,sans-serif;padding:9px 18px;border-radius:999px;border:0;background:#0071e3;color:#fff;cursor:pointer">Stay here and stop using blank tabs</button>';
+    c.querySelector('button').addEventListener('click', function () { setPref(false); c.remove(); });
+    document.body.appendChild(c);
+  }
+
+  if (cloaked) {
+    blankBtn.title = pref() ? 'Stop opening Nexus Play in a blank tab' : 'Always open Nexus Play in a blank tab';
+    blankBtn.setAttribute('aria-label', blankBtn.title);
+    blankBtn.addEventListener('click', function () {
+      var on = !pref();
+      setPref(on);
+      blankBtn.title = on ? 'Stop opening Nexus Play in a blank tab' : 'Always open Nexus Play in a blank tab';
+      blankBtn.setAttribute('aria-label', blankBtn.title);
+      toast(on ? 'Nexus Play will open in a blank tab from now on.' : 'Nexus Play will open normally from now on.');
+    });
+  } else {
+    blankBtn.addEventListener('click', function () {
+      if (!openBlank()) { toast('Your browser blocked the new tab. Allow pop-ups for this site, then press the button again.'); return; }
+      setPref(true);
+      leftBehind();
+    });
+    if (window.top === window && pref()) {
+      if (openBlank()) leftBehind();
+      else {
+        // blocked without a click: open it on the first click or key press instead
+        var once = function (e) {
+          removeEventListener('pointerdown', once, true); removeEventListener('keydown', once, true);
+          if (openBlank()) {
+            leftBehind();
+            if (e.type === 'pointerdown') addEventListener('click', function swallow(ev) { ev.preventDefault(); ev.stopPropagation(); removeEventListener('click', swallow, true); }, true);
+          }
+        };
+        addEventListener('pointerdown', once, true);
+        addEventListener('keydown', once, true);
+      }
+    }
+  }
   var box = document.getElementById('nxPlayer');
   var closeBtn = document.getElementById('nxPlayerClose');
   var frame = null;
