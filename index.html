@@ -331,6 +331,11 @@
         <a href="https://github.com/ARTGEOrge">GitHub</a>
       </nav>
       <div class="nav-tools">
+      <button class="nav-icon" id="blankBtn" aria-label="Open in a blank tab" title="Open in a blank tab (address shows about:blank)">
+        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 12s3.5-6.5 9-6.5c1.6 0 3 .5 4.2 1.2M21 12s-3.5 6.5-9 6.5c-1.6 0-3-.5-4.2-1.2"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/><path d="M4 20 20 4"/>
+        </svg>
+      </button>
       <button class="nav-icon" id="searchBtn" aria-label="Search" aria-expanded="false" aria-controls="searchPanel" title="Search  ( / )">
         <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round">
           <circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.4 15.4 L20.5 20.5"/>
@@ -951,9 +956,28 @@
    still opens a link the normal way. */
 (function () {
   // this home page loaded inside the player (a game's own "Nexus Play" link): close the player instead
-  if (window.top !== window) {
-    try { if (window.top.nxClosePlayer) { window.top.nxClosePlayer(); return; } } catch (e) {}
+  if (window.parent !== window) {
+    try { if (window.parent.nxClosePlayer) { window.parent.nxClosePlayer(); return; } } catch (e) {}
   }
+  var cloaked = false;
+  try { cloaked = window.parent !== window && !!window.parent.nxBlankTab; } catch (e) {}
+
+  // the blank-tab button: the whole site inside an about:blank tab, so the address bar
+  // only ever says about:blank, even after the browser's back arrow
+  var blankBtn = document.getElementById('blankBtn');
+  if (cloaked) blankBtn.hidden = true;
+  blankBtn.addEventListener('click', function () {
+    var w = window.open('about:blank', '_blank');
+    if (!w) { alert('Your browser blocked the new tab. Allow pop-ups for this site, then press the button again.'); return; }
+    var d = w.document;
+    d.open();
+    d.write('<!doctype html><html><head><meta charset="utf-8"><title>Nexus Play</title>' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+      '<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}iframe{position:fixed;inset:0;width:100%;height:100%;border:0}</style>' +
+      '</head><body><iframe allow="fullscreen; autoplay; gamepad; clipboard-write; screen-wake-lock" src="' + location.origin + '/"></iframe></body></html>');
+    d.close();
+    w.nxBlankTab = true;   // document.write gives the tab our URL internally; this marks it instead
+  });
   var box = document.getElementById('nxPlayer');
   var closeBtn = document.getElementById('nxPlayerClose');
   var frame = null;
@@ -980,6 +1004,16 @@
       }
       if (loc && loc.href === 'about:srcdoc') { if (entered) hide(); return; }   // Back from the game
       entered = true;
+      // catch the game's own "back to Nexus Play" links here: in the blank tab the browser
+      // refuses to load the home page a third level deep, so following the link would do nothing
+      try {
+        me.contentDocument.addEventListener('click', function (e) {
+          var a = e.target.closest && e.target.closest('a[href]');
+          if (!a || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey) return;
+          var u; try { u = new URL(a.href, me.contentWindow.location.href); } catch (err) { return; }
+          if (u.origin === location.origin && isHome(u.pathname) && !u.hash) { e.preventDefault(); hide(); }
+        }, true);
+      } catch (e) {}
       // a game's own "back to Nexus Play" link loads the home page in here: treat it as closing
       try { if (loc && isHome(loc.pathname)) { hide(); return; } } catch (e) {}
       try { me.contentWindow.focus(); } catch (e) {}
@@ -1011,7 +1045,11 @@
     if (!raw || raw.charAt(0) === '#') return;
     var url;
     try { url = new URL(a.href, location.href); } catch (err) { return; }
-    if (url.origin !== location.origin || isHome(url.pathname)) return;
+    if (url.origin !== location.origin) {
+      if (cloaked) { e.preventDefault(); window.open(url.href, '_blank', 'noopener'); }
+      return;
+    }
+    if (isHome(url.pathname)) return;
     e.preventDefault();
     open(url.pathname + url.search + url.hash);
   }, true);   // capture: the search panel stops clicks from bubbling
