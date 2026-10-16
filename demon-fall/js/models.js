@@ -243,15 +243,17 @@ export function humanoid(type) {
     for (const s of [-1, 1]) rig.add(torso, ball(0.12 * bulk, 12, 8), S.metal, { pos: [s * 0.27 * bulk, 0.6, 0], scale: [1.25, 0.6, 1.1], rot: [0, 0, s * -0.35] });
   }
   if (boss) {
-    // the Warden's burning core
-    rig.add(torso, ball(0.08, 12, 8), S.lava, { pos: [0, 0.44, 0.19] });
+    // the Warden's burning core (the outer-planet bosses burn in their own colour)
+    const core = type.mutation ? mutationMats()[type.mutation].glow : S.lava;
+    rig.add(torso, ball(0.08, 12, 8), core, { pos: [0, 0.44, 0.19] });
     for (let i = 0; i < 8; i++) {
       const a = (i / 8) * Math.PI * 2;
-      rig.add(torso, box(0.015, 0.1, 0.01), S.lava, { pos: [Math.cos(a) * 0.12, 0.44 + Math.sin(a) * 0.12, 0.18], rot: [0, 0, a + Math.PI / 2] });
+      rig.add(torso, box(0.015, 0.1, 0.01), core, { pos: [Math.cos(a) * 0.12, 0.44 + Math.sin(a) * 0.12, 0.18], rot: [0, 0, a + Math.PI / 2] });
     }
   }
 
   if (outfit) dressOutfit(rig, S, outfit, { torso, hips, head, shirt, bulk, rnd, type });
+  if (type.mutation) mutate(rig, type.mutation, { torso, head, bulk, rnd, quad: false });
 
   // head: skull, brow, jaw, teeth, ears, sunken sockets
   rig.add(head, ball(0.125, 12, 10), skin, { pos: [0, 0.13, 0], scale: [0.95, 1.15, 1.05] });
@@ -425,6 +427,8 @@ export function quadruped(type) {
   const FL = leg(-0.18, 0.4, false), FR = leg(0.18, 0.4, false);
   const BL = leg(-0.18, -0.38, true), BR = leg(0.18, -0.38, true);
 
+  if (type.mutation) mutate(rig, type.mutation, { torso, head, bulk: 1, rnd: Math.random, quad: true });
+
   // whip tail
   const tail = joint(torso, 0, 0.1, -0.5);
   for (let i = 0; i < 6; i++) {
@@ -439,8 +443,68 @@ export function quadruped(type) {
   });
 }
 
+/* What each outer planet did to the infected: glowing acid blisters (Venus),
+ * crackling arc-burns and a charged coil on the back (Jupiter), and ice
+ * crystals grown out through the skin (Neptune). Shared materials, merged per joint. */
+let MUT = null;
+function mutationMats() {
+  if (MUT) return MUT;
+  MUT = {
+    acid: { glow: new THREE.MeshBasicMaterial({ color: 0xc8ff2a }), crust: { c: 0x8a7a2a, k: 1.3 } },
+    storm: { glow: new THREE.MeshBasicMaterial({ color: 0x8ae0ff }), crust: { c: 0x2a2a34, k: 1.2 } },
+    ice: {
+      glow: new THREE.MeshBasicMaterial({ color: 0xbff8ff }),
+      crust: new THREE.MeshStandardMaterial({ color: 0xbfe0f0, roughness: 0.15, metalness: 0.3, emissive: 0x2a6a9a, emissiveIntensity: 0.6 })
+    }
+  };
+  return MUT;
+}
+function mutate(rig, kind, { torso, head, bulk, rnd, quad }) {
+  const M = mutationMats()[kind];
+  if (!M) return;
+  if (kind === 'acid') {
+    // blisters bubbling through the cloth, one on the scalp, a crust of burnt skin
+    for (let i = 0; i < 7; i++) {
+      const a = rnd() * Math.PI * 2, y = quad ? rnd() * 0.2 - 0.05 : 0.15 + rnd() * 0.5;
+      const pos = quad ? [Math.cos(a) * 0.2, 0.12 + y, -0.3 + rnd() * 0.7] : [Math.sin(a) * 0.22 * bulk, y, Math.cos(a) * 0.15 * bulk];
+      rig.add(torso, ball(0.035 + rnd() * 0.03, 8, 6), M.glow, { pos });
+    }
+    rig.add(head, ball(0.04, 8, 6), M.glow, { pos: quad ? [0.05, 0.16, 0.05] : [0.05, 0.24, 0.02] });
+    if (!quad) rig.add(torso, box(0.14, 0.12, 0.02), M.crust, { pos: [-0.1, 0.3, 0.16], rot: [0, 0, 0.4] });
+  } else if (kind === 'storm') {
+    // a jagged arc-burn across the chest and a charged coil strapped to the back
+    const zig = [[-0.12, 0.52], [-0.02, 0.42], [-0.08, 0.32], [0.06, 0.22]];
+    for (let i = 0; i < zig.length - 1; i++) {
+      const [x0, y0] = zig[i], [x1, y1] = zig[i + 1];
+      const len = Math.hypot(x1 - x0, y1 - y0);
+      rig.add(torso, box(0.016, len, 0.012), M.glow, quad
+        ? { pos: [(x0 + x1) / 2, 0.24, (y0 + y1) / 2 - 0.3], rot: [Math.PI / 2, 0, Math.atan2(x1 - x0, y1 - y0)] }
+        : { pos: [(x0 + x1) / 2, (y0 + y1) / 2, 0.168], rot: [0, 0, -Math.atan2(x1 - x0, y1 - y0)] });
+    }
+    if (!quad) {
+      rig.add(torso, cyl(0.06, 0.06, 0.32, 10), M.crust, { pos: [0, 0.4, -0.2] });
+      for (let i = 0; i < 4; i++) rig.add(torso, cyl(0.065, 0.065, 0.02, 10), M.glow, { pos: [0, 0.28 + i * 0.08, -0.2] });
+    } else {
+      for (let i = 0; i < 3; i++) rig.add(torso, cone(0.03, 0.18), M.glow, { pos: [0, 0.3, 0.2 - i * 0.2], rot: [-0.3, 0, 0] });
+    }
+  } else if (kind === 'ice') {
+    // crystals pushed out through the shoulders and back, frost on the head
+    const spots = quad
+      ? [[0, 0.3, 0.2], [0.12, 0.26, 0], [-0.12, 0.26, -0.15], [0, 0.3, -0.3]]
+      : [[0.24, 0.62, -0.02], [-0.24, 0.62, -0.02], [0.08, 0.5, -0.17], [-0.1, 0.36, -0.17], [0.02, 0.22, -0.16]];
+    for (const [x, y, z] of spots) {
+      const h = 0.14 + rnd() * 0.16;
+      rig.add(torso, cone(0.045, h, 5), M.crust, { pos: [x * bulk, y, z], rot: [-0.6 - rnd() * 0.5, 0, x * -2] });
+      rig.add(torso, cone(0.025, h * 0.7, 5), M.crust, { pos: [x * bulk + 0.03, y - 0.04, z + 0.02], rot: [-0.3, 0, x * -3 + 0.4] });
+    }
+    rig.add(head, cone(0.03, 0.12, 5), M.crust, { pos: quad ? [0.06, 0.2, 0] : [0.06, 0.25, -0.03], rot: [-0.3, 0, -0.4] });
+    for (let i = 0; i < 3; i++) rig.add(torso, ball(0.02, 6, 5), M.glow, { pos: quad ? [0.1 - i * 0.1, 0.2, 0.1] : [0.1 - i * 0.1, 0.38, 0.17] });
+  }
+}
+
 /* Colony and moon-base uniforms layered over the infected body. */
 let GLASS = null;
+const VISORS = new Map();
 function dressOutfit(rig, S, outfit, { torso, hips, head, shirt, bulk, rnd, type }) {
   const white = { c: 0xc8c4bc, k: 1.05 };     // bright cloth blows out under the torch otherwise
   const dark = { c: 0x2a2e34, k: 1.2 };
@@ -470,8 +534,14 @@ function dressOutfit(rig, S, outfit, { torso, hips, head, shirt, bulk, rnd, type
     rig.add(torso, box(0.03, 0.02, 0.01), { c: 0x4ae06a, k: 1.6 }, { pos: [-0.04, 0.32, 0.232] });
     rig.add(torso, tube(0.16, 0.18, 0.07, 14), white, { pos: [0, 0.66, 0], scale: [1, 1, 0.9] });   // neck ring
     if (!GLASS) GLASS = new THREE.MeshStandardMaterial({ color: type.visor || 0xbfe2ff, transparent: true, opacity: 0.28, roughness: 0.05, metalness: 0.7, depthWrite: false, side: THREE.DoubleSide });
+    // outer-planet suits keep their own visor tint (the original suits share the first one made)
+    let glass = GLASS;
+    if (type.ownVisor) {
+      glass = VISORS.get(type.visor);
+      if (!glass) VISORS.set(type.visor, (glass = new THREE.MeshStandardMaterial({ color: type.visor, transparent: true, opacity: 0.32, roughness: 0.05, metalness: 0.7, depthWrite: false, side: THREE.DoubleSide })));
+    }
     // the back two thirds of the bubble: the faceplate is gone
-    rig.add(head, new THREE.SphereGeometry(0.21, 14, 10, Math.PI * 0.85, Math.PI * 1.3), GLASS, { pos: [0, 0.12, -0.01] });
+    rig.add(head, new THREE.SphereGeometry(0.21, 14, 10, Math.PI * 0.85, Math.PI * 1.3), glass, { pos: [0, 0.12, -0.01] });
     rig.add(head, cyl(0.022, 0.022, 0.05, 6), dark, { pos: [0.16, 0.2, -0.04], rot: [0, 0, -0.5] });   // helmet lamp
   }
   if (outfit === 'miner') {

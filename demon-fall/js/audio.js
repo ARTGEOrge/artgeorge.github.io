@@ -105,7 +105,11 @@ export const sfx = {
     noise(4.5, { gain: 0.9, from: 1400, to: 60 });
     tone(40, 4.5, { gain: 0.4, type: 'sawtooth', to: 90 });
   },
-  ui() { tone(760, 0.05, { gain: 0.1, type: 'square' }); }
+  ui() { tone(760, 0.05, { gain: 0.1, type: 'square' }); },
+  // the outer planets: a storm-charged body winding up, the snap when it lets go, and far thunder
+  charge() { tone(220, 0.6, { gain: 0.12, type: 'sawtooth', to: 1400 }); noise(0.6, { gain: 0.08, from: 3000, to: 7000, type: 'bandpass', q: 6 }); },
+  zap() { noise(0.35, { gain: 0.6, from: 7000, to: 600 }); tone(1800, 0.2, { gain: 0.22, type: 'square', to: 90 }); },
+  thunder() { noise(2.6, { gain: 0.5, from: 600, to: 40 }); tone(38, 2.2, { gain: 0.32, type: 'sawtooth', to: 24 }); }
 };
 
 /** Positional-ish volume: fades a one-shot by distance from the player. */
@@ -123,7 +127,7 @@ export function at(fn, dist, maxDist = 42) {
 /* -------------------------------------------------------------------- music
  * A drone built from three detuned oscillators plus a heartbeat pulse. The
  * filter opens and the pulse speeds up as danger rises. */
-export function startMusic(rootHz = 55) {
+export function startMusic(rootHz = 55, tempo = 1) {
   if (!ensure()) return;
   stopMusic();
   const filt = ctx.createBiquadFilter();
@@ -137,7 +141,7 @@ export function startMusic(rootHz = 55) {
     o.connect(g); g.connect(filt); o.start();
     oscs.push(o);
   });
-  droneNodes = { oscs, filt, root: rootHz, pulseAt: 0 };
+  droneNodes = { oscs, filt, root: rootHz, pulseAt: 0, tempo: tempo || 1 };
 }
 
 export function stopMusic() {
@@ -153,7 +157,7 @@ export function setTension(v, t) {
   if (!droneNodes || !ctx) return;
   droneNodes.filt.frequency.value = 180 + tension * 900;
   musicGain.gain.value = 0.22 + tension * 0.22;
-  const beat = 1.35 - tension * 0.75;
+  const beat = (1.35 - tension * 0.75) / droneNodes.tempo;   // the outer planets set their own pulse
   if (t > droneNodes.pulseAt) {
     droneNodes.pulseAt = t + beat;
     tone(droneNodes.root * 0.5, 0.16, { gain: 0.1 + tension * 0.16, type: 'sine', to: droneNodes.root * 0.35 });

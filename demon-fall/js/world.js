@@ -363,6 +363,7 @@ export class World {
     let best = null, bestT = maxDist;
     const inv = { x: 1 / dir.x, y: 1 / dir.y, z: 1 / dir.z };
     for (const c of this.colliders) {
+      if (c.pass) continue;            // deck-edge barriers: they stop feet, not bullets or sightlines
       let t0 = 0, t1 = bestT, axis = -1, sign = 1;
       for (let a = 0; a < 3; a++) {
         const k = a === 0 ? 'x' : a === 1 ? 'y' : 'z';

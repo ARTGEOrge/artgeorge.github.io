@@ -6,35 +6,63 @@
  * mid-cutscene. Two routes share it:
  *   'mars' — Earth falls away behind, rift debris, land at the Tharsis colony
  *   'moon' — Mars falls away, a field of wrecked transports, land at Artemis
- *            (a little longer and denser: the campaign keeps getting harder) */
+ *            (a little longer and denser: the campaign keeps getting harder)
+ * and three more out past the Moon, each denser than the last:
+ *   'venus'   — Earth falls away, Hive spore-pods drifting sunward, down through the yellow haze
+ *   'jupiter' — Venus falls away, the asteroid belt, down onto the refinery over the cloud tops
+ *   'neptune' — Jupiter falls away, a field of ice, down into the blue methane dark */
 import * as THREE from 'three';
 import { material, puffTexture } from './textures.js';
+import { planetTexture } from './outer-kit.js';
 import { clamp, damp, randRange, TAU, makeRng } from './util.js';
 import * as audio from './audio.js';
 
 const LANDING_TIME = 13;
 
-const ROUTES = {
+export const ROUTES = {
   mars: {
-    name: 'MARS', length: 62, density: 1, rockHp: 1,
-    debrisText: 'Rift debris ahead — clear a path', approachText: 'Mars approach — hold her steady'
+    name: 'MARS', title: 'Mars', length: 62, density: 1, rockHp: 1, seed: 20260915,
+    debrisText: 'Rift debris ahead — clear a path', approachText: 'Mars approach — hold her steady',
+    failText: 'The ship broke up in the debris field'
   },
   moon: {
-    name: 'MOON', length: 58, density: 1.3, rockHp: 1.25,
-    debrisText: 'Wrecked evac ships ahead — clear a path', approachText: 'Lunar approach — no air to brake, hold her steady'
+    name: 'MOON', title: 'the Moon', length: 58, density: 1.3, rockHp: 1.25, seed: 20261014,
+    debrisText: 'Wrecked evac ships ahead — clear a path', approachText: 'Lunar approach — no air to brake, hold her steady',
+    failText: 'The ship broke up in the wreckage field'
+  },
+  venus: {
+    name: 'VENUS', title: 'Venus', length: 60, density: 1.45, rockHp: 1.3, seed: 20261101,
+    debrisText: 'Hive spore-pods drifting sunward — burn a path', approachText: 'Venus entry — ninety atmospheres, hold her steady',
+    failText: 'The ship broke up among the spore-pods',
+    from: 'earth', halo: 0xffe0a0, debris: ['flesh', 0x9aa03a], dust: 0xd8c070,
+    fog: 0xc8a050, fogDensity: 0.0042, surface: ['sulfur', 0xd8c890]
+  },
+  jupiter: {
+    name: 'JUPITER', title: 'Jupiter', length: 64, density: 1.6, rockHp: 1.4, seed: 20261115, radius: 170,
+    debrisText: 'The asteroid belt — clear a path', approachText: 'Jupiter approach — storms below, hold her steady',
+    failText: 'The ship broke up in the asteroid belt',
+    from: 'venus', halo: 0xffc890, debris: ['redrock', 0x7a6a5a], dust: 0xc89a6a,
+    fog: 0x8a6440, fogDensity: 0.0032, surface: ['cloud', 0xd8a878], lightning: true
+  },
+  neptune: {
+    name: 'NEPTUNE', title: 'Neptune', length: 66, density: 1.75, rockHp: 1.5, seed: 20261130,
+    debrisText: 'Ice field ahead — shoot it apart', approachText: 'Neptune entry — methane storms, hold her steady',
+    failText: 'The ship broke up in the ice field',
+    from: 'jupiter', halo: 0x6aa0ff, debris: ['ice', 0xbfdcff], dust: 0xc8dcff,
+    fog: 0x1a3a7a, fogDensity: 0.0038, surface: ['ice', 0xa8c8f0], ring: 0x9ab8e8
   }
 };
 
 export class MarsFlight {
   constructor(hud, opts = {}) {
     this.hud = hud;
-    this.dest = opts.dest === 'moon' ? 'moon' : 'mars';
+    this.dest = ROUTES[opts.dest] ? opts.dest : 'mars';
     this.route = ROUTES[this.dest];
     this.destName = this.route.name;
     this.length = this.route.length;
     this.scene = new THREE.Scene();
     this.camera = new THREE.PerspectiveCamera(72, 1, 0.1, 6000);
-    this.rng = makeRng(this.dest === 'moon' ? 20261014 : 20260915);
+    this.rng = makeRng(this.route.seed);
     this.build();
     this.reset();
   }
@@ -69,8 +97,9 @@ export class MarsFlight {
     scene.add(sunLight, new THREE.AmbientLight(0x2a3050, 0.7));
 
     const moon = this.dest === 'moon';
+    const R = this.route, outer = !!R.from;
     // where you left falling away behind: Earth, or Mars on the way to the Moon
-    this.earth = moon
+    this.earth = outer ? this.outerFrom(R.from) : moon
       ? new THREE.Mesh(new THREE.SphereGeometry(120, 48, 32), material('sand', { repeat: 4, roughness: 1 }))
       : new THREE.Mesh(
         new THREE.SphereGeometry(140, 48, 32),
@@ -81,18 +110,40 @@ export class MarsFlight {
       );
     this.earth.position.set(40, -60, 520);
     scene.add(this.earth);
-    const glow = new THREE.Mesh(new THREE.SphereGeometry(moon ? 126 : 148, 32, 24),
-      new THREE.MeshBasicMaterial({ color: moon ? 0xff8a5a : 0x4a86c8, transparent: true, opacity: moon ? 0.14 : 0.18, side: THREE.BackSide }));
-    this.earth.add(glow);
+    if (!outer) {
+      const glow = new THREE.Mesh(new THREE.SphereGeometry(moon ? 126 : 148, 32, 24),
+        new THREE.MeshBasicMaterial({ color: moon ? 0xff8a5a : 0x4a86c8, transparent: true, opacity: moon ? 0.14 : 0.18, side: THREE.BackSide }));
+      this.earth.add(glow);
+    }
 
     // the destination ahead — starts a dot, ends filling the screen
     this.mars = new THREE.Mesh(
-      new THREE.SphereGeometry(120, 48, 32),
-      moon ? material('regolith', { repeat: 3, roughness: 1, color: 0xd8d8dc }) : material('sand', { repeat: 4, roughness: 1 })
+      new THREE.SphereGeometry(R.radius || 120, 48, 32),
+      outer ? new THREE.MeshStandardMaterial({ map: planetTexture(this.dest), roughness: 0.95, emissive: 0xffffff, emissiveMap: planetTexture(this.dest), emissiveIntensity: 0.18 })
+        : moon ? material('regolith', { repeat: 3, roughness: 1, color: 0xd8d8dc }) : material('sand', { repeat: 4, roughness: 1 })
     );
     this.mars.position.set(0, 0, -4200);
+    if (outer) this.mars.rotation.z = 0.15;
     scene.add(this.mars);
-    if (!moon) {
+    if (outer) {
+      const r0 = R.radius || 120;
+      const halo = new THREE.Mesh(new THREE.SphereGeometry(r0 * 1.06, 32, 24),
+        new THREE.MeshBasicMaterial({ color: R.halo, transparent: true, opacity: 0.16, side: THREE.BackSide }));
+      this.mars.add(halo);
+      if (R.ring || this.dest === 'jupiter') {
+        const ring = new THREE.Mesh(new THREE.RingGeometry(r0 * 1.4, r0 * (this.dest === 'jupiter' ? 1.8 : 2.2), 64),
+          new THREE.MeshBasicMaterial({ color: R.ring || 0xc8a888, transparent: true, opacity: 0.18, side: THREE.DoubleSide, depthWrite: false }));
+        ring.rotation.x = Math.PI / 2 - 0.2;
+        this.mars.add(ring);
+      }
+      // a moon or two hanging beside the giant
+      for (let k = 0; k < (this.dest === 'jupiter' ? 3 : 1); k++) {
+        const m = new THREE.Mesh(new THREE.SphereGeometry(10 + k * 4, 20, 14),
+          material(this.dest === 'neptune' ? 'ice' : 'regolith', { repeat: 1, color: [0xe8d070, 0xd8d0c0, 0xa8a090][k] || 0xc8d8e8 }));
+        m.position.set(-260 + k * 110, 90 - k * 60, 120 - k * 80);
+        this.mars.add(m);
+      }
+    } else if (!moon) {
       const halo = new THREE.Mesh(new THREE.SphereGeometry(126, 32, 24),
         new THREE.MeshBasicMaterial({ color: 0xff8a5a, transparent: true, opacity: 0.14, side: THREE.BackSide }));
       this.mars.add(halo);
@@ -138,7 +189,8 @@ export class MarsFlight {
 
     // debris field: instanced rocks streaming past
     this.rockGeo = new THREE.IcosahedronGeometry(1, 0);
-    this.rockMat = moon ? material('hull', { repeat: 1, roughness: 0.6, metalness: 0.6, color: 0x7a7e86 }) : material('sand', { repeat: 1, roughness: 1, color: 0x6a5a52 });
+    this.rockMat = outer ? material(R.debris[0], { repeat: 1, roughness: R.debris[0] === 'ice' ? 0.2 : 0.8, metalness: R.debris[0] === 'ice' ? 0.3 : 0.05, color: R.debris[1], emissive: R.debris[0] === 'flesh' ? 0x2a3a00 : 0x000000 })
+      : moon ? material('hull', { repeat: 1, roughness: 0.6, metalness: 0.6, color: 0x7a7e86 }) : material('sand', { repeat: 1, roughness: 1, color: 0x6a5a52 });
     this.rocks = [];
     for (let i = 0; i < 90; i++) {
       const m = new THREE.Mesh(this.rockGeo, this.rockMat);
@@ -197,11 +249,13 @@ export class MarsFlight {
       }
       surfGeo.computeVertexNormals();
     }
-    const surf = new THREE.Mesh(surfGeo, moon ? material('regolith', { repeat: 30, roughness: 1 }) : material('sand', { repeat: 30, roughness: 1 }));
+    const surf = new THREE.Mesh(surfGeo, outer ? material(R.surface[0], { repeat: 30, roughness: 1, color: R.surface[1] })
+      : moon ? material('regolith', { repeat: 30, roughness: 1 }) : material('sand', { repeat: 30, roughness: 1 }));
     surf.position.y = -60;
     this.surface.add(surf);
+    if (outer) this.outerLanding(R);
     // the colony: domes and a mast (on the Moon: low base modules)
-    for (let i = 0; i < 7; i++) {
+    for (let i = 0; i < (outer ? 0 : 7); i++) {
       const a = (i / 7) * TAU;
       const dome = new THREE.Mesh(moon ? new THREE.CylinderGeometry(4, 4, 18 + this.rng() * 10, 16).rotateZ(Math.PI / 2).rotateY(a)
         : new THREE.SphereGeometry(8 + this.rng() * 6, 20, 12, 0, TAU, 0, Math.PI / 2),
@@ -215,17 +269,82 @@ export class MarsFlight {
     const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.9, 40, 8),
       new THREE.MeshStandardMaterial({ color: 0x9aa2aa, metalness: 0.6, roughness: 0.4 }));
     mast.position.set(0, -40, -190);
-    this.surface.add(mast);
+    if (!outer) this.surface.add(mast);
     this.surface.visible = false;
     scene.add(this.surface);
 
     this.dust = [];
     for (let i = 0; i < 80; i++) {
-      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.sparkTex, color: moon ? 0x9a9a9e : 0xc06a3a, opacity: 0.5, depthWrite: false }));
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.sparkTex, color: outer ? R.dust : moon ? 0x9a9a9e : 0xc06a3a, opacity: 0.5, depthWrite: false }));
       s.visible = false;
       s.userData = { vel: new THREE.Vector3(), life: 0 };
       scene.add(s);
       this.dust.push(s);
+    }
+  }
+
+  /** The world you are leaving, for the outer routes. */
+  outerFrom(kind) {
+    if (kind === 'earth') {
+      const e = new THREE.Mesh(new THREE.SphereGeometry(140, 48, 32),
+        new THREE.MeshStandardMaterial({ color: 0x2a5a8a, roughness: 0.9, emissive: 0x0a1a3a, emissiveIntensity: 0.35 }));
+      const glow = new THREE.Mesh(new THREE.SphereGeometry(148, 32, 24),
+        new THREE.MeshBasicMaterial({ color: 0x4a86c8, transparent: true, opacity: 0.18, side: THREE.BackSide }));
+      e.add(glow);
+      const moon = new THREE.Mesh(new THREE.SphereGeometry(36, 24, 16), material('regolith', { repeat: 1, color: 0xd8d8dc }));
+      moon.position.set(-200, 60, -60);
+      e.add(moon);
+      return e;
+    }
+    const big = kind === 'jupiter';
+    const p = new THREE.Mesh(new THREE.SphereGeometry(big ? 170 : 130, 48, 32),
+      new THREE.MeshStandardMaterial({ map: planetTexture(kind), roughness: 0.95, emissive: 0xffffff, emissiveMap: planetTexture(kind), emissiveIntensity: 0.15 }));
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(big ? 178 : 138, 32, 24),
+      new THREE.MeshBasicMaterial({ color: big ? 0xffc890 : 0xffe0a0, transparent: true, opacity: 0.15, side: THREE.BackSide }));
+    p.add(glow);
+    return p;
+  }
+
+  /** What you set down on past the Moon: domes in the Venus haze, the refinery over Jupiter's clouds, the ice station on Neptune. */
+  outerLanding(R) {
+    const g = this.surface, rng = this.rng;
+    const shell = new THREE.MeshStandardMaterial({ color: 0xd8d4cc, roughness: 0.5, metalness: 0.35 });
+    const lampCol = this.dest === 'venus' ? 0xffd27a : this.dest === 'jupiter' ? 0xffa050 : 0x8ad8ff;
+    if (this.dest === 'jupiter') {
+      // decks on stilts over the cloud tops, gas spheres on them
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * TAU, d = 40 + rng() * 30;
+        const deck = new THREE.Mesh(new THREE.BoxGeometry(30 + rng() * 20, 2, 24 + rng() * 14), shell);
+        deck.position.set(Math.cos(a) * d, -50, -170 + Math.sin(a) * d);
+        g.add(deck);
+        const ball = new THREE.Mesh(new THREE.SphereGeometry(5 + rng() * 3, 16, 12), shell);
+        ball.position.copy(deck.position).add(new THREE.Vector3(0, 7, 0));
+        g.add(ball);
+      }
+    } else {
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * TAU;
+        const m = this.dest === 'venus'
+          ? new THREE.Mesh(new THREE.SphereGeometry(8 + rng() * 6, 20, 12, 0, TAU, 0, Math.PI / 2), shell)
+          : new THREE.Mesh(new THREE.CylinderGeometry(5, 6, 10 + rng() * 14, 12), shell);
+        m.position.set(Math.cos(a) * (46 + rng() * 30), -58, -170 + Math.sin(a) * (40 + rng() * 30));
+        g.add(m);
+        if (this.dest === 'neptune') {
+          const spike = new THREE.Mesh(new THREE.ConeGeometry(3, 20 + rng() * 20, 5), material('ice', { repeat: 1, color: 0xbfe0ff }));
+          spike.position.set(Math.cos(a + 0.4) * 80, -50, -170 + Math.sin(a + 0.4) * 80);
+          g.add(spike);
+        }
+      }
+    }
+    for (let i = 0; i < 6; i++) {
+      const lamp = new THREE.PointLight(lampCol, 3, 60, 2);
+      lamp.position.set((i - 2.5) * 30, -44, -170 + (i % 2) * 30);
+      g.add(lamp);
+    }
+    if (R.lightning) {
+      this.bolt = new THREE.PointLight(0xc8d8ff, 0, 400, 1.2);
+      this.bolt.position.set(0, -20, -260);
+      g.add(this.bolt);
     }
   }
 
@@ -309,6 +428,10 @@ export class MarsFlight {
         this.landT = 0;
         this.surface.visible = true;
         this.mars.visible = false;
+        if (this.route.fog) {   // down into the haze
+          this.scene.fog = new THREE.FogExp2(this.route.fog, this.route.fogDensity);
+          this.scene.background = new THREE.Color(this.route.fog);
+        }
         this.hud.subtitle('Touchdown in 10');
       }
     } else if (this.phase === 'landing') {
@@ -319,6 +442,10 @@ export class MarsFlight {
       camera.rotation.x = damp(camera.rotation.x, -0.35 + t * 0.35, 2, dt);
       camera.position.y = damp(camera.position.y, 0, 1.6, dt);
       if (Math.random() < dt * 40 * t) this.spawnDust();
+      if (this.bolt) {   // Jupiter: lightning under the cloud tops
+        this.bolt.intensity = Math.max(0, this.bolt.intensity - dt * 900);
+        if (Math.random() < dt * 0.9) this.bolt.intensity = 600;
+      }
       if (this.landT > LANDING_TIME * 0.55 && !this.thrusterSound) {
         this.thrusterSound = true;
         audio.sfx.launch();

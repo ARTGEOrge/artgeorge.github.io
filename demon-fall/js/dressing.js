@@ -17,8 +17,10 @@ export function dress(world, theme, index, quality = 1, script = null) {
   const outdoor = !theme.dark && theme.rift > 0;
   // Mars and the Moon: rock and panel debris instead of brick, dust drifts instead of puddles
   const space = theme.space || null;
-  const stone = space === 'mars' ? 'redrock' : space === 'moon' ? 'regolith' : 'concrete';
-  const drift = space && !theme.dark ? { collide: false, shadow: false, mat: { color: space === 'mars' ? 0xe8a888 : 0xb8b8bc } } : null;
+  // the outer planets: sulfur crust on Venus, plate on Jupiter's decks, ice on Neptune
+  const OUTER = { venus: ['redrock', 0x6a5430], jupiter: ['rust', 0x9a7a5a], neptune: ['ice', 0xd8eaf8] };
+  const stone = space === 'mars' ? 'redrock' : space === 'moon' ? 'regolith' : OUTER[space] ? OUTER[space][0] : 'concrete';
+  const drift = space && !theme.dark ? { collide: false, shadow: false, mat: { color: space === 'mars' ? 0xe8a888 : OUTER[space] ? OUTER[space][1] : 0xb8b8bc } } : null;
   const decals = [];            // { pos, normal, size, cell, rot }
 
   // the walkable area: everything inside the floor collider that isn't a wall
@@ -38,6 +40,7 @@ export function dress(world, theme, index, quality = 1, script = null) {
   };
   const floorAt = (x, z) => {
     const hit = world.raycast(new THREE.Vector3(x, f0 + 3, z), UP, 4);
+    if (hit && hit.collider && hit.collider.void) return null;      // the hidden floor under a cloud deck
     return hit && hit.point.y > f0 - 0.5 && hit.point.y < f0 + 2.2 && hit.normal.y > 0.5 ? hit.point.y : null;
   };
   // centre the scatter on where the level is: around the colliders' middle and the player start
@@ -96,7 +99,7 @@ export function dress(world, theme, index, quality = 1, script = null) {
     } else if (r < 0.62) {
       // a still, black puddle that mirrors the lights
       const g = new THREE.CircleGeometry(1, 14).rotateX(-Math.PI / 2);
-      if (drift) world.shape(g, space === 'mars' ? 'sand' : 'regolith', { ...drift, pos: [x, y + 0.012, z], scale: [rng.range(0.8, 2), 1, rng.range(0.5, 1.2)], rot: [0, rng() * TAU, 0] });
+      if (drift) world.shape(g, space === 'mars' || space === 'venus' ? 'sand' : OUTER[space] ? OUTER[space][0] : 'regolith', { ...drift, pos: [x, y + 0.012, z], scale: [rng.range(0.8, 2), 1, rng.range(0.5, 1.2)], rot: [0, rng() * TAU, 0] });
       else world.shape(g, 'asphalt', { ...puddle, pos: [x, y + 0.012, z], scale: [rng.range(0.4, 1.0), 1, rng.range(0.3, 0.8)], rot: [0, rng() * TAU, 0] });
     } else if (r < 0.72) {
       // broken planks and a length of pipe

@@ -1,6 +1,6 @@
 /* Grand Prix World Tour — boot, menus, HUD, input, saving and quality. */
 import * as THREE from 'three';
-import { LEVELS, LIVERIES } from './levels.js';
+import { LEVELS, LIVERIES, tierOfLevel } from './levels.js';
 import { Race, STEP } from './race.js';
 import { makeCar } from './car.js';
 import { cardArt } from './art.js';
@@ -20,8 +20,12 @@ const OFFSITE = !location.pathname.includes('/grand-prix-tour/');
 function loadSave() {
   try {
     const r = JSON.parse(localStorage.getItem(SAVE) || '{}');
+    const best = r.best || {};
+    let unlocked = Math.min(LEVELS.length, Math.max(1, r.unlocked | 0 || 1));
+    // saves from the ten-race tour: a podium in the old last race now opens the next tour
+    while (unlocked < LEVELS.length && best[unlocked] && best[unlocked].place <= 3) unlocked++;
     return {
-      unlocked: Math.min(LEVELS.length, Math.max(1, r.unlocked | 0 || 1)), best: r.best || {}, livery: (r.livery | 0) % LIVERIES.length,
+      unlocked, best, livery: (r.livery | 0) % LIVERIES.length,
       cam: r.cam === 'cockpit' ? 'cockpit' : 'chase', quality: ['auto', 'ultra', 'high', 'medium', 'low'].includes(r.quality) ? r.quality : 'auto', muted: !!r.muted
     };
   } catch (e) { return { unlocked: 1, best: {}, livery: 0, cam: 'chase', quality: 'auto', muted: false }; }
@@ -130,25 +134,42 @@ const fmt = t => { if (!isFinite(t)) return '--'; const m = Math.floor(t / 60), 
 const ord = n => n + (n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th');
 const medalOf = p => p === 1 ? 'gold' : p === 2 ? 'silver' : p === 3 ? 'bronze' : null;
 const stars = n => '●'.repeat(n) + '○'.repeat(5 - n);
-const diffStars = L => Math.max(1, Math.min(5, Math.round((L.id + 1) / 2)));
+/* difficulty within its tour (1-5) plus the rival class, so every tour step-up shows */
+const diffStars = L => 1 + Math.floor(((L.id - 1) % 10) / 2);
+const TOURS = ['World Tour I', 'World Tour II', 'World Tour III'];
+const tourOf = L => Math.floor((L.id - 1) / 10);
+const tierTag = L => { const T = tierOfLevel(L); return `<span class="tier" style="--tc:${T.col}">${T.name}</span>`; };
+let lvPage = null;
 
 function renderLevels() {
   const grid = $('levelGrid'); grid.innerHTML = '';
+  const pages = Math.ceil(LEVELS.length / 10);
+  if (lvPage == null) lvPage = Math.min(pages - 1, Math.floor((save.unlocked - 1) / 10));
   let golds = 0;
-  LEVELS.forEach(L => {
+  LEVELS.forEach(L => { const b = save.best[L.id]; if (b && b.place === 1) golds++; });
+  const tabs = $('tourTabs'); tabs.innerHTML = '';
+  for (let p = 0; p < pages; p++) {
+    const first = LEVELS[p * 10], last = LEVELS[Math.min(LEVELS.length, p * 10 + 10) - 1], open = first.id <= save.unlocked;
+    const pods = LEVELS.slice(p * 10, p * 10 + 10).filter(L => save.best[L.id] && save.best[L.id].place <= 3).length;
+    const t = document.createElement('button');
+    t.className = 'tab' + (p === lvPage ? ' on' : '') + (open ? '' : ' locked');
+    t.innerHTML = `<b>${TOURS[p] || 'Tour ' + (p + 1)}</b><small>${first.from} → ${last.to}</small><small>${open ? pods + '/10 podiums' : '🔒 locked'} · ${tierTag(last)}</small>`;
+    t.onclick = () => { audio.sfx.click(); lvPage = p; renderLevels(); };
+    tabs.appendChild(t);
+  }
+  LEVELS.slice(lvPage * 10, lvPage * 10 + 10).forEach(L => {
     const b = save.best[L.id], locked = L.id > save.unlocked, md = b && medalOf(b.place);
-    if (md === 'gold') golds++;
     const el = document.createElement('button');
     el.className = 'lv' + (locked ? ' locked' : '');
     el.innerHTML = cardArt(L, 'lv' + L.id) + (locked ? `<div class="lock">🔒 LOCKED<br><small>Podium in race ${L.id - 1}</small></div>` : '') +
       (md ? `<span class="medal ${md}">${b.place}</span>` : '') +
       `<div class="meta"><div class="n">RACE ${L.id} · ${L.country.toUpperCase()}</div><div class="route">${L.from} → ${L.to}</div>
       <div class="info"><span>${(L.length / 1000).toFixed(1)} km · ${L.time}</span><span class="stars">${stars(diffStars(L))}</span></div>
-      <div class="info"><span>${b ? 'Best ' + fmt(b.time) + ' · ' + ord(b.place) : 'Not raced'}</span></div></div>`;
-    if (!locked) el.onclick = () => { audio.unlock(); audio.sfx.click(); openLevel(L.id); };
+      <div class="info"><span>${b ? 'Best ' + fmt(b.time) + ' · ' + ord(b.place) : 'Not raced'}</span>${tierTag(L)}</div></div>`;
+    if (!locked) el.onclick = () => { audio.unlock(); audio.sfx.click(); lvPage = tourOf(L); openLevel(L.id); };
     grid.appendChild(el);
   });
-  $('tourSub').textContent = `Finish in the top three to unlock the next race · ${golds}/10 gold`;
+  $('tourSub').textContent = `Finish in the top three to unlock the next race · ${golds}/${LEVELS.length} gold`;
 }
 
 function renderGarage() {
@@ -173,7 +194,7 @@ function disposeRace() {
 
 function openLevel(id, { skipIntro = false } = {}) {
   disposeRace();
-  level = LEVELS[id - 1];
+  level = LEVELS[id - 1]; lvPage = tourOf(level);
   $('loading').hidden = false; $('loading').textContent = 'BUILDING ' + level.from.toUpperCase() + ' → ' + level.to.toUpperCase();
   return new Promise(res => setTimeout(() => {
     race = new Race(level, renderer, { livery: save.livery, quality: q, cam: save.cam, tier: tierOf() });
@@ -184,11 +205,11 @@ function openLevel(id, { skipIntro = false } = {}) {
     $('loading').hidden = true;
     introT = 0;
     $('introArt').innerHTML = cardArt(level, 'in' + level.id);
-    $('introK').textContent = `Race ${level.id} of ${LEVELS.length} · ${level.country}`;
+    $('introK').textContent = `${TOURS[tourOf(level)] || ''} · Race ${level.id} of ${LEVELS.length} · ${level.country}`;
     $('introRoute').innerHTML = `${level.from}<i>→</i>${level.to}`;
     $('introBlurb').textContent = level.blurb;
-    $('introFacts').innerHTML = [['Distance', (level.length / 1000).toFixed(1) + ' km'], ['Conditions', level.time], ['Rivals', '<span class="stars">' + stars(diffStars(level)) + '</span>'], ['Grid', ord(level.grid) + ' / 12']]
-      .map(([k, v]) => `<div><small>${k}</small><b>${v}</b></div>`).join('') + (best ? `<div style="grid-column:1/-1"><small>Your best</small><b>${fmt(best.time)} · ${ord(best.place)}</b></div>` : '');
+    $('introFacts').innerHTML = [['Distance', (level.length / 1000).toFixed(1) + ' km'], ['Conditions', level.time], ['Rivals', tierTag(level) + ' <span class="stars">' + stars(diffStars(level)) + '</span>'], ['Grid', ord(level.grid) + ' / 12']]
+      .map(([k, v]) => `<div><small>${k}</small><b>${v}</b></div>`).join('') + (race.nemesis ? `<div style="grid-column:1/-1"><small>Rival to beat · ${tierOfLevel(level).name} class</small><b><span class="bar" style="background:${race.nemesis.liv.a}"></span>${race.nemesis.liv.driver} · ${race.nemesis.liv.team} #${race.nemesis.liv.num}</b></div>` : '') + (best ? `<div style="grid-column:1/-1"><small>Your best</small><b>${fmt(best.time)} · ${ord(best.place)}</b></div>` : '');
     $('rFrom').textContent = level.from; $('rTo').textContent = level.to;
     if (skipIntro) beginRace(); else go('intro');
     res();
@@ -376,7 +397,7 @@ function showResults() {
   $('resK').textContent = `Race ${L.id} · ${L.country}`;
   $('resRoute').innerHTML = `${L.from}<i>→</i>${L.to}`;
   const md = medalOf(r.place);
-  $('resMedal').innerHTML = (md ? `<span class="medal ${md}">${r.place}</span>` : '') + `<div><b>${ord(r.place)} place · ${fmt(r.time)}</b><div class="sub" style="margin:0;text-align:left">${md ? md[0].toUpperCase() + md.slice(1) + ' medal' : 'Finish in the top three for a medal'}${r.unlockedNow ? ' · <b style="color:#20d070">' + LEVELS[L.id].from + ' → ' + LEVELS[L.id].to + ' unlocked!</b>' : ''}${L.id === LEVELS.length && r.place <= 3 ? ' · <b style="color:#ffcb3a">World Tour complete!</b>' : ''}</div></div>`;
+  $('resMedal').innerHTML = (md ? `<span class="medal ${md}">${r.place}</span>` : '') + `<div><b>${ord(r.place)} place · ${fmt(r.time)}</b><div class="sub" style="margin:0;text-align:left">${md ? md[0].toUpperCase() + md.slice(1) + ' medal' : 'Finish in the top three for a medal'}${r.unlockedNow ? ' · <b style="color:#20d070">' + LEVELS[L.id].from + ' → ' + LEVELS[L.id].to + ' unlocked!</b>' : ''}${L.id === LEVELS.length && r.place <= 3 ? ' · <b style="color:#ffcb3a">World Tour complete — you beat the Legends!</b>' : L.id % 10 === 0 && r.place <= 3 ? ' · <b style="color:#ffcb3a">' + TOURS[tourOf(L)] + ' complete! ' + tierOfLevel(LEVELS[L.id]).name + ' rivals await.</b>' : ''}</div></div>`;
   const lead = r.res[0].time;
   $('resTable').innerHTML = r.res.map((x, i) => `<tr class="${x.c.isPlayer ? 'me' : ''}"><td class="p">${i + 1}</td><td><span class="bar" style="background:${x.c.liv.a}"></span>${x.c.isPlayer ? '<b>You</b>' : x.c.liv.driver}</td><td style="color:#9aa0aa">${x.c.liv.team} #${x.c.liv.num}</td><td class="t">${i === 0 ? fmt(x.time) : '+' + (x.time - lead).toFixed(3)}${x.est ? '*' : ''}</td></tr>`).join('');
   $('resTable').insertAdjacentHTML('beforeend', r.res.some(x => x.est) ? '<tr><td colspan="4" style="color:#9aa0aa;font-size:12px;border:0">* still racing: projected finishing gap</td></tr>' : '');

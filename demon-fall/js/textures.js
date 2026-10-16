@@ -469,6 +469,43 @@ const PAINT = {
     }
     grain(ctx, size, 0.1);
   },
+  /* ---- the outer planets ---- */
+  sulfur(ctx, size, rng) {
+    // Venus: baked basalt crusted with yellow sulfur and pale acid bloom
+    for (let y = 0; y < size; y += 2) for (let x = 0; x < size; x += 2) {
+      const n = fbm(x / 40, y / 40, 5, 61), m = fbm(x / 14 + 9, y / 14, 3, 62);
+      const crust = clamp((n - 0.55) * 2.2, 0, 1) * 0.7;
+      const r = 70 + m * 30 + crust * 110, g = 58 + m * 24 + crust * 90, b = 38 + m * 12 + crust * 16;
+      ctx.fillStyle = `rgb(${r | 0},${g | 0},${b | 0})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+    for (let i = 0; i < 9; i++) { ctx.globalAlpha = 0.6; crack(ctx, rng() * size, rng() * size, 30, rng() * 6.28, 1.6, '#2a2010', rng); }
+    ctx.globalAlpha = 1;
+    grain(ctx, size, 0.08);
+  },
+  ice(ctx, size, rng) {
+    // Neptune: blue-white frozen methane over deck plate, with frost cracks
+    for (let y = 0; y < size; y += 2) for (let x = 0; x < size; x += 2) {
+      const n = fbm(x / 60, y / 60, 5, 71), m = fbm(x / 9, y / 9, 2, 72);
+      const v = 150 + n * 80 + m * 20;
+      ctx.fillStyle = `rgb(${v * 0.78 | 0},${v * 0.9 | 0},${Math.min(255, v * 1.08) | 0})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+    for (let i = 0; i < 14; i++) { ctx.globalAlpha = 0.55; crack(ctx, rng() * size, rng() * size, 26, rng() * 6.28, 1.2, '#eaf6ff', rng); }
+    for (let i = 0; i < 6; i++) { ctx.globalAlpha = 0.35; crack(ctx, rng() * size, rng() * size, 20, rng() * 6.28, 1.4, '#3a5a8a', rng); }
+    ctx.globalAlpha = 1;
+    grain(ctx, size, 0.05, false);
+  },
+  cloud(ctx, size, rng) {
+    // a sea of cloud seen from above: soft billows, tinted per planet by the material colour
+    for (let y = 0; y < size; y += 2) for (let x = 0; x < size; x += 2) {
+      const n = fbm(x / 70, y / 50, 6, 81), band = Math.sin(y / size * Math.PI * 6 + n * 3) * 0.5 + 0.5;
+      const v = 120 + n * 110 + band * 25;
+      ctx.fillStyle = `rgb(${v | 0},${v | 0},${v | 0})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+    grain(ctx, size, 0.03, false);
+  },
   demonHide(ctx, size, rng) {
     ctx.fillStyle = '#2a1014'; ctx.fillRect(0, 0, size, size);
     for (let y = 0; y < size; y += 2) for (let x = 0; x < size; x += 2) {

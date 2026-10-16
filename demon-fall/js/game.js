@@ -20,23 +20,33 @@ import { LEVEL_1, LEVEL_2, LEVEL_3 } from './levels-a.js';
 import { LEVEL_4, LEVEL_5, LEVEL_6 } from './levels-b.js';
 import { MARS_1, MARS_2, MARS_3, MARS_4, MARS_5, MARS_6 } from './levels-mars.js';
 import { MOON_1, MOON_2, MOON_3, MOON_4, MOON_5, MOON_6 } from './levels-moon.js';
+import { VENUS_1, VENUS_2, VENUS_3, VENUS_4, VENUS_5, VENUS_6 } from './levels-venus.js';
+import { JUPITER_1, JUPITER_2, JUPITER_3, JUPITER_4, JUPITER_5, JUPITER_6 } from './levels-jupiter.js';
+import { NEPTUNE_1, NEPTUNE_2, NEPTUNE_3, NEPTUNE_4, NEPTUNE_5, NEPTUNE_6 } from './levels-neptune.js';
 import { MarsFlight } from './mars.js';
 import { dress } from './dressing.js';
 import { clamp, damp, makeRng, randRange, fmtTime, TAU, Rolling } from './util.js';
 import * as audio from './audio.js';
 
 /* Earth (1–6), then the flight to Mars; Mars (7–12), then the flight to the
- * Moon; the Moon (13–18), then it is over. A level's `flight` says where its
- * last stage flies you, and `world` groups it in the menus. */
+ * Moon; the Moon (13–18), an interlude, and the trail outward: Venus (19–24),
+ * Jupiter (25–30), Neptune (31–36), where it ends. A level's `flight` says
+ * where its last stage flies you, and `world` groups it in the menus. */
 export const LEVELS = [
   LEVEL_1, LEVEL_2, LEVEL_3, LEVEL_4, LEVEL_5, LEVEL_6,
   MARS_1, MARS_2, MARS_3, MARS_4, MARS_5, MARS_6,
-  MOON_1, MOON_2, MOON_3, MOON_4, MOON_5, MOON_6
+  MOON_1, MOON_2, MOON_3, MOON_4, MOON_5, MOON_6,
+  VENUS_1, VENUS_2, VENUS_3, VENUS_4, VENUS_5, VENUS_6,
+  JUPITER_1, JUPITER_2, JUPITER_3, JUPITER_4, JUPITER_5, JUPITER_6,
+  NEPTUNE_1, NEPTUNE_2, NEPTUNE_3, NEPTUNE_4, NEPTUNE_5, NEPTUNE_6
 ];
 export const WORLDS = [
   { key: 'earth', name: 'Earth', from: 0, to: 5 },
   { key: 'mars', name: 'Mars', from: 6, to: 11 },
-  { key: 'moon', name: 'The Moon', from: 12, to: 17 }
+  { key: 'moon', name: 'The Moon', from: 12, to: 17 },
+  { key: 'venus', name: 'Venus', from: 18, to: 23 },
+  { key: 'jupiter', name: 'Jupiter', from: 24, to: 29 },
+  { key: 'neptune', name: 'Neptune', from: 30, to: 35 }
 ];
 export const worldOf = i => WORLDS.find(w => i >= w.from && i <= w.to) || WORLDS[0];
 
@@ -308,10 +318,12 @@ export class Game {
       ? { count: 400, colour: 0x8a8478, embers: 0.02, size: 0.05 }
       : { count: 900, colour: 0xb8aca0, embers: 0.3, size: 0.09 }));
 
-    const hemi = new THREE.HemisphereLight(new THREE.Color(theme.hemi[0]).lerp(new THREE.Color(0x8a90b0), 0.3), theme.hemi[1], theme.hemi[2] * 3.6);
+    const hemi = this.hemi = new THREE.HemisphereLight(new THREE.Color(theme.hemi[0]).lerp(new THREE.Color(0x8a90b0), 0.3), theme.hemi[1], theme.hemi[2] * 3.6);
     // a little ambient so shadowed corners stay readable rather than pure black
     const ambient = new THREE.AmbientLight(new THREE.Color(theme.hemi[0]).lerp(new THREE.Color(0x9a8a90), 0.45), theme.ambient == null ? 2.4 : theme.ambient);
     this.scene.add(hemi, ambient);
+    // Jupiter's storms: lightning lights the whole sky now and then
+    this.lightning = theme.lightning ? { ...theme.lightning, next: randRange(2, 5), flash: 0, base: hemi.intensity, ambient, ambientBase: ambient.intensity, glow: this.sky.material.uniforms.glow.value.clone() } : null;
 
     this.sun = new THREE.DirectionalLight(theme.sun.colour, theme.sun.intensity * 2.4);
     this.sun.position.set(...theme.sun.pos);
@@ -377,10 +389,12 @@ export class Game {
     this.stats = { kills: 0, headshots: 0, shots: 0, hits: 0, started: this.time, score: 0 };
     this.levelDone = false;
     this.marsFlight = null;
+    this.pendingFlight = null;
+    this.hazardT = 0;
     this.updateFollow();
 
     if (preview) { this.stage = null; this.beacon.visible = false; return; }
-    audio.startMusic(theme.music || 45);
+    audio.startMusic(theme.music || 45, theme.tempo || 1);
     this.nextStage();
     this.bannerPending = true;         // shown when play actually starts
     this.hud.slots(this.owned, this.current);
@@ -478,6 +492,18 @@ export class Game {
 
     // Earth's last stage flies you to Mars, Mars's last flies you to the Moon
     if (this.levelDef.flight) {
+      // the Moon finale is not the end any more: an interlude first, then the flight out to Venus
+      if (this.levelDef.interlude) {
+        this.state = 'cleared';
+        document.exitPointerLock();
+        audio.stopMusic();
+        audio.sfx.win();
+        const summary = this.levelSummary();
+        summary.interlude = this.levelDef.flight;
+        this.pendingFlight = this.levelDef.flight;
+        this.hud.levelCleared(summary);
+        return;
+      }
       this.startMars(this.levelDef.flight);
       return;
     }
@@ -512,8 +538,22 @@ export class Game {
     this.renderPass.scene = this.marsFlight.scene;
     this.renderPass.camera = this.marsFlight.camera;
     this.hud.marsMode(true);
-    this.hud.objective(dest === 'moon' ? 'Fly to the Moon' : 'Fly to Mars');
+    this.hud.objective('Fly to ' + this.marsFlight.route.title);
     this.hud.subtitle('Lift-off. Hold on.');
+  }
+
+  /** "Follow the signal" on the interlude screen: call from inside that click (it captures the mouse). */
+  beginPendingFlight() {
+    const dest = this.pendingFlight;
+    if (!dest) return false;
+    this.pendingFlight = null;
+    this.startMars(dest);
+    this.mouse.down = this.mouse.right = false;
+    this.lock();
+    this.checkLock();
+    this.lastFrame = performance.now();
+    this.runLoop();
+    return true;
   }
 
   /* ------------------------------------------------------------ weapons */
@@ -853,6 +893,8 @@ export class Game {
     }
 
     this.updateFollow();
+    if (this.lightning) this.updateLightning(dt);
+    if (this.script.hazards) this.updateHazards(dt);
 
     // sun shadow follows the player so the shadow map stays tight
     this.sun.target.position.copy(player.pos);
@@ -878,6 +920,42 @@ export class Game {
     this.hud.threat(this.enemies.alive);
 
     if (player.dead && this.state === 'playing') this.die();
+  }
+
+  /** A strike somewhere in the storm: the sky and the decks flash, thunder follows. */
+  updateLightning(dt) {
+    const L = this.lightning;
+    L.next -= dt;
+    if (L.next <= 0) {
+      L.next = randRange(L.every[0], L.every[1]);
+      L.flash = 1;
+      L.second = randRange(0.08, 0.2);       // most strikes flicker twice
+      const delay = randRange(250, 1400);
+      setTimeout(() => { if (this.state === 'playing') audio.sfx.thunder(); }, delay);
+    }
+    if (L.second > 0) { L.second -= dt; if (L.second <= 0) L.flash = Math.max(L.flash, 0.8); }
+    L.flash = Math.max(0, L.flash - dt * 6);
+    const f = L.flash * L.flash;
+    this.hemi.intensity = L.base * (1 + f * (L.power || 3));
+    L.ambient.intensity = L.ambientBase * (1 + f * 1.5);
+    this.sky.material.uniforms.glow.value.copy(L.glow).lerp(new THREE.Color(L.colour || 0xc8d8ff), f * 0.8);
+  }
+
+  /** Acid pools and the like: standing in one burns, in ticks so the hurt sound doesn't stutter. */
+  updateHazards(dt) {
+    const p = this.player.pos;
+    let inside = null;
+    for (const h of this.script.hazards) {
+      if (p.y < 0.8 && (p.x - h.x) ** 2 + (p.z - h.z) ** 2 < h.r * h.r) { inside = h; break; }
+    }
+    if (!inside) { this.hazardT = 0; return; }
+    this.hazardT -= dt;
+    if (this.hazardT <= 0) {
+      this.hazardT = 0.5;
+      this.player.hurt(inside.dps * 0.5, this.time);
+      this.hud.damage();
+      this.hud.feed(inside.label || 'ACID BURN');
+    }
   }
 
   /** Show which way a hit came from, relative to where the player faces. */
@@ -995,7 +1073,7 @@ export class Game {
       this.state = 'dead';
       document.exitPointerLock();
       audio.sfx.lose();
-      this.hud.died(flight.dest === 'moon' ? 'The ship broke up in the wreckage field' : 'The ship broke up in the debris field');
+      this.hud.died(flight.route.failText);
       return;
     }
     if (finished) {

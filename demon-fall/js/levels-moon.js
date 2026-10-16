@@ -606,7 +606,7 @@ export const MOON_5 = {
 
 /* ================================================================ 18 */
 export const MOON_6 = {
-  id: 18, world: 'moon',
+  id: 18, world: 'moon', flight: 'venus', interlude: true,   // not the end: the signal leads on to Venus
   name: 'The Hive',
   subtitle: 'Tycho crater — where it started',
   brief: 'Every signal leads to Tycho. The infection has grown a nest in the crater. Burn out the brood, kill the Matriarch, and get home.',

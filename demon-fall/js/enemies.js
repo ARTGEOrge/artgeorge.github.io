@@ -118,6 +118,98 @@ export const TYPES = {
     scale: 3.4, eyes: 0x7ae8ff, score: 8000, sight: 100, gib: 0x3a1a4a, boss: true, leaps: true,
     outfit: 'labcoat', accent: 0x5af0ff, skin: 0x8a90a0,
     ranged: { range: 40, cooldown: 2.3, speed: 17, damage: 14, volley: 4 }
+  },
+
+  /* ---- Venus: the cloud cities and the heat-shielded domes. The acid got into them.
+   * `mutation` adds the planet's growths to the body (models.js). */
+  scorched: {
+    name: 'Scorched Colonist', hp: 70, speed: 1.9, run: 2.6, damage: 13, reach: 1.45, attackTime: 1.05, windup: 0.4,
+    scale: 1, eyes: 0xe8ff3a, score: 170, sight: 50, gib: 0x6a3a10, mutation: 'acid',
+    outfit: 'jumpsuit', cloth: [0xc89a2a, 0x8a6a3a, 0xb8782a, 0x6a5a40], accent: 0xffd23a, skin: 0xc8b890
+  },
+  acidCrawler: {
+    name: 'Acid Crawler', hp: 54, speed: 5.9, run: 7.3, damage: 13, reach: 1.5, attackTime: 0.62, windup: 0.22,
+    scale: 0.86, eyes: 0xe8ff3a, score: 240, sight: 58, gib: 0x6a5a10, quad: true, flesh: true, lunges: true, mutation: 'acid',
+    cloth: [0xc89a2a, 0x8a6a3a], skin: 0xd8c890
+  },
+  acidSpitter: {
+    name: 'Acid Spitter', hp: 72, speed: 2.3, run: 3.0, damage: 12, reach: 1.4, attackTime: 1.0, windup: 0.4,
+    scale: 0.98, eyes: 0xc8ff2a, score: 290, sight: 60, gib: 0x5a6a10, mutation: 'acid',
+    outfit: 'labcoat', accent: 0xc8ff2a, skin: 0xb8b878,
+    ranged: { range: 32, cooldown: 2.7, speed: 15, damage: 14 }
+  },
+  heatSuit: {
+    name: 'Heat Suit', hp: 130, speed: 1.75, run: 2.4, damage: 17, reach: 1.5, attackTime: 1.15, windup: 0.42,
+    scale: 1.04, eyes: 0xe8ff3a, score: 300, sight: 52, gib: 0x6a3a10, bodyMult: 0.65, mutation: 'acid',
+    outfit: 'suit', cloth: [0xd8c8a0, 0xc8b890], accent: 0xd8a020, skin: 0xb8b090, visor: 0xffb020, ownVisor: true
+  },
+  tyrant: {
+    name: 'The Sulfur Tyrant', hp: 2400, speed: 2.2, run: 3.1, damage: 38, reach: 3.2, attackTime: 1.55, windup: 0.7,
+    scale: 3.3, eyes: 0xe8ff3a, score: 9000, sight: 100, gib: 0x6a5a10, boss: true, mutation: 'acid',
+    outfit: 'suit', cloth: [0xc8a860], accent: 0xffd23a, skin: 0xa8a070, visor: 0xffb020, ownVisor: true,
+    ranged: { range: 40, cooldown: 2.4, speed: 16, damage: 14, volley: 5 }
+  },
+
+  /* ---- Jupiter: the cloud-skimmer refinery. The storms got into these ones:
+   * `discharge` winds up (a ring on the floor shows its reach) and then arcs. */
+  rigger: {
+    name: 'Charged Rigger', hp: 84, speed: 1.9, run: 2.6, damage: 15, reach: 1.5, attackTime: 1.1, windup: 0.42,
+    scale: 1.02, eyes: 0x8ae0ff, score: 210, sight: 52, gib: 0x5a2a3a, mutation: 'storm',
+    outfit: 'miner', cloth: [0xd88a2a, 0x8a5a2a, 0x5a6a7a], accent: 0x8ae0ff, skin: 0xb8a898
+  },
+  stormLeaper: {
+    name: 'Storm Leaper', hp: 64, speed: 3.3, run: 4.3, damage: 12, reach: 1.5, attackTime: 0.8, windup: 0.3,
+    scale: 0.96, eyes: 0x9ae8ff, score: 300, sight: 60, gib: 0x5a2a3a, leaps: true, lunges: true, mutation: 'storm',
+    outfit: 'jumpsuit', cloth: [0x8a5a2a, 0x6a4a3a, 0xa86a2a], accent: 0x8ae0ff, skin: 0xc0b0a8,
+    discharge: { radius: 4.2, damage: 15, windup: 0.8, cooldown: 5.5, colour: 0x8ae0ff }
+  },
+  arcCaster: {
+    name: 'Arc Caster', hp: 78, speed: 2.2, run: 2.9, damage: 12, reach: 1.4, attackTime: 1.0, windup: 0.4,
+    scale: 0.98, eyes: 0x6ad8ff, score: 300, sight: 62, gib: 0x5a2a3a, mutation: 'storm',
+    outfit: 'labcoat', accent: 0x6ad8ff, skin: 0xb0a8a8,
+    ranged: { range: 34, cooldown: 2.5, speed: 22, damage: 13 }
+  },
+  stormHulk: {
+    name: 'Ballast Hulk', hp: 380, speed: 1.85, run: 2.6, damage: 26, reach: 2.3, attackTime: 1.55, windup: 0.72,
+    scale: 1.9, eyes: 0x8ae0ff, score: 700, sight: 50, gib: 0x6d1420, heavy: true, bodyMult: 0.8, mutation: 'storm',
+    outfit: 'miner', cloth: [0xd88a2a, 0x6a4a3a], accent: 0x8ae0ff, skin: 0xa89888,
+    discharge: { radius: 5, damage: 18, windup: 1.0, cooldown: 7, colour: 0x8ae0ff }
+  },
+  tempest: {
+    name: 'The Tempest', hp: 2600, speed: 2.3, run: 3.3, damage: 38, reach: 3.3, attackTime: 1.5, windup: 0.65,
+    scale: 3.4, eyes: 0x9ae8ff, score: 10000, sight: 110, gib: 0x3a2a5a, boss: true, leaps: true, mutation: 'storm',
+    outfit: 'miner', cloth: [0x8a5a2a], accent: 0x8ae0ff, skin: 0x9a9098,
+    ranged: { range: 40, cooldown: 2.6, speed: 22, damage: 14, volley: 3 },
+    discharge: { radius: 7, damage: 26, windup: 1.0, cooldown: 6.5, colour: 0x9ae8ff }
+  },
+
+  /* ---- Neptune: the deep stations, frozen over. Slow heavy brutes, fast pale wraiths. */
+  frozenCrew: {
+    name: 'Frozen Researcher', hp: 80, speed: 1.85, run: 2.6, damage: 15, reach: 1.45, attackTime: 1.05, windup: 0.4,
+    scale: 1, eyes: 0xbff8ff, score: 200, sight: 52, gib: 0x3a3a6a, mutation: 'ice',
+    outfit: 'labcoat', accent: 0x5ab8ff, skin: 0xb0c4d8
+  },
+  iceWraith: {
+    name: 'Ice Wraith', hp: 72, speed: 4.9, run: 6.2, damage: 13, reach: 1.5, attackTime: 0.72, windup: 0.26,
+    scale: 1.06, eyes: 0xdffcff, score: 330, sight: 64, gib: 0x2a4a6a, lunges: true, mutation: 'ice',
+    outfit: 'jumpsuit', cloth: [0x2a3a5a, 0x3a4a6a], accent: 0xbff8ff, skin: 0xd8eaf8,
+    ranged: { range: 26, cooldown: 3.4, speed: 20, damage: 12 }
+  },
+  frostCrawler: {
+    name: 'Frost Crawler', hp: 60, speed: 6.0, run: 7.6, damage: 14, reach: 1.5, attackTime: 0.6, windup: 0.2,
+    scale: 0.86, eyes: 0xbff8ff, score: 260, sight: 60, gib: 0x2a3a6a, quad: true, flesh: true, lunges: true, mutation: 'ice',
+    cloth: [0x2a3a5a, 0x3a4a6a], skin: 0xc8d8e8
+  },
+  frostBrute: {
+    name: 'Frozen Brute', hp: 440, speed: 1.7, run: 2.45, damage: 28, reach: 2.3, attackTime: 1.6, windup: 0.75,
+    scale: 1.95, eyes: 0xbff8ff, score: 800, sight: 50, gib: 0x2a3a6a, heavy: true, bodyMult: 0.7, mutation: 'ice',
+    outfit: 'suit', cloth: [0x8a9ab0, 0x9aa8b8], accent: 0x3a8ae8, skin: 0x9ab0c8, visor: 0x8ad8ff, ownVisor: true
+  },
+  progenitor: {
+    name: 'The Progenitor', hp: 3000, speed: 2.4, run: 3.4, damage: 42, reach: 3.5, attackTime: 1.5, windup: 0.65,
+    scale: 3.8, eyes: 0xdffcff, score: 15000, sight: 120, gib: 0x2a1a4a, boss: true, leaps: true, mutation: 'ice', demon: true,
+    ranged: { range: 44, cooldown: 2.4, speed: 19, damage: 15, volley: 5 },
+    discharge: { radius: 7.5, damage: 28, windup: 1.1, cooldown: 7, colour: 0xbff8ff }
   }
 };
 
@@ -130,11 +222,14 @@ function scaledType(base, mods) {
   t.run = base.run * (mods.speed || 1);
   t.damage = Math.round(base.damage * (mods.damage || 1));
   if (base.ranged) t.ranged = { ...base.ranged, damage: Math.round(base.ranged.damage * (mods.damage || 1)), cooldown: base.ranged.cooldown / (mods.fire || 1) };
+  if (base.discharge) t.discharge = { ...base.discharge, damage: Math.round(base.discharge.damage * (mods.damage || 1)) };
   return t;
 }
 
 /* ------------------------------------------------------------------ enemy */
 let nextId = 1;
+// the floor ring a charging body shows: unit radius, scaled to its reach
+const RING_GEO = new THREE.RingGeometry(0.9, 1, 40).rotateX(-Math.PI / 2);
 
 export class Enemy {
   constructor(kind, pos, type = TYPES[kind]) {
@@ -175,6 +270,7 @@ export class Enemy {
   dispose() {
     if (this.parts.eyes[0]) this.parts.eyes[0].material.dispose();
     if (this.parts.halo) this.parts.halo.material.dispose();
+    if (this.ring) this.ring.material.dispose();
   }
 
   headPos(out = tmpV1) { return out.copy(this.obj.position).setY(this.obj.position.y + this.headY); }
@@ -246,6 +342,8 @@ export class Enemy {
     this.deathT = 0;
     this.headshotKill = !!head;
     if (this.parts.halo) this.parts.halo.visible = false;   // the light goes out of its eyes
+    if (this.ring) this.ring.visible = false;
+    this.charge = 0;
   }
 
   /** ctx: { dt, player, world, fx, enemies, time, onAttack, onFire } */
@@ -317,6 +415,9 @@ export class Enemy {
         ctx.onFire(this, spread, i * 0.12);
       }
     }
+
+    // ---- storm-charged bodies wind up, show their reach on the floor, then arc
+    if (this.type.discharge) this.updateDischarge(ctx, this.type.discharge, dist);
 
     // ---- leapers bound at you; in low gravity they hang in the air
     this.leaping = Math.max(0, (this.leaping || 0) - dt);
@@ -427,6 +528,46 @@ export class Enemy {
     }
   }
 
+  updateDischarge(ctx, Z, dist) {
+    const fx = ctx.fx;
+    if (this.charge > 0) {
+      this.charge -= ctx.dt;
+      const k = 1 - this.charge / Z.windup;
+      if (this.ring) {
+        this.ring.visible = true;
+        this.ring.scale.setScalar((Z.radius / this.type.scale) * (0.35 + 0.65 * k));
+        this.ring.material.opacity = 0.35 + 0.5 * k * (0.6 + 0.4 * Math.sin(this.charge * 40));
+      }
+      if (fx && Math.random() < ctx.dt * 30) fx.sparks(this.bodyPos(new THREE.Vector3()), new THREE.Vector3(0, 1, 0), 2, [0.55, 0.85, 1]);
+      if (this.charge <= 0) {
+        this.charge = 0;
+        this.dischargeAt = ctx.time + Z.cooldown * randRange(0.8, 1.2);
+        if (this.ring) this.ring.visible = false;
+        const c = this.bodyPos(new THREE.Vector3());
+        if (fx) {
+          fx.light(c, Z.colour || 0x8ae0ff, 9, 0.3, Z.radius * 3.5);
+          fx.sparks(c, new THREE.Vector3(0, 1, 0), 28, [0.6, 0.9, 1]);
+          fx.plasmaBurst(c, [0.5, 0.85, 1]);
+        }
+        audio.at(() => audio.sfx.zap(), dist, 60);
+        if (dist < Z.radius && ctx.onDischarge) ctx.onDischarge(this, Z.damage);
+      }
+    } else if ((this.state === 'chase' || this.state === 'attack') && dist < Z.radius * 0.8 &&
+               ctx.time > (this.dischargeAt || 0) && !(this.leaping > 0)) {
+      this.charge = Z.windup;
+      if (!this.ring) {
+        this.ring = new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({
+          color: Z.colour || 0x8ae0ff, transparent: true, opacity: 0.4, depthWrite: false,
+          blending: THREE.AdditiveBlending, side: THREE.DoubleSide
+        }));
+        this.ring.position.y = 0.06 / this.type.scale;
+        this.ring.renderOrder = 3;
+        this.obj.add(this.ring);
+      }
+      audio.at(() => audio.sfx.charge(), dist, 40);
+    }
+  }
+
   freeAhead(world, p, dx, dz, dist) {
     const x = p.x + dx * dist, z = p.z + dz * dist;
     const list = world.near(x, z, this.radius + 0.2);
@@ -518,7 +659,7 @@ export class Enemy {
       P.head.rotation.x += this.flinch * 0.3;
     } else P.torso.rotation.x = damp(P.torso.rotation.x, 0, 8, dt);
 
-    const glow = this.hitFlash > 0 ? 1 : 0;
+    const glow = this.hitFlash > 0 || (this.charge > 0 && Math.sin(this.charge * 50) > 0) ? 1 : 0;
     P.eyes.forEach(e => { e.material.color.setHex(glow ? 0xffffff : this.type.eyes); });
 
     // breathing, and a head that hunts for the player (idle ones look about)
@@ -611,6 +752,7 @@ export class Enemies {
     const shared = {
       dt, player, world, fx, time: ctx.time, enemies: this.list, gravity: ctx.gravity,
       onAttack: ctx.onAttack,
+      onDischarge: (enemy, damage) => ctx.onPlayerHit(damage, enemy.pos.clone()),
       onFire: (enemy, spread, delay) => {
         const from = enemy.bodyPos(new THREE.Vector3()).setY(enemy.pos.y + enemy.headY * 0.86);
         const dir = player.eyePos(new THREE.Vector3()).sub(from).normalize();

@@ -7,7 +7,7 @@ import { Track, DS, START_S } from './track.js';
 import { populate } from './scenery.js';
 import { makeCar, wheelGeometry, WHEELS } from './car.js';
 import { makeSky, Particles, Weather, SpeedLines } from './fx.js';
-import { LIVERIES, fieldFor } from './levels.js';
+import { LIVERIES, fieldFor, aiOf } from './levels.js';
 import * as TX from './textures.js';
 import * as audio from './audio.js';
 import { TIERS } from './quality.js';
@@ -60,7 +60,7 @@ export class Race {
     // fx
     this.smoke = new Particles(500); scene.add(this.smoke.points);
     this.sparks = new Particles(260, { additive: true }); scene.add(this.sparks.points);
-    if (L.weather !== 'clear') { this.weather = new Weather(L.weather, this.quality >= 2 ? 500 : 1100); scene.add(this.weather.obj); }
+    if (L.weather === 'rain' || L.weather === 'snow') { this.weather = new Weather(L.weather, this.quality >= 2 ? 500 : 1100); scene.add(this.weather.obj); }
     this.lines = new SpeedLines(); this.camera.add(this.lines.obj);
     this.dustCol = new THREE.Color(L.ground.near);
     this.buildField(opts.livery ?? 0);
@@ -75,11 +75,13 @@ export class Race {
   /* ------------------------------------------------------------ field */
   buildField(liveryIdx) {
     const L = this.L, t = this.track, scene = this.scene;
-    const rivals = fieldFor(liveryIdx);
+    let rivals = fieldFor(liveryIdx);
+    // from World Tour II a different rival leads the field each race (1-10 unchanged)
+    if (L.id > 10) { const rot = (L.id * 5) % rivals.length; rivals = [...rivals.slice(rot), ...rivals.slice(0, rot)]; }
     const N = 12, slot = clamp(L.grid, 1, N) - 1;
-    const r = TX.rng(L.seed + 5);
+    const r = TX.rng(L.seed + 5), A = this.ai = aiOf(L);
     // rivals sorted fastest first fill the grid; the player takes `slot`
-    const skills = rivals.map((rv, k) => L.ai + L.aiSpread * (1 - 2 * k / (rivals.length - 1)) * 0.5 + (r() - 0.5) * 0.01);
+    const skills = rivals.map((rv, k) => A.pace + A.spread * (1 - 2 * k / (rivals.length - 1)) * 0.5 + (r() - 0.5) * 0.01);
     this.cars = [];
     let ai = 0;
     for (let g = 0; g < N; g++) {
@@ -88,11 +90,11 @@ export class Race {
       const car = {
         id: g, isPlayer: isP, liv, grid: g + 1,
         s: START_S - 9 - g * 8, d: (g % 2 ? -1 : 1) * 2.3, v: 0, idx: 0, x: 0, y: 0, z: 0, yaw: 0, yawRate: 0, steer: 0, vl: 0,
-        skill: isP ? 1 : skills[ai], bias: isP ? 0 : (r() - 0.5) * 1.6, react: 0.15 + r() * 0.35, spin: 0,
+        skill: isP ? 1 : skills[ai], bias: isP ? 0 : (r() - 0.5) * 1.6, react: A.react[0] + r() * A.react[1], spin: 0,
         finished: false, finishTime: 0, place: g + 1, cp: 0, drs: false, slip: 0, rpm: 0.3, throttle: 0, scrape: 0, offroad: false,
         visYaw: 0, roll: 0, pitch: 0, gear: 1, latD: 0
       };
-      if (!isP) ai++;
+      if (!isP) { car.passLook = A.passLook; car.margin = A.margin; car.defD = null; if (ai === 0) this.nemesis = car; ai++; }
       const p = t.at(car.s, car.d, {});
       car.x = p.x; car.z = p.z; car.y = p.y; car.yaw = p.th; car.idx = t.idx(car.s);
       car.mesh = makeCar(liv, { detail: this.tier.carDetail, shadows: !!this.tier.shadows }); scene.add(car.mesh);
@@ -108,7 +110,7 @@ export class Race {
     const bg = new THREE.PlaneGeometry(1, 1); bg.rotateX(-Math.PI / 2);
     this.shadowMesh = new THREE.InstancedMesh(bg, new THREE.MeshBasicMaterial({ map: TX.blob(), transparent: true, depthWrite: false, opacity: (this.L.night ? 0.5 : 0.85) * (this.tier.shadows ? 0.6 : 1) }), N);
     this.shadowMesh.frustumCulled = false; scene.add(this.shadowMesh);
-    this.aiProf = t.profile(37 * L.grip, 30 * L.grip, V_TOP - 1);
+    this.aiProf = t.profile(A.corner * L.grip, A.brake * L.grip, V_TOP - 1 + A.top);
     this.apProf = t.profile(38.5 * L.grip, 32 * L.grip, V_TOP);
   }
 
@@ -390,12 +392,12 @@ export class Race {
     for (const o of this.cars) {
       if (o === c) continue;
       const ds = o.s - c.s, dd = o.d - c.d;
-      const near = 8 + Math.max(0, c.v - o.v) * 2.2;
+      const near = 8 + Math.max(0, c.v - o.v) * (c.passLook || 2.2);
       if (ds > 0 && ds < near && Math.abs(dd) < 2.4 && ds < bestDs) { bestDs = ds; block = o; }
       if (Math.abs(ds) < 6 && Math.abs(dd) < 2.4) want += (dd > 0 ? -1 : 1) * 1.2;
     }
     if (block && c.v > block.v - 0.5) {
-      const l = block.d + 2.7, r = block.d - 2.7;
+      const mg = c.margin || 2.7, l = block.d + mg, r = block.d - mg;
       const okL = l < lim, okR = r > -lim;
       if (okL && okR) want = Math.abs(l - want) < Math.abs(r - want) ? l : r;
       else if (okL) want = l; else if (okR) want = r;
@@ -411,19 +413,32 @@ export class Race {
     if (!racing || this.raceT < c.react) { c.v = 0; c.throttle = this.phase === 'lights' ? 0.5 : 0; this.gearbox(c, 0.4); this.placeAI(c, 0, dt); return; }
     const look = c.s + Math.max(6, c.v * 0.4);
     let target = Math.min(t.lerp(this.aiProf, c.s), t.lerp(this.aiProf, look)) * c.skill;
-    // subtle rubber band
-    const p = this.player;
+    // subtle rubber band: leaders ease off a little for you, trailers push (less help in later tours)
+    const p = this.player, A = this.ai;
     if (!p.finished && !c.finished) {
       const gap = c.s - p.s;
-      target *= 1 - clamp(gap / 500, -1, 1) * 0.022;
+      target *= 1 - clamp(gap / 500, -1, 1) * (gap > 0 ? A.bandAhead : A.bandBehind);
     }
     if (c.finished) target = Math.min(target, c.s > t.finishS + 180 ? 0 : 26);
     c.follow = null;
-    const want = this.laneTarget(c, t.lerp(t.line, c.s + 14) * (0.8 + c.skill * 0.2) + c.bias * 0.6);
-    if (c.follow) target = Math.min(target, c.follow.v + (c.follow.s - c.s - 7) * 0.4);
-    // slipstream for the AI too
-    if (c.follow && c.follow.s - c.s < 30) target += 1.2;
-    const top = V_TOP - 1 + (t.drsFlag[t.idx(c.s)] ? 6 : 0);
+    // defending (Elite / Legend): when you close in on a straight, make one move to cover your line and hold it
+    if (A.defend && !c.finished && !p.finished) {
+      const gap = c.s - p.s;
+      if (gap > 6 && gap < 26 && p.v > c.v - 0.5 && t.kAbs[c.idx] < 1 / 300) {
+        if (c.defD == null) c.defD = clamp(p.d, c.d - 2.4 * A.defend, c.d + 2.4 * A.defend);
+      } else if (gap < 4 || gap > 34) c.defD = null;
+    } else c.defD = null;
+    const base = c.defD != null ? c.defD : t.lerp(t.line, c.s + 14) * (0.8 + c.skill * 0.2) + c.bias * 0.6;
+    const want = this.laneTarget(c, base);
+    if (c.follow) target = Math.min(target, c.follow.v + (c.follow.s - c.s - A.passGap) * 0.4);
+    // slipstream for the AI too (later tours: any car in line ahead, on the straights)
+    let tow = 0;
+    if (A.towAny) {
+      for (const o of this.cars) if (o !== c) { const ds = o.s - c.s; if (ds > 5 && ds < A.towRange && Math.abs(o.d - c.d) < 1.8) tow = Math.max(tow, 1 - (ds - 5) / (A.towRange - 5)); }
+      if (t.kAbs[c.idx] > 1 / 400) tow *= 0.3;
+    } else if (c.follow && c.follow.s - c.s < 30) tow = 1;
+    target += tow * A.tow;
+    const top = V_TOP - 1 + A.top + (t.drsFlag[t.idx(c.s)] ? 6 : 0);
     if (c.v < target) { c.v += accelCurve(c.v, top) * dt; c.v = Math.min(c.v, target); c.throttle = 1; }
     else { c.v = Math.max(target, c.v - 32 * this.L.grip * dt); c.throttle = 0; }
     c.v = Math.max(0, c.v);

@@ -1,28 +1,14 @@
 /* Scenery: low-poly props merged per type and drawn as InstancedMeshes,
- * bucketed into 400 m chunks so only nearby ones are drawn. Each of the ten
- * locations has its own mix, plus landmarks at the start and finish towns. */
+ * bucketed into 400 m chunks so only nearby ones are drawn. Each of the thirty
+ * locations has its own mix (levels 11-30 live in world.js), plus landmarks at the start and finish towns. */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as TX from './textures.js';
 import { DS, START_S } from './track.js';
 
-const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), v3 = new THREE.Vector3(), sc = new THREE.Vector3();
-function P(geo, color, { x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1 } = {}) {
-  e.set(rx, ry, rz); q.setFromEuler(e); m4.compose(v3.set(x, y, z), q, sc.set(sx, sy, sz));
-  geo.applyMatrix4(m4);
-  const keepUv = !!geo.userData.keepUv;
-  const g = geo.index ? geo.toNonIndexed() : geo;
-  if (!keepUv && g.attributes.uv) g.deleteAttribute('uv');
-  const c = new THREE.Color(color), n = g.attributes.position.count, col = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
-  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  return g;
-}
-const M = parts => { const g = mergeGeometries(parts); g.computeBoundingSphere(); return g; };
-const cyl = (r0, r1, h, s = 6) => { const g = new THREE.CylinderGeometry(r1, r0, h, s); g.translate(0, h / 2, 0); return g; };
-const cone = (r, h, s = 7) => { const g = new THREE.ConeGeometry(r, h, s); g.translate(0, h / 2, 0); return g; };
-const ico = (r, d = 0) => new THREE.IcosahedronGeometry(r, d);
-const bx = (w, h, d) => { const g = new THREE.BoxGeometry(w, h, d); g.translate(0, h / 2, 0); return g; };
+import { P, M, cyl, cone, ico, bx } from './geo.js';
+import { GEO2, GLOW2, LIT2, FADE2, WIRE2, populateWorld } from './world.js';
+const e = new THREE.Euler(), q = new THREE.Quaternion();
 
 /* ------------------------------------------------------------- props */
 const GEO = {
@@ -123,6 +109,7 @@ const GEO = {
   },
   casino() { return M([P(bx(40, 30, 30), '#ffffff'), P(bx(30, 12, 22), '#ffffff', { y: 30 })]); }
 };
+Object.assign(GEO, GEO2);
 GEO.wheel = () => {
   const parts = [P(new THREE.TorusGeometry(70, 1.6, 6, 40), '#e8eef4', { y: 82 })];
   for (let i = 0; i < 12; i++) { const g = new THREE.BoxGeometry(0.8, 140, 0.8); parts.push(P(g, '#c8d4e0', { y: 82, rz: i * Math.PI / 12 })); }
@@ -165,8 +152,12 @@ export class Scenery {
       : new THREE.MeshLambertMaterial({ vertexColors: true, map: TX.windows(false) });
     else if (type === 'casino') m = new THREE.MeshLambertMaterial({ vertexColors: true, color: '#40384a', emissive: '#ffffff', emissiveMap: TX.windows(true), emissiveIntensity: 1.2, map: TX.windows(false) });
     else if (['lampHead', 'floodHead', 'sign', 'supertree', 'beam'].includes(type)) m = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: type === 'beam', opacity: type === 'beam' ? 0.16 : 1, depthWrite: type !== 'beam', fog: type !== 'beam' });
+    else if (WIRE2.has(type)) m = new THREE.MeshBasicMaterial({ vertexColors: true, wireframe: true, transparent: true, opacity: 0.85 });
+    else if (GLOW2.has(type)) m = new THREE.MeshBasicMaterial({ vertexColors: true });
+    else if (FADE2.has(type)) m = new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.28, depthWrite: false });
     else if (type === 'pool') m = new THREE.MeshBasicMaterial({ map: TX.softDot(), transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, vertexColors: true, polygonOffset: true, polygonOffsetFactor: -4 });
     else if (night && ['triple', 'tower', 'needle', 'pyramid'].includes(type)) m = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: type === 'pyramid' ? '#101018' : '#4a5a80', emissiveIntensity: 0.8 });
+    else if ((night || L.dusk) && LIT2.has(type)) m = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: night ? '#b08a5a' : '#6a5038', emissiveIntensity: night ? 0.55 : 0.4 });
     else if (night && type === 'wheel') m = new THREE.MeshBasicMaterial({ vertexColors: true, color: '#9fe8ff' });
     else m = new THREE.MeshLambertMaterial({ vertexColors: true });
     this.mats[type] = m; return m;
@@ -314,14 +305,14 @@ export function populate(track, L, quality, scene) {
       S.building(x, y, z, track.th[track.idx(s)] + (S.r() < 0.5 ? 0 : Math.PI / 2), w, h, d, col);
     }
   });
-  const nightLamps = (every, flood = false, warm = '#ffd9a0') => {
+  const nightLamps = (every, flood = false, warm = '#ffd9a0', poolK = 1) => {
     S.along(flood ? 'flood' : 'lamp', every, 0.8, {
       facing: true, build: (p, side, s, ry, y) => {
         S.add(flood ? 'flood' : 'lamp', p.x, y, p.z, ry, 1);
         S.add(flood ? 'floodHead' : 'lampHead', p.x, y, p.z, ry, 1, new THREE.Color(warm));
         // light pool on the road
         const tmp = {}; track.at(s, side * (track.w[track.idx(s)] / 2 - 1.5), tmp);
-        S.add('pool', tmp.x, tmp.y + 0.06, tmp.z, 0, flood ? 30 : 20, new THREE.Color(warm).multiplyScalar(flood ? 0.5 : 0.62), 1, flood ? 30 : 20);
+        S.add('pool', tmp.x, tmp.y + 0.06, tmp.z, 0, flood ? 30 : 20, new THREE.Color(warm).multiplyScalar((flood ? 0.5 : 0.62) * poolK), 1, flood ? 30 : 20);
       }
     });
   };
@@ -415,7 +406,7 @@ export function populate(track, L, quality, scene) {
     S.add('triple', tmp.x, track.groundY(tmp.x, tmp.z), tmp.z, track.th[track.idx(START_S + 400)], 1, new THREE.Color('#ffffff'), null, null, -1);
     track.at(START_S + 900, -150, tmp);
     S.add('wheel', tmp.x, track.groundY(tmp.x, tmp.z), tmp.z, track.th[track.idx(START_S + 900)] + Math.PI / 2, 1, null, null, null, -1);
-  }
+  } else populateWorld(T, { S, track, L, end, len, town, nightLamps, signs, PASTEL, CITY_DAY, NEON });
   S.finalize(scene);
   return S;
 }

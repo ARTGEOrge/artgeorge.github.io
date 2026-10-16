@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-<meta name="description" content="Grand Prix World Tour — a 3D Formula-style road race across ten world locations, from Monte Carlo to Singapore." />
-<title>Grand Prix World Tour — Nexus Play</title>
+<meta name="description" content="Grand Prix World Tour — a 3D Formula-style road race across thirty world locations in three tours, from Monte Carlo to Abu Dhabi." />
+<title>Grand Prix World Tour</title>
 <link href="vendor/fonts/fonts.css" rel="stylesheet" />
 <style>
   *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -61,6 +61,15 @@
   .medal.gold { background: var(--gold); } .medal.silver { background: var(--silver); } .medal.bronze { background: var(--bronze); }
   .lv .medal { position: absolute; top: 8px; right: 8px; }
   .stars { color: var(--red); letter-spacing: 2px; }
+  .tier { display: inline-block; font-family: var(--display); font-size: 10px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; padding: 1px 6px; border-radius: 5px; color: var(--tc); box-shadow: inset 0 0 0 1px var(--tc); vertical-align: 1px; }
+  #tourTabs { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; width: min(1180px, 100%); margin-bottom: 14px; }
+  .tab { flex: 1 1 200px; max-width: 320px; text-align: left; padding: 9px 14px; border-radius: 12px; background: rgba(255,255,255,.06); border: 1px solid var(--line); transition: background .15s, border-color .15s; }
+  .tab:hover { background: rgba(255,255,255,.12); }
+  .tab.on { border-color: #fff; background: rgba(255,255,255,.14); }
+  .tab.locked { opacity: .6; }
+  .tab b { font-family: var(--display); font-size: 15px; letter-spacing: .08em; text-transform: uppercase; display: block; }
+  .tab small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }
+  .facts .bar { display: inline-block; width: 4px; height: 13px; border-radius: 2px; vertical-align: -1px; margin-right: 7px; }
 
   /* garage */
   #garage { justify-content: flex-end; padding-bottom: 36px; }
@@ -207,7 +216,7 @@
   <div id="menu" class="screen" hidden>
     <div class="brand">Nexus Play presents</div>
     <div class="logo">Grand Prix<br><span>World Tour</span></div>
-    <div class="tag">Ten road races across the world, from Monte Carlo to Singapore. Eleven rivals. One car. Finish on the podium to unlock the next country.</div>
+    <div class="tag">Thirty road races across the world in three tours, from Monte Carlo to Abu Dhabi. Eleven rivals who get faster and smarter: Rookie, Pro, Elite, Legend. Finish on the podium to unlock the next country.</div>
     <div class="btns">
       <button class="btn primary" id="bRace">Race</button>
       <button class="btn" id="bGarage">Garage · Livery</button>
@@ -220,6 +229,7 @@
   <div id="levels" class="screen dim" hidden>
     <h2 class="title">World Tour</h2>
     <div class="sub" id="tourSub">Finish in the top three to unlock the next race.</div>
+    <div id="tourTabs"></div>
     <div id="levelGrid"></div>
     <button class="btn small" id="bLvBack">Back</button>
   </div>
@@ -245,7 +255,7 @@
         <li><kbd>R</kbd></li><li>Reset onto the road</li>
         <li><kbd>Esc</kbd> <kbd>P</kbd></li><li>Pause</li>
       </ul>
-      <p>Tuck in behind a rival for a slipstream tow. Barriers scrub speed, grass and gravel slow you right down. Phones and tablets get on-screen pedals.</p>
+      <p>Rivals come in four classes. Rookies and Pros (World Tour I) leave you room; Elite drivers (Tour II) defend their line and use the tow; Legends (Tour III) brake later, barely ease off and are near-perfect. Tuck in behind a rival for a slipstream tow. Barriers scrub speed, grass and gravel slow you right down. Phones and tablets get on-screen pedals.</p>
       <button class="btn primary" id="bHelpBack">Got it</button>
     </div></div>
   </div>
@@ -254,7 +264,7 @@
     <div class="card glass">
       <div class="art" id="introArt"></div>
       <div class="body">
-        <div class="k" id="introK">Race 1 of 10</div>
+        <div class="k" id="introK">Race 1 of 30</div>
         <div class="route" id="introRoute"></div>
         <p id="introBlurb"></p>
         <div class="facts" id="introFacts"></div>

@@ -75,6 +75,13 @@ export function barrier(style, accent = '#ff3aa8') {
       g.fillStyle = '#2a4a8a'; g.fillRect(0, 10, 256, 26);
       g.fillStyle = '#f2f2f2'; g.font = 'bold 18px sans-serif'; g.fillText('WORLD TOUR', 18, 30); g.fillText('GRAND PRIX', 150, 30);
       g.fillStyle = 'rgba(0,0,0,0.2)'; for (let x = 0; x < 256; x += 128) g.fillRect(x, 0, 3, 64);
+    } else if (style === 'stone') { // dry-stone / masonry wall
+      g.fillStyle = '#8a857c'; g.fillRect(0, 0, 256, 64);
+      const r = rng(31);
+      for (let y = 0; y < 64; y += 12) for (let x = -(y % 24); x < 256; x += 22 + r() * 10) {
+        const v = 110 + r() * 60 | 0; g.fillStyle = `rgb(${v},${v - 4},${v - 12})`; g.fillRect(x + 1, y + 1, 20 + r() * 8, 10);
+      }
+      g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, 60, 256, 4);
     } else { // neon city wall: dark concrete with a glowing strip
       g.fillStyle = '#2a2a33'; g.fillRect(0, 0, 256, 64);
       g.fillStyle = '#3c3c48'; for (let x = 0; x < 256; x += 64) g.fillRect(x + 2, 4, 58, 40);

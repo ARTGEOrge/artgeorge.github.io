@@ -37,6 +37,9 @@ function vnoise(x, z, seed) {
   const a = hash2(xi, zi, seed), b = hash2(xi + 1, zi, seed), c = hash2(xi, zi + 1, seed), d = hash2(xi + 1, zi + 1, seed);
   return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
 }
+/* Levels 11-30 borrow a base terrain kit (alps crags, desert dunes, outback
+ * rock) from the first ten; `kit` falls back to the theme itself. */
+export const kitOf = L => L.kit || L.theme;
 export function fbm(x, z, seed) { return vnoise(x, z, seed) * 0.55 + vnoise(x * 2.1, z * 2.1, seed + 3) * 0.3 + vnoise(x * 4.3, z * 4.3, seed + 7) * 0.15; }
 
 export class Track {
@@ -246,9 +249,10 @@ export class Track {
     let h = this.y[i] - 0.45;
     const ex = dist - bd;
     if (ex > 8) {
-      const hill = L.hill * smooth01(30, L.theme === 'alps' ? 260 : 420, ex);
+      const K = kitOf(L), crag = K === 'alps', dunes = L.dunes ?? K === 'desert';
+      const hill = L.hill * smooth01(30, crag ? 260 : 420, ex);
       const nz = fbm(px / 260, pz / 260, L.seed % 97);
-      h += hill * (L.theme === 'alps' ? 0.35 + nz * 1.1 : nz) + (L.theme === 'desert' ? Math.sin(px / 23 + Math.sin(pz / 41) * 2) * 2.2 * smooth01(20, 80, ex) : 0);
+      h += hill * (crag ? 0.35 + nz * 1.1 : nz) + (dunes ? Math.sin(px / 23 + Math.sin(pz / 41) * 2) * 2.2 * smooth01(20, 80, ex) : 0);
       if (L.coast && L.sea) {
         const side = L.coast === 'left' ? 1 : -1;
         if (Math.sign(g.d) === side) { const t = smooth01(14, 70, ex); h = h * (1 - t) + (this.seaY - 9) * t; }
@@ -269,17 +273,18 @@ export class Track {
       roadMat = new THREE.MeshStandardMaterial({ map: A.map, roughnessMap: A.rough, roughness: 1, metalness: L.wet ? 0.18 : 0.02, envMapIntensity: L.wet ? 1.2 : 0.6, color: L.night ? '#d8d8e0' : '#ffffff' });
     } else roadMat = new THREE.MeshStandardMaterial({ map: TX.asphalt(L.road, L.line, !!L.wet), roughness: L.wet ? 0.28 : 0.86, metalness: L.wet ? 0.25 : 0.02, color: L.night ? '#d8d8e0' : '#ffffff' });
     const kerbMat = new THREE.MeshLambertMaterial({ map: hd ? HD.kerbHD() : TX.kerb() });
-    const gk = L.city ? 'pavement' : L.theme === 'alps' ? 'snow' : L.theme === 'desert' ? 'sand' : (L.theme === 'outback' || L.theme === 'vegas') ? 'dirt' : 'grass';
+    const K = kitOf(L);
+    const gk = L.gk ? L.gk : L.city ? 'pavement' : L.theme === 'alps' ? 'snow' : L.theme === 'desert' ? 'sand' : (L.theme === 'outback' || L.theme === 'vegas') ? 'dirt' : 'grass';
     this.groundMap = hd ? HD.groundTex(gk) : TX.detail(); this.shadowsOn = shadows;
     const neonCols = { tokyo: '#ff2fa8', vegas: '#ffcf2a', singapore: '#2fe0ff' };
-    const barTex = TX.barrier(L.barrier, neonCols[L.theme] || '#ff2fa8');
+    const barTex = TX.barrier(L.barrier, L.neon || neonCols[L.theme] || '#ff2fa8');
     const barMat = L.barrier === 'neon' ? new THREE.MeshBasicMaterial({ map: barTex, side: THREE.DoubleSide })
       : new THREE.MeshLambertMaterial({ map: barTex, side: THREE.DoubleSide });
     const runMat = new THREE.MeshLambertMaterial({ vertexColors: true, map: this.groundMap });
     TX.detail().repeat.set(1, 1);
     this.materials = [roadMat, kerbMat, barMat, runMat];
-    const barH = L.barrier === 'armco' ? 0.95 : L.barrier === 'tecpro' ? 1.15 : 1.5;
-    const nearCol = new THREE.Color(L.ground.near), sandCol = new THREE.Color(L.theme === 'alps' ? '#cfd6dd' : L.city ? '#5c5c66' : '#c8b48a');
+    const barH = L.barrier === 'armco' ? 0.95 : L.barrier === 'tecpro' ? 1.15 : L.barrier === 'stone' ? 1.1 : 1.5;
+    const nearCol = new THREE.Color(L.ground.near), sandCol = new THREE.Color(L.gravel ? L.gravel : K === 'alps' && L.ground.snow ? '#cfd6dd' : L.city ? '#5c5c66' : '#c8b48a');
     for (let c0 = 0; c0 < this.n - 1; c0 += CHUNK) {
       const c1 = Math.min(this.n - 1, c0 + CHUNK);
       const ch = new THREE.Group();
@@ -403,7 +408,8 @@ export class Track {
     const nx = Math.ceil((maxX - minX) / cell) + 1, nz = Math.ceil((maxZ - minZ) / cell) + 1;
     const pos = new Float32Array(nx * nz * 3), col = new Float32Array(nx * nz * 3), uv = new Float32Array(nx * nz * 2);
     const ca = new THREE.Color(L.ground.a), cb = new THREE.Color(L.ground.b), cn = new THREE.Color(L.ground.near), cf = new THREE.Color(L.ground.far);
-    const beach = new THREE.Color('#d8c690'), rock = new THREE.Color(L.theme === 'alps' ? '#8a8f98' : L.theme === 'outback' ? '#8a4a2a' : '#6f6a5c');
+    const K = kitOf(L);
+    const beach = new THREE.Color(L.beach || '#d8c690'), rock = new THREE.Color(L.rock || (K === 'alps' ? '#8a8f98' : K === 'outback' ? '#8a4a2a' : '#6f6a5c'));
     const tmp = new THREE.Color();
     // coarse nearest via every 6th sample, refined locally
     const xs = [], zs = [], is = [];
@@ -428,8 +434,9 @@ export class Track {
       if (ex < 30) tmp.lerp(cn, 1 - Math.max(0, ex) / 30);
       tmp.lerp(cf, smooth01(250, 1100, ex) * 0.85);
       if (L.sea && h < this.seaY + 3.5 && h > this.seaY - 3) tmp.lerp(beach, 0.85);
-      if (L.theme === 'alps' && h - this.y[g.i] > 60 && nz2 > 0.55) tmp.lerp(rock, 0.5);
-      if (L.theme === 'outback' && nz2 > 0.7) tmp.lerp(rock, 0.4);
+      if (K === 'alps' && h - this.y[g.i] > 60 && nz2 > 0.55) tmp.lerp(rock, 0.5);
+      if (K === 'outback' && nz2 > 0.7) tmp.lerp(rock, 0.4);
+      if (L.snowline && h - this.y[g.i] > L.snowline && nz2 > 0.35) tmp.lerp(new THREE.Color('#eef2f6'), 0.8);
       col[v * 3] = tmp.r; col[v * 3 + 1] = tmp.g; col[v * 3 + 2] = tmp.b;
     }
     const idx = new Uint32Array((nx - 1) * (nz - 1) * 6);

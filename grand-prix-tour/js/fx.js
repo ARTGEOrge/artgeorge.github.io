@@ -4,7 +4,7 @@ import * as TX from './textures.js';
 
 export function makeSky(L, { clouds = true } = {}) {
   const sun = new THREE.Vector3(...L.sky.sun).normalize();
-  const cover = !clouds ? 0 : L.weather === 'rain' ? 0.85 : L.weather === 'snow' ? 0.7 : L.theme === 'desert' ? 0.12 : L.night ? 0.3 : 0.42;
+  const cover = !clouds ? 0 : L.weather === 'rain' ? 0.85 : L.weather === 'snow' ? 0.7 : L.cover != null ? L.cover : L.theme === 'desert' ? 0.12 : L.night ? 0.3 : 0.42;
   const mat = new THREE.ShaderMaterial({
     side: THREE.BackSide, depthWrite: false, fog: false,
     uniforms: {

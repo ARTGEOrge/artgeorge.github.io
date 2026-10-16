@@ -10,18 +10,21 @@ const $ = id => document.getElementById(id);
 const SAVE = 'demonFall.v1';
 
 /* ------------------------------------------------------------- progress
- * Same key and shape as ever: { unlocked, best, finished } plus `won`.
- * `finished` has always meant "flew off Earth"; saves from before Mars existed
- * stop at unlocked 6, so a finished save opens Mars 1 (stage 7) for them. */
+ * Same key and shape as ever: { unlocked, best, finished } plus `won`, and now
+ * `endured` (beat Neptune 36). `finished` has always meant "flew off Earth";
+ * saves from before Mars existed stop at unlocked 6, so a finished save opens
+ * Mars 1 (stage 7) for them. `won` has always meant "beat the Moon finale";
+ * those saves stopped at unlocked 18, so a won save opens Venus 1 (stage 19). */
 function loadSave() {
   try {
     const raw = JSON.parse(localStorage.getItem(SAVE) || '{}');
-    const s = { unlocked: raw.unlocked || 1, best: raw.best || {}, finished: !!raw.finished, won: !!raw.won };
+    const s = { unlocked: raw.unlocked || 1, best: raw.best || {}, finished: !!raw.finished, won: !!raw.won, endured: !!raw.endured };
     if (s.finished) s.unlocked = Math.max(s.unlocked, 7);
+    if (s.won) s.unlocked = Math.max(s.unlocked, 19);
     s.unlocked = Math.min(Math.max(1, s.unlocked | 0), LEVELS.length);
     return s;
   } catch (e) {
-    return { unlocked: 1, best: {}, finished: false, won: false };
+    return { unlocked: 1, best: {}, finished: false, won: false, endured: false };
   }
 }
 function store(s) {
@@ -213,15 +216,29 @@ const hud = {
 
   died(reason) {
     const w = worldOf(game.levelIndex).key;
-    $('deadSub').textContent = reason || (w === 'mars' ? 'The colony takes another colonist.' : w === 'moon' ? 'Another body for the Hive.' : 'The horde takes the city.');
+    const lines = {
+      mars: 'The colony takes another colonist.', moon: 'Another body for the Hive.',
+      venus: 'The acid has you now.', jupiter: 'Lost in the storm.', neptune: 'Frozen into the deep.'
+    };
+    $('deadSub').textContent = reason || lines[w] || 'The horde takes the city.';
     show('dead');
   },
 
   levelCleared(summary) {
-    const toMoon = summary.flight === 'moon';
-    $('clearTitle').textContent = summary.victory ? 'Humanity Endures' : summary.final ? (toMoon ? 'Moonfall' : 'Welcome to Mars') : 'Stage Clear';
-    $('clearSub').textContent = summary.victory ? 'Earth, Mars, the Moon — the war is over'
-      : summary.final ? (toMoon ? 'Mars is behind you. The Moon is worse.' : 'You made it off Earth')
+    // landing screens after each flight: [title, line, next button]
+    const LANDED = {
+      mars: ['Welcome to Mars', 'You made it off Earth', 'On to Mars'],
+      moon: ['Moonfall', 'Mars is behind you. The Moon is worse.', 'On to the Moon'],
+      venus: ['Into the Haze', 'Venus — ninety atmospheres of acid, and something in the clouds calling back', 'On to Venus'],
+      jupiter: ['Storm King', 'Jupiter — the refinery hangs over a storm the size of three Earths', 'On to Jupiter'],
+      neptune: ['The Blue Dark', 'Neptune — the end of the signal, and the start of all of it', 'On to Neptune']
+    };
+    const land = LANDED[summary.flight] || LANDED.mars;
+    $('clearTitle').textContent = summary.victory ? 'Humanity Endures' : summary.interlude ? 'Humanity Endures — For Now'
+      : summary.final ? land[0] : 'Stage Clear';
+    $('clearSub').textContent = summary.victory ? 'Earth, Mars, the Moon, Venus, Jupiter, Neptune — the Progenitor is dead. The war is over.'
+      : summary.interlude ? 'Earth, Mars and the Moon are clear. But the Matriarch was calling to something out past the Sun — and Venus answered.'
+      : summary.final ? land[1]
       : worldOf(summary.level).name + ' · Stage ' + (summary.level + 1) + ' · ' + summary.name;
     $('stTime').textContent = summary.timeText;
     $('stKills').textContent = summary.kills;
@@ -230,13 +247,14 @@ const hud = {
     $('clearScore').textContent = summary.score.toLocaleString() + ' POINTS';
     $('clearExtra').hidden = !summary.mars;
     if (summary.mars) $('clearExtra').textContent = `Flight: ${summary.mars.destroyed} rocks destroyed · hull ${summary.mars.hull}%`;
-    $('nextLabel').textContent = summary.victory ? 'Main menu' : summary.final ? (toMoon ? 'On to the Moon' : 'On to Mars') : 'Next stage';
+    $('nextLabel').textContent = summary.victory ? 'Main menu' : summary.interlude ? 'Follow the signal' : summary.final ? land[2] : 'Next stage';
 
     const best = save.best[summary.level];
     if (!best || summary.score > best.score) save.best[summary.level] = { score: summary.score, time: summary.time };
     save.unlocked = Math.max(save.unlocked, Math.min(LEVELS.length, summary.level + 2));
     if (summary.final || summary.level >= 5) save.finished = true;
-    if (summary.victory) save.won = true;
+    if (summary.interlude || summary.victory) save.won = true;   // beat the Moon: Venus is open
+    if (summary.victory) save.endured = true;
     store(save);
     refreshMenu();
     show('cleared');
@@ -335,6 +353,65 @@ function spaceArt(lv, i) {
   return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") center/cover`;
 }
 
+/** Card art past the Moon: Venus (yellow haze, domes and cloud decks), Jupiter (the banded giant, refinery decks), Neptune (deep blue, ice spires). */
+function outerArt(lv, i) {
+  const t = lv.theme, rng = makeRng(i * 613 + 11);
+  const hex = n => '#' + n.toString(16).padStart(6, '0');
+  const w = lv.world;
+  let back = '', mid = '', front = '';
+  if (w === 'venus') {
+    back = '<circle cx="230" cy="58" r="40" fill="#fff4c8" opacity=".25"/><circle cx="230" cy="58" r="16" fill="#fff8e0" opacity=".6"/>';
+    for (let k = 0; k < 5; k++) back += `<ellipse cx="${rng.range(0, 320).toFixed(0)}" cy="${rng.range(40, 110).toFixed(0)}" rx="${rng.range(60, 120).toFixed(0)}" ry="${rng.range(8, 16).toFixed(0)}" fill="#e8c878" opacity=".25"/>`;
+    for (let k = 0; k < 40; k++) {   // acid rain
+      const x = rng.range(0, 330), y = rng.range(0, 190);
+      front += `<line x1="${x.toFixed(0)}" y1="${y.toFixed(0)}" x2="${(x - 4).toFixed(0)}" y2="${(y + 12).toFixed(0)}" stroke="#e0ff6a" stroke-opacity=".35" stroke-width="1"/>`;
+    }
+  } else if (w === 'jupiter') {
+    let bands = '';
+    for (let k = 0; k < 9; k++) bands += `<rect x="40" y="${-20 + k * 16}" width="260" height="9" fill="${['#e8c8a0', '#c8905a', '#f0dcc0', '#b87a4a'][k % 4]}" opacity=".9"/>`;
+    back = `<defs><clipPath id="jp${i}"><circle cx="170" cy="60" r="110"/></clipPath></defs><circle cx="170" cy="60" r="110" fill="#d8a878"/><g clip-path="url(#jp${i})">${bands}<ellipse cx="210" cy="96" rx="22" ry="11" fill="#b8503a"/></g>`;
+  } else {
+    back = '<circle cx="250" cy="44" r="26" fill="#3a6ad8"/><ellipse cx="250" cy="44" rx="46" ry="7" fill="none" stroke="#9ab8e8" stroke-opacity=".35" stroke-width="2"/>';
+    for (let k = 0; k < 60; k++) front += `<rect x="${rng.range(0, 320).toFixed(0)}" y="${rng.range(0, 200).toFixed(0)}" width="${rng.range(4, 10).toFixed(0)}" height="1" fill="#dfefff" opacity=".45" transform="rotate(-12)"/>`;
+  }
+  // the ground line: a dune ridge on Venus, rail-fenced decks over cloud on Jupiter, ice on Neptune
+  if (w === 'jupiter') {
+    mid = '<rect x="0" y="150" width="320" height="50" fill="#5a3a24"/>';
+    for (let k = 0; k < 3; k++) { const x = 20 + k * 100 + rng.range(-10, 10); mid += `<rect x="${x.toFixed(0)}" y="128" width="80" height="8" fill="#3a3e46"/><rect x="${(x + 4).toFixed(0)}" y="120" width="72" height="1.5" fill="#9aa0a8"/><circle cx="${(x + 40).toFixed(0)}" cy="114" r="12" fill="#c8ccd2"/>`; }
+  } else {
+    let ridge = 'M0 200 L0 150';
+    for (let x = 0; x <= 320; x += 20) ridge += ` L${x} ${142 + rng.range(-8, 8)}`;
+    ridge += ' L320 200Z';
+    mid = `<path d="${ridge}" fill="${w === 'venus' ? '#6a5024' : '#2a4a7a'}"/>`;
+    if (w === 'neptune') for (let k = 0; k < 6; k++) { const x = rng.range(10, 310); const h = rng.range(30, 80); mid += `<path d="M${(x - 7).toFixed(0)} 150 L${x.toFixed(0)} ${(150 - h).toFixed(0)} L${(x + 7).toFixed(0)} 150Z" fill="#bfe4f8" opacity=".85"/>`; }
+    else for (let k = 0; k < 4; k++) { const x = rng.range(20, 300); mid += `<ellipse cx="${x.toFixed(0)}" cy="146" rx="${rng.range(14, 26).toFixed(0)}" ry="14" fill="#d8d0b8"/>`; }
+  }
+  const extra = {
+    18: '<path d="M150 150 L154 96 L158 150Z" fill="#e8e0c8"/>',
+    19: '<rect x="0" y="60" width="320" height="10" fill="#1a160c"/><rect x="0" y="66" width="320" height="2" fill="#ffd27a"/>',
+    20: '<ellipse cx="160" cy="60" rx="80" ry="26" fill="#e8d8b0"/><path d="M120 80 L140 120 M200 80 L180 120" stroke="#6a6e76" stroke-width="2"/>',
+    21: '<circle cx="80" cy="140" r="14" fill="#c8f02a" opacity=".7"/><rect x="200" y="96" width="16" height="54" fill="#8a7a5a"/>',
+    22: '<path d="M156 150 L160 40 L164 150Z" fill="#c8c0a8"/><circle cx="160" cy="40" r="4" fill="#ff3020"/>',
+    23: '<circle cx="160" cy="126" r="24" fill="#c8f02a" opacity=".55"/>',
+    24: '<path d="M40 40 l10 22 l-8 0 l12 26" stroke="#c8e8ff" stroke-width="2.5" fill="none"/>',
+    25: '<rect x="120" y="96" width="80" height="32" fill="#9aa0a8"/>',
+    26: '<path d="M240 30 l-12 30 l10 0 l-14 34" stroke="#e8f4ff" stroke-width="3" fill="none"/>',
+    27: '<rect x="0" y="60" width="320" height="10" fill="#14100c"/><rect x="0" y="66" width="320" height="2" fill="#ffa050"/>',
+    28: '<path d="M120 128 Q160 80 200 128Z" fill="#d8dce4"/>',
+    29: '<circle cx="160" cy="132" r="20" fill="#8ae0ff" opacity=".5"/>',
+    30: '<rect x="130" y="110" width="60" height="40" fill="#9ab0c8"/>',
+    31: '<rect x="0" y="60" width="320" height="10" fill="#0a1420"/><rect x="0" y="66" width="320" height="2" fill="#8ad8ff"/>',
+    32: '<path d="M0 90 Q160 70 320 100" stroke="#dfefff" stroke-opacity=".4" stroke-width="10" fill="none"/>',
+    33: '<path d="M150 150 L154 70 L166 70 L170 150Z" fill="#6a7a8a"/>',
+    34: '<path d="M100 150 L110 60 L120 150Z M200 150 L212 50 L224 150Z" fill="#dff4ff"/>',
+    35: '<circle cx="160" cy="118" r="30" fill="#bff8ff" opacity=".4"/><circle cx="160" cy="118" r="8" fill="#ffffff"/>'
+  }[i] || '';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 200" preserveAspectRatio="xMidYMid slice">
+    <defs><linearGradient id="s${i}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${hex(t.skyTop)}"/><stop offset=".75" stop-color="${hex(t.skyHorizon)}"/><stop offset="1" stop-color="${hex(t.skyGlow || t.skyHorizon)}"/></linearGradient></defs>
+    <rect width="320" height="200" fill="url(#s${i})"/>${back}${mid}${extra}${front}</svg>`;
+  return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}") center/cover`;
+}
+
 function buildLevelList() {
   const box = $('levels');
   box.innerHTML = '';
@@ -349,7 +426,8 @@ function buildLevelList() {
       const best = save.best[i];
       const el = document.createElement('button');
       el.className = 'lv' + (open ? '' : ' locked');
-      el.style.setProperty('--art', lv.world && lv.world !== 'earth' ? spaceArt(lv, i) : stageArt(lv, i));
+      const outer = lv.world === 'venus' || lv.world === 'jupiter' || lv.world === 'neptune';
+      el.style.setProperty('--art', outer ? outerArt(lv, i) : lv.world && lv.world !== 'earth' ? spaceArt(lv, i) : stageArt(lv, i));
       el.innerHTML =
         '<div class="num">' + String(i + 1).padStart(2, '0') + '</div>' +
         (best ? '<div class="badge done">★ ' + best.score.toLocaleString() + '</div>'
@@ -413,6 +491,8 @@ $('retryBtn').onclick = () => runLevel(() => game.restart(true));
 $('deadMenuBtn').onclick = () => toMenu();
 $('clearMenuBtn').onclick = () => toMenu();
 $('nextBtn').onclick = () => {
+  // the interlude after the Moon: this click flies you out to Venus
+  if (game.pendingFlight) { show(null); game.beginPendingFlight(); return; }
   const next = game.levelIndex + 1;
   if (next >= LEVELS.length) { toMenu(); return; }
   runLevel(() => game.loadLevel(next, true));

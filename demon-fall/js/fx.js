@@ -391,7 +391,7 @@ export class Shake {
  * always looks full without simulating the whole level.
  */
 export class Ash {
-  constructor(scene, { count = 700, colour = 0xb8aca0, size = 0.09, embers = 0.12, box = 36 } = {}) {
+  constructor(scene, { count = 700, colour = 0xb8aca0, size = 0.09, embers = 0.12, box = 36, fall = null, wind = 0 } = {}) {
     this.box = box;
     this.count = count;
     const pos = new Float32Array(count * 3), col = new Float32Array(count * 3);
@@ -404,6 +404,10 @@ export class Ash {
       this.vel[i * 3] = randRange(-0.3, 0.6);
       this.vel[i * 3 + 1] = randRange(-0.5, -0.15);
       this.vel[i * 3 + 2] = randRange(-0.3, 0.3);
+      if (fall) {   // rain and sleet: fast, slanted by the wind
+        this.vel[i * 3] = wind + randRange(-0.4, 0.4);
+        this.vel[i * 3 + 1] = randRange(fall[0], fall[1]);
+      }
       const c = Math.random() < embers ? hot : base;
       col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
       if (c === hot) this.vel[i * 3 + 1] = randRange(0.1, 0.5);   // embers rise
