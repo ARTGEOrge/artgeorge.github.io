@@ -935,5 +935,74 @@
     }, { passive: true });
   })();
 </script>
+<div id="nxPlayer" hidden><button id="nxPlayerClose" type="button" aria-label="Back to Nexus Play">&#8592; Nexus Play</button></div>
+<style>
+  #nxPlayer { position: fixed; inset: 0; z-index: 10000; background: #000; }
+  #nxPlayer[hidden] { display: none; }
+  #nxPlayer iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; display: block; background: #000; }
+  #nxPlayerClose { position: absolute; left: 10px; bottom: 10px; z-index: 1; font: 600 12px/1 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    color: #fff; background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.25); border-radius: 999px; padding: 7px 12px; cursor: pointer; opacity: .55; }
+  #nxPlayerClose:hover, #nxPlayerClose:focus-visible { opacity: 1; }
+</style>
+<script>
+/* Games and apps open inside the home page instead of navigating to their own
+   address, so the address bar never changes while you play. The small button
+   (or a game's own "Nexus Play" link) returns to the list. Ctrl/middle-click
+   still opens a link the normal way. */
+(function () {
+  // this home page loaded inside the player (a game's own "Nexus Play" link): close the player instead
+  if (window.top !== window) {
+    try { if (window.top.nxClosePlayer) { window.top.nxClosePlayer(); return; } } catch (e) {}
+  }
+  var box = document.getElementById('nxPlayer');
+  var closeBtn = document.getElementById('nxPlayerClose');
+  var frame = null;
+
+  function isHome(path) { return path === '/' || path === '/index.html'; }
+
+  function show(path) {
+    if (frame) frame.remove();
+    frame = document.createElement('iframe');
+    frame.title = 'Game';
+    frame.setAttribute('allow', 'fullscreen; autoplay; gamepad; clipboard-write; screen-wake-lock');
+    frame.addEventListener('load', function () {
+      // a game's own "back to Nexus Play" link loads the home page in here: treat it as closing
+      try { if (isHome(frame.contentWindow.location.pathname)) { close(true); return; } } catch (e) {}
+      try { frame.contentWindow.focus(); } catch (e) {}
+    });
+    frame.src = path;
+    box.insertBefore(frame, closeBtn);
+    box.hidden = false;
+    document.documentElement.style.overflow = 'hidden';
+  }
+
+  function hide() {
+    if (frame) { frame.remove(); frame = null; }   // removing it skips any "leave page?" prompt
+    box.hidden = true;
+    document.documentElement.style.overflow = '';
+  }
+
+  // no pushState and no navigation of this page: the address bar is never touched, so
+  // it keeps showing whatever it showed before (even if someone cleared it)
+  function open(path) { show(path); }
+  function close() { hide(); }
+  closeBtn.addEventListener('click', function () { close(); });
+  window.nxClosePlayer = function () { setTimeout(close, 0); };
+
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target.closest && e.target.closest('a[href]');
+    if (!a || (a.target && a.target !== '_self') || a.hasAttribute('download')) return;
+    var raw = a.getAttribute('href');
+    if (!raw || raw.charAt(0) === '#') return;
+    var url;
+    try { url = new URL(a.href, location.href); } catch (err) { return; }
+    if (url.origin !== location.origin || isHome(url.pathname)) return;
+    e.preventDefault();
+    open(url.pathname + url.search + url.hash);
+  }, true);   // capture: the search panel stops clicks from bubbling
+
+})();
+</script>
 </body>
 </html>
