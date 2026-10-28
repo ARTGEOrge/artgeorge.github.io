@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Grid Pop</title>
+<meta name="description" content="Drop block shapes onto an 8×8 grid. Fill a row or column to pop it. Chain clears for combos." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root { --bg1: #2b1d5c; --bg2: #13254f; --ink: #fff; --muted: #b9c2e8; --acc: #ffcf3f; }
+  html, body { height: 100%; overflow: hidden; background: #1b0f3d; }
+  body { font-family: 'Baloo 2', 'Segoe UI', system-ui, sans-serif; color: var(--ink); user-select: none; -webkit-user-select: none; touch-action: none; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .hidden { display: none !important; }
+  #over { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(8,10,30,.6); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 5; }
+  .card { background: linear-gradient(#3a2b7a, #241b55); border: 2px solid rgba(255,255,255,.18); border-radius: 26px; padding: 26px 30px 24px; text-align: center; min-width: min(320px, 86vw); box-shadow: 0 20px 60px rgba(0,0,0,.45); animation: rise .4s cubic-bezier(.2,1.4,.4,1); }
+  @keyframes rise { from { transform: translateY(30px) scale(.9); opacity: 0; } }
+  .card h2 { font-size: 34px; line-height: 1; color: var(--acc); }
+  .card .big { font-size: 64px; font-weight: 800; line-height: 1.1; margin-top: 8px; }
+  .card p { color: var(--muted); font-size: 16px; }
+  .card .new { display: inline-block; margin-top: 6px; background: #ff5d8f; color: #fff; padding: 2px 12px; border-radius: 99px; font-size: 14px; }
+  button.play { margin-top: 18px; font: inherit; font-size: 22px; font-weight: 800; color: #3a2400; background: linear-gradient(#ffe27a, #ffb321); border: 0; border-radius: 18px; padding: 10px 34px; cursor: pointer; box-shadow: 0 6px 0 #c47a00; }
+  button.play:active { transform: translateY(4px); box-shadow: 0 2px 0 #c47a00; }
+  button.play:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  #mute { position: fixed; top: 12px; right: 12px; z-index: 4; width: 42px; height: 42px; border-radius: 50%; border: 0; background: rgba(255,255,255,.12); color: #fff; font-size: 18px; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<button id="mute" type="button" aria-label="Mute sound">🔊</button>
+<div id="over" class="hidden" role="dialog" aria-label="Game over">
+  <div class="card">
+    <h2>No more room!</h2>
+    <div class="big" id="oScore">0</div>
+    <p id="oBest">Best 0</p>
+    <div class="new hidden" id="oNew">New best!</div><br />
+    <button class="play" id="again" type="button">Play again</button>
+  </div>
+</div>
+<script>
+(function () {
+  'use strict';
+  var cv = document.getElementById('c'), g = cv.getContext('2d');
+  var N = 8;
+  var COLORS = [
+    ['#ff6b6b', '#c73a4a'], ['#ffb23f', '#d67a12'], ['#ffe14d', '#cfa412'], ['#5be37d', '#24a14e'],
+    ['#45c8ff', '#1882c9'], ['#8a7bff', '#5440d6'], ['#ff7fd1', '#c94199']
+  ];
+  // shapes as [x,y] cell lists
+  var SHAPES = [
+    [[0,0]], [[0,0],[1,0]], [[0,0],[0,1]], [[0,0],[1,0],[2,0]], [[0,0],[0,1],[0,2]],
+    [[0,0],[1,0],[2,0],[3,0]], [[0,0],[0,1],[0,2],[0,3]], [[0,0],[1,0],[2,0],[3,0],[4,0]], [[0,0],[0,1],[0,2],[0,3],[0,4]],
+    [[0,0],[1,0],[0,1],[1,1]], [[0,0],[1,0],[2,0],[0,1],[1,1],[2,1],[0,2],[1,2],[2,2]],
+    [[0,0],[0,1],[1,1]], [[1,0],[0,1],[1,1]], [[0,0],[1,0],[0,1]], [[0,0],[1,0],[1,1]],
+    [[0,0],[0,1],[0,2],[1,2]], [[1,0],[1,1],[1,2],[0,2]], [[0,0],[1,0],[2,0],[0,1]], [[0,0],[1,0],[2,0],[2,1]],
+    [[0,0],[1,0],[2,0],[1,1]], [[1,0],[0,1],[1,1],[2,1]], [[0,0],[1,0],[1,1],[2,1]], [[1,0],[2,0],[0,1],[1,1]],
+    [[0,0],[0,1],[0,2],[1,0],[2,0]], [[0,0],[1,0],[2,0],[2,1],[2,2]]
+  ];
+
+  var rings = [], board, tray, score, best = 0, combo, shown = 0, parts = [], floats = [], drag = null, shake = 0, over = false, flash = [];
+  try { best = parseInt(localStorage.getItem('gridpop.best'), 10) || 0; } catch (e) {}
+  var muted = false; try { muted = localStorage.getItem('gridpop.muted') === '1'; } catch (e) {}
+
+  // --------------------------------------------------------------- audio
+  var ac = null;
+  function tone(f, d, type, v, delay) {
+    if (muted) return;
+    try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return; }
+    if (ac.state === 'suspended') ac.resume();
+    var t = ac.currentTime + (delay || 0), o = ac.createOscillator(), a = ac.createGain();
+    o.type = type || 'sine'; o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(f * 1.5, t + d);
+    a.gain.setValueAtTime(v || 0.12, t); a.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(a).connect(ac.destination); o.start(t); o.stop(t + d + 0.02);
+  }
+  var sfx = {
+    pick: function () { tone(520, 0.06, 'triangle', 0.08); },
+    place: function () { tone(220, 0.09, 'square', 0.06); },
+    bad: function () { tone(140, 0.12, 'sawtooth', 0.05); },
+    pop: function (n, c) { for (var i = 0; i < 3 + n; i++) tone(440 * Math.pow(1.19, i + c), 0.12, 'sine', 0.1, i * 0.05); },
+    over: function () { [392, 330, 262, 196].forEach(function (f, i) { tone(f, 0.25, 'triangle', 0.1, i * 0.14); }); }
+  };
+  var muteBtn = document.getElementById('mute');
+  function muteIcon() { muteBtn.textContent = muted ? '🔇' : '🔊'; muteBtn.setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound'); }
+  muteBtn.addEventListener('click', function () { muted = !muted; try { localStorage.setItem('gridpop.muted', muted ? '1' : '0'); } catch (e) {} muteIcon(); });
+  muteIcon();
+
+  // --------------------------------------------------------------- game
+  function newPiece() {
+    // smaller pieces are a bit more common so a jammed board can still recover
+    var s, r = Math.random();
+    do { s = SHAPES[Math.floor(Math.random() * SHAPES.length)]; } while (s.length >= 5 && r < 0.35 && Math.random() < 0.6);
+    var w = 0, h = 0; s.forEach(function (p) { w = Math.max(w, p[0] + 1); h = Math.max(h, p[1] + 1); });
+    return { cells: s, w: w, h: h, col: Math.floor(Math.random() * COLORS.length), used: false, pop: 0 };
+  }
+  function deal() { tray = [newPiece(), newPiece(), newPiece()]; tray.forEach(function (p, i) { p.pop = -i * 0.08; }); }
+  function reset() {
+    board = []; for (var y = 0; y < N; y++) { board.push([]); for (var x = 0; x < N; x++) board[y].push(-1); }
+    score = 0; shown = 0; combo = 0; over = false; parts = []; floats = []; flash = []; rings = [];
+    deal();
+    document.getElementById('over').classList.add('hidden');
+  }
+  function fits(p, gx, gy) {
+    for (var i = 0; i < p.cells.length; i++) {
+      var x = gx + p.cells[i][0], y = gy + p.cells[i][1];
+      if (x < 0 || y < 0 || x >= N || y >= N || board[y][x] >= 0) return false;
+    }
+    return true;
+  }
+  function canFitAnywhere(p) { for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) if (fits(p, x, y)) return true; return false; }
+
+  function place(p, gx, gy) {
+    p.cells.forEach(function (c) { board[gy + c[1]][gx + c[0]] = p.col; });
+    p.used = true; sfx.place();
+    var gained = p.cells.length;
+    var rows = [], cols = [];
+    for (var y = 0; y < N; y++) { var full = true; for (var x = 0; x < N; x++) if (board[y][x] < 0) full = false; if (full) rows.push(y); }
+    for (x = 0; x < N; x++) { full = true; for (y = 0; y < N; y++) if (board[y][x] < 0) full = false; if (full) cols.push(x); }
+    var lines = rows.length + cols.length;
+    if (lines) {
+      combo++;
+      var pts = lines * 10 * lines * combo;
+      gained += pts;
+      var cells = {};
+      rows.forEach(function (yy) { for (var xx = 0; xx < N; xx++) cells[xx + ',' + yy] = 1; });
+      cols.forEach(function (xx) { for (var yy = 0; yy < N; yy++) cells[xx + ',' + yy] = 1; });
+      Object.keys(cells).forEach(function (k, i) {
+        var xy = k.split(',').map(Number), col = board[xy[1]][xy[0]];
+        flash.push({ x: xy[0], y: xy[1], col: col, t: 0, d: i * 0.012 });
+        board[xy[1]][xy[0]] = -1;
+      });
+      sfx.pop(lines, combo);
+      shake = Math.min(14, 4 + lines * 3);
+      var label = lines >= 3 ? 'AMAZING!' : lines === 2 ? 'DOUBLE!' : 'POP!';
+      floats.push({ text: label, sub: '+' + pts + (combo > 1 ? '  combo x' + combo : ''), x: L.bx + (gx + p.w / 2) * L.cs, y: L.by + (gy + p.h / 2) * L.cs, t: 0, big: true });
+    } else {
+      combo = 0;
+      floats.push({ text: '+' + gained, x: L.bx + (gx + p.w / 2) * L.cs, y: L.by + (gy + p.h / 2) * L.cs, t: 0 });
+    }
+    score += gained;
+    if (tray.every(function (q) { return q.used; })) deal();
+    var left = tray.filter(function (q) { return !q.used; });
+    if (!left.some(canFitAnywhere)) setTimeout(gameOver, 650);
+  }
+  function gameOver() {
+    if (over) return;
+    over = true; sfx.over();
+    var isNew = score > best;
+    if (isNew) { best = score; try { localStorage.setItem('gridpop.best', String(best)); } catch (e) {} }
+    document.getElementById('oScore').textContent = score;
+    document.getElementById('oBest').textContent = 'Best ' + best;
+    document.getElementById('oNew').classList.toggle('hidden', !isNew || !score);
+    document.getElementById('over').classList.remove('hidden');
+    document.getElementById('again').focus({ preventScroll: true });
+  }
+  document.getElementById('again').addEventListener('click', reset);
+
+  // --------------------------------------------------------------- layout
+  var L = {}, dpr = 1;
+  function layout() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var W = innerWidth, H = innerHeight;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    var cs = Math.floor(Math.min((W - 28) / N, (H - 100) / (N + 3.6)));
+    cs = Math.max(22, Math.min(cs, 64));
+    L = { W: W, H: H, cs: cs, bx: Math.round((W - cs * N) / 2), by: Math.round(Math.max(84, (H - cs * (N + 3.6)) / 2 + 40)) };
+    L.ty = L.by + cs * N + cs * 0.45; L.th = cs * 3; L.ts = cs * 0.66;
+  }
+  addEventListener('resize', function () { cache = {}; layout(); });
+
+  function slot(i) {
+    var w = Math.min(L.W, L.cs * N + 40) / 3, x0 = (L.W - w * 3) / 2;
+    return { x: x0 + w * i, y: L.ty, w: w, h: L.th };
+  }
+  function trayPos(p, i) {
+    var s = slot(i), ts = L.ts;
+    return { x: s.x + (s.w - p.w * ts) / 2, y: s.y + (s.h - p.h * ts) / 2, s: ts };
+  }
+
+  // --------------------------------------------------------------- input
+  function pt(e) { return { x: e.clientX, y: e.clientY }; }
+  cv.addEventListener('pointerdown', function (e) {
+    if (over) return;
+    var q = pt(e);
+    for (var i = 0; i < 3; i++) {
+      var p = tray[i]; if (p.used) continue;
+      var s = slot(i);
+      if (q.x >= s.x && q.x <= s.x + s.w && q.y >= s.y - 10 && q.y <= s.y + s.h + 10) {
+        var lift = e.pointerType === 'touch' ? L.cs * 1.6 : L.cs * 0.6;
+        drag = { i: i, p: p, x: q.x, y: q.y, lift: lift, gx: null, gy: null };
+        cv.setPointerCapture(e.pointerId); sfx.pick(); updateGhost(); return;
+      }
+    }
+  });
+  cv.addEventListener('pointermove', function (e) { if (!drag) return; var q = pt(e); drag.x = q.x; drag.y = q.y; updateGhost(); });
+  function endDrag() {
+    if (!drag) return;
+    if (drag.gx !== null) place(drag.p, drag.gx, drag.gy); else sfx.bad();
+    drag = null;
+  }
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', function () { drag = null; });
+  function dragOrigin() {
+    var p = drag.p, cs = L.cs;
+    return { x: drag.x - p.w * cs / 2, y: drag.y - drag.lift - p.h * cs / 2 };
+  }
+  function updateGhost() {
+    var o = dragOrigin(), gx = Math.round((o.x - L.bx) / L.cs), gy = Math.round((o.y - L.by) / L.cs);
+    if (fits(drag.p, gx, gy)) { drag.gx = gx; drag.gy = gy; } else { drag.gx = drag.gy = null; }
+  }
+
+  // --------------------------------------------------------------- drawing
+  function rr(x, y, w, h, r) { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+  // Faceted jewel tiles: a bright table in the middle, four bevels lit from the top-left,
+  // a diagonal glint and a dark rim. Each colour and size is drawn once and cached.
+  var COLORS3 = [
+    ['#ffb0b0', '#ff5a6e', '#a8173a'], ['#ffd59a', '#ff9a2e', '#b24d00'], ['#fff3a6', '#ffd23a', '#a87900'], ['#b5ffc4', '#3fd877', '#0f7a3c'],
+    ['#b3ecff', '#2fb5f5', '#0b5d9c'], ['#d2c9ff', '#7a68ff', '#3a24b0'], ['#ffc4ec', '#ff5cc4', '#a01a78']
+  ];
+  var cache = {};
+  function jewel(col, s) {
+    var key = col + ':' + Math.round(s * dpr);
+    if (cache[key]) return cache[key];
+    var px = Math.max(8, Math.round(s * dpr)), c = document.createElement('canvas'); c.width = c.height = px;
+    var x = c.getContext('2d'), k = COLORS3[col], m = px * 0.055, r = px * 0.16, inS = px * 0.24;
+    function path(pts) { x.beginPath(); x.moveTo(pts[0], pts[1]); for (var i = 2; i < pts.length; i += 2) x.lineTo(pts[i], pts[i + 1]); x.closePath(); }
+    // rim
+    x.fillStyle = k[2]; x.beginPath(); x.moveTo(m + r, m); x.arcTo(px - m, m, px - m, px - m, r); x.arcTo(px - m, px - m, m, px - m, r); x.arcTo(m, px - m, m, m, r); x.arcTo(m, m, px - m, m, r); x.fill();
+    var a = m + px * 0.04, b = px - a, i0 = inS, i1 = px - inS;
+    // bevels
+    var gt = x.createLinearGradient(0, a, 0, i0); gt.addColorStop(0, k[0]); gt.addColorStop(1, k[1]);
+    x.fillStyle = gt; path([a, a, b, a, i1, i0, i0, i0]); x.fill();                    // top
+    x.fillStyle = k[1]; path([a, a, i0, i0, i0, i1, a, b]); x.fill();                    // left
+    x.globalAlpha = 0.85; x.fillStyle = k[2]; path([b, a, b, b, i1, i1, i1, i0]); x.fill(); // right
+    x.globalAlpha = 1; x.fillStyle = k[2]; path([a, b, i0, i1, i1, i1, b, b]); x.fill();  // bottom
+    x.fillStyle = 'rgba(0,0,0,.18)'; path([a, b, i0, i1, i1, i1, b, b]); x.fill();
+    // table
+    var tg = x.createLinearGradient(i0, i0, i1, i1); tg.addColorStop(0, k[0]); tg.addColorStop(0.55, k[1]); tg.addColorStop(1, k[1]);
+    x.fillStyle = tg; x.fillRect(i0, i0, i1 - i0, i1 - i0);
+    // glint across the table and top bevel
+    x.save(); x.beginPath(); x.rect(a, a, b - a, b - a); x.clip();
+    x.fillStyle = 'rgba(255,255,255,.42)'; path([i0, i0 + px * 0.16, i0 + px * 0.16, i0, i0 + px * 0.26, i0, i0, i0 + px * 0.26]); x.fill();
+    x.fillStyle = 'rgba(255,255,255,.55)'; x.fillRect(a + px * 0.08, a + px * 0.03, px * 0.22, px * 0.045);
+    x.restore();
+    // facet edges
+    x.strokeStyle = 'rgba(255,255,255,.22)'; x.lineWidth = Math.max(1, px * 0.012);
+    x.beginPath(); x.moveTo(a, a); x.lineTo(i0, i0); x.moveTo(b, a); x.lineTo(i1, i0); x.moveTo(a, b); x.lineTo(i0, i1); x.moveTo(b, b); x.lineTo(i1, i1); x.stroke();
+    return (cache[key] = c);
+  }
+  function tile(x, y, s, col, alpha) {
+    g.globalAlpha = alpha === undefined ? 1 : alpha;
+    g.drawImage(jewel(col, s), x, y, s, s);
+    g.globalAlpha = 1;
+  }
+  // four-point twinkle star
+  function star(x, y, r, a, col) {
+    g.save(); g.globalAlpha = a; g.fillStyle = col || '#fff'; g.translate(x, y);
+    g.beginPath(); g.moveTo(0, -r); g.quadraticCurveTo(0, 0, r, 0); g.quadraticCurveTo(0, 0, 0, r); g.quadraticCurveTo(0, 0, -r, 0); g.quadraticCurveTo(0, 0, 0, -r); g.fill();
+    g.restore();
+  }
+
+  // ------------------------------------------------------------ scenery
+  var BOKEH = [], STARS = [];
+  for (var bi = 0; bi < 26; bi++) BOKEH.push({ x: Math.random(), y: Math.random(), r: 20 + Math.random() * 70, sp: 0.004 + Math.random() * 0.012, hue: [280, 320, 200, 45, 170][bi % 5], ph: Math.random() * 6 });
+  for (bi = 0; bi < 90; bi++) STARS.push({ x: Math.random(), y: Math.random(), s: Math.random() < 0.15 ? 2 : 1, ph: Math.random() * 6 });
+  function drawBg() {
+    var W = L.W, H = L.H, bg = g.createLinearGradient(0, 0, W * 0.4, H);
+    bg.addColorStop(0, '#1b0f3d'); bg.addColorStop(0.5, '#2a1660'); bg.addColorStop(1, '#0b1b46');
+    g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    STARS.forEach(function (s0) { g.globalAlpha = 0.35 + 0.35 * Math.sin(t * 2 + s0.ph); g.fillStyle = '#fff'; g.fillRect(s0.x * W, s0.y * H, s0.s, s0.s); });
+    g.globalAlpha = 1;
+    // aurora ribbons
+    g.globalCompositeOperation = 'lighter';
+    [['rgba(80,255,200,', 0.22, 0.0], ['rgba(170,90,255,', 0.3, 2.1], ['rgba(255,90,180,', 0.42, 4.2]].forEach(function (A) {
+      var yb = H * A[1];
+      g.beginPath(); g.moveTo(0, yb);
+      for (var x = 0; x <= W; x += 24) g.lineTo(x, yb + Math.sin(x / W * 5 + t * 0.4 + A[2]) * H * 0.05 + Math.sin(x / W * 13 - t * 0.3) * H * 0.015);
+      for (x = W; x >= 0; x -= 24) g.lineTo(x, yb + H * 0.14 + Math.sin(x / W * 4 + t * 0.35 + A[2] + 1) * H * 0.04);
+      g.closePath();
+      var ag = g.createLinearGradient(0, yb - H * 0.05, 0, yb + H * 0.18); ag.addColorStop(0, A[0] + '0)'); ag.addColorStop(0.45, A[0] + '.13)'); ag.addColorStop(1, A[0] + '0)');
+      g.fillStyle = ag; g.fill();
+    });
+    BOKEH.forEach(function (b) {
+      b.y -= b.sp * 0.016; if (b.y < -0.15) { b.y = 1.15; b.x = Math.random(); }
+      var x = b.x * W + Math.sin(t * 0.3 + b.ph) * 30, y = b.y * H, rg = g.createRadialGradient(x, y, 0, x, y, b.r);
+      rg.addColorStop(0, 'hsla(' + b.hue + ',100%,70%,.13)'); rg.addColorStop(0.6, 'hsla(' + b.hue + ',100%,60%,.05)'); rg.addColorStop(1, 'hsla(' + b.hue + ',100%,60%,0)');
+      g.fillStyle = rg; g.beginPath(); g.arc(x, y, b.r, 0, 7); g.fill();
+    });
+    g.globalCompositeOperation = 'source-over';
+  }
+  function drawFrame() {
+    var cs = L.cs, B = cs * N, x = L.bx - 12, y = L.by - 12, w = B + 24;
+    // outer glow + animated gradient rim
+    g.save(); g.shadowColor = 'rgba(190,110,255,.55)'; g.shadowBlur = 34;
+    var rim = g.createLinearGradient(x, y, x + w, y + w), sh = (Math.sin(t * 0.7) + 1) / 2;
+    rim.addColorStop(0, '#5ef0ff'); rim.addColorStop(0.35 + sh * 0.2, '#b26bff'); rim.addColorStop(0.75, '#ff5cc4'); rim.addColorStop(1, '#ffcf3f');
+    g.fillStyle = rim; rr(x, y, w, w, 22); g.fill(); g.restore();
+    // glass well
+    var well = g.createLinearGradient(0, y, 0, y + w); well.addColorStop(0, '#1a1347'); well.addColorStop(1, '#0d0a2c');
+    g.fillStyle = well; rr(x + 4, y + 4, w - 8, w - 8, 18); g.fill();
+    g.fillStyle = 'rgba(255,255,255,.05)'; rr(x + 6, y + 6, w - 12, w * 0.12, 14); g.fill();
+    // corner gems
+    [[x, y], [x + w, y], [x, y + w], [x + w, y + w]].forEach(function (c, i) {
+      g.save(); g.translate(c[0], c[1]); g.rotate(Math.PI / 4);
+      var s0 = 11, gg = g.createLinearGradient(-s0, -s0, s0, s0); gg.addColorStop(0, '#fff6c0'); gg.addColorStop(1, ['#ffb321', '#ff5cc4', '#5ef0ff', '#b26bff'][i]);
+      g.fillStyle = gg; g.fillRect(-s0 / 1.4, -s0 / 1.4, s0 * 1.4, s0 * 1.4); g.strokeStyle = 'rgba(40,10,70,.7)'; g.lineWidth = 2; g.strokeRect(-s0 / 1.4, -s0 / 1.4, s0 * 1.4, s0 * 1.4);
+      g.restore();
+    });
+  }
+  function drawLogo() {
+    var fs = Math.round(Math.min(34, Math.max(22, L.W * 0.05))), y = L.by - 12 - Math.min(56, L.cs * 0.9 + 10) - 26;
+    if (y < fs + 2) return;
+    g.save(); g.font = '800 ' + fs + 'px "Baloo 2", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+    var w = g.measureText('GRID POP').width, lg = g.createLinearGradient(L.W / 2 - w / 2, 0, L.W / 2 + w / 2, 0);
+    lg.addColorStop(0, '#5ef0ff'); lg.addColorStop(0.5, '#ff7fd1'); lg.addColorStop(1, '#ffcf3f');
+    g.lineWidth = 6; g.strokeStyle = 'rgba(30,8,60,.9)'; g.strokeText('GRID POP', L.W / 2, y);
+    g.fillStyle = lg; g.fillText('GRID POP', L.W / 2, y);
+    g.restore();
+  }
+  function piece(p, x, y, s, alpha) { p.cells.forEach(function (c) { tile(x + c[0] * s, y + c[1] * s, s, p.col, alpha); }); }
+
+  var t = 0, last = performance.now();
+  function frame(now) {
+    var dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, L.W, L.H);
+    var sx = 0, sy = 0;
+    if (shake > 0) { sx = (Math.random() - 0.5) * shake; sy = (Math.random() - 0.5) * shake; shake = Math.max(0, shake - dt * 40); }
+    drawBg();
+    g.save(); g.translate(sx, sy);
+    drawLogo();
+
+    // header
+    shown += (score - shown) * Math.min(1, dt * 10); if (Math.abs(score - shown) < 0.5) shown = score;
+    var fs = Math.round(Math.min(56, L.cs * 0.9 + 10));
+    g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.font = '800 ' + fs + 'px "Baloo 2", sans-serif';
+    g.lineWidth = 7; g.strokeStyle = 'rgba(30,8,60,.85)'; g.strokeText(Math.round(shown), L.W / 2, L.by - 22);
+    g.fillStyle = '#fff'; g.fillText(Math.round(shown), L.W / 2, L.by - 22);
+    g.font = '700 16px "Baloo 2", sans-serif'; g.textAlign = 'left'; g.fillStyle = '#ffcf3f'; g.fillText('BEST ' + best, L.bx - 4, 34);
+    g.textAlign = 'center';
+    if (combo > 1) { g.fillStyle = '#ff7fd1'; g.fillText('combo x' + combo, L.W / 2, L.by - 22 - fs - 2); }
+
+    // board
+    var cs = L.cs, B = cs * N;
+    drawFrame();
+    for (var y = 0; y < N; y++) for (var x = 0; x < N; x++) {
+      g.fillStyle = (x + y) % 2 ? 'rgba(140,120,255,.07)' : 'rgba(140,120,255,.11)';
+      rr(L.bx + x * cs + 2, L.by + y * cs + 2, cs - 4, cs - 4, cs * 0.18); g.fill();
+      g.fillStyle = 'rgba(0,0,0,.25)'; rr(L.bx + x * cs + 2, L.by + y * cs + 2, cs - 4, cs * 0.12, cs * 0.1); g.fill();
+    }
+    // placed jewels, each with an occasional twinkle
+    for (y = 0; y < N; y++) for (x = 0; x < N; x++) if (board[y][x] >= 0) {
+      tile(L.bx + x * cs, L.by + y * cs, cs, board[y][x]);
+      var tw = Math.sin(t * 1.3 + x * 1.7 + y * 2.9);
+      if (tw > 0.985) star(L.bx + (x + 0.3) * cs, L.by + (y + 0.3) * cs, cs * 0.28 * (tw - 0.985) / 0.015, 0.9);
+    }
+    // ghost + lines that would clear
+    if (drag && drag.gx !== null) {
+      var p = drag.p, tmp = board.map(function (r) { return r.slice(); });
+      p.cells.forEach(function (c) { tmp[drag.gy + c[1]][drag.gx + c[0]] = p.col; });
+      g.fillStyle = 'rgba(255,255,255,.18)';
+      for (y = 0; y < N; y++) if (tmp[y].every(function (v) { return v >= 0; })) { rr(L.bx, L.by + y * cs, B, cs, 8); g.fill(); }
+      for (x = 0; x < N; x++) { var full = true; for (y = 0; y < N; y++) if (tmp[y][x] < 0) full = false; if (full) { rr(L.bx + x * cs, L.by, cs, B, 8); g.fill(); } }
+      piece(p, L.bx + drag.gx * cs, L.by + drag.gy * cs, cs, 0.38);
+    }
+    // clearing cells: flash white then burst
+    for (var i = flash.length - 1; i >= 0; i--) {
+      var f = flash[i]; f.t += dt;
+      var k = f.t - f.d; if (k < 0) { tile(L.bx + f.x * cs, L.by + f.y * cs, cs, f.col); continue; }
+      if (k < 0.16) {
+        var sc = 1 + k * 1.5, cx = L.bx + (f.x + 0.5) * cs, cy = L.by + (f.y + 0.5) * cs;
+        tile(cx - cs * sc / 2, cy - cs * sc / 2, cs * sc, f.col, 1 - k / 0.16);
+        g.fillStyle = 'rgba(255,255,255,' + (0.8 - k * 5) + ')'; rr(cx - cs * sc / 2, cy - cs * sc / 2, cs * sc, cs * sc, cs * 0.2); g.fill();
+      } else {
+        for (var n = 0; n < 6; n++) parts.push({ x: L.bx + (f.x + 0.5) * cs, y: L.by + (f.y + 0.5) * cs, vx: (Math.random() - 0.5) * 420, vy: -Math.random() * 420 - 60, life: 0.9, col: COLORS3[f.col][n % 2 ? 0 : 1], s: 3 + Math.random() * 6, star: n < 2 });
+        rings.push({ x: L.bx + (f.x + 0.5) * cs, y: L.by + (f.y + 0.5) * cs, t: 0, col: COLORS3[f.col][0] });
+        flash.splice(i, 1);
+      }
+    }
+
+    // tray: glass pods
+    for (i = 0; i < 3; i++) {
+      var sl = slot(i), pw = Math.min(sl.w - 12, L.cs * 3.3);
+      var pg = g.createLinearGradient(0, sl.y, 0, sl.y + sl.h); pg.addColorStop(0, 'rgba(255,255,255,.10)'); pg.addColorStop(1, 'rgba(255,255,255,.03)');
+      g.fillStyle = pg; rr(sl.x + (sl.w - pw) / 2, sl.y + 4, pw, sl.h - 8, 18); g.fill();
+      g.strokeStyle = 'rgba(255,255,255,.12)'; g.lineWidth = 1.5; g.stroke();
+    }
+    for (i = 0; i < 3; i++) {
+      var q = tray[i], s = slot(i);
+      if (q.used || (drag && drag.i === i)) continue;
+      q.pop = Math.min(1, q.pop + dt * 5);
+      if (q.pop <= 0) continue;
+      var tp = trayPos(q, i), e = q.pop < 1 ? 1 + Math.sin(q.pop * Math.PI) * 0.15 : 1, ok = canFitAnywhere(q);
+      g.save(); g.translate(tp.x + q.w * tp.s / 2, tp.y + q.h * tp.s / 2); g.scale(e * q.pop, e * q.pop);
+      piece(q, -q.w * tp.s / 2, -q.h * tp.s / 2, tp.s, ok ? 1 : 0.35);
+      g.restore();
+      void s;
+    }
+    // dragged piece
+    if (drag) { var o = dragOrigin(); g.save(); g.shadowColor = 'rgba(0,0,0,.4)'; g.shadowBlur = 18; g.shadowOffsetY = 10; piece(drag.p, o.x, o.y, cs, 0.95); g.restore(); }
+
+    // particles
+    for (i = parts.length - 1; i >= 0; i--) {
+      var pp = parts[i]; pp.life -= dt; if (pp.life <= 0) { parts.splice(i, 1); continue; }
+      pp.vy += 900 * dt; pp.x += pp.vx * dt; pp.y += pp.vy * dt;
+      if (pp.star) star(pp.x, pp.y, pp.s * 1.6, Math.min(1, pp.life * 2), '#fff8d0');
+      else { g.globalAlpha = Math.min(1, pp.life * 2); g.fillStyle = pp.col; g.save(); g.translate(pp.x, pp.y); g.rotate(pp.life * 8); g.fillRect(-pp.s / 2, -pp.s / 2, pp.s, pp.s); g.restore(); }
+    }
+    g.globalAlpha = 1;
+    for (i = rings.length - 1; i >= 0; i--) {
+      var rg = rings[i]; rg.t += dt; if (rg.t > 0.45) { rings.splice(i, 1); continue; }
+      g.globalAlpha = 1 - rg.t / 0.45; g.strokeStyle = rg.col; g.lineWidth = 3;
+      g.beginPath(); g.arc(rg.x, rg.y, L.cs * (0.3 + rg.t * 2.2), 0, 7); g.stroke();
+    }
+    g.globalAlpha = 1;
+    // floating text
+    for (i = floats.length - 1; i >= 0; i--) {
+      var fl = floats[i]; fl.t += dt; if (fl.t > 1.2) { floats.splice(i, 1); continue; }
+      var a = fl.t < 0.9 ? 1 : 1 - (fl.t - 0.9) / 0.3, sz = fl.big ? (fl.t < 0.15 ? 0.6 + fl.t * 3.3 : 1.1 - Math.min(0.1, (fl.t - 0.15))) : 1;
+      g.globalAlpha = a; g.textAlign = 'center';
+      g.font = '800 ' + Math.round((fl.big ? 40 : 24) * sz) + 'px "Baloo 2", sans-serif';
+      g.lineWidth = 6; g.strokeStyle = 'rgba(30,10,60,.8)'; g.strokeText(fl.text, fl.x, fl.y - fl.t * 50);
+      g.fillStyle = fl.big ? '#ffcf3f' : '#fff'; g.fillText(fl.text, fl.x, fl.y - fl.t * 50);
+      if (fl.sub) { g.font = '700 18px "Baloo 2", sans-serif'; g.lineWidth = 4; g.strokeText(fl.sub, fl.x, fl.y - fl.t * 50 + 26); g.fillStyle = '#fff'; g.fillText(fl.sub, fl.x, fl.y - fl.t * 50 + 26); }
+    }
+    g.globalAlpha = 1;
+    g.restore();
+    requestAnimationFrame(frame);
+  }
+
+  layout(); reset();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

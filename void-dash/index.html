@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>Void Dash</title>
+<meta name="description" content="Steer a neon-edged cube through the holes in glowing walls rushing out of the void. It keeps getting faster." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;800;900&display=swap" rel="stylesheet" />
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root { --c: #2ff3ff; }
+  html, body { height: 100%; overflow: hidden; background: #020205; }
+  body { font-family: 'Orbitron', system-ui, sans-serif; color: #fff; user-select: none; -webkit-user-select: none; touch-action: none; cursor: crosshair; }
+  canvas#gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .hidden { display: none !important; }
+  .neon { color: #fff; text-shadow: 0 0 6px var(--c), 0 0 18px var(--c), 0 0 42px var(--c); }
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 3; }
+  #score { position: absolute; left: 50%; top: 14px; transform: translateX(-50%); font-size: 44px; font-weight: 900; }
+  #lvl { position: absolute; left: 18px; top: 18px; font-size: 14px; letter-spacing: .2em; color: var(--c); }
+  #best { position: absolute; right: 18px; top: 18px; font-size: 14px; letter-spacing: .2em; color: #9aa; }
+  #msg { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%); font-size: clamp(22px, 4.5vw, 44px); font-weight: 900; letter-spacing: .12em; opacity: 0; white-space: nowrap; }
+  #msg.on { animation: msg 1.3s ease forwards; }
+  @keyframes msg { 0% { opacity: 0; transform: translate(-50%, -50%) scale(1.6); } 15% { opacity: 1; transform: translate(-50%, -50%) scale(1); } 70% { opacity: 1; } 100% { opacity: 0; } }
+  #tip { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); font-size: 12px; letter-spacing: .15em; color: #9ab; transition: opacity 1s; white-space: nowrap; }
+  #tip.gone { opacity: 0; }
+  .screen { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: 20px; text-align: center; background: radial-gradient(ellipse at center, rgba(2,2,8,.35), rgba(2,2,8,.85)); }
+  .logo { font-weight: 900; font-size: clamp(48px, 11vw, 120px); line-height: .95; letter-spacing: .06em; }
+  .logo span { display: block; font-size: .5em; letter-spacing: .5em; margin-top: 6px; }
+  .tag { max-width: 520px; font-size: 14px; line-height: 1.7; color: #b8c8d8; font-family: system-ui, sans-serif; }
+  .btn { font: inherit; font-weight: 800; font-size: 20px; letter-spacing: .25em; color: #fff; cursor: pointer; background: transparent; padding: 14px 40px 14px 46px;
+    border: 2px solid var(--c); border-radius: 4px; box-shadow: 0 0 14px var(--c), inset 0 0 14px var(--c); text-shadow: 0 0 10px var(--c); transition: background .15s; }
+  .btn:hover { background: rgba(47,243,255,.12); }
+  .btn:focus-visible { outline: 2px solid #fff; outline-offset: 6px; }
+  .box { border: 2px solid var(--c); box-shadow: 0 0 18px var(--c), inset 0 0 22px rgba(47,243,255,.25); background: rgba(0,0,0,.75); padding: 22px 34px; min-width: min(340px, 88vw); }
+  .box h2 { font-size: 30px; font-weight: 900; letter-spacing: .12em; }
+  .box .grid { display: grid; grid-template-columns: 1fr auto; gap: 8px 26px; margin-top: 14px; font-size: 15px; letter-spacing: .1em; text-align: left; color: #b8c8d8; }
+  .box .grid b { color: #fff; }
+  #mute { position: fixed; right: 16px; bottom: 16px; z-index: 5; width: 40px; height: 40px; border-radius: 4px; border: 2px solid var(--c); background: #000; color: #fff; font-size: 16px; cursor: pointer; box-shadow: 0 0 10px var(--c); }
+</style>
+<script type="importmap">{ "imports": { "three": "/sky-strike/vendor/three/build/three.module.js", "three/addons/": "/sky-strike/vendor/three/examples/jsm/" } }</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="hud" class="hidden">
+  <div id="lvl">LEVEL 1</div>
+  <div id="score" class="neon">0</div>
+  <div id="best"></div>
+  <div id="msg" class="neon"></div>
+  <div id="tip">MOVE THE MOUSE · ARROWS / WASD · DRAG ON TOUCH SCREENS</div>
+</div>
+<button id="mute" type="button" aria-label="Mute sound">🔊</button>
+<div id="title" class="screen">
+  <div class="logo neon">VOID<span>DASH</span></div>
+  <p class="tag">You are a cube in the void. Walls are coming, each with a way through. Line yourself up with the hole and slip past. Every ten walls the colour shifts and the speed climbs.</p>
+  <button class="btn" id="play" type="button">PLAY</button>
+</div>
+<div id="over" class="screen hidden">
+  <div class="box" role="dialog" aria-label="Run over">
+    <h2 class="neon">SHATTERED</h2>
+    <div class="grid"><span>WALLS</span><b id="oScore">0</b><span>LEVEL</span><b id="oLvl">1</b><span>BEST</span><b id="oBest">0</b></div>
+  </div>
+  <button class="btn" id="again" type="button">RETRY</button>
+</div>
+<div id="paused" class="screen hidden"><div class="logo neon" style="font-size:54px">PAUSED</div><button class="btn" id="resume" type="button">RESUME</button></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+const $ = id => document.getElementById(id);
+const rand = (a, b) => a + Math.random() * (b - a);
+
+// ---------------------------------------------------------------- renderer + glow
+const renderer = new THREE.WebGLRenderer({ canvas: $('gl'), antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#020205'); scene.fog = new THREE.Fog('#020205', 30, 120);
+const camera = new THREE.PerspectiveCamera(70, 1, 0.1, 300);
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth / 2, innerHeight / 2), 0.85, 0.35, 0.25);
+composer.addPass(bloom); composer.addPass(new OutputPass());
+function resize() { renderer.setSize(innerWidth, innerHeight, false); composer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.fov = camera.aspect < 0.8 ? 88 : 70; camera.updateProjectionMatrix(); }
+addEventListener('resize', resize); resize();
+
+// ---------------------------------------------------------------- palette (shifts every 10 walls)
+const THEMES = ['#2ff3ff', '#ff3df0', '#7dff3a', '#ffae2f', '#9a6bff', '#ff3b5c', '#3dffb8', '#ffffff'];
+const glow = new THREE.MeshBasicMaterial({ color: THEMES[0], toneMapped: false });
+const glowSoft = new THREE.LineBasicMaterial({ color: THEMES[0], transparent: true, opacity: 0.13, toneMapped: false });
+const glowCube = new THREE.MeshBasicMaterial({ color: '#dffcff', toneMapped: false });
+const black = new THREE.MeshBasicMaterial({ color: '#000000' });
+let themeCol = new THREE.Color(THEMES[0]), themeTarget = new THREE.Color(THEMES[0]);
+
+// neon edges: 12 thin bars around a box, so lines are thick enough to glow
+const bar = new THREE.BoxGeometry(1, 1, 1);
+function neonBox(w, h, d, t, mat) {
+  const g = new THREE.Group(), add = (x, y, z, sx, sy, sz) => { const m = new THREE.Mesh(bar, mat); m.position.set(x, y, z); m.scale.set(sx, sy, sz); g.add(m); };
+  for (const y of [-h / 2, h / 2]) for (const z of [-d / 2, d / 2]) add(0, y, z, w + t, t, t);
+  for (const x of [-w / 2, w / 2]) for (const z of [-d / 2, d / 2]) add(x, 0, z, t, h + t, t);
+  for (const x of [-w / 2, w / 2]) for (const y of [-h / 2, h / 2]) add(x, y, 0, t, t, d + t);
+  return g;
+}
+
+// ---------------------------------------------------------------- tunnel
+const COLS = 9, ROWS = 6, X0 = -COLS / 2, Y0 = -ROWS / 2;          // play area: x -4.5..4.5, y -3..3
+const tunnel = new THREE.Group(); scene.add(tunnel);
+{
+  const pts = [], L = 160;
+  for (let z = 0; z >= -L; z -= 4) {               // ribs around the tunnel every 4 units
+    pts.push(X0 - 0.5, Y0 - 0.5, z, -X0 + 0.5, Y0 - 0.5, z, -X0 + 0.5, Y0 - 0.5, z, -X0 + 0.5, -Y0 + 0.5, z, -X0 + 0.5, -Y0 + 0.5, z, X0 - 0.5, -Y0 + 0.5, z, X0 - 0.5, -Y0 + 0.5, z, X0 - 0.5, Y0 - 0.5, z);
+  }
+  for (let x = X0; x <= -X0 + 0.01; x += 1.5) pts.push(x, Y0 - 0.5, 0, x, Y0 - 0.5, -L);   // floor rails
+  for (let y = Y0; y <= -Y0 + 0.01; y += 1.5) pts.push(X0 - 0.5, y, 0, X0 - 0.5, y, -L, -X0 + 0.5, y, 0, -X0 + 0.5, y, -L);
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  tunnel.add(new THREE.LineSegments(geo, glowSoft));
+}
+// starfield far away
+{
+  const p = []; for (let i = 0; i < 1500; i++) { const a = rand(0, Math.PI * 2), r = rand(25, 90); p.push(Math.cos(a) * r, Math.sin(a) * r, rand(-250, 0)); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+  var stars = new THREE.Points(g, new THREE.PointsMaterial({ color: '#8fb8ff', size: 0.25, sizeAttenuation: true, toneMapped: false })); scene.add(stars);
+}
+// speed streaks
+const streaks = []; const streakMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.35, toneMapped: false });
+for (let i = 0; i < 40; i++) { const m = new THREE.Mesh(bar, streakMat); m.scale.set(0.03, 0.03, rand(2, 5)); scene.add(m); streaks.push(m); }
+
+// ---------------------------------------------------------------- player cube
+const S = 0.8;
+const cube = new THREE.Group();
+cube.add(new THREE.Mesh(new THREE.BoxGeometry(S, S, S), black));
+cube.add(neonBox(S, S, S, 0.07, glowCube));
+const core = new THREE.Mesh(new THREE.BoxGeometry(S * 0.3, S * 0.3, S * 0.3), glow); cube.add(core);
+scene.add(cube);
+const trail = []; for (let i = 0; i < 6; i++) { const t = neonBox(S, S, S, 0.03, new THREE.MeshBasicMaterial({ color: THEMES[0], transparent: true, opacity: 0.1 * (1 - i / 10), toneMapped: false })); scene.add(t); trail.push(t); }
+
+// ---------------------------------------------------------------- walls
+const walls = [];
+function holePatterns(lv) {
+  // holes as lists of [col,row,w,h] rectangles in grid cells; tighter with level
+  const big = Math.max(1, 3 - Math.floor(lv / 2)), out = [];
+  const rc = (w, h) => [Math.floor(rand(0, COLS - w + 1)), Math.floor(rand(0, ROWS - h + 1)), w, h];
+  const r = Math.random();
+  if (lv === 0 || r < 0.3) out.push(rc(big + 1, big));
+  else if (r < 0.5) out.push(rc(big, big + 1));
+  else if (r < 0.68) { const a = rc(big, big); out.push(a, [a[0], Math.min(ROWS - 1, a[1] + big), Math.min(COLS - a[0], big + 2), 1]); }   // L / T shape
+  else if (r < 0.84) { out.push(rc(1, ROWS), [0, Math.floor(rand(0, ROWS)), COLS, 1]); out.length = 1; out.push(rc(big, big)); }       // pick one of two
+  else out.push(rc(big, big));
+  return out;
+}
+function buildWall(z, lv) {
+  const holes = holePatterns(lv), filled = [];
+  for (let r = 0; r < ROWS; r++) { filled.push([]); for (let c = 0; c < COLS; c++) filled[r].push(!holes.some(([hc, hr, hw, hh]) => c >= hc && c < hc + hw && r >= hr && r < hr + hh)); }
+  const g = new THREE.Group(), D = 0.6, T = 0.09;
+  // black fill, one box per horizontal run of solid cells
+  for (let r = 0; r < ROWS; r++) {
+    let c = 0;
+    while (c < COLS) {
+      if (!filled[r][c]) { c++; continue; }
+      let e = c; while (e < COLS && filled[r][e]) e++;
+      const m = new THREE.Mesh(bar, black); m.scale.set(e - c, 1, D); m.position.set(X0 + (c + e) / 2, Y0 + r + 0.5, 0); g.add(m);
+      c = e;
+    }
+  }
+  // glowing outline: every edge between solid and open (or the wall's border), on both faces, plus depth bars at hole corners
+  const edge = (x1, y1, x2, y2) => {
+    for (const fz of [D / 2, -D / 2]) { const m = new THREE.Mesh(bar, glow); m.position.set((x1 + x2) / 2, (y1 + y2) / 2, fz); m.scale.set(Math.max(T, Math.abs(x2 - x1) + T), Math.max(T, Math.abs(y2 - y1) + T), T); g.add(m); }
+  };
+  const solid = (c, r) => r >= 0 && r < ROWS && c >= 0 && c < COLS && filled[r][c];
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    if (!filled[r][c]) continue;
+    const x = X0 + c, y = Y0 + r;
+    if (!solid(c, r + 1)) edge(x, y + 1, x + 1, y + 1);
+    if (!solid(c, r - 1)) edge(x, y, x + 1, y);
+    if (!solid(c - 1, r)) edge(x, y, x, y + 1);
+    if (!solid(c + 1, r)) edge(x + 1, y, x + 1, y + 1);
+  }
+  for (let r = 0; r <= ROWS; r++) for (let c = 0; c <= COLS; c++) {
+    const n = [solid(c - 1, r - 1), solid(c, r - 1), solid(c - 1, r), solid(c, r)].filter(Boolean).length;
+    const inner = c > 0 && c < COLS && r > 0 && r < ROWS;
+    if (inner && (n === 1 || n === 3 || (n === 2 && solid(c - 1, r - 1) === solid(c, r)))) { const m = new THREE.Mesh(bar, glow); m.position.set(X0 + c, Y0 + r, 0); m.scale.set(T, T, D + T); g.add(m); }
+  }
+  g.position.z = z; scene.add(g);
+  const moving = lv >= 2 && Math.random() < Math.min(0.5, 0.15 + lv * 0.05);
+  walls.push({ g, z, filled, passed: false, moving, ph: rand(0, 6), amp: moving ? rand(0.6, 1.4) : 0, tight: holes.every(h => h[2] === 1 || h[3] === 1) });
+}
+
+// ---------------------------------------------------------------- shards
+const shards = [];
+function shatter(p) {
+  for (let i = 0; i < 26; i++) {
+    const s = neonBox(0.25, 0.25, 0.25, 0.04, i % 2 ? glowCube : glow); s.position.copy(p).add(new THREE.Vector3(rand(-0.4, 0.4), rand(-0.4, 0.4), rand(-0.4, 0.4))); scene.add(s);
+    shards.push({ m: s, v: new THREE.Vector3(rand(-7, 7), rand(-5, 9), rand(2, 12)), r: new THREE.Vector3(rand(-9, 9), rand(-9, 9), rand(-9, 9)), t: 0 });
+  }
+}
+
+// ---------------------------------------------------------------- sound
+let ac = null, muted = false; try { muted = localStorage.getItem('voiddash.muted') === '1'; } catch (e) {}
+function A() { if (muted) return null; try { ac = ac || new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; } if (ac.state === 'suspended') ac.resume(); return ac; }
+function tone(f1, f2, d, type, v, delay = 0) { const a = A(); if (!a) return; const t = a.currentTime + delay, o = a.createOscillator(), g = a.createGain(); o.type = type; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t + d); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d); o.connect(g).connect(a.destination); o.start(t); o.stop(t + d + 0.02); }
+const sfx = { pass: n => tone(440 + (n % 10) * 40, 880 + (n % 10) * 60, 0.12, 'sine', 0.06), tight: () => { tone(988, 1976, 0.1, 'square', 0.05); tone(1319, 2637, 0.14, 'square', 0.04, 0.06); }, level: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, f, 0.14, 'sawtooth', 0.05, i * 0.07)), crash: () => { tone(300, 40, 0.7, 'sawtooth', 0.14); tone(90, 30, 0.8, 'square', 0.1); } };
+function muteIcon() { $('mute').textContent = muted ? '🔇' : '🔊'; $('mute').setAttribute('aria-label', muted ? 'Unmute sound' : 'Mute sound'); }
+$('mute').addEventListener('click', () => { muted = !muted; try { localStorage.setItem('voiddash.muted', muted ? '1' : '0'); } catch (e) {} muteIcon(); }); muteIcon();
+
+// ---------------------------------------------------------------- state
+let state = 'title', paused = false, P, score, lv, speed, nextWallZ, shake = 0, best = 0;
+try { best = parseInt(localStorage.getItem('voiddash.best'), 10) || 0; } catch (e) {}
+function setTheme(i) { themeTarget.set(THEMES[i % THEMES.length]); document.documentElement.style.setProperty('--c', THEMES[i % THEMES.length]); }
+function reset() {
+  for (const w of walls) scene.remove(w.g); walls.length = 0;
+  for (const s of shards) scene.remove(s.m); shards.length = 0;
+  P = { x: 0, y: 0, z: 0, tx: 0, ty: 0, alive: true };
+  score = 0; lv = 0; speed = 16; nextWallZ = -38; setTheme(0);
+  cube.visible = true; cube.rotation.set(0, 0, 0);
+  for (let i = 0; i < 6; i++) { buildWall(nextWallZ, 0); nextWallZ -= 26; }
+  $('score').textContent = '0'; $('lvl').textContent = 'LEVEL 1'; $('best').textContent = best ? 'BEST ' + best : '';
+}
+function flash(t) { const m = $('msg'); m.textContent = t; m.classList.remove('on'); void m.offsetWidth; m.classList.add('on'); }
+function start() { A(); $('title').classList.add('hidden'); $('over').classList.add('hidden'); $('hud').classList.remove('hidden'); const tip = $('tip'); tip.classList.remove('gone'); setTimeout(() => tip.classList.add('gone'), 5000); reset(); state = 'play'; paused = false; }
+$('play').addEventListener('click', start); $('again').addEventListener('click', start);
+function setPause(on) { paused = on; $('paused').classList.toggle('hidden', !on); }
+$('resume').addEventListener('click', () => setPause(false));
+document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play') setPause(true); });
+
+// ---------------------------------------------------------------- input
+const keys = new Set(); let mouseOn = false, mx = 0, my = 0, drag = null;
+addEventListener('keydown', e => { keys.add(e.code); if (['KeyP', 'Escape'].includes(e.code) && state === 'play') setPause(!paused); if (e.code.startsWith('Arrow')) { e.preventDefault(); mouseOn = false; } if (['KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) mouseOn = false; });
+addEventListener('keyup', e => keys.delete(e.code));
+addEventListener('pointermove', e => {
+  if (e.pointerType === 'mouse') { mouseOn = true; mx = (e.clientX / innerWidth) * 2 - 1; my = -((e.clientY / innerHeight) * 2 - 1); }
+  else if (drag && P) { P.tx = drag.x + (e.clientX - drag.cx) / innerWidth * 14; P.ty = drag.y - (e.clientY - drag.cy) / innerHeight * 10; }
+});
+addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse' && P) { mouseOn = false; drag = { cx: e.clientX, cy: e.clientY, x: P.tx, y: P.ty }; } });
+addEventListener('pointerup', () => { drag = null; });
+
+// ---------------------------------------------------------------- update
+const LX = -X0 - S / 2, LY = -Y0 - S / 2;
+function crash() {
+  P.alive = false; state = 'dead'; cube.visible = false; shatter(cube.position); sfx.crash(); shake = 1.4;
+  if (score > best) { best = score; try { localStorage.setItem('voiddash.best', String(best)); } catch (e) {} }
+  $('oScore').textContent = score; $('oLvl').textContent = lv + 1; $('oBest').textContent = best;
+  setTimeout(() => { state = 'over'; $('over').classList.remove('hidden'); $('again').focus({ preventScroll: true }); }, 1100);
+}
+function update(dt, T) {
+  speed = Math.min(42, 16 + score * 0.32);
+  P.z -= speed * dt;
+  // steering
+  if (mouseOn) { P.tx = mx * LX * 1.15; P.ty = my * LY * 1.2; }
+  const kx = (keys.has('ArrowRight') || keys.has('KeyD') ? 1 : 0) - (keys.has('ArrowLeft') || keys.has('KeyA') ? 1 : 0), ky = (keys.has('ArrowUp') || keys.has('KeyW') ? 1 : 0) - (keys.has('ArrowDown') || keys.has('KeyS') ? 1 : 0);
+  if (kx || ky) { P.tx = P.x + kx * 1.2; P.ty = P.y + ky * 1.2; }
+  P.tx = Math.max(-LX, Math.min(LX, P.tx)); P.ty = Math.max(-LY, Math.min(LY, P.ty));
+  const maxV = 11 * dt;
+  P.x += Math.max(-maxV, Math.min(maxV, (P.tx - P.x) * Math.min(1, dt * 10)));
+  P.y += Math.max(-maxV, Math.min(maxV, (P.ty - P.y) * Math.min(1, dt * 10)));
+  // walls
+  for (let i = walls.length - 1; i >= 0; i--) {
+    const w = walls[i], ox = w.moving ? Math.sin(T * 1.6 + w.ph) * w.amp : 0;
+    w.g.position.x = ox;
+    if (w.z > P.z + 12) { scene.remove(w.g); walls.splice(i, 1); continue; }
+    if (!w.passed && Math.abs(P.z - w.z) < 0.3 + S / 2) {
+      // any solid cell overlapping the cube's square?
+      const x1 = P.x - S / 2 - ox, x2 = P.x + S / 2 - ox, y1 = P.y - S / 2, y2 = P.y + S / 2;
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+        if (!w.filled[r][c]) continue;
+        const cx1 = X0 + c, cy1 = Y0 + r;
+        if (x2 > cx1 + 0.02 && x1 < cx1 + 0.98 && y2 > cy1 + 0.02 && y1 < cy1 + 0.98) return crash();
+      }
+    }
+    if (!w.passed && P.z < w.z - 0.3 - S / 2) {
+      w.passed = true; score++; $('score').textContent = score; sfx.pass(score);
+      if (w.tight) { flash('PERFECT'); sfx.tight(); }
+      if (score % 10 === 0) { lv++; setTheme(lv); sfx.level(); flash('LEVEL ' + (lv + 1)); $('lvl').textContent = 'LEVEL ' + (lv + 1); }
+    }
+  }
+  while (nextWallZ > P.z - 160) { buildWall(nextWallZ, lv); nextWallZ -= Math.max(16, 26 - lv * 1.2); }
+}
+
+// ---------------------------------------------------------------- frame
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; const T = now / 1000;
+  if (!P) reset();
+  if (state === 'play' && !paused) update(dt, T);
+  if (state === 'title') { P.z -= 10 * dt; P.x = Math.sin(T * 0.8) * 1.5; P.y = Math.sin(T * 1.1) * 0.8; for (const w of walls) if (w.z > P.z + 12) { w.z -= 26 * 6; w.g.position.z = w.z; } }
+  // theme colour eases over
+  themeCol.lerp(themeTarget, Math.min(1, dt * 3)); glow.color.copy(themeCol); glowSoft.color.copy(themeCol); trail.forEach(t => t.children.forEach(m => m.material.color.copy(themeCol)));
+  // cube + trail
+  cube.position.set(P.x, P.y, P.z);
+  if (P.alive) { cube.rotation.z += ((P.tx - P.x) * -0.25 - cube.rotation.z) * Math.min(1, dt * 8); cube.rotation.x += ((P.ty - P.y) * 0.2 - cube.rotation.x) * Math.min(1, dt * 8); core.rotation.x += dt * 3; core.rotation.y += dt * 2; }
+  trail.forEach((t, i) => { t.position.set(P.x, P.y, P.z + (i + 1) * (0.35 + speed * 0.012)); t.rotation.copy(cube.rotation); t.visible = P.alive; });
+  // shards
+  for (let i = shards.length - 1; i >= 0; i--) { const s = shards[i]; s.t += dt; s.v.y -= 9 * dt; s.m.position.addScaledVector(s.v, dt); s.m.rotation.x += s.r.x * dt; s.m.rotation.y += s.r.y * dt; if (s.t > 2.5) { scene.remove(s.m); shards.splice(i, 1); } }
+  // tunnel + background follow the camera
+  tunnel.position.z = Math.ceil(P.z / 4) * 4 + 8; stars.position.z = P.z;
+  streaks.forEach(m => { if (!m.userData.z || m.position.z > P.z + 6) { const a = rand(0, Math.PI * 2), r = rand(5.5, 12); m.position.set(Math.cos(a) * r, Math.sin(a) * r * 0.75, P.z - rand(20, 90)); m.userData.z = 1; } m.position.z += speed * 0.6 * dt; streakMat.opacity = Math.min(0.5, (speed - 12) / 50); });
+  // camera
+  camera.position.set(P.x * 0.6, P.y * 0.6 + 1.6, P.z + 7.5); camera.lookAt(P.x * 0.35, P.y * 0.35, P.z - 14);
+  camera.fov += (((camera.aspect < 0.8 ? 88 : 70) + (state === 'play' ? (speed - 16) * 0.35 : 0)) - camera.fov) * Math.min(1, dt * 2); camera.updateProjectionMatrix();
+  if (shake > 0) { camera.position.x += rand(-1, 1) * shake * 0.15; camera.position.y += rand(-1, 1) * shake * 0.15; shake = Math.max(0, shake - dt * 1.6); }
+  bloom.strength = 0.8 + Math.sin(T * 2) * 0.06 + shake * 0.5;
+  composer.render();
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+window.VD = { get state() { return { state, score, lv, walls: walls.length }; }, start, get P() { return P; }, walls };
+</script>
+</body>
+</html>
