@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
+  <title>Photo Studio</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --white: #ffffff; --gray: #f5f5f7; --ink: #1d1d1f; --ink-2: #6e6e73;
+      --blue: #0071e3; --link: #0066cc; --hair: rgba(0,0,0,0.1); --red: #d70015; --green: #1d8a3a;
+    }
+    body {
+      background: var(--gray); color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', 'Segoe UI', system-ui, sans-serif;
+      font-size: 15px; line-height: 1.47; letter-spacing: -0.01em; -webkit-font-smoothing: antialiased;
+    }
+    a { color: var(--link); text-decoration: none; }
+    button, input, select, textarea { font: inherit; color: inherit; }
+    :focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; border-radius: 6px; }
+    [hidden] { display: none !important; }
+
+    .nav { position: sticky; top: 0; z-index: 50; height: 44px; background: rgba(245,245,247,0.85);
+      -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); border-bottom: 1px solid var(--hair); }
+    .nav-in { max-width: 1240px; height: 100%; margin: 0 auto; padding: 0 22px; display: flex; align-items: center; gap: 24px; }
+    .nav-mark { font-size: 14px; font-weight: 600; color: var(--ink); }
+    .nav-links { display: flex; gap: 24px; margin-left: auto; font-size: 12px; }
+    .nav-links a { color: rgba(0,0,0,0.8); }
+
+    .wrap { max-width: 1240px; margin: 0 auto; padding: 24px 22px 80px; }
+    h1 { font-size: 32px; font-weight: 700; letter-spacing: -0.02em; }
+    .lede { color: var(--ink-2); margin-top: 2px; }
+
+    .note { max-width: 560px; margin: 80px auto; background: #fff; border-radius: 18px; padding: 32px; text-align: center; }
+    .note h1 { font-size: 26px; }
+    .note p { color: var(--ink-2); margin-top: 10px; }
+    .note code { background: var(--gray); border-radius: 6px; padding: 2px 6px; font-size: 13px; color: var(--ink); }
+
+    .strip { display: flex; gap: 10px; overflow-x: auto; padding: 18px 2px 14px; scrollbar-width: thin; }
+    .tile { flex: 0 0 auto; width: 84px; height: 84px; border-radius: 12px; border: 2px solid transparent; overflow: hidden;
+      background: #e3e3e8; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; }
+    .tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .tile.on { border-color: var(--blue); }
+    .tile.add { background: #fff; border: 2px dashed #b7b7bd; flex-direction: column; color: var(--blue); font-size: 12px; font-weight: 600; gap: 2px; }
+    .tile.add b { font-size: 26px; line-height: 1; font-weight: 400; }
+
+    .drop { background: #fff; border: 2px dashed #b7b7bd; border-radius: 18px; padding: 64px 22px; text-align: center; color: var(--ink-2); }
+    .drop.over { border-color: var(--blue); background: #eef5ff; }
+    .drop b { color: var(--ink); font-size: 19px; display: block; margin-bottom: 6px; }
+
+    .ed { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 22px; align-items: start; }
+    @media (max-width: 900px) { .ed { grid-template-columns: 1fr; } }
+    .stage-box { background: #fff; border-radius: 18px; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+    #stage { width: min(100%, calc(70vh * var(--ar, 1.5))); border-radius: 10px; background: #111; touch-action: none; user-select: none; }
+    #stage .po-text.edit { pointer-events: auto; cursor: move; }
+    #stage .po-text.sel { outline: 2px dashed #0a84ff; outline-offset: 0.12em; }
+    .hint { font-size: 12px; color: var(--ink-2); text-align: center; }
+
+    .panel { background: #fff; border-radius: 18px; padding: 18px; display: flex; flex-direction: column; gap: 18px; }
+    .grp h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-2); margin-bottom: 8px; }
+    .row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+    .row > label { width: 64px; flex: 0 0 auto; font-size: 13px; color: var(--ink-2); }
+    .row > input[type=range] { flex: 1; min-width: 0; }
+    .row > .val { width: 40px; text-align: right; font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+    input[type=text], input[type=date], input[type=number], select, textarea {
+      width: 100%; border: 1px solid #d2d2d7; border-radius: 9px; padding: 7px 10px; background: #fff; min-width: 0; }
+    textarea { resize: vertical; min-height: 56px; }
+    input[type=color] { width: 44px; height: 32px; border: 1px solid #d2d2d7; border-radius: 8px; padding: 2px; background: #fff; cursor: pointer; }
+    .layers { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { border: 1px solid #d2d2d7; background: #fff; border-radius: 980px; padding: 4px 12px; font-size: 13px; cursor: pointer;
+      max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .chip.on { background: var(--blue); border-color: var(--blue); color: #fff; }
+    .btn { border: 0; border-radius: 980px; padding: 8px 16px; cursor: pointer; background: #e8e8ed; font-size: 14px; }
+    .btn:hover { background: #dcdce1; }
+    .btn.primary { background: var(--blue); color: #fff; font-weight: 600; padding: 11px 20px; font-size: 15px; }
+    .btn.primary:hover { background: #0077ed; }
+    .btn.primary:disabled { background: #9cc7f4; cursor: default; }
+    .btn.danger { color: var(--red); background: transparent; padding: 8px 4px; }
+    .seg { display: flex; background: #e8e8ed; border-radius: 9px; padding: 2px; flex: 1; }
+    .seg button { flex: 1; border: 0; background: transparent; border-radius: 7px; padding: 4px 0; font-size: 13px; cursor: pointer; }
+    .seg button.on { background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+    .check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; margin-top: 10px; color: var(--ink-2); }
+    .check input { margin-top: 3px; }
+    .status { font-size: 13px; min-height: 20px; }
+    .status.err { color: var(--red); }
+    .status.ok { color: var(--green); }
+    .mini-wrap { display: flex; gap: 12px; align-items: flex-start; }
+    #mini { width: 120px; border-radius: 10px; background: #111; flex: 0 0 auto; }
+    .mini-wrap p { font-size: 12px; color: var(--ink-2); }
+  </style>
+  <script src="../overlay.js"></script>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-in">
+      <a class="nav-mark" href="/">Nexus Play</a>
+      <nav class="nav-links" aria-label="Site">
+        <a href="/photos/">Photos</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Shown everywhere except the owner's own PC -->
+  <section class="note" id="offline">
+    <h1>Photo Studio</h1>
+    <p id="offlineMsg">Checking for the Studio on this computer…</p>
+  </section>
+
+  <main class="wrap" id="app" hidden>
+    <h1>Photo Studio</h1>
+    <p class="lede">Add photos, put text on them, stamp your ©. Saved photos go live the next time you commit and push.</p>
+
+    <div class="strip" id="strip" aria-label="Photos"></div>
+
+    <div class="drop" id="drop">
+      <b>Drop a photo here</b>
+      JPEG, PNG or iPhone (HEIC) photos. Or <a href="#" id="pickLink">choose a file</a>, or pick a photo above to edit its text.
+    </div>
+    <input type="file" id="file" accept="image/jpeg,image/png,image/heic,image/heif,.heic,.heif" hidden />
+
+    <div class="ed" id="ed" hidden>
+      <div class="stage-box">
+        <div class="po-host" id="stage"><img id="stageImg" alt="" /></div>
+        <p class="hint">Drag text to move it. Arrow keys nudge the selected text.</p>
+      </div>
+
+      <div class="panel">
+        <div class="grp">
+          <h2>Copyright</h2>
+          <div class="row"><label for="cName">Name</label><input type="text" id="cName" maxlength="80" /></div>
+          <div class="row"><label for="cYear">Year</label><input type="number" id="cYear" min="1900" max="2100" /></div>
+          <div class="row"><label>Corner</label>
+            <div class="seg" id="cCorner">
+              <button data-c="tl" title="Top left">↖</button><button data-c="tr" title="Top right">↗</button>
+              <button data-c="bl" title="Bottom left">↙</button><button data-c="br" class="on" title="Bottom right">↘</button>
+            </div>
+          </div>
+          <div class="row"><button class="btn" id="cAdd">Add © mark</button></div>
+          <label class="check" id="burnRow"><input type="checkbox" id="burn" checked />
+            <span>Stamp the © into the image file itself, so it stays on copies people download.</span></label>
+        </div>
+
+        <div class="grp">
+          <h2>Text</h2>
+          <div class="layers" id="layers"></div>
+          <div class="row"><button class="btn" id="tAdd">Add text</button></div>
+          <div id="lCtl" hidden>
+            <div class="row"><textarea id="lT" maxlength="400" aria-label="Text"></textarea></div>
+            <div class="row"><label for="lSize">Size</label><input type="range" id="lSize" min="1" max="30" step="0.1" /><span class="val" id="lSizeV"></span></div>
+            <div class="row"><label for="lColor">Colour</label><input type="color" id="lColor" />
+              <select id="lFont" aria-label="Font"></select></div>
+            <div class="row"><label for="lStyle">Style</label>
+              <select id="lStyle"><option value="shadow">Shadow</option><option value="outline">Outline</option><option value="box">Box</option><option value="plain">Plain</option></select></div>
+            <div class="row"><label>Align</label>
+              <div class="seg" id="lAlign"><button data-a="left">Left</button><button data-a="center">Centre</button><button data-a="right">Right</button></div></div>
+            <div class="row"><label for="lX">Across</label><input type="range" id="lX" min="0" max="100" step="0.1" /><span class="val" id="lXV"></span></div>
+            <div class="row"><label for="lY">Down</label><input type="range" id="lY" min="0" max="100" step="0.1" /><span class="val" id="lYV"></span></div>
+            <div class="row"><label for="lRot">Tilt</label><input type="range" id="lRot" min="-45" max="45" step="1" /><span class="val" id="lRotV"></span></div>
+            <div class="row"><button class="btn danger" id="lDel">Remove this text</button></div>
+          </div>
+        </div>
+
+        <div class="grp">
+          <h2>Caption</h2>
+          <div class="row"><input type="text" id="cap" maxlength="200" placeholder="Shown under the photo (optional)" aria-label="Caption" /></div>
+          <div class="row"><label for="date">Date</label><input type="date" id="date" /></div>
+        </div>
+
+        <div class="grp">
+          <h2>Preview</h2>
+          <div class="mini-wrap">
+            <div class="po-host" id="mini"><img id="miniImg" alt="" /></div>
+            <p>How it looks as a small card in the gallery.</p>
+          </div>
+        </div>
+
+        <div>
+          <button class="btn primary" id="save">Save to gallery</button>
+          <button class="btn" id="cancel">Cancel</button>
+          <p class="status" id="status" role="status"></p>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+  (function () {
+    'use strict';
+    var $ = function (id) { return document.getElementById(id); };
+    var HEIC_LIB = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+    var FULL_MAX = 2048, THUMB_MAX = 900;
+    var photos = [], doc = null, sel = -1, corner = 'br';
+
+    function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+    function today() { var d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+    function say(msg, kind) { var s = $('status'); s.textContent = msg || ''; s.className = 'status' + (kind ? ' ' + kind : ''); }
+    function safeSrc(s) { return /^img\/[a-z0-9-]+\.jpg$/.test(s || '') ? '../' + s : ''; }
+
+    function api(path, body) {
+      return fetch(path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : { cache: 'no-store' })
+        .then(function (r) {
+          return r.json().catch(function () { return {}; }).then(function (j) {
+            if (!r.ok || !j.ok) throw new Error(j.error || ('HTTP ' + r.status));
+            return j;
+          });
+        });
+    }
+
+    // ---- start: the Studio only works where studio.py is running ----
+    api('/api/studio').then(function (j) {
+      photos = j.photos || [];
+      $('offline').hidden = true;
+      $('app').hidden = false;
+      drawStrip();
+    }).catch(function () {
+      $('offlineMsg').innerHTML = 'Uploading only works on the site owner’s own computer. ' +
+        'If that’s you, double-click <code>photos\Photo Studio.bat</code> in the site folder and it will open here.';
+    });
+
+    function drawStrip() {
+      var s = $('strip');
+      s.textContent = '';
+      var add = document.createElement('button');
+      add.className = 'tile add' + (doc && doc.mode === 'new' ? ' on' : '');
+      add.innerHTML = '<b>+</b>New';
+      add.title = 'Add a new photo';
+      add.onclick = function () { $('file').click(); };
+      s.appendChild(add);
+      photos.forEach(function (ph) {
+        var b = document.createElement('button');
+        b.className = 'tile' + (doc && doc.id === ph.id && doc.mode === 'edit' ? ' on' : '');
+        b.title = 'Edit text on this photo' + (ph.caption ? ': ' + ph.caption : '');
+        var im = document.createElement('img');
+        im.src = safeSrc(ph.thumb) || safeSrc(ph.src); im.alt = ph.caption || ''; im.loading = 'lazy';
+        b.appendChild(im);
+        b.onclick = function () { editExisting(ph); };
+        s.appendChild(b);
+      });
+    }
+
+    // ---- loading a new photo (JPEG, PNG, HEIC) ----
+    $('pickLink').onclick = function (e) { e.preventDefault(); $('file').click(); };
+    $('file').onchange = function () { if (this.files[0]) loadFile(this.files[0]); this.value = ''; };
+    var drop = $('drop');
+    ['dragenter', 'dragover'].forEach(function (t) { drop.addEventListener(t, function (e) { e.preventDefault(); drop.classList.add('over'); }); });
+    ['dragleave', 'drop'].forEach(function (t) { drop.addEventListener(t, function () { drop.classList.remove('over'); }); });
+    drop.addEventListener('drop', function (e) { e.preventDefault(); if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
+
+    function isHeic(f) { return /heic|heif/i.test(f.type) || /\.(heic|heif)$/i.test(f.name); }
+    var heicLoading = null;
+    function loadHeicLib() {
+      if (window.heic2any) return Promise.resolve();
+      return heicLoading || (heicLoading = new Promise(function (ok, bad) {
+        var s = document.createElement('script');
+        s.src = HEIC_LIB; s.onload = ok;
+        s.onerror = function () { heicLoading = null; bad(new Error('Couldn’t load the iPhone photo converter. Check your internet.')); };
+        document.head.appendChild(s);
+      }));
+    }
+
+    // Decodes to a bitmap the right way up: browsers apply the EXIF
+    // orientation for JPEGs, and the HEIC decoder applies the iPhone's rotation.
+    function decode(blob) {
+      if (window.createImageBitmap) {
+        return createImageBitmap(blob, { imageOrientation: 'from-image' }).catch(function () { return decodeImg(blob); });
+      }
+      return decodeImg(blob);
+    }
+    function decodeImg(blob) {
+      return new Promise(function (ok, bad) {
+        var url = URL.createObjectURL(blob), im = new Image();
+        im.onload = function () { ok(im); };
+        im.onerror = function () { URL.revokeObjectURL(url); bad(new Error('That file isn’t a photo this browser can open.')); };
+        im.src = url;
+      });
+    }
+
+    function scaled(src, w, h, max) {
+      var k = Math.min(1, max / Math.max(w, h)), c = document.createElement('canvas');
+      c.width = Math.round(w * k); c.height = Math.round(h * k);
+      var g = c.getContext('2d');
+      g.imageSmoothingQuality = 'high';
+      g.drawImage(src, 0, 0, c.width, c.height);
+      return c;
+    }
+
+    function loadFile(f) {
+      if (!/^image\/(jpeg|png|heic|heif)$/i.test(f.type) && !/\.(jpe?g|png|heic|heif)$/i.test(f.name)) {
+        alert('Please choose a JPEG, PNG or iPhone (HEIC) photo.');
+        return;
+      }
+      drop.querySelector('b').textContent = isHeic(f) ? 'Converting iPhone photo…' : 'Opening photo…';
+      var p = isHeic(f)
+        ? loadHeicLib().then(function () { return heic2any({ blob: f, toType: 'image/jpeg', quality: 0.95 }); })
+            .then(function (out) { return decode(Array.isArray(out) ? out[0] : out); })
+        : decode(f);
+      p.then(function (bmp) {
+        var w = bmp.naturalWidth || bmp.width, h = bmp.naturalHeight || bmp.height;
+        var base = scaled(bmp, w, h, FULL_MAX);
+        if (bmp.close) bmp.close();
+        open({
+          mode: 'new', id: 'p' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7),
+          canvas: base, w: base.width, h: base.height, url: base.toDataURL('image/jpeg', 0.9),
+          caption: '', date: today(), texts: []
+        });
+        addCopyright();
+      }).catch(function (e) {
+        alert(e.message || 'Couldn’t open that photo.');
+      }).then(function () { drop.querySelector('b').textContent = 'Drop a photo here'; });
+    }
+
+    function editExisting(ph) {
+      open({
+        mode: 'edit', id: ph.id, w: ph.w, h: ph.h, url: safeSrc(ph.src),
+        caption: ph.caption || '', date: ph.date || '',
+        texts: (ph.texts || []).map(function (L) {
+          var n = PhotoOverlay.normalize(L);
+          n.copy = /^\s*©/.test(n.t);
+          return n;
+        })
+      });
+    }
+
+    function open(d) {
+      doc = d; sel = d.texts.length ? 0 : -1;
+      $('drop').hidden = true; $('ed').hidden = false;
+      $('stageImg').src = $('miniImg').src = d.url;
+      $('stage').style.setProperty('--ar', d.w / d.h);
+      $('stage').style.aspectRatio = $('mini').style.aspectRatio = d.w + ' / ' + d.h;
+      $('cap').value = d.caption; $('date').value = d.date;
+      $('burnRow').hidden = d.mode !== 'new';
+      $('save').textContent = d.mode === 'new' ? 'Save to gallery' : 'Save changes';
+      say('');
+      drawStrip(); render(); syncCtl();
+      $('ed').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function closeDoc() {
+      doc = null; sel = -1;
+      $('ed').hidden = true; $('drop').hidden = false;
+      drawStrip();
+    }
+    $('cancel').onclick = closeDoc;
+
+    // ---- stage ----
+    function render() {
+      var host = $('stage');
+      Array.prototype.forEach.call(host.querySelectorAll('.po-text'), function (el) { el.remove(); });
+      doc.texts.forEach(function (L, i) {
+        var el = PhotoOverlay.applyLayer(document.createElement('div'), L);
+        if (!L.t.trim()) { el.textContent = 'Text'; el.style.opacity = '0.5'; }
+        el.classList.add('edit');
+        if (i === sel) el.classList.add('sel');
+        el.dataset.i = i;
+        host.appendChild(el);
+      });
+      PhotoOverlay.render($('mini'), doc.texts);
+      drawLayers();
+    }
+    function drawLayers() {
+      var box = $('layers');
+      box.textContent = '';
+      doc.texts.forEach(function (L, i) {
+        var c = document.createElement('button');
+        c.className = 'chip' + (i === sel ? ' on' : '');
+        c.textContent = (L.t.trim() || 'Text').split('\n')[0].slice(0, 28);
+        c.onclick = function () { sel = i; render(); syncCtl(); };
+        box.appendChild(c);
+      });
+    }
+
+    var drag = null;
+    $('stage').addEventListener('pointerdown', function (e) {
+      var el = e.target.closest('.po-text');
+      if (!el) { if (sel >= 0) { sel = -1; render(); syncCtl(); } return; }
+      sel = +el.dataset.i;
+      var L = doc.texts[sel], r = $('stage').getBoundingClientRect();
+      drag = { x: e.clientX, y: e.clientY, lx: L.x, ly: L.y, w: r.width, h: r.height };
+      $('stage').setPointerCapture(e.pointerId);
+      render(); syncCtl();
+      e.preventDefault();
+    });
+    $('stage').addEventListener('pointermove', function (e) {
+      if (!drag || sel < 0) return;
+      var L = doc.texts[sel];
+      L.x = round(Math.max(0, Math.min(100, drag.lx + (e.clientX - drag.x) / drag.w * 100)));
+      L.y = round(Math.max(0, Math.min(100, drag.ly + (e.clientY - drag.y) / drag.h * 100)));
+      L.corner = null;
+      update(false);
+    });
+    ['pointerup', 'pointercancel'].forEach(function (t) { $('stage').addEventListener(t, function () { drag = null; }); });
+    document.addEventListener('keydown', function (e) {
+      if (!doc || sel < 0 || /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) return;
+      var d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+      if (!d) return;
+      e.preventDefault();
+      var L = doc.texts[sel], k = e.shiftKey ? 2 : 0.5;
+      L.x = round(Math.max(0, Math.min(100, L.x + d[0] * k)));
+      L.y = round(Math.max(0, Math.min(100, L.y + d[1] * k)));
+      L.corner = null;
+      update(false);
+    });
+    function round(v) { return Math.round(v * 100) / 100; }
+
+    // ---- text controls ----
+    var fontSel = $('lFont');
+    Object.keys(PhotoOverlay.FONTS).forEach(function (k) {
+      var o = document.createElement('option'); o.value = k; o.textContent = PhotoOverlay.FONTS[k].label; fontSel.appendChild(o);
+    });
+    function cur() { return doc && sel >= 0 ? doc.texts[sel] : null; }
+    function syncCtl() {
+      var L = cur();
+      $('lCtl').hidden = !L;
+      if (!L) return;
+      $('lT').value = L.t; $('lSize').value = L.size; $('lColor').value = L.color; $('lFont').value = L.font;
+      $('lStyle').value = L.style; $('lX').value = L.x; $('lY').value = L.y; $('lRot').value = L.rot;
+      Array.prototype.forEach.call($('lAlign').children, function (b) { b.classList.toggle('on', b.dataset.a === L.align); });
+      vals();
+    }
+    function vals() {
+      var L = cur(); if (!L) return;
+      $('lSizeV').textContent = (+L.size).toFixed(1); $('lXV').textContent = Math.round(L.x) + '%';
+      $('lYV').textContent = Math.round(L.y) + '%'; $('lRotV').textContent = L.rot + '°';
+    }
+    // Redraws after a change; a © layer pinned to a corner stays tucked into it.
+    function update(sync) {
+      var L = cur();
+      if (L && L.corner) pin(L);
+      render();
+      if (sync) syncCtl(); else { $('lX').value = L.x; $('lY').value = L.y; vals(); }
+    }
+    function bind(id, key, conv) {
+      $(id).addEventListener('input', function () { var L = cur(); if (!L) return; L[key] = conv ? conv(this.value) : this.value; if (key === 'x' || key === 'y') L.corner = null; update(false); });
+    }
+    bind('lT', 't'); bind('lSize', 'size', Number); bind('lColor', 'color'); bind('lFont', 'font'); bind('lStyle', 'style');
+    bind('lX', 'x', Number); bind('lY', 'y', Number); bind('lRot', 'rot', Number);
+    $('lAlign').onclick = function (e) { var a = e.target.dataset.a, L = cur(); if (a && L) { L.align = a; update(true); } };
+    $('lDel').onclick = function () { if (sel < 0) return; doc.texts.splice(sel, 1); sel = doc.texts.length - 1; render(); syncCtl(); };
+    $('tAdd').onclick = function () {
+      doc.texts.push(PhotoOverlay.normalize({ t: 'Your text', x: 50, y: 50, size: 8 }));
+      sel = doc.texts.length - 1; render(); syncCtl();
+      $('lT').focus(); $('lT').select();
+    };
+
+    // ---- copyright ----
+    $('cName').value = store('studio_copy_name') || 'Arthur George';
+    $('cYear').value = new Date().getFullYear();
+    $('cName').oninput = function () { store('studio_copy_name', this.value); };
+    $('cCorner').onclick = function (e) {
+      var c = e.target.dataset.c; if (!c) return;
+      corner = c;
+      Array.prototype.forEach.call(this.children, function (b) { b.classList.toggle('on', b.dataset.c === c); });
+      if (doc && doc.texts.some(function (L) { return L.copy; })) addCopyright();
+    };
+    $('cAdd').onclick = addCopyright;
+    function copyText() {
+      var y = String($('cYear').value || '').trim(), n = $('cName').value.trim();
+      return '© ' + (y ? y + ' ' : '') + n;
+    }
+    function addCopyright() {
+      var existing = -1;
+      doc.texts.forEach(function (L, i) { if (L.copy) existing = i; });
+      var L = existing >= 0 ? doc.texts[existing] : PhotoOverlay.normalize({ size: 2.4, color: '#ffffff', style: 'shadow' });
+      L.t = copyText(); L.copy = true; L.corner = corner; L.align = corner[1] === 'l' ? 'left' : 'right';
+      if (existing < 0) doc.texts.push(L);
+      sel = doc.texts.indexOf(L);
+      update(true);
+    }
+    // Places a layer so its edges sit a small margin in from the chosen corner.
+    function pin(L) {
+      render();
+      var host = $('stage'), el = host.querySelector('.po-text[data-i="' + doc.texts.indexOf(L) + '"]');
+      if (!el || !host.clientWidth) return;
+      var m = 2.5, hw = el.offsetWidth / host.clientWidth * 50, hh = el.offsetHeight / host.clientHeight * 50;
+      L.x = round(L.corner[1] === 'l' ? m + hw : 100 - m - hw);
+      L.y = round(L.corner[0] === 't' ? m * doc.w / doc.h + hh : 100 - m * doc.w / doc.h - hh);
+    }
+
+    $('cap').oninput = function () { doc.caption = this.value; };
+    $('date').oninput = function () { doc.date = this.value; };
+
+    // ---- burning a text layer into pixels (matches overlay.js styling) ----
+    function burn(canvas, layer) {
+      var L = PhotoOverlay.normalize(layer), g = canvas.getContext('2d'), W = canvas.width, H = canvas.height;
+      var f = PhotoOverlay.FONTS[L.font], px = L.size / 100 * W, lh = px * 1.08;
+      g.save();
+      g.font = f.weight + ' ' + px + 'px ' + f.css;
+      g.textBaseline = 'middle';
+      var lines = L.t.replace(/\n+$/, '').split('\n');
+      var bw = Math.max.apply(null, lines.map(function (s) { return g.measureText(s).width; }));
+      var padX = L.style === 'box' ? 0.42 * px : 0, padY = L.style === 'box' ? 0.18 * px : 0;
+      var boxW = bw + padX * 2, boxH = lines.length * lh + padY * 2;
+      g.translate(L.x / 100 * W, L.y / 100 * H);
+      g.rotate(L.rot * Math.PI / 180);
+      var hex = L.color, r = parseInt(hex.substr(1, 2), 16), gg = parseInt(hex.substr(3, 2), 16), b = parseInt(hex.substr(5, 2), 16);
+      var dark = (r * 0.299 + gg * 0.587 + b * 0.114) > 150;
+      if (L.style === 'box') {
+        g.fillStyle = dark ? 'rgba(20,20,22,0.74)' : 'rgba(255,255,255,0.9)';
+        var rad = 0.28 * px, x0 = -boxW / 2, y0 = -boxH / 2;
+        g.beginPath();
+        if (g.roundRect) g.roundRect(x0, y0, boxW, boxH, rad); else g.rect(x0, y0, boxW, boxH);
+        g.fill();
+      }
+      g.textAlign = L.align;
+      var tx = L.align === 'left' ? -bw / 2 : L.align === 'right' ? bw / 2 : 0;
+      lines.forEach(function (s, i) {
+        var ty = -boxH / 2 + padY + lh * (i + 0.5);
+        if (L.style === 'outline') {
+          g.lineWidth = 0.18 * px; g.lineJoin = 'round'; g.strokeStyle = dark ? '#111111' : '#ffffff';
+          g.strokeText(s, tx, ty);
+        }
+        if (L.style === 'shadow') {
+          g.shadowColor = 'rgba(0,0,0,0.55)'; g.shadowBlur = 0.25 * px; g.shadowOffsetY = 0.06 * px;
+        }
+        g.fillStyle = L.color;
+        g.fillText(s, tx, ty);
+      });
+      g.restore();
+    }
+
+    function toB64(canvas, q) {
+      return new Promise(function (ok, bad) {
+        canvas.toBlob(function (blob) {
+          if (!blob) return bad(new Error('Couldn’t encode the photo.'));
+          var fr = new FileReader();
+          fr.onload = function () { ok(String(fr.result).split(',')[1]); };
+          fr.onerror = bad;
+          fr.readAsDataURL(blob);
+        }, 'image/jpeg', q);
+      });
+    }
+
+    function clean(L) {
+      var n = PhotoOverlay.normalize(L);
+      return n.t.trim() ? n : null;
+    }
+
+    // ---- save ----
+    $('save').onclick = function () {
+      if (!doc) return;
+      var d = doc, btn = $('save');
+      btn.disabled = true; say('Saving…');
+      var job;
+      if (d.mode === 'new') {
+        var stamp = $('burn').checked;
+        var full = document.createElement('canvas');
+        full.width = d.w; full.height = d.h;
+        full.getContext('2d').drawImage(d.canvas, 0, 0);
+        var keep = [];
+        d.texts.forEach(function (L) {
+          if (!clean(L)) return;
+          if (L.copy && stamp) burn(full, L); else keep.push(clean(L));
+        });
+        var thumb = scaled(full, d.w, d.h, THUMB_MAX);
+        job = Promise.all([toB64(full, 0.88), toB64(thumb, 0.82)]).then(function (b) {
+          return api('/api/photos/add', { id: d.id, w: d.w, h: d.h, full: b[0], thumb: b[1], caption: d.caption, date: d.date, texts: keep });
+        });
+      } else {
+        job = api('/api/photos/update', { id: d.id, caption: d.caption, date: d.date, texts: d.texts.map(clean).filter(Boolean) });
+      }
+      job.then(function (j) {
+        photos = j.photos;
+        say('');
+        var n = photos.length;
+        closeDoc();
+        $('drop').querySelector('b').textContent = 'Saved ✓ ' + n + (n === 1 ? ' photo' : ' photos') + ' in the gallery';
+        setTimeout(function () { $('drop').querySelector('b').textContent = 'Drop a photo here'; }, 6000);
+      }).catch(function (e) {
+        say('Couldn’t save: ' + e.message, 'err');
+      }).then(function () { btn.disabled = false; });
+    };
+  })();
+  </script>
+</body>
+</html>

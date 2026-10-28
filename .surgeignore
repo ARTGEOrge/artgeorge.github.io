@@ -12,3 +12,5 @@ deploy.ps1
 # Surge rejects the full site (~480 MB) but takes ~415 MB. Everything
 # except Astra goes there; the picker hides cards whose file is missing.
 eaglercraft/astra.html
+# Photo Studio launcher (local only)
+photos/*.bat
