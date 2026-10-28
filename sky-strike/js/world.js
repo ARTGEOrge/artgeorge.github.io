@@ -123,6 +123,8 @@ export class World {
     this.ammo = { ...this.ammoMax };
     Object.assign(this.player, { hp: 100, heat: 0, over: false, alive: true, gunAcc: 0, gunSide: 0, bombSide: 0, mslSide: 0, flareCd: 0, bombCd: 0, mslCd: 0, firing: false });
     this.camMode = opt.cam || 'chase';
+    // Assists: auto pull-up, softer hits, quicker locks and bombs that home onto nearby targets.
+    this.assist = opt.assist !== false; this.hitMark = 0; this.gcasT = 0;
     this.camQ = this.player.quat.clone(); this.camPos = new THREE.Vector3(); this.shake = 0; this.fov = 65;
     // collections
     this.targets = []; this.bullets = []; this.ebullets = []; this.bombs = []; this.missiles = []; this.emissiles = []; this.flares = []; this.shells = []; this.fighters = []; this.rings = []; this.pending = []; this.decor = [];
@@ -140,6 +142,7 @@ export class World {
     this.countObjectives();
     this.objectives.forEach(o => o.total = o.count ?? o.total);
     this.waves = (M.fighters || []).map(w => ({ ...w, spawned: false }));
+    this.beacon = makeBeacon(); this.scene.add(this.beacon);
     this.updateJetVisual(0);
     this.jet.setStores(this.ammo.bombs, this.ammoMax.bombs, this.ammo.msl, this.ammoMax.msl);
   }
@@ -298,6 +301,19 @@ export class World {
       const k = clamp(this.outOfBounds / 250, 0, 1); pin.pitch = lerp(pin.pitch, s.pitch * 0.7, k); pin.roll = lerp(pin.roll, s.roll, k);
     }
     if (P.pos.y > 3600) pin.pitch = Math.min(pin.pitch, -0.3);
+    // auto pull-up: if the ground is under 2 s away, roll level and climb out
+    this.gcasT = Math.max(0, this.gcasT - dt);
+    if (this.assist && !this.noCrash && P.vel.y < -3) {
+      let near = false;
+      for (const s of [0.5, 1, 1.5, 2]) { const x = P.pos.x + P.vel.x * s, z = P.pos.z + P.vel.z * s, y = P.pos.y + P.vel.y * s; if (y < T.ground(x, z) + 18) { near = true; break; } }
+      if (near) {
+        const f = fwdOf(P.quat, _v2), h = Math.hypot(f.x, f.z) || 1;
+        const s = steerTo(P.pos, P.quat, _v1.set(P.pos.x + f.x / h * 900, P.pos.y + 420, P.pos.z + f.z / h * 900), {});
+        pin.pitch = Math.max(pin.pitch, s.pitch); pin.roll = s.roll;
+        if (this.gcasT === 0) this.events.push({ t: 'msg', text: 'Auto pull-up', cls: 'amber', dur: 1.2 });
+        this.gcasT = 2;
+      }
+    }
     P.fly(pin, dt);
     // ground / water / building collision
     const gh = T.ground(P.pos.x, P.pos.z);
@@ -337,6 +353,7 @@ export class World {
   }
   damagePlayer(d, big) {
     const P = this.player; if (!P.alive || this.god || this.phase !== 'fly') return;
+    if (this.assist) d *= 0.6;
     P.hp -= d; this.shake = Math.min(1.2, this.shake + d * 0.04); this.events.push({ t: 'hit', k: d });
     if (big) audio.sfx.bigHit(); else if (this.R() < 0.5) audio.sfx.hit();
     if (P.hp <= 0) this.killPlayer('shot');
@@ -399,7 +416,7 @@ export class World {
         if (!t.alive || (t.air && t.falling)) continue;
         _v1.copy(t.pos); _v1.y += t.cy; _v1.sub(P.pos);
         const d = _v1.length(); if (d > 5200 || d < 120) continue;
-        const ang = Math.acos(clamp(_v1.dot(f) / d, -1, 1)); if (ang > 0.24) continue;
+        const ang = Math.acos(clamp(_v1.dot(f) / d, -1, 1)); if (ang > (this.assist ? 0.34 : 0.24)) continue;
         const s = ang * 3 + d / 5200 + (t.primary ? -0.25 : 0) + (t === L.target ? -0.45 : 0) + (t === this.apTarget ? -0.6 : 0);
         if (s < bs) { bs = s; best = t; }
       }
@@ -411,7 +428,7 @@ export class World {
     }
     if (L.target && this.ammo.msl > 0 && L.cool <= 0) {
       L.t += dt;
-      const need = L.target.air ? 1.1 : 0.8;
+      const need = (L.target.air ? 1.1 : 0.8) * (this.assist ? 0.6 : 1);
       if (!L.locked && L.t >= need) { L.locked = true; audio.sfx.lockOn(); }
     } else { L.t = 0; L.locked = false; }
   }
@@ -445,7 +462,7 @@ export class World {
       b.v.y -= 9.8 * dt * 0.5; b.p.addScaledVector(b.v, dt);
       let hit = false;
       for (const t of this.near(b.p, 40)) {
-        if (this.segHit(t, ox, oy, oz, b.p, t.air ? 7 : 1.5)) { this.damage(t, 10, 'gun'); this.shots.hit++; this.fx.puff(b.p.x, b.p.y, b.p.z, 'spark', t.air ? 1 : 1.3); hit = true; break; }
+        if (this.segHit(t, ox, oy, oz, b.p, t.air ? 7 : 1.5)) { this.damage(t, 10, 'gun'); this.shots.hit++; this.hitMark = 1; this.fx.puff(b.p.x, b.p.y, b.p.z, 'spark', t.air ? 1 : 1.3); hit = true; break; }
       }
       if (!hit) { const g = T.ground(b.p.x, b.p.z); if (b.p.y < g) { this.fx.puff(b.p.x, g, b.p.z, g <= T.waterLevel + 0.01 && T.height(b.p.x, b.p.z) < T.waterLevel ? 'water' : 'dust', 1.2); hit = true; } }
       if (hit || b.life <= 0) this.bullets.splice(i, 1);
@@ -474,7 +491,9 @@ export class World {
     }
     // bombs
     for (let i = this.bombs.length - 1; i >= 0; i--) {
-      const b = this.bombs[i]; b.age += dt; b.v.y -= 9.81 * dt; b.p.addScaledVector(b.v, dt);
+      const b = this.bombs[i]; b.age += dt; b.v.y -= 9.81 * dt;
+      if (this.assist && b.age > 0.3) this.guideBomb(b, dt);
+      b.p.addScaledVector(b.v, dt);
       b.m.position.copy(b.p); b.m.quaternion.setFromUnitVectors(AZ, _v1.copy(b.v).normalize().negate());
       const gh = T.ground(b.p.x, b.p.z);
       let hit = b.p.y < gh;
@@ -556,6 +575,25 @@ export class World {
     const cx = t.pos.x, cy = t.pos.y + t.cy, cz = t.pos.z;
     const px = _v1.x + ab.x * k, py = _v1.y + ab.y * k, pz = _v1.z + ab.z * k;
     return Math.hypot(px - cx, py - cy, pz - cz) < t.r * 0.8 + pad;
+  }
+  /* assist: nudge a falling bomb's drift towards the closest ground target near where it will land */
+  guideBomb(b, dt) {
+    const fall = h => (b.v.y + Math.sqrt(Math.max(0, b.v.y * b.v.y + 2 * 9.81 * h))) / 9.81;
+    let tgo = fall(b.p.y - this.terrain.ground(b.p.x, b.p.z)), lx = b.p.x + b.v.x * tgo, lz = b.p.z + b.v.z * tgo;
+    if (!b.aim || !b.aim.alive) {
+      tgo = fall(b.p.y - this.terrain.ground(lx, lz)); lx = b.p.x + b.v.x * tgo; lz = b.p.z + b.v.z * tgo;
+      let best = null, bd = 60;
+      // objective targets win over clutter; small stuff only pulls the bomb if it's already close
+      for (const t of this.targets) { if (!t.alive || t.air) continue; const d = Math.hypot(t.pos.x - lx, t.pos.z - lz) - t.r * 0.5 - (t.primary ? 25 : 0); if (d < bd && (t.primary || d < 30)) { bd = d; best = t; } }
+      b.aim = best;
+    }
+    if (!b.aim) return;
+    // time to fall to the target's own height, so hills and valleys on the way don't throw it off
+    tgo = fall(b.p.y - b.aim.pos.y); lx = b.p.x + b.v.x * tgo; lz = b.p.z + b.v.z * tgo;
+    if (tgo < 0.05) return;
+    const ex = (b.aim.pos.x - lx) / Math.max(tgo, 0.4), ez = (b.aim.pos.z - lz) / Math.max(tgo, 0.4), m = Math.hypot(ex, ez), cap = 40 * dt;
+    const k = m > cap ? cap / m : 1;
+    b.v.x += ex * k; b.v.z += ez * k;
   }
   near(p, r) {
     const out = [];
@@ -847,6 +885,21 @@ export class World {
     this.fx.drawTracers(tr);
     // in-cloud fog
     this.cloudFog = this.sky.inCloud(cam.position);
+    this.hitMark = Math.max(0, this.hitMark - dt * 6);
+    // beacon over the nearest objective target: bright from afar, fades as you close in
+    let bt = null, bd = 1e9;
+    if (P.alive && this.phase === 'fly') {
+      const open = new Set(this.objectives.filter(o => !o.complete).map(o => o.tag));
+      for (const t of this.targets) if (t.alive && t.primary && open.has(t.tag)) { const d = t.pos.distanceTo(P.pos); if (d < bd) { bd = d; bt = t; } }
+    }
+    this.beaconTarget = bt;
+    this.beacon.visible = !!bt;
+    if (bt) {
+      this.beacon.position.set(bt.pos.x, bt.pos.y, bt.pos.z);
+      const s = clamp(bd / 1100, 1, 6); this.beacon.scale.set(s, 1, s);
+      this.beacon.material.uniforms.op.value = clamp((bd - 500) / 1500, 0.12, 1);
+      this.beacon.material.uniforms.time.value = this.time;
+    }
   }
   predictImpact() {
     const P = this.player, T = this.terrain, p = _v1.copy(P.pos), v = _v2.copy(P.vel).add(upOf(P.quat, _v3).multiplyScalar(-3)), dt = 0.06;
@@ -926,5 +979,22 @@ export class World {
     this.envRT.dispose();
     this.terrain.dispose && this.terrain.dispose();
   }
+}
+/* a tall glowing light pillar, brightest at the base, with bands rising up it */
+function makeBeacon() {
+  const g = new THREE.CylinderGeometry(9, 16, 1400, 24, 1, true); g.translate(0, 700, 0);
+  const m = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.DoubleSide, toneMapped: false, fog: false,
+    uniforms: { op: { value: 1 }, time: { value: 0 } },
+    vertexShader: `varying float vY; varying vec3 vN; varying vec3 vV; void main(){ vY = position.y / 1400.0; vec4 mv = modelViewMatrix * vec4(position, 1.0); vN = normalize(normalMatrix * normal); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+    // normal blending (not additive) so the pillar still reads against bright sand and snow
+    fragmentShader: `uniform float op, time; varying float vY; varying vec3 vN; varying vec3 vV;
+      void main(){ float edge = pow(abs(dot(normalize(vN), normalize(vV))), 1.2);
+        float bands = 0.75 + 0.25 * sin(vY * 60.0 - time * 6.0);
+        float a = clamp(pow(1.0 - vY, 1.6) * (0.35 + 0.65 * edge) * bands * op, 0.0, 0.8);
+        gl_FragColor = vec4(mix(vec3(1.0, 0.42, 0.05), vec3(1.0, 0.85, 0.4), edge), a); }`
+  });
+  const mesh = new THREE.Mesh(g, m); mesh.frustumCulled = false; mesh.renderOrder = 5; mesh.visible = false;
+  return mesh;
 }
 function wrap(a) { while (a > Math.PI) a -= Math.PI * 2; while (a < -Math.PI) a += Math.PI * 2; return a; }

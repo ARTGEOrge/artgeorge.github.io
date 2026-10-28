@@ -26,7 +26,7 @@ export class HUD {
     const g = this.g, cam = W.camera, P = W.player, w = innerWidth, h = innerHeight, S = this.scale, cock = W.camMode === 'cockpit';
     g.setTransform(this.pr, 0, 0, this.pr, 0, 0); g.clearRect(0, 0, w, h);
     if (!P.alive || W.phase === 'brief') { this.drawMini(W); return; }
-    g.lineWidth = 1.6 * S; g.strokeStyle = G; g.fillStyle = G; g.shadowColor = 'rgba(40,255,120,.6)'; g.shadowBlur = 6 * S;
+    g.lineWidth = 2 * S; g.strokeStyle = G; g.fillStyle = G; g.shadowColor = 'rgba(0,20,8,.75)'; g.shadowBlur = 3 * S; g.shadowOffsetY = 1;
     g.font = `600 ${Math.round(14 * S)}px "Chakra Petch", "Bahnschrift", sans-serif`; g.textBaseline = 'middle';
     _f.set(0, 0, -1).applyQuaternion(P.quat); _u.set(0, 1, 0).applyQuaternion(P.quat); _r.set(1, 0, 0).applyQuaternion(P.quat);
     const pitch = Math.asin(clamp(_f.y, -1, 1)), heading = (Math.atan2(_f.x, -_f.z) * 180 / Math.PI + 360) % 360;
@@ -34,10 +34,18 @@ export class HUD {
     const bs = this.proj(cam, _w.copy(P.pos).addScaledVector(_f, 900));
     const cx = bs.x, cy = bs.y;
     g.beginPath(); g.moveTo(cx - 14 * S, cy); g.lineTo(cx - 5 * S, cy); g.moveTo(cx + 5 * S, cy); g.lineTo(cx + 14 * S, cy); g.moveTo(cx, cy - 14 * S); g.lineTo(cx, cy - 5 * S); g.moveTo(cx, cy + 5 * S); g.lineTo(cx, cy + 14 * S); g.stroke();
-    // mouse-stick deflection (only while flying with the mouse)
-    if (opt.mouse && document.pointerLockElement) {
-      const m = opt.mouse; g.save(); g.globalAlpha = 0.55; g.beginPath(); g.arc(cx, cy, 46 * S, 0, 7); g.setLineDash([3 * S, 5 * S]); g.stroke(); g.setLineDash([]);
-      g.globalAlpha = 0.9; g.beginPath(); g.arc(cx + m.x * 46 * S, cy + m.y * 46 * S, 4 * S, 0, 7); g.fill(); g.restore();
+    // mouse aim: a ring where the cursor is, tied to the gun cross
+    if (opt.mouse && opt.mouse.active) {
+      const m = opt.mouse, R = Math.min(w, h) * 0.42, mx = cx + m.x * R, my = cy + m.y * R;
+      g.save(); g.strokeStyle = '#ffffff'; g.fillStyle = '#ffffff'; g.shadowColor = 'rgba(0,0,0,.6)'; g.shadowBlur = 4 * S;
+      if (Math.hypot(mx - cx, my - cy) > 24 * S) { g.globalAlpha = 0.35; g.setLineDash([4 * S, 6 * S]); g.beginPath(); g.moveTo(cx, cy); g.lineTo(mx, my); g.stroke(); g.setLineDash([]); }
+      g.globalAlpha = 0.95; g.lineWidth = 2 * S; g.beginPath(); g.arc(mx, my, 11 * S, 0, 7); g.stroke();
+      g.beginPath(); g.arc(mx, my, 2.2 * S, 0, 7); g.fill(); g.restore();
+    }
+    // hit marker on the gun cross
+    if (W.hitMark > 0) {
+      g.save(); g.strokeStyle = '#ffffff'; g.globalAlpha = W.hitMark; g.lineWidth = 2.4 * S; const a = 8 * S, b = 16 * S;
+      g.beginPath(); g.moveTo(cx - b, cy - b); g.lineTo(cx - a, cy - a); g.moveTo(cx + b, cy - b); g.lineTo(cx + a, cy - a); g.moveTo(cx - b, cy + b); g.lineTo(cx - a, cy + a); g.moveTo(cx + b, cy + b); g.lineTo(cx + a, cy + a); g.stroke(); g.restore();
     }
     // flight path marker
     const vdir = _w.copy(P.vel).normalize();
@@ -142,17 +150,27 @@ export class HUD {
         g.strokeStyle = G; g.fillStyle = G; g.lineWidth = 1.6 * S;
       }
     }
-    // off-screen arrow to nearest objective
-    if (nearestObj) {
-      const s = this.proj(cam, _v.set(nearestObj.pos.x, nearestObj.pos.y + nearestObj.cy, nearestObj.pos.z));
+    // objective marker: pulsing bracket on screen, big arrow at the edge when it is behind you
+    const obj = W.beaconTarget || nearestObj;
+    if (obj) {
+      const od = obj.pos.distanceTo(P.pos);
+      const s = this.proj(cam, _v.set(obj.pos.x, obj.pos.y + obj.cy, obj.pos.z));
       const onScreen = s.in && s.x > 0 && s.x < w && s.y > 0 && s.y < h;
-      if (!onScreen) {
-        const l = _w.copy(nearestObj.pos).sub(cam.position).applyQuaternion(cam.quaternion.clone().invert());
+      g.save(); g.fillStyle = AMB; g.strokeStyle = AMB; g.lineWidth = 2.4 * S; g.textAlign = 'center';
+      g.font = `700 ${Math.round(13 * S)}px "Chakra Petch", sans-serif`;
+      if (onScreen) {
+        const r = (22 + Math.sin(this.t * 6) * 4) * S, k = 9 * S;
+        for (const [sx, sy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) { g.beginPath(); g.moveTo(s.x + sx * r, s.y + sy * (r - k)); g.lineTo(s.x + sx * r, s.y + sy * r); g.lineTo(s.x + sx * (r - k), s.y + sy * r); g.stroke(); }
+        if (od > 600) g.fillText(`TARGET ${(od / 1000).toFixed(1)} KM`, s.x, s.y - r - 12 * S);
+      } else {
+        const l = _w.copy(obj.pos).sub(cam.position).applyQuaternion(cam.quaternion.clone().invert());
         const a = Math.atan2(l.x, l.y), R = Math.min(w, h) * 0.36;
         const ax = w / 2 + Math.sin(a) * R, ay = h / 2 - Math.cos(a) * R;
-        g.save(); g.translate(ax, ay); g.rotate(a); g.fillStyle = RED; g.beginPath(); g.moveTo(0, -14 * S); g.lineTo(10 * S, 6 * S); g.lineTo(-10 * S, 6 * S); g.closePath(); g.fill(); g.restore();
-        g.fillStyle = RED; g.textAlign = 'center'; g.fillText((nd / 1000).toFixed(1) + ' KM', ax, ay + 22 * S); g.fillStyle = G;
+        g.translate(ax, ay); g.rotate(a); g.beginPath(); g.moveTo(0, -22 * S); g.lineTo(16 * S, 8 * S); g.lineTo(0, 2 * S); g.lineTo(-16 * S, 8 * S); g.closePath(); g.fill();
+        g.setTransform(this.pr, 0, 0, this.pr, 0, 0);
+        g.fillText(`TARGET ${(od / 1000).toFixed(1)} KM`, ax, ay + 26 * S);
       }
+      g.restore();
     }
     // CCIP pipper + bomb fall line
     if (W.ccip && W.ccip.t < 30) {

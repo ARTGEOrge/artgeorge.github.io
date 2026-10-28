@@ -6,7 +6,7 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { MISSIONS } from './missions.js';
-import { World, STEP } from './world.js';
+import { World, STEP, steerTo } from './world.js';
 import { buildJet } from './jet.js';
 import { Sky, skyMaterial } from './sky.js';
 import { HUD } from './hud.js';
@@ -25,8 +25,8 @@ const QOPTS = ['auto', 'ultra', 'high', 'medium', 'low'];
 function loadSave() {
   try {
     const r = JSON.parse(localStorage.getItem(SAVE) || '{}');
-    return { unlocked: clamp(r.unlocked | 0 || 1, 1, MISSIONS.length), best: r.best || {}, quality: QOPTS.includes(r.quality) ? r.quality : 'auto', muted: !!r.muted, invert: !!r.invert, cam: r.cam === 'cockpit' ? 'cockpit' : 'chase' };
-  } catch (e) { return { unlocked: 1, best: {}, quality: 'auto', muted: false, invert: false, cam: 'chase' }; }
+    return { unlocked: clamp(r.unlocked | 0 || 1, 1, MISSIONS.length), best: r.best || {}, quality: QOPTS.includes(r.quality) ? r.quality : 'auto', muted: !!r.muted, invert: r.invert ?? true, assist: r.assist ?? true, cam: r.cam === 'cockpit' ? 'cockpit' : 'chase' };
+  } catch (e) { return { unlocked: 1, best: {}, quality: 'auto', muted: false, invert: true, assist: true, cam: 'chase' }; }
 }
 function store() { try { localStorage.setItem(SAVE, JSON.stringify(save)); } catch (e) { /* private mode */ } }
 const save = loadSave();
@@ -92,7 +92,7 @@ function go(name) {
   if (name !== 'fly' && document.pointerLockElement) document.exitPointerLock();
   if (name === 'missions') renderMissions();
   if (['menu', 'missions', 'help'].includes(name) && world) disposeWorld();
-  if (name !== 'fly') { $('cloud').style.opacity = 0; $('hit').style.opacity = 0; }
+  if (name !== 'fly') { $('cloud').style.opacity = 0; $('hit').style.opacity = 0; $('speed').style.opacity = 0; document.body.classList.remove('aiming'); }
   if (name !== 'fly' && name !== 'pause') hud.g.clearRect(0, 0, hud.c.width, hud.c.height);
 }
 $('loading').hidden = true;
@@ -107,7 +107,9 @@ const qualLabel = () => $('bQuality').textContent = 'Quality: ' + save.quality;
 $('bQuality').onclick = () => { save.quality = QOPTS[(QOPTS.indexOf(save.quality) + 1) % QOPTS.length]; rt = 0; store(); qualLabel(); applyQuality(); };
 const invLabel = () => $('bInvert').textContent = 'Pitch: ' + (save.invert ? 'W climbs' : 'flight');
 $('bInvert').onclick = () => { save.invert = !save.invert; store(); invLabel(); };
-soundLabel(); qualLabel(); invLabel();
+const assistLabel = () => $('bAssist').textContent = 'Assists: ' + (save.assist ? 'on' : 'off');
+$('bAssist').onclick = () => { save.assist = !save.assist; store(); assistLabel(); if (world) world.assist = save.assist; };
+soundLabel(); qualLabel(); invLabel(); assistLabel();
 
 const fmt = t => { const m = Math.floor(t / 60), s = Math.floor(t - m * 60); return m + ':' + String(s).padStart(2, '0'); };
 const starStr = n => '★'.repeat(n) + `<i>${'★'.repeat(3 - n)}</i>`;
@@ -137,7 +139,7 @@ function openMission(id, { skipBrief = false, tierName } = {}) {
   return new Promise(res => setTimeout(() => {
     const T = tierName ? TIERS[tierName] : buildTier();
     const t0 = performance.now();
-    world = new World(mission, renderer, { tier: T, cam: save.cam });
+    world = new World(mission, renderer, { tier: T, cam: save.cam, assist: save.assist });
     world.buildMs = Math.round(performance.now() - t0);
     renderer.toneMappingExposure = mission.env.exposure || 1;
     rt = 0; applyQuality(); buildComposer();
@@ -162,7 +164,7 @@ function launch() {
   go('fly'); paused = false; acc = 0; resultsAt = 0; feedClear();
   world.start(); world.camMode = save.cam;
   $('camTag').textContent = world.camMode.toUpperCase();
-  if (!isTouch && !TEST) $('mouseHint').hidden = false;
+  const hint = $('mouseHint'); hint.hidden = !!TEST; hint.classList.remove('gone'); clearTimeout(hint.t); hint.t = setTimeout(() => hint.classList.add('gone'), 9000);
 }
 function pause(on) {
   if (!world || (screen !== 'fly' && screen !== 'pause')) return;
@@ -186,7 +188,7 @@ const keys = new Set(), latch = { bomb: false, missile: false, flare: false };
 const KEYMAP = { KeyW: 'down', ArrowUp: 'down', KeyS: 'up', ArrowDown: 'up', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right', KeyQ: 'yawL', KeyE: 'yawR', ShiftLeft: 'ab', ShiftRight: 'ab', KeyZ: 'brake', ControlLeft: 'brake', ControlRight: 'brake', Space: 'gun', KeyB: 'bomb', KeyF: 'missile', KeyX: 'flare' };
 addEventListener('keydown', e => {
   const k = KEYMAP[e.code];
-  if (k) { keys.add(k); if (screen === 'fly') e.preventDefault(); if (!e.repeat && latch[k] !== undefined) latch[k] = true; }
+  if (k) { keys.add(k); if (['up', 'down', 'left', 'right'].includes(k)) mouse.active = false; if (screen === 'fly') e.preventDefault(); if (!e.repeat && latch[k] !== undefined) latch[k] = true; }
   if (e.repeat) return;
   if (e.code === 'Escape' || e.code === 'KeyP') { if (screen === 'fly') pause(true); else if (screen === 'pause') pause(false); }
   if (e.code === 'KeyC' && screen === 'fly') toggleCam();
@@ -195,21 +197,21 @@ addEventListener('keydown', e => {
 });
 addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) keys.delete(k); });
 addEventListener('blur', () => keys.clear());
-// mouse: pointer-locked "centring stick"
-const mouse = { x: 0, y: 0, l: false, r: false };
+// mouse aim: the jet steers towards the cursor (no click-to-capture needed)
+const mouse = { x: 0, y: 0, l: false, r: false, sx: 0, sy: 0, active: false };
 canvas.addEventListener('mousedown', e => {
   if (screen !== 'fly') return;
   audio.unlock();
-  if (!document.pointerLockElement && !isTouch) { canvas.requestPointerLock?.(); $('mouseHint').hidden = true; return; }
   if (e.button === 0) mouse.l = true; if (e.button === 2) { mouse.r = true; latch.bomb = true; }
 });
 addEventListener('mouseup', e => { if (e.button === 0) mouse.l = false; if (e.button === 2) mouse.r = false; });
 canvas.addEventListener('contextmenu', e => e.preventDefault());
 addEventListener('mousemove', e => {
-  if (document.pointerLockElement !== canvas) return;
-  mouse.x = clamp(mouse.x + e.movementX * 0.0042, -1, 1); mouse.y = clamp(mouse.y + e.movementY * 0.0042, -1, 1);
+  if (isTouch) return;
+  mouse.sx = e.clientX; mouse.sy = e.clientY;
+  if (screen === 'fly' && (Math.abs(e.movementX) + Math.abs(e.movementY) > 0)) mouse.active = true;
 });
-document.addEventListener('pointerlockchange', () => { if (!document.pointerLockElement) { mouse.x = mouse.y = 0; mouse.l = mouse.r = false; if (screen === 'fly' && world && world.phase === 'fly' && !TEST) pause(true); } });
+document.documentElement.addEventListener('mouseleave', () => { mouse.active = false; mouse.l = false; });
 // touch
 const touch = { x: 0, y: 0 }, tHeld = {};
 (() => {
@@ -229,16 +231,31 @@ const touch = { x: 0, y: 0 }, tHeld = {};
   $('tPause').addEventListener('pointerdown', e => { e.preventDefault(); pause(true); });
 })();
 
+const _aim = new THREE.Vector3(), _fw = new THREE.Vector3(), _cr = new THREE.Vector3(), _cu = new THREE.Vector3();
 const testInput = { active: false, auto: false, pitch: 0, roll: 0, yaw: 0, ab: false, brake: false, gun: false, bomb: false, missile: false, flare: false };
 function readInput(dt) {
   if (testInput.active) return testInput.auto && world ? world.autopilot() : { ...testInput };
   const h = k => keys.has(k) || tHeld[k];
   const inv = save.invert ? -1 : 1;
-  mouse.x *= Math.exp(-dt * 1.6); mouse.y *= Math.exp(-dt * 1.6);
-  const kp = ((keys.has('up') ? 1 : 0) - (keys.has('down') ? 1 : 0)) * inv;
-  const mp = mouse.y * inv, tp = touch.y * inv;
+  const kp = ((keys.has('up') ? 1 : 0) - (keys.has('down') ? 1 : 0)) * inv, kr = (keys.has('right') ? 1 : 0) - (keys.has('left') ? 1 : 0);
+  const tp = touch.y * inv;
+  let mp = 0, mr = 0;
+  mouse.x = mouse.y = 0;
+  if (mouse.active && !kp && !kr && world && world.player.alive) {
+    // cursor offset from the gun cross = where to turn; steerTo banks and pulls like a pilot would
+    const P = world.player, R = Math.min(innerWidth, innerHeight) * 0.42;
+    const bs = hud.proj(world.camera, _aim.copy(P.pos).addScaledVector(_fw.set(0, 0, -1).applyQuaternion(P.quat), 900));
+    let mx = (mouse.sx - bs.x) / R, my = (mouse.sy - bs.y) / R;
+    const m = Math.hypot(mx, my); if (m > 1) { mx /= m; my /= m; }
+    mouse.x = mx; mouse.y = my;
+    if (m > 0.035) {
+      const cr = _cr.set(1, 0, 0).applyQuaternion(world.camera.quaternion), cu = _cu.set(0, 1, 0).applyQuaternion(world.camera.quaternion);
+      _aim.copy(P.pos).addScaledVector(_fw, 1000).addScaledVector(cr, mx * 1100).addScaledVector(cu, -my * 1100);
+      const st = steerTo(P.pos, P.quat, _aim, {}, 1.2); mp = st.pitch; mr = st.roll;
+    }
+  }
   const i = {
-    pitch: clamp(kp + mp * 1.6 + tp, -1, 1), roll: clamp((keys.has('right') ? 1 : 0) - (keys.has('left') ? 1 : 0) + mouse.x * 1.6 + touch.x, -1, 1), yaw: (keys.has('yawR') ? 1 : 0) - (keys.has('yawL') ? 1 : 0),
+    pitch: clamp(kp + mp + tp, -1, 1), roll: clamp(kr + mr + touch.x, -1, 1), yaw: (keys.has('yawR') ? 1 : 0) - (keys.has('yawL') ? 1 : 0),
     ab: h('ab'), brake: h('brake'), gun: h('gun') || mouse.l, bomb: h('bomb') || mouse.r || latch.bomb, missile: latch.missile, flare: h('flare') || latch.flare
   };
   latch.bomb = latch.missile = latch.flare = false;
@@ -262,6 +279,8 @@ function updateHudDom(dt) {
   hitT = Math.max(0, hitT - dt * 1.8);
   $('hit').style.opacity = Math.min(0.85, hitT + (W.player.alive && W.player.hp < 30 ? 0.18 + Math.sin(W.time * 6) * 0.08 : 0));
   $('cloud').style.opacity = Math.min(0.92, (W.cloudFog || 0) * 1.4);
+  $('speed').style.opacity = W.player.alive ? clamp(W.player.ab * 0.9 + (W.player.speed - 230) / 300, 0, 0.9).toFixed(2) : 0;
+  document.body.classList.toggle('aiming', mouse.active && W.player.alive);
 }
 function flash(text, cls = '', dur = 1.6) { const m = $('msg'); m.textContent = text; m.className = 'on ' + cls; msgT = dur; }
 function feed(label, score, primary) {
@@ -270,13 +289,17 @@ function feed(label, score, primary) {
   while (box.children.length > 6) box.lastChild.remove();
   setTimeout(() => d.remove(), 2700);
 }
+function pop(label, score, primary) {
+  const p = $('pop'); p.innerHTML = `<b>${primary ? 'TARGET DESTROYED' : 'DESTROYED'}</b><span>${label.toUpperCase()} +${score}</span>`;
+  p.className = ''; void p.offsetWidth; p.className = 'on' + (primary ? ' big' : '');
+}
 function feedClear() { $('feed').innerHTML = ''; $('msg').className = ''; }
 function handleEvents() {
   const ev = world.events; world.events = [];
   for (const e of ev) {
     if (e.t === 'msg') flash(e.text, e.cls, e.dur);
     else if (e.t === 'obj') flash(e.text, 'green', 2.2);
-    else if (e.t === 'kill') feed(e.label, e.score, e.primary);
+    else if (e.t === 'kill') { feed(e.label, e.score, e.primary); pop(e.label, e.score, e.primary); }
     else if (e.t === 'hit') hitT = Math.min(1, hitT + e.k * 0.05);
     else if (e.t === 'done') { flash(e.ok ? 'Mission complete' : e.reason, e.ok ? 'green' : 'red', 3); resultsAt = e.ok ? 3.2 : 3.6; finishMission(); }
   }
