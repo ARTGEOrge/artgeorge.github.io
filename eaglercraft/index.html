@@ -44,17 +44,19 @@
 
     .list { list-style: none; margin-top: 32px; display: grid; gap: 12px; }
     .ver {
-      display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 18px;
-      padding: 18px 20px; border-radius: 18px; background: var(--card);
+      display: grid; grid-template-columns: 88px 1fr auto; align-items: center; gap: 18px;
+      padding: 16px 20px 16px 16px; border-radius: 18px; background: var(--card);
       border: 1px solid var(--hair); transition: background-color .2s, transform .2s;
     }
     .ver:hover { background: var(--card-h); transform: translateY(-1px); }
+    /* each version gets its own pixel-art scene, drawn on a 32x32 grid */
     .badge {
-      width: 64px; height: 64px; border-radius: 12px; display: grid; place-items: center;
-      font-size: 17px; font-weight: 700; letter-spacing: -0.01em; color: #fff;
-      background: linear-gradient(var(--grass) 0 32%, var(--dirt) 32% 100%);
-      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+      position: relative; width: 88px; height: 88px; border-radius: 14px; overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12), 0 4px 14px rgba(0,0,0,0.4);
+      transition: transform .25s;
     }
+    .ver:hover .badge { transform: scale(1.04) rotate(-1.5deg); }
+    .badge svg { display: block; width: 100%; height: 100%; }
     .name { font-size: 21px; font-weight: 600; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .tag {
       font-size: 12px; font-weight: 600; letter-spacing: 0; padding: 2px 8px; border-radius: 999px;
@@ -72,8 +74,8 @@
     @media (max-width: 560px) {
       h1 { font-size: 36px; }
       .sub { font-size: 18px; }
-      .ver { grid-template-columns: 48px 1fr; gap: 14px; padding: 16px; }
-      .badge { width: 48px; height: 48px; font-size: 14px; border-radius: 10px; }
+      .ver { grid-template-columns: 64px 1fr; gap: 14px; padding: 16px; }
+      .badge { width: 64px; height: 64px; border-radius: 11px; }
       .play { grid-column: 1 / -1; text-align: center; }
     }
   </style>
@@ -87,7 +89,25 @@
 
     <ul class="list">
       <li><a class="ver" href="26.2.html" data-v="26.2">
-        <span class="badge" aria-hidden="true">26.2</span>
+        <span class="badge" aria-hidden="true">
+          <!-- 26.2: a cherry grove at dusk, petals drifting down -->
+          <svg viewBox="0 0 32 32" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+            <defs><linearGradient id="v26sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6fb6ff"/><stop offset="0.65" stop-color="#ffc6de"/><stop offset="1" stop-color="#ffe6c2"/></linearGradient></defs>
+            <rect width="32" height="32" fill="url(#v26sky)"/>
+            <rect x="25" y="3" width="4" height="4" fill="#fff6c9"/><rect x="26" y="2" width="2" height="6" fill="#fff6c9"/><rect x="24" y="4" width="6" height="2" fill="#fff6c9"/>
+            <rect x="2" y="5" width="5" height="1" fill="#fff" opacity=".8"/><rect x="1" y="6" width="8" height="1" fill="#fff" opacity=".8"/>
+            <rect x="0" y="19" width="9" height="5" fill="#b78fc9"/><rect x="3" y="17" width="4" height="2" fill="#b78fc9"/><rect x="23" y="18" width="9" height="6" fill="#a982c0"/><rect x="26" y="16" width="4" height="2" fill="#a982c0"/>
+            <rect x="0" y="24" width="32" height="8" fill="#8a5a32"/><rect x="0" y="24" width="32" height="2" fill="#6cc24a"/>
+            <rect x="2" y="26" width="2" height="1" fill="#6cc24a"/><rect x="9" y="26" width="1" height="1" fill="#6cc24a"/><rect x="20" y="26" width="2" height="1" fill="#6cc24a"/><rect x="28" y="26" width="1" height="1" fill="#6cc24a"/>
+            <rect x="5" y="28" width="2" height="1" fill="#6e4422"/><rect x="13" y="29" width="3" height="1" fill="#6e4422"/><rect x="24" y="28" width="2" height="1" fill="#a7744a"/><rect x="18" y="30" width="2" height="1" fill="#a7744a"/>
+            <rect x="14" y="13" width="3" height="11" fill="#4a2a2e"/><rect x="16" y="13" width="1" height="11" fill="#6b3c42"/><rect x="11" y="12" width="3" height="2" fill="#4a2a2e"/><rect x="17" y="11" width="4" height="2" fill="#4a2a2e"/><rect x="13" y="23" width="5" height="1" fill="#4a2a2e"/>
+            <rect x="5" y="6" width="11" height="7" fill="#f4a6c8"/><rect x="14" y="4" width="13" height="8" fill="#f4a6c8"/><rect x="9" y="2" width="9" height="4" fill="#f4a6c8"/><rect x="4" y="8" width="2" height="3" fill="#f4a6c8"/><rect x="27" y="6" width="2" height="4" fill="#f4a6c8"/>
+            <rect x="5" y="11" width="11" height="2" fill="#de78a6"/><rect x="16" y="10" width="11" height="2" fill="#de78a6"/><rect x="9" y="8" width="3" height="2" fill="#de78a6"/><rect x="21" y="7" width="3" height="2" fill="#de78a6"/><rect x="27" y="9" width="2" height="1" fill="#de78a6"/>
+            <rect x="10" y="3" width="3" height="2" fill="#ffd6e9"/><rect x="17" y="5" width="3" height="2" fill="#ffd6e9"/><rect x="6" y="7" width="2" height="1" fill="#ffd6e9"/><rect x="23" y="5" width="2" height="1" fill="#ffd6e9"/><rect x="14" y="8" width="2" height="1" fill="#ffd6e9"/>
+            <rect x="5" y="15" width="1" height="1" fill="#ffc0db"/><rect x="24" y="15" width="1" height="1" fill="#ffc0db"/><rect x="20" y="19" width="1" height="1" fill="#ffc0db"/><rect x="9" y="18" width="1" height="1" fill="#ffc0db"/><rect x="28" y="13" width="1" height="1" fill="#ffc0db"/><rect x="11" y="21" width="1" height="1" fill="#ffc0db"/>
+            <rect x="4" y="24" width="1" height="1" fill="#ff8fc0"/><rect x="25" y="24" width="1" height="1" fill="#ff8fc0"/><rect x="29" y="25" width="1" height="1" fill="#ff8fc0"/><rect x="7" y="25" width="1" height="1" fill="#ff8fc0"/>
+          </svg>
+        </span>
         <span>
           <span class="name">Minecraft 26.2 <span class="tag">Newest</span></span>
           <span class="desc">The latest blocks, mobs and features.</span>
@@ -96,7 +116,35 @@
         <span class="play">Play</span>
       </a></li>
       <li><a class="ver" href="1.12.html" data-v="1.12">
-        <span class="badge" aria-hidden="true">1.12</span>
+        <span class="badge" aria-hidden="true">
+          <!-- 1.12: World of Color, a stack of concrete and glazed terracotta with a parrot on top -->
+          <svg viewBox="0 0 32 32" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+            <defs><linearGradient id="v112bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f3352"/><stop offset="1" stop-color="#171826"/></linearGradient></defs>
+            <rect width="32" height="32" fill="url(#v112bg)"/>
+            <rect x="3" y="3" width="1" height="1" fill="#fff" opacity=".7"/><rect x="27" y="5" width="1" height="1" fill="#fff" opacity=".6"/><rect x="22" y="2" width="1" height="1" fill="#fff" opacity=".5"/><rect x="6" y="9" width="1" height="1" fill="#fff" opacity=".4"/>
+            <!-- bottom row: orange, cyan, magenta concrete -->
+            <rect x="2" y="23" width="9" height="9" fill="#f07613"/><rect x="2" y="23" width="9" height="1" fill="#ff9d4d"/><rect x="10" y="23" width="1" height="9" fill="#b85608"/>
+            <rect x="11" y="23" width="9" height="9" fill="#158991"/><rect x="11" y="23" width="9" height="1" fill="#2fb4bd"/><rect x="19" y="23" width="1" height="9" fill="#0d5f65"/>
+            <rect x="20" y="23" width="10" height="9" fill="#a9309f"/><rect x="20" y="23" width="10" height="1" fill="#cf5ac5"/><rect x="29" y="23" width="1" height="9" fill="#7a1f73"/>
+            <!-- middle row: yellow concrete, blue glazed terracotta -->
+            <rect x="6" y="14" width="9" height="9" fill="#f8c527"/><rect x="6" y="14" width="9" height="1" fill="#ffe170"/><rect x="14" y="14" width="1" height="9" fill="#c99a0e"/>
+            <rect x="15" y="14" width="10" height="9" fill="#2f3f9e"/>
+            <rect x="16" y="15" width="3" height="1" fill="#e9f1ff"/><rect x="16" y="15" width="1" height="3" fill="#e9f1ff"/><rect x="21" y="15" width="3" height="1" fill="#5fa7ff"/><rect x="23" y="15" width="1" height="3" fill="#5fa7ff"/>
+            <rect x="16" y="21" width="3" height="1" fill="#5fa7ff"/><rect x="16" y="19" width="1" height="3" fill="#5fa7ff"/><rect x="21" y="21" width="3" height="1" fill="#e9f1ff"/><rect x="23" y="19" width="1" height="3" fill="#e9f1ff"/>
+            <rect x="19" y="17" width="2" height="3" fill="#e9f1ff"/><rect x="18" y="18" width="4" height="1" fill="#5fa7ff"/>
+            <rect x="24" y="14" width="1" height="9" fill="#1d2766"/>
+            <!-- a little lime concrete corner peeking in -->
+            <rect x="25" y="17" width="5" height="6" fill="#70b919"/><rect x="25" y="17" width="5" height="1" fill="#97dd3f"/>
+            <!-- parrot -->
+            <rect x="12" y="6" width="4" height="4" fill="#e3262b"/><rect x="12" y="10" width="4" height="4" fill="#e3262b"/>
+            <rect x="15" y="7" width="1" height="1" fill="#fff"/><rect x="15" y="7" width="1" height="1" fill="#111" opacity=".85"/><rect x="14" y="7" width="1" height="1" fill="#fff"/>
+            <rect x="16" y="7" width="2" height="2" fill="#3a3a3a"/><rect x="16" y="9" width="1" height="1" fill="#3a3a3a"/>
+            <rect x="11" y="10" width="2" height="3" fill="#2f6fd8"/><rect x="11" y="11" width="1" height="2" fill="#1d4fa8"/>
+            <rect x="12" y="5" width="3" height="1" fill="#ff5a4a"/>
+            <rect x="10" y="12" width="2" height="2" fill="#f2c230"/><rect x="9" y="13" width="2" height="1" fill="#2f6fd8"/>
+            <rect x="13" y="14" width="1" height="1" fill="#555"/><rect x="15" y="14" width="1" height="1" fill="#555"/>
+          </svg>
+        </span>
         <span>
           <span class="name">Minecraft 1.12.2</span>
           <span class="desc">The World of Color update: concrete, parrots, glazed terracotta.</span>
@@ -105,7 +153,34 @@
         <span class="play">Play</span>
       </a></li>
       <li><a class="ver" href="1.8.html" data-v="1.8">
-        <span class="badge" aria-hidden="true">1.8</span>
+        <span class="badge" aria-hidden="true">
+          <!-- 1.8: PvP, crossed diamond and iron swords over a health bar -->
+          <svg viewBox="0 0 32 32" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+            <defs><radialGradient id="v18bg" cx="0.5" cy="0.45" r="0.7"><stop offset="0" stop-color="#7a1c1c"/><stop offset="0.6" stop-color="#3a0b0b"/><stop offset="1" stop-color="#160404"/></radialGradient></defs>
+            <rect width="32" height="32" fill="url(#v18bg)"/>
+            <rect x="4" y="3" width="1" height="1" fill="#ff6a3a" opacity=".7"/><rect x="27" y="10" width="1" height="1" fill="#ff6a3a" opacity=".6"/><rect x="2" y="15" width="1" height="1" fill="#ffb03a" opacity=".6"/><rect x="29" y="20" width="1" height="1" fill="#ffb03a" opacity=".5"/><rect x="15" y="2" width="1" height="1" fill="#ff6a3a" opacity=".5"/>
+            <!-- iron sword, top-left to bottom-right: 3px blade stepped by 2 so it reads as one solid edge -->
+            <g fill="#d8d8d8"><rect x="6" y="6" width="3" height="3"/><rect x="8" y="8" width="3" height="3"/><rect x="10" y="10" width="3" height="3"/><rect x="12" y="12" width="3" height="3"/><rect x="14" y="14" width="3" height="3"/><rect x="16" y="16" width="3" height="3"/><rect x="18" y="18" width="3" height="3"/></g>
+            <g fill="#8e8e8e"><rect x="6" y="8" width="1" height="1"/><rect x="8" y="10" width="1" height="1"/><rect x="10" y="12" width="1" height="1"/><rect x="12" y="14" width="1" height="1"/><rect x="14" y="16" width="1" height="1"/><rect x="16" y="18" width="1" height="1"/><rect x="18" y="20" width="1" height="1"/></g>
+            <g fill="#ffffff"><rect x="4" y="4" width="3" height="3"/><rect x="8" y="6" width="1" height="1"/><rect x="10" y="8" width="1" height="1"/><rect x="12" y="10" width="1" height="1"/></g>
+            <g fill="#4e4e4e"><rect x="24" y="17" width="3" height="3"/><rect x="22" y="19" width="3" height="3"/><rect x="20" y="21" width="3" height="3"/><rect x="18" y="23" width="3" height="3"/></g>
+            <rect x="22" y="22" width="3" height="3" fill="#6b4a2a"/><rect x="24" y="24" width="3" height="3" fill="#7d5a36"/><rect x="25" y="25" width="1" height="1" fill="#5a3c20"/><rect x="26" y="26" width="3" height="3" fill="#9a9a9a"/><rect x="26" y="26" width="1" height="1" fill="#d8d8d8"/>
+            <!-- diamond sword, top-right to bottom-left (mirror of the iron one) -->
+            <g fill="#4ee2ec"><rect x="23" y="6" width="3" height="3"/><rect x="21" y="8" width="3" height="3"/><rect x="19" y="10" width="3" height="3"/><rect x="17" y="12" width="3" height="3"/><rect x="15" y="14" width="3" height="3"/><rect x="13" y="16" width="3" height="3"/><rect x="11" y="18" width="3" height="3"/></g>
+            <g fill="#2a9fb0"><rect x="25" y="8" width="1" height="1"/><rect x="23" y="10" width="1" height="1"/><rect x="21" y="12" width="1" height="1"/><rect x="19" y="14" width="1" height="1"/><rect x="17" y="16" width="1" height="1"/><rect x="15" y="18" width="1" height="1"/><rect x="13" y="20" width="1" height="1"/></g>
+            <g fill="#d6feff"><rect x="25" y="4" width="3" height="3"/><rect x="23" y="6" width="1" height="1"/><rect x="21" y="8" width="1" height="1"/><rect x="19" y="10" width="1" height="1"/><rect x="17" y="12" width="1" height="1"/></g>
+            <g fill="#1f7f8c"><rect x="5" y="17" width="3" height="3"/><rect x="7" y="19" width="3" height="3"/><rect x="9" y="21" width="3" height="3"/><rect x="11" y="23" width="3" height="3"/></g>
+            <rect x="7" y="22" width="3" height="3" fill="#6b4a2a"/><rect x="5" y="24" width="3" height="3" fill="#7d5a36"/><rect x="6" y="25" width="1" height="1" fill="#5a3c20"/><rect x="3" y="26" width="3" height="3" fill="#4ee2ec"/><rect x="5" y="26" width="1" height="1" fill="#d6feff"/>
+            <!-- clash spark -->
+            <rect x="15" y="11" width="2" height="1" fill="#fff3a0"/><rect x="15" y="10" width="1" height="1" fill="#fff"/><rect x="11" y="15" width="1" height="2" fill="#fff3a0"/><rect x="20" y="15" width="1" height="2" fill="#fff3a0"/>
+            <!-- hearts: two full, one half -->
+            <g fill="#e8262b"><rect x="9" y="27" width="2" height="1"/><rect x="12" y="27" width="2" height="1"/><rect x="9" y="28" width="5" height="2"/><rect x="10" y="30" width="3" height="1"/><rect x="11" y="31" width="1" height="1"/>
+            <rect x="15" y="27" width="2" height="1"/><rect x="18" y="27" width="2" height="1"/><rect x="15" y="28" width="5" height="2"/><rect x="16" y="30" width="3" height="1"/><rect x="17" y="31" width="1" height="1"/>
+            <rect x="21" y="27" width="2" height="1"/><rect x="21" y="28" width="2" height="2"/><rect x="22" y="30" width="1" height="1"/></g>
+            <g fill="#4a4a4a"><rect x="24" y="27" width="2" height="1"/><rect x="23" y="28" width="3" height="2"/><rect x="23" y="30" width="2" height="1"/><rect x="23" y="31" width="1" height="1"/></g>
+            <rect x="10" y="28" width="1" height="1" fill="#ff9a9a"/><rect x="16" y="28" width="1" height="1" fill="#ff9a9a"/><rect x="22" y="28" width="1" height="1" fill="#ff9a9a"/>
+          </svg>
+        </span>
         <span>
           <span class="name">Minecraft 1.8.8</span>
           <span class="desc">The classic PvP version most Eaglercraft servers run.</span>
@@ -114,7 +189,35 @@
         <span class="play">Play</span>
       </a></li>
       <li><a class="ver" href="1.5.2.html" data-v="1.5.2">
-        <span class="badge" aria-hidden="true">1.5.2</span>
+        <span class="badge" aria-hidden="true">
+          <!-- 1.5.2: the Redstone Update, a glowing torch, dust wire, hopper and comparator -->
+          <svg viewBox="0 0 32 32" shape-rendering="crispEdges" xmlns="http://www.w3.org/2000/svg">
+            <defs><radialGradient id="v152glow" cx="0.5" cy="0.38" r="0.5"><stop offset="0" stop-color="#ff3a20" stop-opacity=".55"/><stop offset="1" stop-color="#ff3a20" stop-opacity="0"/></radialGradient></defs>
+            <rect width="32" height="32" fill="#4a4a4e"/>
+            <g fill="#3a3a3e"><rect x="0" y="0" width="5" height="3"/><rect x="9" y="2" width="4" height="2"/><rect x="20" y="0" width="6" height="2"/><rect x="2" y="9" width="3" height="3"/><rect x="26" y="7" width="4" height="3"/><rect x="11" y="18" width="3" height="2"/><rect x="0" y="20" width="4" height="2"/><rect x="28" y="14" width="4" height="2"/></g>
+            <g fill="#5c5c61"><rect x="6" y="5" width="3" height="1"/><rect x="16" y="3" width="2" height="1"/><rect x="28" y="2" width="3" height="1"/><rect x="1" y="15" width="2" height="1"/><rect x="21" y="9" width="2" height="1"/><rect x="7" y="13" width="2" height="1"/></g>
+            <rect width="32" height="32" fill="url(#v152glow)"/>
+            <!-- floor and redstone dust wire -->
+            <rect x="0" y="25" width="32" height="7" fill="#7a7a7f"/><rect x="0" y="25" width="32" height="1" fill="#8e8e94"/>
+            <g fill="#5e5e63"><rect x="3" y="28" width="3" height="1"/><rect x="14" y="30" width="4" height="1"/><rect x="25" y="29" width="3" height="1"/></g>
+            <rect x="1" y="26" width="30" height="2" fill="#9b0f0f"/>
+            <g fill="#ff2a1a"><rect x="2" y="26" width="2" height="1"/><rect x="7" y="27" width="2" height="1"/><rect x="12" y="26" width="1" height="1"/><rect x="19" y="27" width="2" height="1"/><rect x="24" y="26" width="2" height="1"/><rect x="29" y="27" width="1" height="1"/></g>
+            <!-- hopper -->
+            <rect x="1" y="14" width="9" height="3" fill="#4c4c50"/><rect x="2" y="15" width="7" height="1" fill="#1e1e22"/><rect x="1" y="14" width="9" height="1" fill="#6c6c72"/>
+            <rect x="2" y="17" width="7" height="4" fill="#424246"/><rect x="2" y="17" width="1" height="4" fill="#5a5a60"/>
+            <rect x="4" y="21" width="3" height="2" fill="#38383c"/><rect x="5" y="23" width="1" height="3" fill="#38383c"/>
+            <!-- redstone torch -->
+            <rect x="15" y="15" width="2" height="11" fill="#6b4a2a"/><rect x="16" y="15" width="1" height="11" fill="#86603a"/>
+            <rect x="14" y="10" width="4" height="5" fill="#b0160f"/><rect x="14" y="10" width="4" height="4" fill="#ff2a1a"/><rect x="15" y="11" width="2" height="2" fill="#ffd2c4"/>
+            <g fill="#ff6a50"><rect x="12" y="8" width="1" height="1"/><rect x="19" y="7" width="1" height="1"/><rect x="17" y="5" width="1" height="1"/><rect x="13" y="4" width="1" height="1"/><rect x="20" y="11" width="1" height="1"/><rect x="11" y="12" width="1" height="1"/></g>
+            <!-- comparator -->
+            <rect x="21" y="21" width="10" height="4" fill="#b9b9be"/><rect x="21" y="21" width="10" height="1" fill="#d6d6db"/><rect x="21" y="24" width="10" height="1" fill="#8e8e94"/>
+            <rect x="22" y="19" width="1" height="2" fill="#8a1a10"/><rect x="22" y="18" width="1" height="1" fill="#ff3a20"/>
+            <rect x="29" y="19" width="1" height="2" fill="#8a1a10"/><rect x="29" y="18" width="1" height="1" fill="#ff3a20"/>
+            <rect x="25" y="19" width="2" height="2" fill="#8a1a10"/><rect x="25" y="18" width="2" height="1" fill="#ff3a20"/>
+            <rect x="23" y="22" width="2" height="1" fill="#9b0f0f"/><rect x="27" y="22" width="2" height="1" fill="#9b0f0f"/>
+          </svg>
+        </span>
         <span>
           <span class="name">Minecraft 1.5.2</span>
           <span class="desc">The original Eaglercraft. Smallest and quickest to load.</span>
