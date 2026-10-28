@@ -48,6 +48,7 @@
       grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
     }
     .list > li { display: flex; }
+    .list > li[hidden], .list[hidden], h2[hidden], .sub2[hidden] { display: none; }
     .ver {
       flex: 1; display: flex; flex-direction: column; gap: 14px;
       padding: 14px 14px 16px; border-radius: 20px; background: var(--card);
@@ -469,6 +470,27 @@
         a.addEventListener('click', function () {
           try { localStorage.setItem(KEY, v); } catch (e) {}
         });
+      });
+    })();
+
+    // Not every host carries every build (surge has a size limit, so the biggest ones stay
+    // off it). Ask for each build's file and hide the card if this host doesn't have it,
+    // along with a whole section once nothing in it is left. A network error leaves it shown.
+    (function () {
+      function tidy() {
+        document.querySelectorAll('.list').forEach(function (list) {
+          var empty = !list.querySelector('li:not([hidden])');
+          list.hidden = empty;
+          var p = list.previousElementSibling;
+          if (p && p.classList.contains('sub2')) { p.hidden = empty; p = p.previousElementSibling; }
+          if (p && p.tagName === 'H2') p.hidden = empty;
+        });
+      }
+      document.querySelectorAll('.list > li').forEach(function (li) {
+        var a = li.querySelector('a.ver');
+        fetch(a.getAttribute('href'), { method: 'HEAD', cache: 'no-store' }).then(function (r) {
+          if (r.status === 404) { li.hidden = true; tidy(); }
+        }, function () {});
       });
     })();
   </script>
