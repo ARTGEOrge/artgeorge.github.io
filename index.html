@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="description" content="Twenty-six games that run in your browser. No downloads, no installs — just press play." />
-  <title>Game Arcade</title>
+  <title>Nexus Play</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
@@ -165,6 +165,16 @@
        is not mistaken for part of the Kart Games tile. */
     .intro { text-align: center; padding: 64px 22px 52px; }
     .intro .t-sub { color: var(--ink-2); }
+    /* the site name: a slow-moving cool gradient with a soft glow behind it */
+    .brand-title {
+      font-weight: 800; letter-spacing: -0.02em;
+      background: linear-gradient(90deg, #00c6ff, #6a5cff, #c04cff, #ff4fa3, #ff9b3d, #ff4fa3, #c04cff, #6a5cff, #00c6ff);
+      background-size: 200% 100%;
+      -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: #6a5cff;
+      animation: brandShift 8s linear infinite;
+    }
+    @keyframes brandShift { to { background-position: -200% 0; } }
+    @media (prefers-reduced-motion: reduce) { .brand-title { animation: none; } }
 
     /* ---------------------------------------------------------- tiles
        Full-width blocks stacked with 12px gaps. Each game's title, buttons
@@ -365,7 +375,7 @@
 
   <main>
     <section class="intro">
-      <h1 class="t-title">Game Arcade</h1>
+      <h1 class="t-title brand-title">Nexus Play</h1>
       <p class="t-sub">Twenty-six games. No downloads. Just press play.</p>
       <div class="pills"><a class="pill pill--fill" href="#games">Browse all games</a></div>
     </section>
