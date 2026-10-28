@@ -9,3 +9,13 @@ node_modules
 Nova_mac.py
 browser_mac.py
 deploy.ps1
+# Surge rejects the full site (~480 MB). Only the four main Eaglercraft
+# versions go there; the picker hides cards whose file is missing.
+eaglercraft/astra.html
+eaglercraft/resent.html
+eaglercraft/starlike.html
+eaglercraft/pixel-1.8.html
+eaglercraft/pixel-1.12.html
+eaglercraft/tuff-1.12.html
+eaglercraft/z-1.11.html
+eaglercraft/winston-horror.html
