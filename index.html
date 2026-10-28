@@ -10,7 +10,9 @@
   <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
   <link rel="manifest" href="/site.webmanifest" />
   <meta name="theme-color" content="#5a1fb8" />
+  <script>/* the surge mirror leaves out the GitHub links */ if (location.hostname === 'benjohnson.surge.sh') document.documentElement.classList.add('no-gh');</script>
   <style>
+    .no-gh [data-gh] { display: none !important; }
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
     :root {
@@ -328,7 +330,7 @@
       <a class="nav-mark" href="/">Nexus Play</a>
       <nav class="nav-links" aria-label="Site">
         <a href="#games">Games</a>
-        <a href="https://github.com/ARTGEOrge">GitHub</a>
+        <a href="https://github.com/ARTGEOrge" data-gh>GitHub</a>
       </nav>
       <div class="nav-tools">
       <button class="nav-icon" id="blankBtn" aria-label="Open in a blank tab" title="Open in a blank tab (address shows about:blank)">
@@ -626,7 +628,7 @@
         <div>
           <h2 class="foot-h">More</h2>
           <ul>
-            <li><a href="https://github.com/ARTGEOrge">GitHub</a></li>
+            <li data-gh><a href="https://github.com/ARTGEOrge">GitHub</a></li>
             <li><a href="/news/">News</a></li>
           </ul>
         </div>
