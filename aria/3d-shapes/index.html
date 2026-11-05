@@ -1487,6 +1487,18 @@
           </button>
         </div>
         <div class="export-section">
+          <div class="export-section-title">2D</div>
+          <button class="export-item" data-format="svg">
+            <span class="ei-icon">
+              <svg viewBox="0 0 24 24"><path d="M4 20l5-14 4 9 3-5 4 10z"/><circle cx="16" cy="6" r="2"/></svg>
+            </span>
+            <div class="ei-text">
+              <div class="ei-name">SVG <span class="ei-tag">laser / Cricut</span></div>
+              <div class="ei-desc">Top-down outline in mm — cutters, Inkscape, Illustrator</div>
+            </div>
+          </button>
+        </div>
+        <div class="export-section">
           <div class="export-section-title">Other</div>
           <button class="export-item" data-format="png">
             <span class="ei-icon">
@@ -3419,6 +3431,7 @@ document.querySelectorAll('.export-item').forEach(b => {
     if      (fmt === 'stl')  exportSTL();
     else if (fmt === 'obj')  exportOBJ();
     else if (fmt === 'glb')  exportGLB();
+    else if (fmt === 'svg')  exportSVG();
     else if (fmt === 'png')  exportPNG();
     else if (fmt === 'json') exportJSON();
   });
@@ -3463,6 +3476,135 @@ function exportGLB() {
     (err) => { console.error(err); showToast('GLB export failed'); },
     { binary: true },
   );
+}
+
+/* SVG: top-down 2D outline (looking straight down), 1 unit = 1 mm.
+   Solids are projected onto the ground, rasterised, then their
+   combined silhouette is traced into closed paths, so overlapping
+   parts merge into one cut line and enclosed gaps stay as holes. */
+function exportSVG() {
+  const solids = shapes.filter(m => !m.userData.hole && m.visible !== false);
+  if (!solids.length) { showToast('No solid shapes to export'); return; }
+
+  // 1. Gather projected triangles (x, z) in world space
+  const tris = [];
+  let minX = Infinity, minZ = Infinity, maxX = -Infinity, maxZ = -Infinity;
+  const v = new THREE.Vector3();
+  for (const m of solids) {
+    m.updateMatrixWorld(true);
+    const g = m.geometry, pos = g.attributes.position, idx = g.index;
+    const count = idx ? idx.count : pos.count;
+    const pts = new Float32Array(pos.count * 2);
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(m.matrixWorld);
+      pts[i * 2] = v.x; pts[i * 2 + 1] = v.z;
+      if (v.x < minX) minX = v.x; if (v.x > maxX) maxX = v.x;
+      if (v.z < minZ) minZ = v.z; if (v.z > maxZ) maxZ = v.z;
+    }
+    for (let i = 0; i + 2 < count; i += 3) {
+      const a = idx ? idx.getX(i) : i, b = idx ? idx.getX(i + 1) : i + 1, c = idx ? idx.getX(i + 2) : i + 2;
+      tris.push(pts[a * 2], pts[a * 2 + 1], pts[b * 2], pts[b * 2 + 1], pts[c * 2], pts[c * 2 + 1]);
+    }
+  }
+  const spanX = maxX - minX, spanZ = maxZ - minZ;
+  if (!(spanX > 0 && spanZ > 0)) { showToast('Nothing visible from above'); return; }
+
+  // 2. Rasterise the silhouette (max ~2000 cells across, never finer than 0.02 mm)
+  const cell = Math.max(Math.max(spanX, spanZ) / 2000, 0.02);
+  const W = Math.ceil(spanX / cell) + 2, H = Math.ceil(spanZ / cell) + 2;
+  const ox = minX - cell, oz = minZ - cell;          // one empty cell of padding
+  const grid = new Uint8Array(W * H);
+  for (let t = 0; t < tris.length; t += 6) {
+    const x0 = (tris[t] - ox) / cell, y0 = (tris[t + 1] - oz) / cell;
+    const x1 = (tris[t + 2] - ox) / cell, y1 = (tris[t + 3] - oz) / cell;
+    const x2 = (tris[t + 4] - ox) / cell, y2 = (tris[t + 5] - oz) / cell;
+    const area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0);
+    if (Math.abs(area) < 1e-9) continue;               // edge-on (vertical) face
+    const s = area > 0 ? 1 : -1;
+    const gx0 = Math.max(0, Math.floor(Math.min(x0, x1, x2))), gx1 = Math.min(W - 1, Math.ceil(Math.max(x0, x1, x2)));
+    const gy0 = Math.max(0, Math.floor(Math.min(y0, y1, y2))), gy1 = Math.min(H - 1, Math.ceil(Math.max(y0, y1, y2)));
+    for (let gy = gy0; gy <= gy1; gy++) {
+      const py = gy + 0.5;
+      for (let gx = gx0; gx <= gx1; gx++) {
+        const px = gx + 0.5;
+        if (s * ((x1 - x0) * (py - y0) - (y1 - y0) * (px - x0)) < 0) continue;
+        if (s * ((x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)) < 0) continue;
+        if (s * ((x0 - x2) * (py - y2) - (y0 - y2) * (px - x2)) < 0) continue;
+        grid[gy * W + gx] = 1;
+      }
+    }
+  }
+
+  // 3. Trace boundary edges (clockwise around filled cells) into closed loops
+  const VW = W + 1, out = new Map();
+  const addEdge = (a, b) => { const l = out.get(a); if (l) l.push(b); else out.set(a, [b]); };
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (!grid[y * W + x]) continue;
+    if (y === 0     || !grid[(y - 1) * W + x]) addEdge(y * VW + x, y * VW + x + 1);
+    if (x === W - 1 || !grid[y * W + x + 1])   addEdge(y * VW + x + 1, (y + 1) * VW + x + 1);
+    if (y === H - 1 || !grid[(y + 1) * W + x]) addEdge((y + 1) * VW + x + 1, (y + 1) * VW + x);
+    if (x === 0     || !grid[y * W + x - 1])   addEdge((y + 1) * VW + x, y * VW + x);
+  }
+  const loops = [];
+  for (const start of out.keys()) {
+    while (out.get(start) && out.get(start).length) {
+      const loop = [];
+      let cur = start;
+      do {
+        loop.push([cur % VW, Math.floor(cur / VW)]);
+        const l = out.get(cur);
+        const nxt = l.pop();
+        if (!l.length) out.delete(cur);
+        cur = nxt;
+      } while (cur !== start && out.has(cur));
+      if (loop.length >= 4) loops.push(loop);
+    }
+  }
+
+  // 4. Smooth the pixel staircase (Douglas–Peucker, ~1.5 cell tolerance)
+  const rdp = (p, eps) => {
+    if (p.length < 3) return p;
+    const keep = new Uint8Array(p.length); keep[0] = keep[p.length - 1] = 1;
+    const stack = [[0, p.length - 1]];
+    while (stack.length) {
+      const [i, j] = stack.pop();
+      const [ax, ay] = p[i], [bx, by] = p[j];
+      const dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
+      let best = -1, bi = -1;
+      for (let k = i + 1; k < j; k++) {
+        const d = Math.abs(dx * (p[k][1] - ay) - dy * (p[k][0] - ax)) / len;
+        if (d > best) { best = d; bi = k; }
+      }
+      if (best > eps) { keep[bi] = 1; stack.push([i, bi], [bi, j]); }
+    }
+    return p.filter((_, k) => keep[k]);
+  };
+  const r = n => +n.toFixed(3);
+  let d = '';
+  for (const loop of loops) {
+    // split the closed loop at its farthest point so both halves simplify cleanly
+    let far = 0, fd = -1;
+    for (let k = 1; k < loop.length; k++) {
+      const dd = (loop[k][0] - loop[0][0]) ** 2 + (loop[k][1] - loop[0][1]) ** 2;
+      if (dd > fd) { fd = dd; far = k; }
+    }
+    const a = rdp(loop.slice(0, far + 1), 1.5);
+    const b = rdp(loop.slice(far).concat([loop[0]]), 1.5);
+    const pts = a.concat(b.slice(1, -1));
+    if (pts.length < 3) continue;
+    d += 'M' + pts.map(([x, y]) => r(x * cell - cell) + ' ' + r(y * cell - cell)).join('L') + 'Z';
+  }
+
+  const wmm = r(spanX), hmm = r(spanZ);
+  const svg =
+`<?xml version="1.0" encoding="UTF-8"?>
+<!-- ${escapeHtml(titleInput.value || 'design')} · top view · exported from 3D Shapes Studio · units: mm -->
+<svg xmlns="http://www.w3.org/2000/svg" width="${wmm}mm" height="${hmm}mm" viewBox="0 0 ${wmm} ${hmm}">
+  <path d="${d}" fill="#d9d9d9" fill-rule="evenodd" stroke="#000000" stroke-width="0.1"/>
+</svg>
+`;
+  downloadBlob(new Blob([svg], { type: 'image/svg+xml' }), '.svg');
+  showToast(`SVG exported · ${wmm} × ${hmm} mm top view`);
 }
 
 function exportPNG() {
