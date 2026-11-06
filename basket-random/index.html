@@ -168,6 +168,144 @@ function throwBall(p) {
   ball.lastTouch = p.side;
 }
 
+// =================== VS AI ===================
+// The CPU always plays the Bucks (right player) and shoots into the left hoop.
+const MODE_OPTIONS = [
+  { label: '2 PLAYERS', ai: null     },
+  { label: 'AI EASY',   ai: 'easy'   },
+  { label: 'AI MEDIUM', ai: 'medium' },
+  { label: 'AI HARD',   ai: 'hard'   },
+];
+let selectedModeIdx = 0;
+const AI_LEVELS = {
+  //        reaction frames, shot error (px), jump eagerness, walk speed
+  easy:   { react: 24, aimErr: 45, jump: 0.08, speed: 0.72 },
+  medium: { react: 11, aimErr: 14, jump: 0.18, speed: 0.9  },
+  hard:   { react: 3,  aimErr: 0,  jump: 0.45, speed: 1    },
+};
+function aiLevel() { return AI_LEVELS[MODE_OPTIONS[selectedModeIdx].ai] || null; }
+function isAI(p) { return p.side === 'right' && !!aiLevel(); }
+const ai = { dx: 0, think: 0, tx: 0, wasHolding: false, holdFrames: 0, shotX: 0 };
+const aiSpotCache = {};
+function resetAI() { ai.dx = 0; ai.think = 0; ai.wasHolding = false; ai.holdFrames = 0; }
+
+// Replay a standing throw (facing left) by the CPU at `px` and report whether it drops into `hoop`.
+// The thrower's own head usually clips the ball on release, which adds a random kick; r1/r2 (0..1)
+// stand in for those two Math.random() calls.
+function simShot(px, hoop, r1, r2) {
+  const gMul = (modifier === 'low-gravity') ? 0.45 : 1;
+  const r = ball.r, rimY = hoop.y + hoop.h - 4;
+  const bbX = hoop.side === 'left' ? hoop.x - 6 : hoop.x + hoop.w - 4;
+  let py = GROUND_Y, pvy = -6;
+  let x = px - 16, y = GROUND_Y - 110, vx = -14, vy = -13;
+  for (let i = 0; i < 300; i++) {
+    pvy += GRAVITY * gMul; py += pvy; if (py > GROUND_Y) { py = GROUND_Y; pvy = 0; }
+    vy += GRAVITY * 0.7 * gMul; x += vx; y += vy;
+    if (x - r < 0) { x = r; vx *= -0.75; }
+    if (x + r > W) { x = W - r; vx *= -0.75; }
+    if (y + r > GROUND_Y) return false;
+    const hdx = x - px, hdy = y - (py - 92), hd = Math.hypot(hdx, hdy), minD = r + 24;
+    if (hd < minD) {
+      const nx = hdx / (hd || 1), ny = hdy / (hd || 1);
+      x = px + nx * minD; y = py - 92 + ny * minD;
+      vx = -(11 + r1 * 3) + nx * 2;
+      vy = -11 - r2 * 4 + ny * 1.5;
+    }
+    if (y < rimY + 2) {
+      for (const rx of [hoop.x, hoop.x + hoop.w]) {
+        const dx = x - rx, dy = y - rimY, d = Math.hypot(dx, dy);
+        if (d < r + 4) {
+          const nx = dx / (d || 1), ny = dy / (d || 1);
+          x = rx + nx * (r + 4); y = rimY + ny * (r + 4);
+          const dot = vx * nx + vy * ny;
+          vx = (vx - 2 * dot * nx) * 0.7; vy = (vy - 2 * dot * ny) * 0.7;
+        }
+      }
+    }
+    if (y > hoop.y - 30 && y < hoop.y + 50) {
+      if (hoop.side === 'left' && x - r < bbX + 10 && x > bbX) { x = bbX + 10 + r; if (vx < 0) vx *= -0.7; }
+      else if (hoop.side === 'right' && x + r > bbX && x < bbX + 10) { x = bbX - r; if (vx > 0) vx *= -0.7; }
+    }
+    if (vy > 0 && x > hoop.x + 6 && x < hoop.x + hoop.w - 6 && y - r < rimY && y + r > rimY) return true;
+  }
+  return false;
+}
+// Odds of scoring from every standing x on the court, cached per screen size + modifier.
+const AI_SAMPLES = [0.05, 0.27, 0.5, 0.73, 0.95];
+function aiShotSpots() {
+  const key = W + 'x' + H + ':' + modifier + ':' + ball.r + ':' + hoops[0].w;
+  if (aiSpotCache[key]) return aiSpotCache[key];
+  const spots = aiSpotCache[key] = [];
+  const hoop = hoops[0];
+  for (let x = hoop.x + hoop.w + 30; x <= W - PLAYER_RADIUS; x += 3) {
+    let made = 0;
+    for (const r1 of AI_SAMPLES) for (const r2 of AI_SAMPLES) if (simShot(x, hoop, r1, r2)) made++;
+    if (made) spots.push({ x, p: made / (AI_SAMPLES.length * AI_SAMPLES.length) });
+  }
+  return spots;
+}
+
+function aiUpdate() {
+  const lvl = aiLevel();
+  if (!lvl) return;
+  const me = players[1], foe = players[0];
+  const grounded = me.y >= GROUND_Y - 0.5;
+
+  if (me.holding) {
+    if (!ai.wasHolding) {
+      // Just picked it up: pick the spot with the best odds (not too far a walk), then fudge it by skill.
+      const spots = aiShotSpots();
+      let best = null, bestScore = -1;
+      for (const s of spots) {
+        const sc = s.p - Math.abs(s.x - me.x) / 3000;
+        if (sc > bestScore) { bestScore = sc; best = s.x; }
+      }
+      if (best === null) best = Math.min(W - PLAYER_RADIUS, hoops[0].x + 420);
+      ai.shotX = best + (Math.random() * 2 - 1) * lvl.aimErr;
+      ai.holdFrames = 0;
+    }
+    ai.wasHolding = true;
+    ai.holdFrames++;
+    const diff = ai.shotX - me.x;
+    ai.dx = Math.abs(diff) > 3 ? Math.sign(diff) : 0;
+    // Shoot when in position, or give up waiting if the defender is in the way.
+    if (grounded && ai.holdFrames > lvl.react && (ai.dx === 0 || ai.holdFrames > 200)) {
+      me.facing = -1;
+      ai.dx = 0;
+      throwBall(me);
+      ai.wasHolding = false;
+    }
+    return;
+  }
+  ai.wasHolding = false;
+
+  // Re-plan where to stand only every few frames (slower levels react later).
+  if (ai.think-- <= 0) {
+    ai.think = lvl.react;
+    if (ball.heldBy === foe.side) {
+      // Defend: stand between the shooter and our side of the court to block the throw.
+      ai.tx = foe.x + 70;
+    } else if (ball.vx > 3 && !ball.heldBy) {
+      // Ball flying toward our own hoop: race ahead of it and head it back.
+      ai.tx = Math.min(ball.x + ball.vx * 40, hoops[1].x - 10);
+      if (ai.tx < ball.x + 30) ai.tx = ball.x + 30;
+    } else {
+      // Chase: get to where the ball is heading, slightly on its right so bumps send it left.
+      const bx = Math.max(PLAYER_RADIUS, Math.min(W - PLAYER_RADIUS, ball.x + ball.vx * 12));
+      ai.tx = bx + 14;
+    }
+  }
+  const diff = ai.tx - me.x;
+  ai.dx = Math.abs(diff) > 8 ? Math.sign(diff) : 0;
+
+  // Jump to head the ball when it drops near.
+  if (grounded && !ball.heldBy && Math.abs(ball.x - me.x) < 70 &&
+      ball.y < me.y - 60 && ball.y > me.y - 320 && ball.vy > -6 &&
+      Math.random() < lvl.jump) {
+    tryJump(me);
+  }
+}
+
 function startGame() {
   const opt = TIME_OPTIONS[selectedTimeIdx];
   timeLeft = opt.seconds;
@@ -182,11 +320,20 @@ function startGame() {
   for (const h of hoops) { h.scored = false; h.netFlash = 0; }
   placePlayers();
   resetBall(Math.random() < 0.5 ? 'left' : 'right');
+  resetAI();
+  if (aiLevel()) aiShotSpots();
   gameState = 'playing';
   lastUpdateMs = performance.now();
 }
 
 function handleMenuClick(x, y) {
+  for (let i = 0; i < MODE_OPTIONS.length; i++) {
+    const h = MODE_OPTIONS[i]._hit;
+    if (h && x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h) {
+      selectedModeIdx = i;
+      return;
+    }
+  }
   for (let i = 0; i < TIME_OPTIONS.length; i++) {
     const h = TIME_OPTIONS[i]._hit;
     if (h && x >= h.x && x <= h.x + h.w && y >= h.y && y <= h.y + h.h) {
@@ -290,6 +437,10 @@ window.addEventListener('keydown', e => {
       selectedTimeIdx = (selectedTimeIdx - 1 + TIME_OPTIONS.length) % TIME_OPTIONS.length;
     } else if (e.code === 'ArrowRight' || e.code === 'KeyD') {
       selectedTimeIdx = (selectedTimeIdx + 1) % TIME_OPTIONS.length;
+    } else if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+      selectedModeIdx = (selectedModeIdx - 1 + MODE_OPTIONS.length) % MODE_OPTIONS.length;
+    } else if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+      selectedModeIdx = (selectedModeIdx + 1) % MODE_OPTIONS.length;
     } else if (e.code === 'Space' || e.code === 'Enter') {
       startGame();
     }
@@ -304,6 +455,7 @@ window.addEventListener('keydown', e => {
   }
   if (!keys[e.code]) {
     for (const p of players) {
+      if (isAI(p)) continue;
       if (e.code === p.keyJump) {
         if (p.holding) throwBall(p);
         else tryJump(p);
@@ -326,7 +478,7 @@ window.addEventListener('touchstart', e => {
   }
   if (gameState === 'over') { startGame(); return; }
   for (const t of e.changedTouches) {
-    const side = t.clientX < W / 2 ? 'left' : 'right';
+    const side = (aiLevel() || t.clientX < W / 2) ? 'left' : 'right';
     const p = players.find(pp => pp.side === side);
     if (p.holding) throwBall(p); else tryJump(p);
   }
@@ -367,14 +519,18 @@ function update() {
   const gMul = (modifier === 'low-gravity') ? 0.45 : 1;
   const restitution = (modifier === 'super-bouncy') ? 0.92 : 0.65;
 
+  aiUpdate();
   for (const p of players) {
     if (p.holdCooldown > 0) p.holdCooldown--;
     const grounded = p.y >= GROUND_Y - 0.5;
     const ctrl = grounded ? 1 : AIR_CONTROL;
-    let dx = 0;
-    if (keys[p.keyLeft])  dx -= 1;
-    if (keys[p.keyRight]) dx += 1;
-    p.x += dx * MOVE_SPEED * ctrl;
+    let dx = 0, spd = MOVE_SPEED;
+    if (isAI(p)) { dx = ai.dx; spd *= aiLevel().speed; }
+    else {
+      if (keys[p.keyLeft])  dx -= 1;
+      if (keys[p.keyRight]) dx += 1;
+    }
+    p.x += dx * spd * ctrl;
     if (dx !== 0) p.facing = dx;
     if (dx !== 0 && grounded) p.walkPhase += 0.3;
     else p.walkPhase *= 0.85;
@@ -535,6 +691,7 @@ function update() {
           resetBall(serveTo);
           if (Math.random() < 0.4) pickModifier();
           else if (modifierTimer <= 0) { modifier = 'normal'; applyModifier(); }
+          if (aiLevel()) aiShotSpots();   // plan CPU shots now, while play is paused
         }
       }, 800);
     }
@@ -1069,52 +1226,59 @@ function drawMenu(t) {
   // Title with glow
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const titleSize = Math.min(110, W * 0.10);
+  const titleSize = Math.min(100, W * 0.09, H * 0.13);
+  const titleY = H * 0.14;
   ctx.shadowColor = '#fcd34d';
   ctx.shadowBlur = 30;
   ctx.fillStyle = '#fcd34d';
   ctx.font = `900 ${titleSize}px Impact, "Arial Black", sans-serif`;
-  ctx.fillText('BASKET RANDOM', W / 2, H * 0.20);
+  ctx.fillText('BASKET RANDOM', W / 2, titleY);
   ctx.shadowBlur = 0;
   ctx.lineWidth = 4;
   ctx.strokeStyle = '#7a4f00';
-  ctx.strokeText('BASKET RANDOM', W / 2, H * 0.20);
+  ctx.strokeText('BASKET RANDOM', W / 2, titleY);
 
-  // Subtitle
+  // A row of selectable option buttons
+  const btnH = 48;
+  const gap = 14;
+  function optionRow(opts, selIdx, btnY, selColor) {
+    const btnW = Math.min(140, (W - 60) / opts.length - 16);
+    const totalW = btnW * opts.length + gap * (opts.length - 1);
+    const startX = W / 2 - totalW / 2;
+    opts.forEach((opt, i) => {
+      const x = startX + i * (btnW + gap);
+      const isSel = i === selIdx;
+      ctx.fillStyle = isSel ? selColor : 'rgba(20,20,40,0.9)';
+      ctx.strokeStyle = isSel ? '#fff' : selColor;
+      ctx.lineWidth = isSel ? 3 : 2;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x, btnY, btnW, btnH, 10);
+      else ctx.rect(x, btnY, btnW, btnH);
+      ctx.fill(); ctx.stroke();
+      ctx.fillStyle = isSel ? '#000' : '#fff';
+      ctx.font = 'bold 16px monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(opt.label, x + btnW / 2, btnY + btnH / 2);
+      opt._hit = { x, y: btnY, w: btnW, h: btnH };
+    });
+  }
+
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 18px monospace';
-  ctx.fillText('CHOOSE YOUR TIME LIMIT', W / 2, H * 0.32);
+  ctx.fillText('WHO ARE YOU PLAYING?', W / 2, H * 0.245);
+  optionRow(MODE_OPTIONS, selectedModeIdx, H * 0.27, '#60a5fa');
 
-  // Time option buttons
-  const btnW = Math.min(140, (W - 60) / TIME_OPTIONS.length - 16);
-  const btnH = 56;
-  const gap = 14;
-  const totalW = btnW * TIME_OPTIONS.length + gap * (TIME_OPTIONS.length - 1);
-  const startX = W / 2 - totalW / 2;
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 18px monospace';
+  ctx.fillText('CHOOSE YOUR TIME LIMIT', W / 2, H * 0.395);
   const btnY = H * 0.42;
-
-  TIME_OPTIONS.forEach((opt, i) => {
-    const x = startX + i * (btnW + gap);
-    const isSel = i === selectedTimeIdx;
-    ctx.fillStyle = isSel ? '#fcd34d' : 'rgba(20,20,40,0.9)';
-    ctx.strokeStyle = isSel ? '#fff' : '#fcd34d';
-    ctx.lineWidth = isSel ? 3 : 2;
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(x, btnY, btnW, btnH, 10);
-    else ctx.rect(x, btnY, btnW, btnH);
-    ctx.fill(); ctx.stroke();
-    ctx.fillStyle = isSel ? '#000' : '#fff';
-    ctx.font = 'bold 16px monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(opt.label, x + btnW / 2, btnY + btnH / 2);
-    opt._hit = { x, y: btnY, w: btnW, h: btnH };
-  });
+  optionRow(TIME_OPTIONS, selectedTimeIdx, btnY, '#fcd34d');
 
   // Hint
   ctx.fillStyle = 'rgba(255,255,255,0.75)';
   ctx.font = 'bold 14px monospace';
-  ctx.fillText('← / →  CHANGE   ·   CLICK A BUTTON   ·   SPACE TO START', W / 2, btnY + btnH + 30);
+  ctx.fillText('↑ / ↓  MODE   ·   ← / →  TIME   ·   SPACE TO START', W / 2, btnY + btnH + 26);
 
   // Big START button (pulsing green)
   const sBW = 240, sBH = 64;
@@ -1147,7 +1311,7 @@ function drawMenu(t) {
   // Matchup line
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 22px Impact, sans-serif';
-  ctx.fillText(TEAMS.left.city + '  vs.  ' + TEAMS.right.city, W / 2, H * 0.74);
+  ctx.fillText(TEAMS.left.city + '  vs.  ' + TEAMS.right.city + (aiLevel() ? '  (CPU)' : ''), W / 2, H * 0.74);
   // Team color dots
   ctx.fillStyle = TEAMS.left.color;
   ctx.beginPath(); ctx.arc(W / 2 - 130, H * 0.74 - 6, 8, 0, Math.PI * 2); ctx.fill();
@@ -1158,7 +1322,7 @@ function drawMenu(t) {
   ctx.font = '13px monospace';
   ctx.textAlign = 'center';
   ctx.fillText('PISTONS  —  A / D move,  W jump or throw', W / 2, H * 0.80);
-  ctx.fillText('BUCKS    —  ← / → move,  ↑ jump or throw', W / 2, H * 0.83);
+  ctx.fillText(aiLevel() ? 'BUCKS    —  played by the computer' : 'BUCKS    —  ← / → move,  ↑ jump or throw', W / 2, H * 0.83);
   ctx.fillText('Walk over the ball to pick it up.  First to 7 — or highest at time-up — wins!', W / 2, H * 0.87);
   drawMenuMascots(t);
 }
@@ -1168,7 +1332,7 @@ const menuMascots = [
   { side: 'right', x: 0, y: 0, vy: 0, color: TEAMS.right.color, rim: TEAMS.right.rim, shorts: TEAMS.right.shorts, facing: -1, armSwing: 0, holding: false, walkPhase: 0, squash: 0 },
 ];
 function drawMenuMascots(t) {
-  if (W < 980 || H < 560) return;
+  if (W < 1240 || H < 560) return;   // only when the cards clear the option rows
   menuMascots.forEach((m, i) => {
     const T = TEAMS[m.side];
     const cx = i ? W - 120 : 120, cw = 190, ch = 300, top = H * 0.30;
@@ -1989,7 +2153,8 @@ function drawWinner() {
     color = '#fcd34d'; name = "IT'S A TIE!";
   } else {
     color = TEAMS[winner].pop;
-    name  = TEAMS[winner].name + ' WIN!';
+    name  = !aiLevel() ? TEAMS[winner].name + ' WIN!'
+          : winner === 'left' ? 'YOU WIN!' : 'CPU WINS!';
   }
   ctx.fillStyle = '#000';
   ctx.font = 'bold 84px monospace';
@@ -2001,7 +2166,7 @@ function drawWinner() {
   ctx.fillStyle = '#fff';
   ctx.font = '20px monospace';
   ctx.fillText(`Final score:  ${score.left}  —  ${score.right}`, W / 2, H / 2 + 36);
-  ctx.fillText('Press SPACE to play again  ·  M to change time', W / 2, H / 2 + 64);
+  ctx.fillText('Press SPACE to play again  ·  M for menu', W / 2, H / 2 + 64);
 }
 
 let crowdHype = 0, crowdCanvas = null, crowdCtx = null, crowdFrame = 0;
